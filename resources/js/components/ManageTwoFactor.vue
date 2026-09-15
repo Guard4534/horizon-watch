@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form } from '@inertiajs/vue3';
-import { ShieldCheck } from '@lucide/vue';
+import { PhShieldCheck } from '@phosphor-icons/vue';
 import { onUnmounted, ref } from 'vue';
 import Heading from '@/components/Heading.vue';
 import TwoFactorRecoveryCodes from '@/components/TwoFactorRecoveryCodes.vue';
@@ -47,7 +47,7 @@ onUnmounted(() => clearTwoFactorAuthData());
 
             <div>
                 <Button v-if="hasSetupData" @click="showSetupModal = true">
-                    <ShieldCheck />Continue setup
+                    <PhShieldCheck />Continue setup
                 </Button>
                 <Form
                     v-else

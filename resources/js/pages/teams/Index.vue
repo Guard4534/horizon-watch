@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { Eye, LogOut, Pencil, Plus } from '@lucide/vue';
+import { PhEye, PhSignOut, PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
 import { ref } from 'vue';
 import CreateTeamModal from '@/components/CreateTeamModal.vue';
 import Heading from '@/components/Heading.vue';
@@ -59,7 +59,7 @@ defineOptions({
 
             <CreateTeamModal>
                 <Button data-test="teams-new-team-button">
-                    <Plus /> New team
+                    <PhPlus /> New team
                 </Button>
             </CreateTeamModal>
         </div>
@@ -95,7 +95,7 @@ defineOptions({
                                     size="sm"
                                     @click="openLeaveTeamDialog(team)"
                                 >
-                                    <LogOut class="h-4 w-4" />
+                                    <PhSignOut class="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -112,7 +112,7 @@ defineOptions({
                                     as-child
                                 >
                                     <Link :href="edit(team.slug)">
-                                        <Eye class="h-4 w-4" />
+                                        <PhEye class="h-4 w-4" />
                                     </Link>
                                 </Button>
                             </TooltipTrigger>
@@ -130,7 +130,7 @@ defineOptions({
                                     as-child
                                 >
                                     <Link :href="edit(team.slug)">
-                                        <Pencil class="h-4 w-4" />
+                                        <PhPencilSimple class="h-4 w-4" />
                                     </Link>
                                 </Button>
                             </TooltipTrigger>

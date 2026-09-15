@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuRadioItemEmits, DropdownMenuRadioItemProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
-import { Circle } from "@lucide/vue"
+import { PhCircle } from "@phosphor-icons/vue"
 import { reactiveOmit } from "@vueuse/core"
 import {
   DropdownMenuItemIndicator,
@@ -31,7 +31,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
     <span class="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
       <DropdownMenuItemIndicator>
         <slot name="indicator-icon">
-          <Circle class="size-2 fill-current" />
+          <PhCircle class="size-2 fill-current" />
         </slot>
       </DropdownMenuItemIndicator>
     </span>

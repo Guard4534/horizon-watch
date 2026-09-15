@@ -1,43 +1,34 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
-import AppLogoIcon from '@/components/AppLogoIcon.vue';
-import { home } from '@/routes';
+import BrandMark from '@/components/nocturne/BrandMark.vue';
+import { useLocale } from '@/composables/useLocale';
 
-defineProps<{
+const { title = '', description = '', kicker = '' } = defineProps<{
     title?: string;
     description?: string;
+    kicker?: string;
 }>();
+
+const { locale, setLocale } = useLocale();
 </script>
 
 <template>
-    <div
-        class="bg-background flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10"
-    >
-        <div class="w-full max-w-sm">
-            <div class="flex flex-col gap-8">
-                <div class="flex flex-col items-center gap-4">
-                    <Link
-                        :href="home()"
-                        class="flex flex-col items-center gap-2 font-medium"
-                    >
-                        <div
-                            class="mb-1 flex h-9 w-9 items-center justify-center rounded-md"
-                        >
-                            <AppLogoIcon
-                                class="size-9 fill-current text-[var(--foreground)] dark:text-white"
-                            />
-                        </div>
-                        <span class="sr-only">{{ title }}</span>
-                    </Link>
-                    <div class="space-y-2 text-center">
-                        <h1 class="text-xl font-medium">{{ title }}</h1>
-                        <p class="text-muted-foreground text-center text-sm">
-                            {{ description }}
-                        </p>
-                    </div>
-                </div>
-                <slot />
-            </div>
+    <div class="flex min-h-svh flex-col items-center justify-center gap-[var(--nc-space-6)] p-6" style="background: var(--nc-bg)">
+        <BrandMark />
+
+        <section class="nc-card w-full max-w-[380px]" style="padding: var(--nc-space-6)">
+            <div v-if="kicker" class="nc-kicker" style="margin-bottom: var(--nc-space-2)">{{ $t(kicker) }}</div>
+            <h3 style="font-size: 25px; line-height: 1.12; margin: 0 0 var(--nc-space-2)">{{ $t(title) }}</h3>
+            <p v-if="description" style="font-size: 13px; color: var(--nc-neutral-400); margin: 0 0 var(--nc-space-4)">
+                {{ $t(description) }}
+            </p>
+            <slot />
+        </section>
+
+        <div class="nc-seg" style="border-radius: var(--nc-radius-sm)">
+            <label v-for="option in ['it', 'en'] as const" :key="option" class="nc-seg-opt" style="padding: 1px 7px; font-size: 10px">
+                <input type="radio" name="auth-locale" :checked="locale === option" @change="setLocale(option)" />
+                {{ option.toUpperCase() }}
+            </label>
         </div>
     </div>
 </template>

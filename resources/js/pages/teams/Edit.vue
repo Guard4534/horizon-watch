@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, router } from '@inertiajs/vue3';
-import { ChevronDown, Mail, UserPlus, X } from '@lucide/vue';
+import { PhCaretDown, PhEnvelopeSimple, PhUserPlus, PhX } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import CancelInvitationModal from '@/components/CancelInvitationModal.vue';
 import DeleteTeamModal from '@/components/DeleteTeamModal.vue';
@@ -159,7 +159,7 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                     data-test="invite-member-button"
                     @click="inviteDialogOpen = true"
                 >
-                    <UserPlus /> Invite member
+                    <PhUserPlus /> Invite member
                 </Button>
             </div>
 
@@ -205,7 +205,7 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                                     size="sm"
                                 >
                                     {{ member.role_label }}
-                                    <ChevronDown
+                                    <PhCaretDown
                                         class="ml-2 h-4 w-4 opacity-50"
                                     />
                                 </Button>
@@ -241,7 +241,7 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                                         size="sm"
                                         @click="confirmRemoveMember(member)"
                                     >
-                                        <X class="h-4 w-4" />
+                                        <PhX class="h-4 w-4" />
                                     </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
@@ -273,7 +273,7 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                         <div
                             class="bg-muted flex h-10 w-10 items-center justify-center rounded-full"
                         >
-                            <Mail class="text-muted-foreground h-5 w-5" />
+                            <PhEnvelopeSimple class="text-muted-foreground h-5 w-5" />
                         </div>
                         <div>
                             <div class="font-medium">
@@ -294,7 +294,7 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                                     size="sm"
                                     @click="confirmCancelInvitation(invitation)"
                                 >
-                                    <X class="h-4 w-4" />
+                                    <PhX class="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>

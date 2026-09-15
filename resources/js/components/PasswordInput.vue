@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Eye, EyeOff } from '@lucide/vue';
+import { PhEye, PhEyeSlash } from '@phosphor-icons/vue';
 import { ref, useTemplateRef } from 'vue';
 import type { HTMLAttributes } from 'vue';
 import { Input } from '@/components/ui/input';
@@ -39,8 +39,8 @@ defineExpose({
             :aria-label="showPassword ? 'Hide password' : 'Show password'"
             :tabindex="-1"
         >
-            <EyeOff v-if="showPassword" class="size-4" />
-            <Eye v-else class="size-4" />
+            <PhEyeSlash v-if="showPassword" class="size-4" />
+            <PhEye v-else class="size-4" />
         </button>
     </div>
 </template>

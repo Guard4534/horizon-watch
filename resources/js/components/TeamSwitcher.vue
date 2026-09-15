@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
-import { Check, ChevronsUpDown, Plus, Users } from '@lucide/vue';
+import { PhCheck, PhCaretUpDown, PhPlus, PhUsers } from '@phosphor-icons/vue';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import CreateTeamModal from '@/components/CreateTeamModal.vue';
 import { Button } from '@/components/ui/button';
@@ -98,7 +98,7 @@ onUnmounted(() => {
                         : 'data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground w-full justify-start px-2 has-[>svg]:px-2'
                 "
             >
-                <Users
+                <PhUsers
                     :class="
                         props.inHeader
                             ? 'hidden'
@@ -122,7 +122,7 @@ onUnmounted(() => {
                         {{ currentTeam?.name ?? 'Select team' }}
                     </span>
                 </div>
-                <ChevronsUpDown
+                <PhCaretUpDown
                     :class="
                         props.inHeader
                             ? 'size-4 opacity-50'
@@ -149,7 +149,7 @@ onUnmounted(() => {
                 @click="switchTeam(team)"
             >
                 {{ team.name }}
-                <Check
+                <PhCheck
                     v-if="currentTeam?.id === team.id"
                     :class="checkIconClass"
                 />
@@ -161,7 +161,7 @@ onUnmounted(() => {
                     :class="teamItemClass"
                     @select.prevent
                 >
-                    <Plus :class="plusIconClass" />
+                    <PhPlus :class="plusIconClass" />
                     <span class="text-muted-foreground">New team</span>
                 </DropdownMenuItem>
             </CreateTeamModal>

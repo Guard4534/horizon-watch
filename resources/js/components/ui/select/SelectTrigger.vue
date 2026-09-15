@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { SelectTriggerProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
-import { ChevronDown } from "@lucide/vue"
+import { PhCaretDown } from "@phosphor-icons/vue"
 import { reactiveOmit } from "@vueuse/core"
 import { SelectIcon, SelectTrigger, useForwardProps } from "reka-ui"
 import { cn } from "@/lib/utils"
@@ -27,7 +27,7 @@ const forwardedProps = useForwardProps(delegatedProps)
   >
     <slot />
     <SelectIcon as-child>
-      <ChevronDown class="size-4 opacity-50" />
+      <PhCaretDown class="size-4 opacity-50" />
     </SelectIcon>
   </SelectTrigger>
 </template>

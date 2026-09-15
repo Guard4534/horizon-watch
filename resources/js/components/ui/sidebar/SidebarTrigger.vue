@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
-import { PanelLeftClose, PanelLeftOpen } from "@lucide/vue"
+import { PhCaretLineLeft, PhCaretLineRight } from "@phosphor-icons/vue"
 import { cn } from "@/lib/utils"
 import { Button } from '@/components/ui/button'
 import { useSidebar } from "./utils"
@@ -21,8 +21,8 @@ const { isMobile, state, toggleSidebar } = useSidebar()
     :class="cn('h-7 w-7', props.class)"
     @click="toggleSidebar"
   >
-    <PanelLeftOpen v-if="isMobile || state === 'collapsed'" />
-    <PanelLeftClose v-else />
+    <PhCaretLineRight v-if="isMobile || state === 'collapsed'" />
+    <PhCaretLineLeft v-else />
     <span class="sr-only">Toggle sidebar</span>
   </Button>
 </template>

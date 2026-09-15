@@ -2,8 +2,7 @@
 import { Form, Head, setLayoutProps } from '@inertiajs/vue3';
 import { computed, ref, watchEffect } from 'vue';
 import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
 import {
     InputOTP,
     InputOTPGroup,
@@ -11,6 +10,13 @@ import {
 } from '@/components/ui/input-otp';
 import { store } from '@/routes/two-factor/login';
 import type { TwoFactorConfigContent } from '@/types';
+
+defineOptions({
+    layout: {
+        kicker: 'Sign in',
+        title: 'Two-factor authentication',
+    },
+});
 
 const showRecoveryInput = ref<boolean>(false);
 const code = ref<string>('');
@@ -35,7 +41,6 @@ const authConfigContent = computed<TwoFactorConfigContent>(() => {
 
 watchEffect(() => {
     setLayoutProps({
-        title: authConfigContent.value.title,
         description: authConfigContent.value.description,
     });
 });
@@ -48,21 +53,19 @@ const toggleRecoveryMode = (clearErrors: () => void): void => {
 </script>
 
 <template>
-    <Head title="Two-factor authentication" />
+    <Head :title="$t('Two-factor authentication')" />
 
-    <div class="space-y-6">
+    <div class="flex flex-col gap-[var(--nc-space-4)]">
         <template v-if="!showRecoveryInput">
             <Form
                 v-bind="store.form()"
-                class="space-y-4"
+                class="flex flex-col gap-[var(--nc-space-3)]"
                 reset-on-error
                 @error="code = ''"
                 #default="{ errors, processing, clearErrors }"
             >
                 <input type="hidden" name="code" :value="code" />
-                <div
-                    class="flex flex-col items-center justify-center space-y-3 text-center"
-                >
+                <div class="flex flex-col items-center justify-center gap-[var(--nc-space-3)] text-center">
                     <div class="flex w-full items-center justify-center">
                         <InputOTP
                             id="otp"
@@ -82,17 +85,19 @@ const toggleRecoveryMode = (clearErrors: () => void): void => {
                     </div>
                     <InputError :message="errors.code" />
                 </div>
-                <Button type="submit" class="w-full" :disabled="processing"
-                    >Continue</Button
-                >
-                <div class="text-muted-foreground text-center text-sm">
-                    <span>or you can </span>
+                <button type="submit" class="nc-btn nc-btn-primary nc-btn-block" :disabled="processing">
+                    <Spinner v-if="processing" />
+                    {{ $t('Continue') }}
+                </button>
+                <div class="text-center" style="font-size: 12px; color: var(--nc-neutral-500)">
+                    <span>{{ $t('or you can') }} </span>
                     <button
                         type="button"
-                        class="text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
+                        class="underline"
+                        style="color: var(--nc-text)"
                         @click="() => toggleRecoveryMode(clearErrors)"
                     >
-                        {{ authConfigContent.buttonText }}
+                        {{ $t(authConfigContent.buttonText) }}
                     </button>
                 </div>
             </Form>
@@ -101,30 +106,37 @@ const toggleRecoveryMode = (clearErrors: () => void): void => {
         <template v-else>
             <Form
                 v-bind="store.form()"
-                class="space-y-4"
+                class="flex flex-col gap-[var(--nc-space-3)]"
                 reset-on-error
                 #default="{ errors, processing, clearErrors }"
             >
-                <Input
-                    name="recovery_code"
-                    type="text"
-                    placeholder="Enter recovery code"
-                    :autofocus="showRecoveryInput"
-                    required
-                />
+                <div class="nc-field">
+                    <label for="recovery_code">{{ $t('Recovery code') }}</label>
+                    <input
+                        id="recovery_code"
+                        class="nc-input"
+                        name="recovery_code"
+                        type="text"
+                        :placeholder="$t('Enter recovery code')"
+                        :autofocus="showRecoveryInput"
+                        required
+                    />
+                </div>
                 <InputError :message="errors.recovery_code" />
-                <Button type="submit" class="w-full" :disabled="processing"
-                    >Continue</Button
-                >
+                <button type="submit" class="nc-btn nc-btn-primary nc-btn-block" :disabled="processing">
+                    <Spinner v-if="processing" />
+                    {{ $t('Continue') }}
+                </button>
 
-                <div class="text-muted-foreground text-center text-sm">
-                    <span>or you can </span>
+                <div class="text-center" style="font-size: 12px; color: var(--nc-neutral-500)">
+                    <span>{{ $t('or you can') }} </span>
                     <button
                         type="button"
-                        class="text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
+                        class="underline"
+                        style="color: var(--nc-text)"
                         @click="() => toggleRecoveryMode(clearErrors)"
                     >
-                        {{ authConfigContent.buttonText }}
+                        {{ $t(authConfigContent.buttonText) }}
                     </button>
                 </div>
             </Form>

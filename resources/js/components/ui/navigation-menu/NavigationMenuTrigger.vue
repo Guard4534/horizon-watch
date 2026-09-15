@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { NavigationMenuTriggerProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
-import { ChevronDown } from "@lucide/vue"
+import { PhCaretDown } from "@phosphor-icons/vue"
 import { reactiveOmit } from "@vueuse/core"
 import {
   NavigationMenuTrigger,
@@ -24,7 +24,7 @@ const forwardedProps = useForwardProps(delegatedProps)
     :class="cn(navigationMenuTriggerStyle(), 'group', props.class)"
   >
     <slot />
-    <ChevronDown
+    <PhCaretDown
       class="relative top-[1px] ml-1 size-3 transition duration-300 group-data-[state=open]:rotate-180"
       aria-hidden="true"
     />
