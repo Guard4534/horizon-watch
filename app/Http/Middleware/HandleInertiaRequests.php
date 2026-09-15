@@ -3,6 +3,8 @@
 namespace App\Http\Middleware;
 
 use App\Data\Auth\AuthUserData;
+use App\Enums\AlertState;
+use App\Monitoring\MonitoringRepository;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -48,6 +50,9 @@ class HandleInertiaRequests extends Middleware
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'currentTeam' => fn () => $user?->currentTeam ? $user->toUserTeam($user->currentTeam) : null,
             'teams' => fn () => $user?->toUserTeams(includeCurrent: true) ?? [],
+            'openAlertCount' => fn () => $user?->currentTeam
+                ? count(app(MonitoringRepository::class)->alerts($user->currentTeam, AlertState::Open))
+                : null,
         ];
     }
 }
