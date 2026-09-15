@@ -1,0 +1,77 @@
+x-app: &app
+  image: ${HORIZON_WATCH_IMAGE:-horizon-watch:local}
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  environment:
+    APP_NAME: Horizon Watch
+    APP_URL: ${APP_URL:-http://localhost:8080}
+    APP_LOCALE: ${APP_LOCALE:-en}
+    APP_KEY: ${APP_KEY:-}
+    DB_CONNECTION: pgsql
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_DATABASE: horizon_watch
+    DB_USERNAME: horizon_watch
+    DB_PASSWORD: ${DB_PASSWORD:-horizon_watch}
+    SESSION_DRIVER: database
+    CACHE_STORE: database
+    QUEUE_CONNECTION: database
+    MAIL_MAILER: ${MAIL_MAILER:-log}
+    MAIL_HOST: ${MAIL_HOST:-}
+    MAIL_PORT: ${MAIL_PORT:-587}
+    MAIL_USERNAME: ${MAIL_USERNAME:-}
+    MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+    MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-horizon-watch@example.com}
+  volumes:
+    - app-data:/data
+
+services:
+  web:
+    <<: *app
+    command: ["web"]
+    ports:
+      - "${HORIZON_WATCH_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  scheduler:
+    <<: *app
+    command: ["scheduler"]
+    depends_on:
+      web:
+        condition: service_healthy
+
+  worker:
+    <<: *app
+    command: ["worker"]
+    depends_on:
+      web:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: horizon_watch
+      POSTGRES_USER: horizon_watch
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-horizon_watch}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "horizon_watch", "-U", "horizon_watch"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  app-data:
+  postgres-data:
