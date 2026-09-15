@@ -2,7 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import PendingInvitationsModal from '@/components/PendingInvitationsModal.vue';
 import PlaceholderPattern from '@/components/PlaceholderPattern.vue';
-import { dashboard } from '@/routes';
+import { wall } from '@/routes';
 import type { DashboardInvitation, Team } from '@/types';
 
 defineProps<{
@@ -15,7 +15,7 @@ defineOptions({
             {
                 title: 'Dashboard',
                 href: props.currentTeam
-                    ? dashboard(props.currentTeam.slug)
+                    ? wall(props.currentTeam.slug)
                     : '/',
             },
         ],

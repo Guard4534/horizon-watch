@@ -3,21 +3,24 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "vp build",
+        "build": "php artisan typescript:transform && vp build",
         "build:ssr": "vp build && vp build --ssr",
         "dev": "vp dev",
         "check": "vp check",
         "check:fix": "vp check --fix",
-        "types:check": "vue-tsc --noEmit"
+        "types:check": "php artisan typescript:transform && vue-tsc --noEmit"
     },
     "dependencies": {
+        "@fontsource-variable/inter": "^5.3.0",
         "@inertiajs/vite": "^3.0.0",
         "@inertiajs/vue3": "^3.0.0",
         "@lucide/vue": "^1.17.0",
+        "@phosphor-icons/vue": "^2.2.1",
         "@vueuse/core": "^12.8.2",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "laravel-vite-plugin": "^3.0.0",
+        "laravel-vue-i18n": "^2.8.0",
         "reka-ui": "^2.9.8",
         "tailwind-merge": "^3.2.0",
         "tailwindcss": "^4.1.1",
