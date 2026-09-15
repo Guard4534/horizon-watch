@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
-import { PhCheck, PhCaretUpDown, PhPlus, PhUsers } from '@phosphor-icons/vue';
+import { PhCheck, PhCaretUpDown, PhPlus } from '@phosphor-icons/vue';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import CreateTeamModal from '@/components/CreateTeamModal.vue';
-import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,15 +13,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { switchMethod } from '@/routes/teams';
 import type { Team } from '@/types';
-
-const props = withDefaults(
-    defineProps<{
-        inHeader?: boolean;
-    }>(),
-    {
-        inHeader: false,
-    },
-);
 
 const page = usePage();
 const isMobile = ref(false);
@@ -35,18 +25,6 @@ const updateIsMobile = () => {
 
 const currentTeam = computed(() => page.props.currentTeam);
 const teams = computed(() => page.props.teams ?? []);
-const menuContentClass = computed(() =>
-    props.inHeader
-        ? 'w-56'
-        : 'w-(--reka-dropdown-menu-trigger-width) min-w-56 rounded-lg',
-);
-const teamItemClass = computed(() =>
-    props.inHeader ? 'cursor-pointer gap-2' : 'cursor-pointer gap-2 p-2',
-);
-const checkIconClass = computed(() =>
-    props.inHeader ? 'ml-auto size-4' : 'ml-auto h-4 w-4',
-);
-const plusIconClass = computed(() => (props.inHeader ? 'size-4' : 'h-4 w-4'));
 
 const switchTeam = (team: Team) => {
     const previousTeamSlug = currentTeam.value?.slug;
@@ -89,82 +67,70 @@ onUnmounted(() => {
 <template>
     <DropdownMenu>
         <DropdownMenuTrigger as-child>
-            <Button
+            <button
+                type="button"
                 data-test="team-switcher-trigger"
-                variant="ghost"
-                :class="
-                    props.inHeader
-                        ? 'h-8 gap-1 px-2'
-                        : 'data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground w-full justify-start px-2 has-[>svg]:px-2'
-                "
+                class="org-card block w-full text-left"
             >
-                <PhUsers
-                    :class="
-                        props.inHeader
-                            ? 'hidden'
-                            : 'hidden size-4 shrink-0 group-data-[collapsible=icon]:block'
-                    "
-                />
-                <div
-                    :class="
-                        props.inHeader
-                            ? 'grid flex-1 text-left text-sm leading-tight'
-                            : 'grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden'
-                    "
-                >
-                    <span
-                        :class="
-                            props.inHeader
-                                ? 'max-w-[120px] truncate font-medium'
-                                : 'truncate font-semibold'
-                        "
-                    >
-                        {{ currentTeam?.name ?? 'Select team' }}
-                    </span>
-                </div>
-                <PhCaretUpDown
-                    :class="
-                        props.inHeader
-                            ? 'size-4 opacity-50'
-                            : 'ml-auto group-data-[collapsible=icon]:hidden'
-                    "
-                />
-            </Button>
+                <span class="nc-label block">{{ $t('Organization') }}</span>
+                <span class="mt-[3px] flex items-center gap-[6px]" style="font-size: 13px">
+                    {{ currentTeam?.name ?? $t('Select organization') }}
+                    <PhCaretUpDown :size="13" class="ml-auto" style="color: var(--nc-neutral-500)" />
+                </span>
+                <span class="mt-[2px] block" style="font-size: 11px; color: var(--nc-neutral-500)">{{ currentTeam?.roleLabel }}</span>
+            </button>
         </DropdownMenuTrigger>
 
         <DropdownMenuContent
-            :class="menuContentClass"
-            :side="props.inHeader ? undefined : isMobile ? 'bottom' : 'right'"
-            :align="props.inHeader ? 'end' : 'start'"
-            :side-offset="props.inHeader ? undefined : 4"
+            class="w-(--reka-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            :side="isMobile ? 'bottom' : 'right'"
+            align="start"
+            :side-offset="4"
         >
             <DropdownMenuLabel class="text-muted-foreground text-xs">
-                Teams
+                {{ $t('Organizations') }}
             </DropdownMenuLabel>
             <DropdownMenuItem
                 v-for="team in teams"
                 :key="team.id"
                 data-test="team-switcher-item"
-                :class="teamItemClass"
+                class="cursor-pointer gap-2 p-2"
                 @click="switchTeam(team)"
             >
                 {{ team.name }}
                 <PhCheck
                     v-if="currentTeam?.id === team.id"
-                    :class="checkIconClass"
+                    class="ml-auto h-4 w-4"
                 />
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <CreateTeamModal>
                 <DropdownMenuItem
                     data-test="team-switcher-new-team"
-                    :class="teamItemClass"
+                    class="cursor-pointer gap-2 p-2"
                     @select.prevent
                 >
-                    <PhPlus :class="plusIconClass" />
-                    <span class="text-muted-foreground">New team</span>
+                    <PhPlus class="h-4 w-4" />
+                    <span class="text-muted-foreground">{{ $t('New organization') }}</span>
                 </DropdownMenuItem>
             </CreateTeamModal>
         </DropdownMenuContent>
     </DropdownMenu>
 </template>
+
+<style scoped>
+.org-card {
+    padding: var(--nc-space-3);
+    border: 0;
+    border-radius: var(--nc-radius-md);
+    background: var(--nc-surface);
+    box-shadow: var(--nc-shadow-sm);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.org-card:hover {
+    box-shadow: var(--nc-shadow-md);
+}
+</style>

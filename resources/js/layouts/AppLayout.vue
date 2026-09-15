@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import AppLayout from '@/layouts/app/AppSidebarLayout.vue';
+import AppSidebarLayout from '@/layouts/app/AppSidebarLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 
-const { breadcrumbs = [] } = defineProps<{
+const { title, subtitle, live = false, breadcrumbs = [] } = defineProps<{
+    title?: string;
+    subtitle?: string;
+    live?: boolean;
     breadcrumbs?: BreadcrumbItem[];
 }>();
 </script>
 
 <template>
-    <AppLayout :breadcrumbs="breadcrumbs">
+    <AppSidebarLayout :title="title ?? breadcrumbs.at(-1)?.title" :subtitle="subtitle" :live="live">
         <slot />
-    </AppLayout>
+    </AppSidebarLayout>
 </template>
