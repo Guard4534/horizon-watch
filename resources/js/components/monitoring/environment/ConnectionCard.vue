@@ -34,7 +34,7 @@ const snippet = computed(() =>
         <div class="mb-[var(--nc-space-3)] flex items-center gap-2">
             <span style="font-size: 14px">{{ $t('Connection') }}</span>
             <span style="font-size: 10px; padding: 2px 7px; border-radius: var(--nc-radius-sm); background: var(--nc-neutral-900); color: var(--nc-neutral-400)">
-                {{ environment.basicAuthUser ? 'basic auth' : $t('no auth') }}
+                {{ environment.basicAuthUser ? $t('basic auth') : $t('no auth') }}
             </span>
         </div>
         <div class="flex flex-col" style="gap: var(--nc-space-2); font-size: 12px; color: var(--nc-neutral-500)">
