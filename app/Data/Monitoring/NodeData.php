@@ -1,0 +1,20 @@
+<?php
+
+namespace App\Data\Monitoring;
+
+use App\Enums\EnvironmentStatus;
+use Spatie\LaravelData\Data;
+
+class NodeData extends Data
+{
+    public function __construct(
+        public string $hostname,
+        public EnvironmentStatus $status,
+        public int $workers,
+        public int $jobsPerMinute,
+        public int $memoryMb,
+        public int $supervisorCount,
+        public int $queueCount,
+        public int $lastHeartbeatSecondsAgo,
+    ) {}
+}
