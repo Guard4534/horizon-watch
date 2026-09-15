@@ -36,7 +36,7 @@ const slug = useTeamSlug();
                             :style="{ color: alert.severity === 'critical' ? 'var(--st-down)' : 'var(--st-warn)' }"
                         >
                             <component :is="alert.severity === 'critical' ? PhWarningOctagon : PhWarning" :size="14" />
-                            {{ alert.severity === 'critical' ? $t('Critical') : 'Warning' }}
+                            {{ alert.severity === 'critical' ? $t('Critical') : $t('Warning') }}
                         </span>
                     </td>
                     <td style="font-size: 12px; letter-spacing: 0.01em">{{ formatRule(alert.metric, alert.threshold, alert.unit) }}</td>
@@ -52,7 +52,7 @@ const slug = useTeamSlug();
                             : $t('max wait :wait on 3 queues', { wait: formatWait(alert.maxWaitSeconds) }) }}
                     </td>
                     <td class="whitespace-nowrap" style="font-size: 12px; color: var(--nc-neutral-600)">{{ formatMinutesAgo(alert.minutesAgo) }}</td>
-                    <td class="whitespace-nowrap" style="font-size: 12px; color: var(--nc-neutral-500)">{{ alert.channels.map((channel) => (channel === 'mail' ? 'email' : 'webhook')).join(' · ') }}</td>
+                    <td class="whitespace-nowrap" style="font-size: 12px; color: var(--nc-neutral-500)">{{ alert.channels.map((channel) => (channel === 'mail' ? $t('email') : $t('webhook'))).join(' · ') }}</td>
                 </tr>
             </tbody>
         </table>

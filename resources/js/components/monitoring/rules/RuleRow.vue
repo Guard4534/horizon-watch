@@ -34,14 +34,14 @@ const { rule, organizationScope } = defineProps<{
             <span class="flex-none" style="font-size: 11px; color: var(--nc-neutral-500)">{{ rule.unit }}</span>
         </div>
         <select class="nc-input" style="font-size: 12px" :value="rule.severity ?? 'disabled'" disabled :title="$t('Available soon')">
-            <option value="warning">Warning</option>
+            <option value="warning">{{ $t('Warning') }}</option>
             <option value="critical">{{ $t('Critical') }}</option>
             <option value="disabled">{{ $t('Disabled') }}</option>
         </select>
-        <label class="nc-radio" style="font-size: 12px">
+        <label class="nc-radio" style="font-size: 12px" :title="$t('Available soon')">
             <input type="checkbox" :checked="rule.notifyByEmail" disabled />
             <span class="nc-dot" />
-            Email
+            {{ $t('Email') }}
         </label>
     </div>
 </template>

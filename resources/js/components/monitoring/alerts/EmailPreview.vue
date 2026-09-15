@@ -17,7 +17,7 @@ const accent = computed(() => (critical.value ? 'var(--st-down)' : 'var(--st-war
         <div style="border: 1px solid var(--nc-divider); border-radius: var(--nc-radius-sm); padding: var(--nc-space-3); font-size: 12px">
             <div class="nc-label">{{ $t('Subject') }}</div>
             <div style="margin: 3px 0 var(--nc-space-3)">
-                [{{ critical ? $t('CRITICAL') : 'WARNING' }}] {{ alert.applicationName }} · {{ alert.environmentName }} — {{ alert.metric }}
+                [{{ critical ? $t('CRITICAL') : $t('WARNING') }}] {{ alert.applicationName }} · {{ alert.environmentName }} — {{ alert.metric }}
             </div>
             <div class="flex items-center gap-[9px]" style="margin-bottom: var(--nc-space-3)">
                 <span class="h-[30px] w-[3px] flex-none rounded-[2px]" :style="{ background: accent }" />
