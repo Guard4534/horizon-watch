@@ -37,14 +37,8 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
-            ? Password::min(12)
-                ->mixedCase()
-                ->letters()
-                ->numbers()
-                ->symbols()
-                ->uncompromised()
-            : null,
-        );
+        // Self-hosted panels may run without internet, so no uncompromised()
+        // lookup; ten characters matches what the interface asks for.
+        Password::defaults(fn (): Password => Password::min(10));
     }
 }

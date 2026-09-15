@@ -10,6 +10,8 @@ beforeEach(function () {
 });
 
 test('reset password link screen can be rendered', function () {
+    User::factory()->create();
+
     $response = $this->get(route('password.request'));
 
     $response->assertOk();
@@ -52,8 +54,8 @@ test('password can be reset with valid token', function () {
         $response = $this->post(route('password.update'), [
             'token' => $notification->token,
             'email' => $user->email,
-            'password' => 'password',
-            'password_confirmation' => 'password',
+            'password' => 'new-password-123',
+            'password_confirmation' => 'new-password-123',
         ]);
 
         $response
