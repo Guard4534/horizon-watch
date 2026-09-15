@@ -1,0 +1,239 @@
+/* Nocturne design system, ported with an nc- prefix so it never collides with
+   Tailwind's own theme variables (--color-neutral-*, --color-accent) or with
+   utility names such as .table. */
+:root {
+    --nc-bg: #161826;
+    --nc-surface: #232532;
+    --nc-text: #e9e9ed;
+    --nc-accent: #9184d9;
+    --nc-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+
+    --nc-neutral-100: #f3f5fe;
+    --nc-neutral-200: #e4e7f5;
+    --nc-neutral-300: #cfd3e5;
+    --nc-neutral-400: #b2b6ca;
+    --nc-neutral-500: #9397ab;
+    --nc-neutral-600: #75798c;
+    --nc-neutral-700: #595d6c;
+    --nc-neutral-800: #3f424d;
+    --nc-neutral-900: #292b31;
+
+    --nc-accent-100: #f5f4ff;
+    --nc-accent-200: #e7e5fe;
+    --nc-accent-300: #d2cefd;
+    --nc-accent-400: #b5abfc;
+    --nc-accent-500: #968ae0;
+    --nc-accent-600: #796cbf;
+    --nc-accent-700: #5d5294;
+    --nc-accent-800: #423a6a;
+    --nc-accent-900: #2b2741;
+
+    --nc-font: 'Inter Variable', system-ui, sans-serif;
+
+    --nc-space-1: 2.8px;
+    --nc-space-2: 5.6px;
+    --nc-space-3: 8.4px;
+    --nc-space-4: 11.2px;
+    --nc-space-6: 16.8px;
+    --nc-space-8: 22.4px;
+
+    --nc-radius-sm: 4px;
+    --nc-radius-md: 8px;
+    --nc-radius-lg: 14px;
+
+    --nc-shadow-sm: 0 0 0 1px #3f424d;
+    --nc-shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
+    --nc-shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
+
+    /* Status and environment palettes belong to the mockup, not the design system. */
+    --st-ok: oklch(0.74 0.09 158);
+    --st-warn: oklch(0.81 0.12 85);
+    --st-down: oklch(0.68 0.16 25);
+    --st-off: oklch(0.58 0.01 280);
+
+    --env-prod: oklch(0.66 0.14 25);
+    --env-preprod: oklch(0.74 0.12 62);
+    --env-staging: oklch(0.78 0.11 92);
+    --env-develop: oklch(0.72 0.1 190);
+    --env-demo: oklch(0.7 0.11 300);
+    --env-worker: oklch(0.73 0.09 150);
+    --env-testing: oklch(0.68 0.08 260);
+}
+
+@keyframes nc-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.25;
+    }
+}
+
+.nc-pulse {
+    animation: nc-pulse 1.6s ease-in-out infinite;
+}
+
+::selection {
+    background: color-mix(in srgb, var(--nc-accent) 30%, transparent);
+}
+
+:focus-visible {
+    outline: 2px solid var(--nc-accent);
+    outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--nc-neutral-800);
+    border-radius: 99px;
+}
+
+.nc-kicker {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--nc-accent);
+}
+
+.nc-label {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--nc-neutral-600);
+}
+
+.nc-hr {
+    height: 1px;
+    border: 0;
+    margin: var(--nc-space-4) 0;
+    background: linear-gradient(to right, transparent, var(--nc-divider) 48px, var(--nc-divider) calc(100% - 48px), transparent);
+}
+
+.nc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    font-family: var(--nc-font);
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.2;
+    color: var(--nc-text);
+    background: transparent;
+    border: 1px solid transparent;
+    padding: var(--nc-space-2) calc(var(--nc-space-3) * 1.2);
+    border-radius: var(--nc-radius-md);
+}
+.nc-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.nc-btn-primary { color: var(--nc-accent); border-color: var(--nc-accent); }
+.nc-btn-primary:not(:disabled):hover { background: color-mix(in srgb, var(--nc-accent) 12%, transparent); }
+.nc-btn-primary:not(:disabled):active { background: color-mix(in srgb, var(--nc-accent) 22%, transparent); }
+.nc-btn-secondary { border-color: var(--nc-divider); }
+.nc-btn-secondary:not(:disabled):hover { background: color-mix(in srgb, var(--nc-text) 7%, transparent); }
+.nc-btn-secondary:not(:disabled):active { background: color-mix(in srgb, var(--nc-text) 14%, transparent); }
+.nc-btn-ghost { color: var(--nc-accent); padding-inline: var(--nc-space-1); }
+.nc-btn-ghost:not(:disabled):hover { background: color-mix(in srgb, var(--nc-accent) 10%, transparent); }
+.nc-btn-ghost:not(:disabled):active { background: color-mix(in srgb, var(--nc-accent) 18%, transparent); }
+.nc-btn-icon { width: 36px; height: 36px; padding: 0; }
+.nc-btn-block { width: 100%; margin-top: var(--nc-space-2); }
+
+.nc-field > label {
+    display: block;
+    font-size: 12px;
+    margin-bottom: 5px;
+    color: color-mix(in srgb, var(--nc-text) 70%, transparent);
+}
+
+.nc-input {
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--nc-text);
+    caret-color: var(--nc-accent);
+    background: var(--nc-surface);
+    border: 1px solid var(--nc-divider);
+    border-radius: var(--nc-radius-md);
+}
+.nc-input:hover { border-color: color-mix(in srgb, var(--nc-text) 45%, transparent); }
+.nc-input:focus-visible { border-color: var(--nc-accent); outline-offset: 0; }
+.nc-input:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.nc-radio { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+.nc-radio input,
+.nc-seg-opt input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.nc-radio .nc-dot { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 1.5px solid var(--nc-divider); }
+.nc-radio:hover .nc-dot { border-color: var(--nc-accent); }
+.nc-radio input:checked + .nc-dot {
+    border-color: var(--nc-accent);
+    background: var(--nc-accent);
+    box-shadow: inset 0 0 0 4px var(--nc-bg);
+}
+.nc-radio input:focus-visible + .nc-dot { outline: 2px solid var(--nc-accent); outline-offset: 2px; }
+
+.nc-seg { display: inline-flex; overflow: hidden; border: 1px solid var(--nc-divider); border-radius: var(--nc-radius-md); }
+.nc-seg-opt { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+.nc-seg-opt + .nc-seg-opt { border-left: 1px solid var(--nc-divider); }
+.nc-seg-opt:has(input:checked) { color: var(--nc-accent); box-shadow: inset 0 0 0 1px var(--nc-accent); }
+.nc-seg-opt:not(:has(input:checked)):hover { background: color-mix(in srgb, var(--nc-text) 7%, transparent); }
+.nc-seg-opt:has(input:focus-visible) { outline: 2px solid var(--nc-accent); outline-offset: -2px; }
+
+.nc-card {
+    border-radius: var(--nc-radius-md);
+    background: var(--nc-surface);
+    box-shadow: var(--nc-shadow-sm);
+    padding: var(--nc-space-4);
+    min-width: 0;
+}
+
+.nc-tag { display: inline-flex; align-items: center; font-size: 11px; letter-spacing: 0.02em; padding: 3px 10px; border-radius: calc(var(--nc-radius-md) * 0.75); }
+.nc-tag-accent { background: var(--nc-accent-800); color: var(--nc-accent-100); }
+.nc-tag-neutral { background: var(--nc-neutral-800); color: var(--nc-neutral-100); }
+.nc-tag-outline { border: 1px solid var(--nc-accent); color: var(--nc-accent); }
+
+.nc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.nc-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--nc-text) 60%, transparent);
+    padding: var(--nc-space-2);
+}
+.nc-table td { padding: var(--nc-space-2); }
+.nc-table thead tr {
+    background: linear-gradient(to right, transparent, var(--nc-divider) 48px, var(--nc-divider) calc(100% - 48px), transparent) no-repeat bottom / 100% 1px;
+}
+.nc-table tbody tr {
+    background: linear-gradient(
+            to right,
+            transparent,
+            color-mix(in srgb, var(--nc-text) 8%, transparent) 48px,
+            color-mix(in srgb, var(--nc-text) 8%, transparent) calc(100% - 48px),
+            transparent
+        )
+        no-repeat bottom / 100% 1px;
+}
+.nc-table tbody tr:hover {
+    background:
+        linear-gradient(color-mix(in srgb, var(--nc-text) 4%, transparent), color-mix(in srgb, var(--nc-text) 4%, transparent)) no-repeat 0 0 / 100% 100%,
+        linear-gradient(
+                to right,
+                transparent,
+                color-mix(in srgb, var(--nc-text) 8%, transparent) 48px,
+                color-mix(in srgb, var(--nc-text) 8%, transparent) calc(100% - 48px),
+                transparent
+            )
+            no-repeat bottom / 100% 1px;
+}
+
+.nc-num { font-variant-numeric: tabular-nums; }
