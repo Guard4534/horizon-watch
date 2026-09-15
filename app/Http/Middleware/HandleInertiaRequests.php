@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Data\Auth\AuthUserData;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -41,8 +42,9 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $user,
+                'user' => $user ? AuthUserData::fromModel($user) : null,
             ],
+            'locale' => fn () => app()->getLocale(),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'currentTeam' => fn () => $user?->currentTeam ? $user->toUserTeam($user->currentTeam) : null,
             'teams' => fn () => $user?->toUserTeams(includeCurrent: true) ?? [],

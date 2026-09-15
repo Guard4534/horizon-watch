@@ -19,6 +19,7 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             auth: Auth;
+            locale: App.Enums.Locale;
             sidebarOpen: boolean;
             currentTeam: Team | null;
             teams: Team[];
