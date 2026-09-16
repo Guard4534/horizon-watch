@@ -22,7 +22,8 @@ export type TeamMember = {
 };
 
 export type TeamInvitation = {
-    code: string;
+    // No code: it is the invitee's credential and never reaches a page prop
+    // (see TeamController::edit).
     email: string;
     role: TeamRole;
     role_label: string;

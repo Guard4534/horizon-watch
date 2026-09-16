@@ -57,6 +57,9 @@ class UpdateMemberData extends Data
     {
         return [
             'environmentIds.required_if' => __('Pick at least one environment for a manual selection.'),
+            // Without this the framework prints the raw key, as in "The
+            // selected environmentIds.0 is invalid."
+            'environmentIds.*.exists' => __('One of the environments you picked is not part of this organization.'),
         ];
     }
 }

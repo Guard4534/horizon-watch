@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
 import { PhDotsThree } from '@phosphor-icons/vue';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import {
     Dialog,
@@ -50,6 +50,18 @@ const manualIds = ref<number[]>([]);
 const manualError = ref<string | null>(null);
 
 const removing = ref<App.Data.Teams.MemberData | null>(null);
+
+// Removing yourself as the last admin besides the owner is allowed — the
+// owner keeps every admin permission and can promote somebody again — but
+// it is the one removal whose consequence is not obvious from the row, so
+// the dialog says it out loud. This is the interlock ChangeMemberRole
+// deliberately does not repeat here (see RemoveMember's docblock).
+const losingTheLastAdmin = computed(
+    () =>
+        removing.value?.isSelf === true &&
+        removing.value.role === 'admin' &&
+        members.filter((member) => member.role === 'admin').length === 1,
+);
 
 // The owner's row has no menu: TeamPolicy::updateMember and removeMember
 // both refuse when the target is the owner, so offering the actions would
@@ -142,8 +154,12 @@ function confirmRemove() {
             error.value = null;
         },
         onFinish: () => (processing.value = false),
-        // Closed on success only: a removal that failed must not look like
-        // one that worked.
+        // Closed either way, with the reason left in the banner above the
+        // table rather than inside a dialog that is gone. onError is
+        // unreachable today: nothing in MemberController::destroy raises a
+        // ValidationException, and a 403 or a 404 is not an Inertia error
+        // response. It stays as the landing place for the first rule that
+        // refuses a removal.
         onSuccess: () => (removing.value = null),
         onError: (errors) => {
             removing.value = null;
@@ -408,14 +424,29 @@ function confirmRemove() {
                 }}</DialogTitle>
                 <DialogDescription>
                     {{
-                        $t(
-                            'They lose access to every environment of this organization. Their account and their other organizations are untouched, and they can be invited again.',
-                        )
+                        removing?.isSelf
+                            ? $t(
+                                  'You lose access to every environment of this organization. Your account and your other organizations are untouched, and you can be invited again.',
+                              )
+                            : $t(
+                                  'They lose access to every environment of this organization. Their account and their other organizations are untouched, and they can be invited again.',
+                              )
                     }}
                 </DialogDescription>
             </DialogHeader>
 
             <p style="font-size: 13px">{{ removing?.name }}</p>
+
+            <p
+                v-if="losingTheLastAdmin"
+                style="font-size: 12px; color: var(--st-warn)"
+            >
+                {{
+                    $t(
+                        'You are the only admin besides the owner: after this, nobody but the owner will be able to invite, remove or change members.',
+                    )
+                }}
+            </p>
 
             <DialogFooter class="gap-2">
                 <button

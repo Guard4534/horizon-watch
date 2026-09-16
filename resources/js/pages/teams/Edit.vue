@@ -95,6 +95,20 @@ const confirmRemoveMember = (member: TeamMember) => {
 // would otherwise land in the props and never be drawn.
 const inertiaPage = usePage();
 const roleError = computed(() => inertiaPage.props.errors?.role);
+
+const removeTargetIsSelf = computed(
+    () => memberToRemove.value?.id === inertiaPage.props.auth.user?.id,
+);
+
+// Removing yourself as the last admin besides the owner is allowed, and
+// nothing refuses it: the dialog is where the consequence gets said out
+// loud. See App\Actions\Teams\RemoveMember.
+const removeTargetIsLastAdmin = computed(
+    () =>
+        removeTargetIsSelf.value &&
+        memberToRemove.value?.role === 'admin' &&
+        props.members.filter((member) => member.role === 'admin').length === 1,
+);
 </script>
 
 <template>
@@ -349,6 +363,8 @@ const roleError = computed(() => inertiaPage.props.errors?.role);
     <RemoveMemberModal
         :team="team"
         :member="memberToRemove"
+        :is-self="removeTargetIsSelf"
+        :losing-the-last-admin="removeTargetIsLastAdmin"
         :open="removeMemberDialogOpen"
         @update:open="removeMemberDialogOpen = $event"
     />

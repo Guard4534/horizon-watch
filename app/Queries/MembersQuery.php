@@ -116,11 +116,16 @@ class MembersQuery
      * VisibleEnvironments, because the spec puts that filter in exactly one
      * class; the other visibilities say everything in their label already.
      *
-     * One query per manual member: pluck() skips the relation the query
-     * eager loads, and the labels are joined in memory from the map the
-     * page already carries. Reproducing the join here to make it a single
-     * query would mean a second copy of the visibility rule, which is the
-     * thing the spec forbids.
+     * Two queries per manual member: VisibleEnvironments::query() reads
+     * the membership to pick its branch, then this pluck() runs. The
+     * labels are joined in memory from the map the page already carries.
+     *
+     * Batching them is possible, but not from here — the join belongs
+     * inside VisibleEnvironments (a query() that accepts the membership
+     * the caller already holds, or a grantedEnvironmentIdsFor(Team,
+     * memberships) beside it). Writing it here instead would mean a second
+     * copy of the visibility rule, which is what the spec forbids. Left
+     * alone deliberately: a members list is small and admin-only.
      *
      * @return array<int, int>
      */

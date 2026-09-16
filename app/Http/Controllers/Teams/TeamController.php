@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Teams;
 
 use App\Actions\Teams\CreateTeam;
+use App\Actions\Teams\RemoveMember;
 use App\Enums\TeamRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Teams\DeleteTeamRequest;
@@ -73,8 +74,11 @@ class TeamController extends Controller
             'invitations' => $team->invitations()
                 ->whereNull('accepted_at')
                 ->get()
+                // No code: it is the invitee's credential, and this page is
+                // open to every member of the organization, viewers
+                // included. The only thing that may carry it is the link
+                // mailed to the invitee (see App\Data\Teams\InvitationData).
                 ->map(fn ($invitation) => [
-                    'code' => $invitation->code,
                     'email' => $invitation->email,
                     'role' => $invitation->role->value,
                     'role_label' => $invitation->role->label(),
@@ -120,23 +124,16 @@ class TeamController extends Controller
     /**
      * Leave the specified team.
      */
-    public function leave(Request $request, Team $team): RedirectResponse
+    public function leave(Request $request, Team $team, RemoveMember $removeMember): RedirectResponse
     {
         Gate::authorize('leave', $team);
 
         $user = $request->user();
 
-        $fallbackTeam = $user->isCurrentTeam($team)
-            ? $user->fallbackTeam($team)
-            : null;
-
-        $team->memberships()
-            ->where('user_id', $user->id)
-            ->delete();
-
-        if ($fallbackTeam) {
-            $user->switchTeam($fallbackTeam);
-        }
+        // Through the action, not inline: leaving is a membership removal
+        // like any other, and the inline version forgot the member's
+        // environment_user grants.
+        $removeMember->handle($team, $user);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('You left the team ":name"', ['name' => $team->name])]);
 

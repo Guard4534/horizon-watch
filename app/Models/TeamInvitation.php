@@ -159,11 +159,9 @@ class TeamInvitation extends Model
         ];
     }
 
-    /**
-     * Get the route key for the model.
-     */
-    public function getRouteKeyName(): string
-    {
-        return 'code';
-    }
+    // No getRouteKeyName() override on purpose: nothing binds this model by
+    // code any more. The public flow takes a "string $code" it looks up
+    // itself, the notification builds the link from ->code, and the panel's
+    // own routes say "{invitation:id}". Returning 'code' here would put a
+    // credential back into the next "{invitation}" URL by default.
 }

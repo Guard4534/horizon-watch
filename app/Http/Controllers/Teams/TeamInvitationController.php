@@ -61,9 +61,9 @@ class TeamInvitationController extends Controller
     }
 
     /**
-     * An invitation resolved by code alone doesn't know which organization
-     * it belongs to: without this check, an admin of one team could act on
-     * another team's invitation just by guessing its code.
+     * An invitation resolved by id alone doesn't know which organization it
+     * belongs to: without this check, an admin of one team could act on
+     * another team's invitation just by counting up.
      */
     private function ensureBelongsToTeam(TeamInvitation $invitation, Team $team): void
     {

@@ -26,20 +26,30 @@ class RemoveMember
      */
     public function handle(Team $team, User $target): void
     {
-        DB::transaction(function () use ($team, $target) {
+        // firstOrFail(), so that "remove somebody who is not a member" is a
+        // 404 rather than a 302 with "Member removed." on it. The check
+        // belongs here and not in a controller: three routes reach this
+        // action (the Members view, the starter kit's settings page, and
+        // leaving an organization), and a silent no-op on the second of
+        // them was a user-existence oracle over the whole installation.
+        $membership = $team->memberships()->where('user_id', $target->id)->firstOrFail();
+
+        DB::transaction(function () use ($team, $target, $membership) {
             DB::table('environment_user')
                 ->where('user_id', $target->id)
                 ->whereIn('environment_id', $team->environments()->pluck('environments.id'))
                 ->delete();
 
-            $team->memberships()->where('user_id', $target->id)->delete();
+            $membership->delete();
 
             // The person may be looking at this organization right now:
-            // leave them somewhere they still belong. Their personal team
-            // always exists in practice; fallbackTeam() covers the
-            // imported-data case where it does not.
+            // leave them somewhere they still belong. The alphabetically
+            // first team they have left, which is their personal team when
+            // that is all that remains — the rule "teams.leave" has always
+            // used. Null only for a membership imported without a personal
+            // team.
             if ($target->isCurrentTeam($team)) {
-                $fallback = $target->personalTeam() ?? $target->fallbackTeam($team);
+                $fallback = $target->fallbackTeam($team);
 
                 if ($fallback) {
                     $target->switchTeam($fallback);

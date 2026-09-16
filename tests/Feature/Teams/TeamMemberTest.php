@@ -240,3 +240,39 @@ test('removing a member through the settings route clears their environment gran
         'environment_id' => $environment->id,
     ]);
 });
+
+test('an admin can remove themselves through the settings route and lands on the home route', function () {
+    $owner = User::factory()->create();
+    $admin = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $team->members()->attach($admin, ['role' => TeamRole::Admin->value]);
+
+    $admin->update(['current_team_id' => $team->id]);
+
+    // Back to teams.edit would be a 403: the page belongs to an
+    // organization they have just left.
+    $this->actingAs($admin)
+        ->delete(route('teams.members.destroy', [$team, $admin]))
+        ->assertRedirect(route('home'));
+
+    expect($admin->fresh()->belongsToTeam($team))->toBeFalse()
+        ->and($admin->fresh()->current_team_id)->toEqual($admin->personalTeam()->id);
+});
+
+test('removing somebody who is not a member of the team is a 404, not a false success', function () {
+    $owner = User::factory()->create();
+    $stranger = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+    // A 302 with "Member removed." on it would answer "does user 41 exist?"
+    // for every id in the installation.
+    $this->actingAs($owner)
+        ->delete(route('teams.members.destroy', [$team, $stranger]))
+        ->assertNotFound();
+
+    expect($stranger->fresh()->belongsToTeam($stranger->personalTeam()))->toBeTrue();
+});

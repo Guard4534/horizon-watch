@@ -1,7 +1,11 @@
 <?php
 
+use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
+use App\Models\Application;
+use App\Models\Environment;
 use App\Models\Team;
+use App\Models\TeamInvitation;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -409,4 +413,65 @@ test('guests cannot access teams', function () {
     $response = $this->get(route('teams.index'));
 
     $response->assertRedirect(route('login'));
+});
+
+test('the team edit page never carries an invitation code, not even for a viewer', function () {
+    $owner = User::factory()->create();
+    $viewer = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $team->members()->attach($viewer, ['role' => TeamRole::Viewer->value]);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'invited_by' => $owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    // This page has no minimum role, and its props are readable in the page
+    // source. The code is what "POST /invitations/{code}/register" accepts
+    // from a guest, so a viewer reading it could take the invited seat.
+    $this->actingAs($viewer)
+        ->get(route('teams.edit', $team))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->has('invitations', 1))
+        ->assertDontSee($invitation->code, escape: false);
+
+    $this->actingAs($owner)
+        ->get(route('teams.edit', $team))
+        ->assertDontSee($invitation->code, escape: false);
+});
+
+test('leaving a team clears the environment grants it carried', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $team->members()->attach($member, [
+        'role' => TeamRole::Member->value,
+        'visibility' => MemberVisibility::Manual->value,
+    ]);
+
+    $environment = Environment::factory()->create([
+        'application_id' => Application::factory()->create(['team_id' => $team->id])->id,
+    ]);
+
+    $team->memberships()
+        ->where('user_id', $member->id)
+        ->firstOrFail()
+        ->visibleEnvironments()
+        ->attach($environment);
+
+    $this->actingAs($member)
+        ->delete(route('teams.leave', $team))
+        ->assertRedirect(route('teams.index'));
+
+    expect($member->fresh()->belongsToTeam($team))->toBeFalse();
+
+    $this->assertDatabaseMissing('environment_user', [
+        'user_id' => $member->id,
+        'environment_id' => $environment->id,
+    ]);
 });

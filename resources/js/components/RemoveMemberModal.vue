@@ -18,6 +18,11 @@ type Props = {
     team: Team;
     member: TeamMember | null;
     open: boolean;
+    // Whether the target is the person clicking, and whether that person is
+    // the last admin besides the owner. Computed by the page, which is the
+    // only place that has both the member list and the authenticated user.
+    isSelf?: boolean;
+    losingTheLastAdmin?: boolean;
 };
 
 const props = defineProps<Props>();
@@ -45,12 +50,27 @@ const removeMember = () => {
         <DialogContent>
             <DialogHeader>
                 <DialogTitle>{{ $t('Remove team member') }}</DialogTitle>
-                <DialogDescription>
+                <DialogDescription v-if="props.isSelf">
+                    {{ $t('You are about to remove yourself from this team.') }}
+                </DialogDescription>
+                <DialogDescription v-else>
                     {{ $t('Are you sure you want to remove') }}
                     <strong>{{ props.member?.name }}</strong>
                     {{ $t('from this team?') }}
                 </DialogDescription>
             </DialogHeader>
+
+            <p
+                v-if="props.losingTheLastAdmin"
+                class="text-sm"
+                style="color: var(--st-warn)"
+            >
+                {{
+                    $t(
+                        'You are the only admin besides the owner: after this, nobody but the owner will be able to invite, remove or change members.',
+                    )
+                }}
+            </p>
 
             <DialogFooter class="gap-2">
                 <DialogClose as-child>

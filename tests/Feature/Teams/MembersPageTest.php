@@ -399,3 +399,22 @@ test('no invitation prop carries the join code', function () {
     // and nowhere else, props included.
     $response->assertDontSee($code, escape: false);
 });
+
+test('an admin removes themselves from the members view and lands on the home route', function () {
+    $this->admin->update(['current_team_id' => $this->team->id]);
+
+    $this->actingAs($this->admin)
+        ->delete(route('members.destroy', ['current_team' => $this->team->slug, 'user' => $this->admin->id]))
+        ->assertRedirect(route('home'));
+
+    expect($this->admin->fresh()->belongsToTeam($this->team))->toBeFalse()
+        ->and($this->admin->fresh()->current_team_id)->toEqual($this->admin->personalTeam()->id);
+});
+
+test('removing a stranger from the members view is a 404, not a false success', function () {
+    $stranger = User::factory()->create();
+
+    $this->actingAs($this->admin)
+        ->delete(route('members.destroy', ['current_team' => $this->team->slug, 'user' => $stranger->id]))
+        ->assertNotFound();
+});

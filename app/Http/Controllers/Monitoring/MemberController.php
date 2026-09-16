@@ -37,6 +37,11 @@ class MemberController extends Controller
 
     /**
      * Change a member's role, their visibility, or both.
+     *
+     * A {user} who is not a member of this organization is a 404, raised by
+     * whichever action runs: both open on the membership with
+     * firstOrFail(). Kept there rather than here so the starter kit's own
+     * member routes cannot answer differently.
      */
     public function update(
         Request $request,
@@ -46,8 +51,6 @@ class MemberController extends Controller
         ChangeMemberRole $changeMemberRole,
         ChangeMemberVisibility $changeMemberVisibility,
     ): RedirectResponse {
-        $this->ensureMemberOf($current_team, $user);
-
         Gate::authorize('updateMember', [$current_team, $user]);
 
         if ($data->role !== null) {
@@ -72,8 +75,6 @@ class MemberController extends Controller
         User $user,
         RemoveMember $removeMember,
     ): RedirectResponse {
-        $this->ensureMemberOf($current_team, $user);
-
         Gate::authorize('removeMember', [$current_team, $user]);
 
         $removeMember->handle($current_team, $user);
@@ -86,15 +87,5 @@ class MemberController extends Controller
         return $request->user()?->is($user)
             ? to_route('home')
             : back();
-    }
-
-    /**
-     * A user resolved by id alone says nothing about which organizations
-     * they belong to: without this, an admin could aim these routes at a
-     * stranger and learn from the answer whether that id exists.
-     */
-    private function ensureMemberOf(Team $team, User $user): void
-    {
-        abort_unless($user->belongsToTeam($team), 404);
     }
 }
