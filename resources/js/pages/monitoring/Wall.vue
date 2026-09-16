@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { Head, router, usePoll } from '@inertiajs/vue3';
+import { Head, Link, router, usePage, usePoll } from '@inertiajs/vue3';
+import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
 import { computed, ref, watch } from 'vue';
+import EmptyState from '@/components/monitoring/EmptyState.vue';
 import EnvironmentTile from '@/components/monitoring/wall/EnvironmentTile.vue';
 import AnomalyList from '@/components/monitoring/wall/AnomalyList.vue';
 import SentNotifications from '@/components/monitoring/wall/SentNotifications.vue';
@@ -8,7 +10,9 @@ import WallFilters from '@/components/monitoring/wall/WallFilters.vue';
 import KpiCard from '@/components/nocturne/KpiCard.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
+import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCount } from '@/lib/monitoring';
+import { create as createApplication } from '@/routes/applications';
 
 defineOptions({
     layout: {
@@ -23,6 +27,17 @@ const { page } = defineProps<{
 }>();
 
 usePoll(15000, { only: ['page', 'openAlertCount'] });
+
+const slug = useTeamSlug();
+const shared = usePage();
+
+// Nothing visible: either the organization has no environment yet, or this
+// member's visibility covers none of the ones that exist. Both end up here,
+// and only someone who may configure applications gets the way out.
+const nothingVisible = computed(() => page.environments.length === 0);
+const canManageApplications = computed(
+    () => shared.props.canManageApplications,
+);
 
 const query = new URLSearchParams(window.location.search);
 const filter = ref<'all' | 'problems'>(
@@ -127,30 +142,56 @@ const kpis = computed(() => [
                 />
             </div>
 
-            <WallFilters
-                v-model:filter="filter"
-                v-model:environment-name="environmentName"
-                v-model:search="search"
-                :environments="page.environments"
-                :problem-count="problems.length"
-            />
-
-            <div
-                class="grid"
-                style="
-                    grid-template-columns: repeat(
-                        auto-fill,
-                        minmax(176px, 1fr)
-                    );
-                    gap: var(--nc-space-3);
+            <EmptyState
+                v-if="nothingVisible"
+                :icon="PhStackSimple"
+                :kicker="$t('Nothing connected')"
+                :title="$t('No environments yet')"
+                :body="
+                    canManageApplications
+                        ? $t(
+                              'Add an application and its environments, and every one of them shows up here.',
+                          )
+                        : $t(
+                              'No environment is visible to you yet. An administrator of this organization can widen your visibility or configure an application.',
+                          )
                 "
             >
-                <EnvironmentTile
-                    v-for="environment in shown"
-                    :key="environment.id"
-                    :environment="environment"
+                <Link
+                    v-if="canManageApplications"
+                    class="nc-btn nc-btn-primary"
+                    :href="createApplication(slug)"
+                >
+                    <PhPlus :size="14" />{{ $t('Add application') }}
+                </Link>
+            </EmptyState>
+
+            <template v-else>
+                <WallFilters
+                    v-model:filter="filter"
+                    v-model:environment-name="environmentName"
+                    v-model:search="search"
+                    :environments="page.environments"
+                    :problem-count="problems.length"
                 />
-            </div>
+
+                <div
+                    class="grid"
+                    style="
+                        grid-template-columns: repeat(
+                            auto-fill,
+                            minmax(176px, 1fr)
+                        );
+                        gap: var(--nc-space-3);
+                    "
+                >
+                    <EnvironmentTile
+                        v-for="environment in shown"
+                        :key="environment.id"
+                        :environment="environment"
+                    />
+                </div>
+            </template>
         </div>
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">

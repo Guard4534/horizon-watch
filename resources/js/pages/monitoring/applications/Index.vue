@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import { PhPlus } from '@phosphor-icons/vue';
+import { Head, usePage } from '@inertiajs/vue3';
+import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
+import EmptyState from '@/components/monitoring/EmptyState.vue';
 import ApplicationSection from '@/components/monitoring/applications/ApplicationSection.vue';
 
 defineOptions({
@@ -13,6 +14,11 @@ const { page } = defineProps<{
 }>();
 
 const search = ref('');
+const shared = usePage();
+
+// page.groups, not the filtered list: a search that matches nothing is not
+// an unconfigured organization.
+const nothingVisible = computed(() => page.groups.length === 0);
 
 const groups = computed(() => {
     const needle = search.value.trim().toLowerCase();
@@ -61,6 +67,21 @@ const groups = computed(() => {
                 <PhPlus :size="14" />{{ $t('Add application') }}
             </button>
         </div>
+        <EmptyState
+            v-if="nothingVisible"
+            :icon="PhStackSimple"
+            :kicker="$t('Nothing connected')"
+            :title="$t('No applications yet')"
+            :body="
+                shared.props.canManageApplications
+                    ? $t(
+                          'Add an application and its environments, and every one of them shows up here.',
+                      )
+                    : $t(
+                          'No environment is visible to you yet. An administrator of this organization can widen your visibility or configure an application.',
+                      )
+            "
+        />
         <ApplicationSection
             v-for="group in groups"
             :key="group.application.id"

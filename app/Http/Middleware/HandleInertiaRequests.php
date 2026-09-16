@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Data\Auth\AuthUserData;
 use App\Enums\AlertState;
+use App\Models\Application;
 use App\Monitoring\MonitoringRepository;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -52,6 +53,14 @@ class HandleInertiaRequests extends Middleware
             'openAlertCount' => fn () => $user?->currentTeam
                 ? count(app(MonitoringRepository::class)->alerts($user->currentTeam, AlertState::Open))
                 : null,
+            // Shared, not a page prop: the empty states of the wall, the
+            // application list, the alerts and the alert settings all need
+            // it, and none of them has anything else to ask the server for.
+            // Read through ApplicationPolicy so the answer stays the same
+            // one the routes enforce.
+            'canManageApplications' => fn () => $user?->currentTeam
+                ? $user->can('create', [Application::class, $user->currentTeam])
+                : false,
         ];
     }
 }

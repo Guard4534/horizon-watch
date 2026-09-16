@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { Head, router, usePoll } from '@inertiajs/vue3';
+import { Head, router, usePage, usePoll } from '@inertiajs/vue3';
+import { PhBellSimpleSlash } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
+import EmptyState from '@/components/monitoring/EmptyState.vue';
 import AlertTable from '@/components/monitoring/alerts/AlertTable.vue';
 import EmailPreview from '@/components/monitoring/alerts/EmailPreview.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
@@ -15,6 +17,12 @@ const { page } = defineProps<{
 }>();
 
 usePoll(15000, { only: ['page', 'openAlertCount'] });
+
+const shared = usePage();
+
+// No visible environment at all: the three tabs and the delivery policy have
+// nothing to describe, so the page is just the explanation.
+const nothingVisible = computed(() => page.environmentCount === 0);
 
 const state = computed({
     get: () => page.state,
@@ -42,7 +50,25 @@ const alerts = computed(() => {
 <template>
     <Head :title="$t('Alerts')" />
 
+    <div v-if="nothingVisible" style="padding: var(--nc-space-6)">
+        <EmptyState
+            :icon="PhBellSimpleSlash"
+            :kicker="$t('Nothing to watch')"
+            :title="$t('No alerts yet')"
+            :body="
+                shared.props.canManageApplications
+                    ? $t(
+                          'Configure an application with at least one environment first: alerts appear as soon as there is something to watch.',
+                      )
+                    : $t(
+                          'No environment is visible to you yet. An administrator of this organization can widen your visibility or configure an application.',
+                      )
+            "
+        />
+    </div>
+
     <div
+        v-else
         class="grid items-start"
         style="
             padding: var(--nc-space-6);

@@ -31,6 +31,7 @@ class AlertLogQuery
                 AlertState::Resolved => $resolved,
             },
             preview: $critical[0] ?? $open[0] ?? null,
+            environmentCount: count($this->monitoring->environments($team)),
         );
     }
 }
