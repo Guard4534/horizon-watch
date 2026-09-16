@@ -18,7 +18,7 @@ class TeamMemberController extends Controller
      */
     public function update(UpdateTeamMemberRequest $request, Team $team, User $user): RedirectResponse
     {
-        Gate::authorize('updateMember', $team);
+        Gate::authorize('updateMember', [$team, $user]);
 
         $newRole = TeamRole::from($request->validated('role'));
 
@@ -37,9 +37,7 @@ class TeamMemberController extends Controller
      */
     public function destroy(Team $team, User $user): RedirectResponse
     {
-        Gate::authorize('removeMember', $team);
-
-        abort_if($team->owner()?->is($user), 403, __('The team owner cannot be removed.'));
+        Gate::authorize('removeMember', [$team, $user]);
 
         $team->memberships()
             ->where('user_id', $user->id)

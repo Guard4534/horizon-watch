@@ -45,15 +45,11 @@ class Application extends Model
             }
         });
 
-        static::updating(function (Application $application) {
-            if ($application->isDirty('name')) {
-                $application->slug = static::generateUniqueSlugWithin(
-                    static::query()->where('team_id', $application->team_id),
-                    $application->name,
-                    $application->id,
-                );
-            }
-        });
+        // No regeneration on rename: environment slugs are built from this
+        // one ("{application-slug}-{name}", see Environment), so changing
+        // it after creation would silently break every environment URL and
+        // the metrics generator's fixed-incident seeds (phase 2 spec,
+        // "Modifica del nome" decision).
     }
 
     /**

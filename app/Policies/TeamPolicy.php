@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Enums\TeamPermission;
+use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\User;
 
@@ -60,17 +61,30 @@ class TeamPolicy
 
     /**
      * Determine whether the user can update a member's role in the team.
+     * The owner's own role is never touched by this action: the owner is
+     * whoever created the organization, and the flow to hand ownership to
+     * someone else doesn't exist yet, so it's forbidden outright rather
+     * than left half-supported.
      */
-    public function updateMember(User $user, Team $team): bool
+    public function updateMember(User $user, Team $team, ?User $target = null): bool
     {
+        if ($target !== null && $target->teamRole($team) === TeamRole::Owner) {
+            return false;
+        }
+
         return $user->hasTeamPermission($team, TeamPermission::UpdateMember);
     }
 
     /**
-     * Determine whether the user can remove a member from the team.
+     * Determine whether the user can remove a member from the team. The
+     * owner can never be removed, not even by themselves (see "leave").
      */
-    public function removeMember(User $user, Team $team): bool
+    public function removeMember(User $user, Team $team, ?User $target = null): bool
     {
+        if ($target !== null && $target->teamRole($team) === TeamRole::Owner) {
+            return false;
+        }
+
         return $user->hasTeamPermission($team, TeamPermission::RemoveMember);
     }
 
@@ -96,5 +110,31 @@ class TeamPolicy
     public function delete(User $user, Team $team): bool
     {
         return ! $team->is_personal && $user->hasTeamPermission($team, TeamPermission::DeleteTeam);
+    }
+
+    /**
+     * Determine whether the user can manage the team's alert rules
+     * (thresholds and recipients). Unused until phase 4.
+     */
+    public function manageAlertRules(User $user, Team $team): bool
+    {
+        return $user->hasTeamPermission($team, TeamPermission::ManageAlertRules);
+    }
+
+    /**
+     * Determine whether the user can mute an alert. Unused until phase 4.
+     */
+    public function muteAlert(User $user, Team $team): bool
+    {
+        return $user->hasTeamPermission($team, TeamPermission::MuteAlert);
+    }
+
+    /**
+     * Determine whether the user can mark an anomaly as handled. Unused
+     * until phase 4.
+     */
+    public function handleAnomaly(User $user, Team $team): bool
+    {
+        return $user->hasTeamPermission($team, TeamPermission::HandleAnomaly);
     }
 }
