@@ -55,7 +55,11 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     // it saw first. That holds today because the binding is transient (a
     // fresh instance per resolution) and every write in this app ends in a
     // redirect, which resolves a new instance on the next request — nothing
-    // currently keeps one instance alive across a write.
+    // currently keeps one instance alive across a write. They are keyed by
+    // team but *not* by user, so they also assume the authenticated user
+    // never changes within one instance's life: a second Auth::login() on a
+    // shared instance (impersonation, Octane, a job that logs users in)
+    // would keep serving the first user's visibility.
 
     /**
      * The team's visible environments, with application eager loaded, fetched
