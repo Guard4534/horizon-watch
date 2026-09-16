@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\EnvironmentColor;
+use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Environment;
@@ -510,3 +511,50 @@ test('member and viewer cannot create, edit or delete environments', function (s
 
     expect(Environment::find($environment->id))->not->toBeNull();
 })->with(['member', 'viewer']);
+
+/**
+ * Visibility is not a permission (phase 2 spec): the write pages answer to
+ * the Policy, so an admin whose own visibility hides an environment still
+ * edits it — including its credentials, which is the whole point, since
+ * nobody else in the organization may. Untested in either direction until
+ * now, and reached from the Applications view, which lists it (see
+ * MonitoringPagesTest); the environment's *detail* page still answers 404
+ * to the same admin, because that one is the operational view.
+ */
+test('an admin edits an environment their own visibility hides', function () {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'old-secret-value',
+    ]);
+
+    // Manual visibility granting nothing: this admin watches no environment
+    // at all.
+    $this->admin->teamMemberships()->where('team_id', $this->team->id)->first()
+        ->update(['visibility' => MemberVisibility::Manual->value]);
+
+    $this->actingAs($this->admin)
+        ->get(route('environments.edit', ['current_team' => $this->team->slug, 'environment' => $environment->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.environment.name', 'production')
+            ->where('page.hasPassword', true));
+
+    $this->actingAs($this->admin)
+        ->patch(route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]), [
+            'name' => 'production',
+            'color' => EnvironmentColor::Prod->value,
+            'horizonUrl' => 'https://production.example.com/horizon/api',
+            'basicAuthUser' => 'monitor',
+            'basicAuthPassword' => 'new-secret-value',
+            'pollIntervalSeconds' => 15,
+        ])
+        ->assertRedirect();
+
+    expect($environment->fresh()->basic_auth_password)->toBe('new-secret-value');
+
+    // The other half of the split, so the two cannot drift apart silently.
+    $this->actingAs($this->admin)
+        ->get(route('environments.show', ['current_team' => $this->team->slug, 'environment' => $environment->slug]))
+        ->assertNotFound();
+});

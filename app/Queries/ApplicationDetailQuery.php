@@ -17,10 +17,13 @@ class ApplicationDetailQuery
 
     public function handle(Team $team, string $applicationId): ApplicationDetailPageData
     {
-        $application = $this->monitoring->application($team, $applicationId) ?? abort(404);
+        // The configuration view, like the list this page is opened from:
+        // see ApplicationListQuery::handle(). The alerts below stay the
+        // watched ones, so a hidden environment simply brings none.
+        $application = $this->monitoring->configurableApplication($team, $applicationId) ?? abort(404);
 
         $environments = array_values(array_filter(
-            $this->monitoring->environments($team),
+            $this->monitoring->configurableEnvironments($team),
             fn (EnvironmentData $environment) => $environment->applicationId === $application->id,
         ));
         $environmentIds = array_map(fn (EnvironmentData $environment) => $environment->id, $environments);

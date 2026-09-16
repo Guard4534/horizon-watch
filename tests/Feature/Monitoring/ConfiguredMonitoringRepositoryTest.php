@@ -54,7 +54,7 @@ test('applications and environments come from the database, ordered as phase 1',
         ]);
 
     expect($this->repository->environment($this->team, $bravoStaging->slug)?->id)->toBe($bravoStaging->slug)
-        ->and($this->repository->application($this->team, $bravo->slug)?->id)->toBe($bravo->slug);
+        ->and($this->repository->configurableApplication($this->team, $bravo->slug)?->id)->toBe($bravo->slug);
 });
 
 test('an environment of another organization does not appear', function () {
@@ -68,6 +68,13 @@ test('an environment of another organization does not appear', function () {
     expect($this->repository->environment($this->team, $foreign->slug))->toBeNull()
         ->and($this->repository->environments($this->team))->toHaveCount(1)
         ->and($this->repository->nodes($this->team, $foreign->slug))->toBe([]);
+
+    // The Applications view drops the visibility filter, never the
+    // organization: $this->user is an admin, so this is the unfiltered
+    // branch answering.
+    expect($this->repository->configurableEnvironments($this->team))->toHaveCount(1)
+        ->and($this->repository->configurableApplications($this->team))->toHaveCount(1)
+        ->and($this->repository->configurableApplication($this->team, $otherApplication->slug))->toBeNull();
 });
 
 test('an application with no visible environment does not appear, even though it has one', function () {
@@ -85,11 +92,10 @@ test('an application with no visible environment does not appear, even though it
 
     $applications = $this->repository->applications($this->team);
 
+    // The watched view: the wall and its counts. The Applications view of
+    // this same admin lists all three — see the split test below.
     expect($applications)->toHaveCount(1)
-        ->and($applications[0]->id)->toBe($alpha->slug)
-        ->and($this->repository->application($this->team, $alpha->slug))->not->toBeNull()
-        ->and($this->repository->application($this->team, $bravo->slug))->toBeNull()
-        ->and($this->repository->application($this->team, $charlie->slug))->toBeNull();
+        ->and($applications[0]->id)->toBe($alpha->slug);
 
     // The wall's applicationCount goes through the same filtered list.
     expect(app(WallQuery::class)->handle($this->team)->applicationCount)->toBe(1);
@@ -103,7 +109,7 @@ test('an admin sees an application with zero environments, so they can still rea
 
     expect($applications)->toHaveCount(1)
         ->and($applications[0]->id)->toBe($empty->slug)
-        ->and($this->repository->application($this->team, $empty->slug))->not->toBeNull();
+        ->and($this->repository->configurableApplication($this->team, $empty->slug))->not->toBeNull();
 });
 
 test('a viewer does not see an application with zero environments', function () {
@@ -118,23 +124,61 @@ test('a viewer does not see an application with zero environments', function () 
     $repository = app(MonitoringRepository::class);
 
     expect($repository->applications($this->team))->toBe([])
-        ->and($repository->application($this->team, $empty->slug))->toBeNull();
+        ->and($repository->configurableApplications($this->team))->toBe([])
+        ->and($repository->configurableApplication($this->team, $empty->slug))->toBeNull();
 });
 
-test('an application whose environments are all hidden stays hidden even for an admin', function () {
-    // $this->user is Admin — has ManageApplications — but their own
-    // visibility is manual and grants nothing: the zero-environment
-    // exception must not leak into "has environments, all hidden".
+test('an application whose environments are all hidden still reaches the Applications view of an admin', function () {
+    // The rare case the spec documents: "un admin con manual vede solo i
+    // suoi ambienti, ma li configura tutti dalla vista Applicativi (dove
+    // serve il permesso, non la visibilità)". $this->user is an Admin whose
+    // manual visibility grants nothing.
     $application = Application::factory()->for($this->team)->create(['name' => 'Fatturaomatic']);
-    Environment::factory()->for($application)->production()->create();
+    $environment = Environment::factory()->for($application)->production()->create();
 
     $this->user->teamMemberships()->where('team_id', $this->team->id)->first()
         ->update(['visibility' => MemberVisibility::Manual->value]);
 
     $repository = app(MonitoringRepository::class);
 
+    // The watched view stays empty: wall, alerts, scopes and counts.
     expect($repository->applications($this->team))->toBe([])
-        ->and($repository->application($this->team, $application->slug))->toBeNull();
+        ->and($repository->environments($this->team))->toBe([])
+        ->and($repository->alerts($this->team, AlertState::Open))->toBe([])
+        // …and so does the environment's own detail page, which is the
+        // watched view too and must still answer 404.
+        ->and($repository->environment($this->team, $environment->slug))->toBeNull();
+
+    // The Applications view answers to the permission instead, so there is
+    // a link to the environment whose credentials this admin may fix.
+    expect($repository->configurableApplications($this->team))->toHaveCount(1)
+        ->and($repository->configurableApplication($this->team, $application->slug))->not->toBeNull()
+        ->and(array_map(fn ($item) => $item->id, $repository->configurableEnvironments($this->team)))
+        ->toBe([$environment->slug]);
+});
+
+test('an application whose environments are all hidden stays hidden for a member', function () {
+    // The mirror of the test above: without ManageApplications there is
+    // nothing to configure, so the Applications view is filtered like every
+    // other page — "un applicativo di cui non si vede nessun ambiente non
+    // compare nell'elenco".
+    $application = Application::factory()->for($this->team)->create(['name' => 'Fatturaomatic']);
+    $environment = Environment::factory()->for($application)->production()->create();
+
+    $member = User::factory()->create();
+    $this->team->members()->attach($member, [
+        'role' => TeamRole::Member->value,
+        'visibility' => MemberVisibility::Manual->value,
+    ]);
+
+    $this->actingAs($member);
+    $repository = app(MonitoringRepository::class);
+
+    expect($repository->applications($this->team))->toBe([])
+        ->and($repository->configurableApplications($this->team))->toBe([])
+        ->and($repository->configurableApplication($this->team, $application->slug))->toBeNull()
+        ->and($repository->configurableEnvironments($this->team))->toBe([])
+        ->and($repository->environment($this->team, $environment->slug))->toBeNull();
 });
 
 test('non_production visibility hides production environments, including from alert counts', function () {
@@ -179,7 +223,9 @@ test('the metrics stay identical within a tick and move on the next', function (
 test('with zero applications every method returns an empty result without error', function () {
     expect($this->repository->applications($this->team))->toBe([])
         ->and($this->repository->environments($this->team))->toBe([])
-        ->and($this->repository->application($this->team, 'anything'))->toBeNull()
+        ->and($this->repository->configurableApplications($this->team))->toBe([])
+        ->and($this->repository->configurableEnvironments($this->team))->toBe([])
+        ->and($this->repository->configurableApplication($this->team, 'anything'))->toBeNull()
         ->and($this->repository->environment($this->team, 'anything'))->toBeNull()
         ->and($this->repository->nodes($this->team, 'anything'))->toBe([])
         ->and($this->repository->queues($this->team, 'anything'))->toBe([])

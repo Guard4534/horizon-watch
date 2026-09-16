@@ -30,6 +30,10 @@ use Illuminate\Support\Collection;
  * the database, filtered by VisibleEnvironments; the numbers still come
  * from GeneratedMetrics, deterministic per environment slug and tick.
  *
+ * The Applications pages are the one exception to that filter — "la
+ * visibilità non è un permesso" — and the note above visibleApplications()
+ * is where that split is decided and explained.
+ *
  * The interface only takes a Team — the phase 1 Queries were written before
  * per-member visibility existed, and changing every Query's signature was
  * out of scope for this phase. So the viewer is an *implicit* dependency,
@@ -49,7 +53,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         'worker-batch' => ['job.runtime' => 900, 'workers.missing' => 2],
     ];
 
-    // The three caches below are per instance and are never invalidated: a
+    // The caches below are per instance and are never invalidated: a
     // repository instance must not span a mutation that changes visibility
     // or the set of environments/applications, or it will keep serving what
     // it saw first. That holds today because the binding is transient (a
@@ -60,6 +64,11 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     // never changes within one instance's life: a second Auth::login() on a
     // shared instance (impersonation, Octane, a job that logs users in)
     // would keep serving the first user's visibility.
+
+    // They are also keyed by *view* where the two views differ (see the
+    // note above visibleApplications()): a cache must never hand the
+    // visibility-filtered list to a caller that asked for the whole
+    // organization, or the other way round.
 
     /**
      * The team's visible environments, with application eager loaded, fetched
@@ -75,11 +84,28 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     /**
      * The same environments as above, indexed by slug for O(1) lookup by
      * every method that resolves one environment (environment(), nodes(),
-     * queues(), …) instead of scanning the list on every call.
+     * queues(), …) instead of scanning the list on every call. Filtered,
+     * like the list it indexes: see findEnvironment().
      *
      * @var array<int, Collection<string, Environment>>
      */
     private array $visibleEnvironmentsBySlugByTeam = [];
+
+    /**
+     * The whole organization's environments, for the Applications pages of
+     * a member who may manage applications — a different list from the one
+     * above, hence a second cache (see the note above visibleApplications()).
+     *
+     * @var array<int, EloquentCollection<int, Environment>>
+     */
+    private array $configurableEnvironmentsByTeam = [];
+
+    /**
+     * The whole organization's applications, same branch as above.
+     *
+     * @var array<int, EloquentCollection<int, Application>>
+     */
+    private array $configurableApplicationsByTeam = [];
 
     /**
      * Applications with zero environments, for members allowed to manage
@@ -90,6 +116,15 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
      * @var array<int, EloquentCollection<int, Application>>
      */
     private array $emptyApplicationsByTeam = [];
+
+    /**
+     * Whether the viewer may manage the team's applications. Memoized
+     * because it now decides which of the two views answers and every list
+     * asks it, at an indexed membership read each time.
+     *
+     * @var array<int, bool>
+     */
+    private array $managesApplicationsByTeam = [];
 
     public function __construct(
         private readonly Guard $auth,
@@ -104,16 +139,30 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             ->all();
     }
 
-    public function application(Team $team, string $applicationId): ?ApplicationData
+    public function environments(Team $team): array
     {
-        $application = $this->visibleApplications($team)->firstWhere('slug', $applicationId);
+        return $this->visibleEnvironmentModels($team)
+            ->map($this->toEnvironmentData(...))
+            ->all();
+    }
+
+    public function configurableApplications(Team $team): array
+    {
+        return $this->configurableApplicationModels($team)
+            ->map($this->toApplicationData(...))
+            ->all();
+    }
+
+    public function configurableApplication(Team $team, string $applicationId): ?ApplicationData
+    {
+        $application = $this->configurableApplicationModels($team)->firstWhere('slug', $applicationId);
 
         return $application ? $this->toApplicationData($application) : null;
     }
 
-    public function environments(Team $team): array
+    public function configurableEnvironments(Team $team): array
     {
-        return $this->visibleEnvironmentModels($team)
+        return $this->configurableEnvironmentModels($team)
             ->map($this->toEnvironmentData(...))
             ->all();
     }
@@ -284,6 +333,35 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     }
 
     /**
+     * ── The visibility split, and where the permission wins ──────────────
+     *
+     * Two readings of the same organization live in this class, because the
+     * spec asks for two (phase 2 spec, "Visibilità degli ambienti"):
+     *
+     * - The *watched* view — the wall, the alerts, the alert-rule scopes,
+     *   the environment detail page and every count that says how much of
+     *   the organization this member is watching — is visibility-filtered
+     *   for everybody, permission or not. "Un ambiente non visibile non
+     *   compare da nessuna parte e la sua pagina risponde 404" is about
+     *   this view. It is served by visibleApplications() and
+     *   visibleEnvironmentModels().
+     * - The *configuration* view — the Applications pages — answers to the
+     *   permission instead: "la visibilità non è un permesso: un admin con
+     *   `manual` vede solo i suoi ambienti, ma li configura tutti dalla
+     *   vista Applicativi (dove serve il permesso, non la visibilità). Il
+     *   caso è raro". A member holding TeamPermission::ManageApplications
+     *   therefore gets the whole organization from the configurable*
+     *   methods; everybody else gets exactly what they watch, which is all
+     *   they could act on anyway.
+     *
+     * Without the split, the rare case the spec calls out had no way
+     * through the interface at all: a restricted admin was told a hidden
+     * environment's name by the Members view, got no link to it from the
+     * Applications view, and could only fix its credentials by typing the
+     * edit URL from memory. The write pages themselves never come through
+     * this class — route model binding, then the Policy — which is why they
+     * already answered 200 to that admin.
+     *
      * Applications with at least one visible environment, in creation order.
      * Derived from the visible environments (whose application is already
      * eager loaded, so this costs no extra query) instead of $team->applications()
@@ -293,10 +371,13 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
      *
      * Exception: an application with *zero* environments (not one whose
      * environments are merely hidden) still appears to a member who can
-     * manage applications, or an admin who empties one via DeleteEnvironment
-     * would lose it forever — an orphaned row nobody could ever reach again
-     * to add an environment to. A restricted member still doesn't see it:
-     * there's nothing they could do about it anyway.
+     * manage applications. It survived the split — the configuration view
+     * lists it anyway now — because this list also feeds the wall's
+     * applicationCount, which is how the wall tells "this application has
+     * no environment yet" from "nothing is configured yet" and from
+     * "something is hidden from you" (see EmptyStateTest). A restricted
+     * member still doesn't see it: there's nothing they could do about it
+     * anyway.
      *
      * @return Collection<int, Application>
      */
@@ -306,7 +387,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             ->pluck('application')
             ->unique('id');
 
-        if ($this->currentUser()->hasTeamPermission($team, TeamPermission::ManageApplications)) {
+        if ($this->managesApplications($team)) {
             $applications = $applications->concat($this->emptyApplications($team))->unique('id');
         }
 
@@ -321,6 +402,54 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         return $this->emptyApplicationsByTeam[$team->id] ??= $team->applications()->doesntHave('environments')->get();
     }
 
+    /**
+     * The Applications pages' applications: the whole organization for a
+     * member who may manage them, the watched list for everybody else (see
+     * the note above visibleApplications()). Read from $team->applications()
+     * rather than derived from the environments, since an application whose
+     * every environment is hidden — the very case this branch exists for —
+     * carries none of them.
+     *
+     * @return Collection<int, Application>
+     */
+    private function configurableApplicationModels(Team $team): Collection
+    {
+        if (! $this->managesApplications($team)) {
+            return $this->visibleApplications($team);
+        }
+
+        return $this->configurableApplicationsByTeam[$team->id] ??= $team->applications()->orderBy('id')->get();
+    }
+
+    /**
+     * The Applications pages' environments, same rule as above.
+     *
+     * @return EloquentCollection<int, Environment>
+     */
+    private function configurableEnvironmentModels(Team $team): EloquentCollection
+    {
+        if (! $this->managesApplications($team)) {
+            return $this->visibleEnvironmentModels($team);
+        }
+
+        return $this->configurableEnvironmentsByTeam[$team->id] ??= $this->visible->ofTeam($team)->get();
+    }
+
+    private function managesApplications(Team $team): bool
+    {
+        return $this->managesApplicationsByTeam[$team->id]
+            ??= $this->currentUser()->hasTeamPermission($team, TeamPermission::ManageApplications);
+    }
+
+    /**
+     * Resolves one environment by slug for the pages that read *one*
+     * environment: the detail page and the panels, series and job tables it
+     * is made of. Deliberately the watched list, permission or not — the
+     * detail page is the operational view, and the spec has a hidden
+     * environment's page answering 404 there. A restricted admin configures
+     * that environment from the Applications view instead, whose edit link
+     * goes to a route-bound page that never asks this class.
+     */
     private function findEnvironment(Team $team, string $environmentId): ?Environment
     {
         $bySlug = $this->visibleEnvironmentsBySlugByTeam[$team->id]

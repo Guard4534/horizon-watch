@@ -7,6 +7,7 @@ use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
 use App\Policies\EnvironmentPolicy;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 beforeEach(function () {
@@ -302,4 +303,30 @@ test('two organizations sharing the same application slug each resolve their own
     $this->actingAs($otherAdmin)
         ->get(route('applications.edit', ['current_team' => $otherTeam->slug, 'application' => $otherApplication->slug]))
         ->assertOk();
+});
+
+/**
+ * Deleting the application must clear the manual-visibility grants of every
+ * environment it takes with it, or environment_user keeps rows pointing at
+ * environments that no longer exist — and the next environment to be given
+ * that id would be silently visible to whoever held the stale grant. Only
+ * the environment delete path asserted this; this is the application path,
+ * where the grants are two cascades deep.
+ */
+test('deleting an application clears the manual visibility grants of its environments', function () {
+    $environment = Environment::factory()->for($this->application)->create();
+
+    $this->member->teamMemberships()->where('team_id', $this->team->id)->first()
+        ->visibleEnvironments()->attach([$environment->id]);
+
+    expect(DB::table('environment_user')->where('environment_id', $environment->id)->exists())->toBeTrue();
+
+    $this->actingAs($this->admin)
+        ->delete(route('applications.destroy', ['current_team' => $this->team->slug, 'application' => $this->application->slug]), [
+            'name' => $this->application->name,
+        ])
+        ->assertRedirect();
+
+    expect(DB::table('environment_user')->where('environment_id', $environment->id)->exists())->toBeFalse()
+        ->and(DB::table('environment_user')->where('user_id', $this->member->id)->exists())->toBeFalse();
 });

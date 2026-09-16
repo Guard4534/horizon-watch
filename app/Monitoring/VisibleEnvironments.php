@@ -28,13 +28,7 @@ class VisibleEnvironments
      */
     public function query(Team $team, User $user): Builder
     {
-        $query = Environment::query()
-            ->whereHas('application', fn ($applications) => $applications->where('team_id', $team->id))
-            ->with('application')
-            ->join('applications', 'applications.id', '=', 'environments.application_id')
-            ->orderBy('applications.name')
-            ->orderBy('environments.name')
-            ->select('environments.*');
+        $query = $this->ofTeam($team);
 
         $membership = $user->teamMemberships()->where('team_id', $team->id)->first();
 
@@ -54,10 +48,28 @@ class VisibleEnvironments
     }
 
     /**
-     * Determine whether the user can see the given environment on the team.
+     * Every environment of the team, in the same shape and order as
+     * query(), with no visibility filter at all.
+     *
+     * Deliberately unfiltered, and the only such query in the app: the spec
+     * says "la visibilità non è un permesso", so the Applications pages —
+     * where the permission decides, not the visibility — list the whole
+     * organization to a member who may manage applications. Its one caller
+     * is ConfiguredMonitoringRepository, which gates it on
+     * TeamPermission::ManageApplications; everything that describes what a
+     * member is *watching* must go through query() instead. Never call this
+     * from a page, a controller or another query.
+     *
+     * @return Builder<Environment>
      */
-    public function allows(Team $team, User $user, Environment $environment): bool
+    public function ofTeam(Team $team): Builder
     {
-        return $this->query($team, $user)->whereKey($environment->id)->exists();
+        return Environment::query()
+            ->whereHas('application', fn ($applications) => $applications->where('team_id', $team->id))
+            ->with('application')
+            ->join('applications', 'applications.id', '=', 'environments.application_id')
+            ->orderBy('applications.name')
+            ->orderBy('environments.name')
+            ->select('environments.*');
     }
 }

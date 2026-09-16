@@ -13,9 +13,16 @@ class ApplicationListQuery
 {
     public function __construct(private MonitoringRepository $monitoring) {}
 
+    /**
+     * The Applications view lists what the viewer may configure, not what
+     * they watch: a member who may manage applications sees every
+     * environment of the organization here, even the ones their own
+     * visibility hides from the wall (phase 2 spec, "la visibilità non è un
+     * permesso"). For everybody else the two lists are the same.
+     */
     public function handle(Team $team): ApplicationListPageData
     {
-        $environments = $this->monitoring->environments($team);
+        $environments = $this->monitoring->configurableEnvironments($team);
 
         $groups = array_map(function (ApplicationData $application) use ($environments) {
             $own = array_values(array_filter($environments, fn (EnvironmentData $environment) => $environment->applicationId === $application->id));
@@ -25,7 +32,7 @@ class ApplicationListQuery
                 environments: $own,
                 triageCount: count(array_filter($own, fn (EnvironmentData $environment) => ! $environment->status->isHealthy())),
             );
-        }, $this->monitoring->applications($team));
+        }, $this->monitoring->configurableApplications($team));
 
         return new ApplicationListPageData($groups, count($environments));
     }

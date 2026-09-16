@@ -98,23 +98,56 @@ test('the query eager loads the application', function () {
     expect($environment->relationLoaded('application'))->toBeTrue();
 });
 
-test('allows matches the query for all', function () {
-    expect($this->filter->allows($this->team, $this->userAll, $this->alphaProduction))->toBeTrue()
-        ->and($this->filter->allows($this->team, $this->userAll, $this->charlieTesting))->toBeTrue()
-        ->and($this->filter->allows($this->team, $this->userAll, $this->foreignEnvironment))->toBeFalse();
+/**
+ * The three tests below used to go through a VisibleEnvironments::allows()
+ * helper, deleted with the memoized slug map that replaced it: one
+ * exists() per environment invites a caller to ask per row. They now ask
+ * query() the same questions — in particular the one the per-visibility
+ * tests above do not: that another organization's environment never
+ * arrives, whatever the visibility.
+ */
+test('the query decides one environment the same way for all', function () {
+    $ids = $this->filter->query($this->team, $this->userAll)->pluck('id')->all();
+
+    expect($ids)->toContain($this->alphaProduction->id)
+        ->and($ids)->toContain($this->charlieTesting->id)
+        ->and($ids)->not->toContain($this->foreignEnvironment->id);
 });
 
-test('allows matches the query for non_production', function () {
-    expect($this->filter->allows($this->team, $this->userNonProduction, $this->alphaStaging))->toBeTrue()
-        ->and($this->filter->allows($this->team, $this->userNonProduction, $this->alphaProduction))->toBeFalse()
-        ->and($this->filter->allows($this->team, $this->userNonProduction, $this->bravoProduction))->toBeFalse()
-        ->and($this->filter->allows($this->team, $this->userNonProduction, $this->foreignEnvironment))->toBeFalse();
+test('the query decides one environment the same way for non_production', function () {
+    $ids = $this->filter->query($this->team, $this->userNonProduction)->pluck('id')->all();
+
+    expect($ids)->toContain($this->alphaStaging->id)
+        ->and($ids)->not->toContain($this->alphaProduction->id)
+        ->and($ids)->not->toContain($this->bravoProduction->id)
+        ->and($ids)->not->toContain($this->foreignEnvironment->id);
 });
 
-test('allows matches the query for manual', function () {
-    expect($this->filter->allows($this->team, $this->userManual, $this->alphaProduction))->toBeTrue()
-        ->and($this->filter->allows($this->team, $this->userManual, $this->charlieTesting))->toBeTrue()
-        ->and($this->filter->allows($this->team, $this->userManual, $this->alphaStaging))->toBeFalse()
-        ->and($this->filter->allows($this->team, $this->userManual, $this->bravoProduction))->toBeFalse()
-        ->and($this->filter->allows($this->team, $this->userManual, $this->foreignEnvironment))->toBeFalse();
+test('the query decides one environment the same way for manual', function () {
+    $ids = $this->filter->query($this->team, $this->userManual)->pluck('id')->all();
+
+    expect($ids)->toContain($this->alphaProduction->id)
+        ->and($ids)->toContain($this->charlieTesting->id)
+        ->and($ids)->not->toContain($this->alphaStaging->id)
+        ->and($ids)->not->toContain($this->bravoProduction->id)
+        ->and($ids)->not->toContain($this->foreignEnvironment->id);
+});
+
+/**
+ * The unfiltered escape hatch of the Applications view (see
+ * VisibleEnvironments::ofTeam()): no visibility filter, and still no way
+ * into another organization.
+ */
+test('ofTeam returns the whole organization, and nothing outside it', function () {
+    $ids = $this->filter->ofTeam($this->team)->pluck('id')->all();
+
+    expect($ids)->toBe([
+        $this->alphaProduction->id,
+        $this->alphaStaging->id,
+        $this->bravoPreprod->id,
+        $this->bravoProduction->id,
+        $this->charlieStaging->id,
+        $this->charlieTesting->id,
+    ])
+        ->and($ids)->not->toContain($this->foreignEnvironment->id);
 });
