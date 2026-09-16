@@ -87,7 +87,10 @@ test('the team edit page can be rendered', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('teams/Edit')
             ->where('members.0.role', TeamRole::Owner->value)
-            ->where('members.0.role_label', TeamRole::Owner->label()),
+            // The one role-tag format: the lowercase enum value, with a
+            // translated sentence for the owner (HasTeams::roleLabel()).
+            ->where('members.0.role_label', 'Owner · admin')
+            ->where('availableRoles.0', ['value' => 'admin', 'label' => 'admin']),
         );
 });
 
@@ -435,12 +438,131 @@ test('the team edit page never carries an invitation code, not even for a viewer
     $this->actingAs($viewer)
         ->get(route('teams.edit', $team))
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->has('invitations', 1))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('pendingInvitationCount', 1)
+            ->missing('invitations'))
         ->assertDontSee($invitation->code, escape: false);
 
     $this->actingAs($owner)
         ->get(route('teams.edit', $team))
         ->assertDontSee($invitation->code, escape: false);
+});
+
+test('the team edit page counts the pending invitations without naming who they went to', function () {
+    $owner = User::factory()->create();
+    $viewer = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $team->members()->attach($viewer, ['role' => TeamRole::Viewer->value]);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'invited_by' => $owner->id,
+        'email' => 'invited@example.com',
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    // This route is gated by membership with no minimum role, so every prop
+    // is readable in the page source by a viewer. MembersQuery withholds the
+    // same list without canInvite; this page must not be the way round it.
+    $this->actingAs($viewer)
+        ->get(route('teams.edit', $team))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('pendingInvitationCount', 1)
+            ->missing('invitations'))
+        ->assertDontSee($invitation->email);
+});
+
+test('the pending invitation count on the team edit page matches the members view', function () {
+    $owner = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+    $invitations = TeamInvitation::factory()->count(3)->create([
+        'team_id' => $team->id,
+        'invited_by' => $owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    // Revoked rows are still rows: counting with whereNull('accepted_at')
+    // made this page say three while the Members view listed one.
+    $invitations[0]->update(['revoked_at' => now()]);
+    $invitations[1]->update(['expires_at' => now()->subDay()]);
+
+    $this->actingAs($owner)
+        ->get(route('teams.edit', $team))
+        ->assertInertia(fn (Assert $page) => $page->where('pendingInvitationCount', 1));
+
+    $this->actingAs($owner)
+        ->get(route('members.index', ['current_team' => $team->slug]))
+        ->assertInertia(fn (Assert $page) => $page->has('page.invitations', 1));
+});
+
+test('the team edit permission flags come from the policies, not from the role table', function () {
+    $user = User::factory()->create();
+    $personalTeam = $user->personalTeam();
+
+    // The owner of a personal team holds DeleteTeam in TeamRole's table, but
+    // TeamPolicy::delete() refuses a personal team — and teams.destroy
+    // answers 403. The flag has to say the same thing, or the template ends
+    // up re-implementing the policy clause by hand.
+    $this->actingAs($user)
+        ->get(route('teams.edit', $personalTeam))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('permissions.canDeleteTeam', false)
+            ->where('permissions.canUpdateTeam', true));
+
+    $team = Team::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+
+    $this->actingAs($user)
+        ->get(route('teams.edit', $team))
+        ->assertInertia(fn (Assert $page) => $page->where('permissions.canDeleteTeam', true));
+});
+
+test('deleting an organization deletes its applications, environments and environment grants', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $team->members()->attach($member, [
+        'role' => TeamRole::Member->value,
+        'visibility' => MemberVisibility::Manual->value,
+    ]);
+
+    $application = Application::factory()->create(['team_id' => $team->id]);
+    $environment = Environment::factory()->production()->create([
+        'application_id' => $application->id,
+    ]);
+
+    expect($environment->basic_auth_password)->not->toBeNull();
+
+    $team->memberships()
+        ->where('user_id', $member->id)
+        ->firstOrFail()
+        ->visibleEnvironments()
+        ->attach($environment);
+
+    $this->actingAs($owner)
+        ->delete(route('teams.destroy', $team), ['name' => $team->name])
+        ->assertRedirect();
+
+    // Team uses SoftDeletes, so $team->delete() is an UPDATE and the
+    // cascadeOnDelete() on applications.team_id never fires on its own: the
+    // rows below — including a basic-auth password that still decrypts —
+    // used to survive in the database, unreferenced by any live team and
+    // unreachable through the interface. The spec asks for a cascade.
+    $this->assertDatabaseMissing('applications', ['id' => $application->id]);
+    $this->assertDatabaseMissing('environments', ['id' => $environment->id]);
+    $this->assertDatabaseMissing('environment_user', [
+        'environment_id' => $environment->id,
+        'user_id' => $member->id,
+    ]);
 });
 
 test('leaving a team clears the environment grants it carried', function () {

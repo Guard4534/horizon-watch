@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Form, Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import {
     PhCaretDown,
     PhEnvelopeSimple,
@@ -30,21 +30,18 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useInitials } from '@/composables/useInitials';
+import { losingTheLastAdmin } from '@/lib/members';
 import { index as membersIndex } from '@/routes/members';
 import { edit, index, update } from '@/routes/teams';
 import { update as updateMember } from '@/routes/teams/members';
-import type {
-    RoleOption,
-    Team,
-    TeamInvitation,
-    TeamMember,
-    TeamPermissions,
-} from '@/types';
+import type { RoleOption, Team, TeamMember, TeamPermissions } from '@/types';
 
 type Props = {
     team: Team;
     members: TeamMember[];
-    invitations: TeamInvitation[];
+    // A count, not a list: the invited addresses are an admin's business and
+    // this route has no minimum role (see TeamController::edit).
+    pendingInvitationCount: number;
     permissions: TeamPermissions;
     availableRoles: RoleOption[];
 };
@@ -78,9 +75,16 @@ const pageTitle = computed(() =>
     }),
 );
 
+// useForm, the phase's one submit idiom: it carries the validation message
+// the role change can come back with (ChangeMemberRole's sole-admin
+// self-demotion guard, and "owner is not assignable") and the in-flight
+// flag, instead of both being read back out of the shared page props.
+const roleForm = useForm<{ role: string }>({ role: '' });
+
 const updateMemberRole = (member: TeamMember, newRole: string) => {
-    router.visit(updateMember([props.team.slug, member.id]), {
-        data: { role: newRole },
+    roleForm.role = newRole;
+
+    roleForm.patch(updateMember([props.team.slug, member.id]).url, {
         preserveScroll: true,
     });
 };
@@ -90,24 +94,18 @@ const confirmRemoveMember = (member: TeamMember) => {
     removeMemberDialogOpen.value = true;
 };
 
-// The role change is a bare visit, so its validation errors (the sole-admin
-// self-demotion guard in ChangeMemberRole, and "owner is not assignable")
-// would otherwise land in the props and never be drawn.
 const inertiaPage = usePage();
-const roleError = computed(() => inertiaPage.props.errors?.role);
 
 const removeTargetIsSelf = computed(
     () => memberToRemove.value?.id === inertiaPage.props.auth.user?.id,
 );
 
-// Removing yourself as the last admin besides the owner is allowed, and
-// nothing refuses it: the dialog is where the consequence gets said out
-// loud. See App\Actions\Teams\RemoveMember.
-const removeTargetIsLastAdmin = computed(
-    () =>
-        removeTargetIsSelf.value &&
-        memberToRemove.value?.role === 'admin' &&
-        props.members.filter((member) => member.role === 'admin').length === 1,
+const removeTargetIsLastAdmin = computed(() =>
+    losingTheLastAdmin(
+        memberToRemove.value,
+        removeTargetIsSelf.value,
+        props.members,
+    ),
 );
 </script>
 
@@ -185,7 +183,7 @@ const removeTargetIsLastAdmin = computed(
                 </Button>
             </div>
 
-            <InputError :message="roleError" />
+            <InputError :message="roleForm.errors.role" />
 
             <div class="space-y-3">
                 <div
@@ -282,14 +280,14 @@ const removeTargetIsLastAdmin = computed(
              Members view, which also shows the role, the visibility and the
              expiry: a second read-only copy here would only be a place for
              the two to disagree. -->
-        <div v-if="invitations.length > 0" class="space-y-6">
+        <div v-if="pendingInvitationCount > 0" class="space-y-6">
             <Heading
                 variant="small"
                 :title="$t('Pending invitations')"
                 :description="
                     $tChoice(
                         ':count invitation is waiting to be accepted.|:count invitations are waiting to be accepted.',
-                        invitations.length,
+                        pendingInvitationCount,
                     )
                 "
             />
@@ -320,10 +318,7 @@ const removeTargetIsLastAdmin = computed(
         </div>
 
         <!-- Danger Zone -->
-        <div
-            v-if="permissions.canDeleteTeam && !team.isPersonal"
-            class="space-y-6"
-        >
+        <div v-if="permissions.canDeleteTeam" class="space-y-6">
             <Heading
                 variant="small"
                 :title="$t('Delete team')"
@@ -370,7 +365,7 @@ const removeTargetIsLastAdmin = computed(
     />
 
     <DeleteTeamModal
-        v-if="permissions.canDeleteTeam && !team.isPersonal"
+        v-if="permissions.canDeleteTeam"
         :team="team"
         :open="deleteDialogOpen"
         @update:open="deleteDialogOpen = $event"

@@ -68,24 +68,31 @@ class TeamController extends Controller
                     'email' => $member->email,
                     'avatar' => $member->avatar ?? null,
                     'role' => $membership->role->value,
-                    'role_label' => $this->roleLabel($membership->role),
+                    'role_label' => User::roleLabel($membership->role),
                 ];
             }),
-            'invitations' => $team->invitations()
-                ->whereNull('accepted_at')
-                ->get()
-                // No code: it is the invitee's credential, and this page is
-                // open to every member of the organization, viewers
-                // included. The only thing that may carry it is the link
-                // mailed to the invitee (see App\Data\Teams\InvitationData).
-                ->map(fn ($invitation) => [
-                    'email' => $invitation->email,
-                    'role' => $invitation->role->value,
-                    'role_label' => $invitation->role->label(),
-                    'created_at' => $invitation->created_at->toISOString(),
-                ]),
+            // A count, not a list. This route is gated by team membership
+            // with no minimum role, so a viewer reads these props out of
+            // the page source; who has been invited is an admin's business
+            // (MembersQuery withholds the same list without canInvite), and
+            // the page has had nothing but a count to draw since the
+            // read-only table moved to the Members view.
+            //
+            // pending(), not whereNull('accepted_at'): that also excludes
+            // revoked and expired rows, so this number and the Members view
+            // it links to cannot disagree.
+            'pendingInvitationCount' => $team->invitations()->pending()->count(),
             'permissions' => $user->toTeamPermissions($team),
-            'availableRoles' => TeamRole::assignable(),
+            // assignable() stays the source of which roles can be picked;
+            // the label comes from the one function that builds a role tag,
+            // so the dropdown and the badge next to it read the same.
+            'availableRoles' => array_map(
+                fn (array $option) => [
+                    'value' => $option['value'],
+                    'label' => User::roleLabel(TeamRole::from($option['value'])),
+                ],
+                TeamRole::assignable(),
+            ),
         ]);
     }
 
@@ -157,6 +164,19 @@ class TeamController extends Controller
 
             $team->invitations()->delete();
             $team->memberships()->delete();
+
+            // Before the team row, and on purpose. Team uses the starter
+            // kit's SoftDeletes, so $team->delete() is an UPDATE and the
+            // cascadeOnDelete() on applications.team_id never fires: the
+            // applications, their environments, the environment_user grants
+            // and the still-decryptable basic-auth passwords would all stay
+            // in the database, unreferenced by any live team and unreachable
+            // through the interface. The spec asks for a cascade and says
+            // phase 2 archives nothing; deleting the applications here lets
+            // the application → environments → environment_user cascade do
+            // the rest, while the team row keeps the kit's restore path.
+            $team->applications()->delete();
+
             $team->delete();
         });
 
@@ -167,19 +187,5 @@ class TeamController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Team deleted.')]);
 
         return to_route('teams.index');
-    }
-
-    /**
-     * The human-facing label of a role, the twin of
-     * HasTeams::roleLabel(): only the owner is translated, because admin,
-     * member and viewer are vocabulary the interface keeps in English. See
-     * TeamRole::label() for why this is not on the enum.
-     *
-     * The invitation rows below need none of this: an invitation can never
-     * carry the owner role (InviteMemberData's rule excludes it).
-     */
-    private function roleLabel(TeamRole $role): string
-    {
-        return $role === TeamRole::Owner ? __('Owner') : $role->label();
     }
 }

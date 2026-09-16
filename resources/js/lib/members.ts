@@ -46,6 +46,27 @@ export function roleTagClass(role: App.Enums.TeamRole): string {
     }
 }
 
+// Whether removing this person takes the organization's last admin besides
+// the owner with it. Allowed, and nothing refuses it — the owner keeps every
+// admin permission and can promote somebody again — but it is the one
+// removal whose consequence is not obvious from the row, so both
+// confirmation dialogs (the Members table's and the one on teams/Edit.vue)
+// say it out loud. Deliberately not mirrored by a server-side guard: see
+// App\Actions\Teams\RemoveMember's docblock, which records why demotion is
+// interlocked and removal is not. It lives here so the two dialogs cannot
+// drift apart.
+export function losingTheLastAdmin(
+    target: { role: App.Enums.TeamRole } | null,
+    targetIsSelf: boolean,
+    members: readonly { role: App.Enums.TeamRole }[],
+): boolean {
+    return (
+        targetIsSelf &&
+        target?.role === 'admin' &&
+        members.filter((member) => member.role === 'admin').length === 1
+    );
+}
+
 // "2 days ago", "in 5 days" — the mockup's phrasing for an invitation's sent
 // and expiry columns. Intl does the wording in the reader's language, so
 // nothing here needs translating and nothing is fetched.

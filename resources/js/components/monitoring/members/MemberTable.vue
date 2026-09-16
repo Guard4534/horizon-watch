@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { router } from '@inertiajs/vue3';
+import { useForm } from '@inertiajs/vue3';
 import { PhDotsThree } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
@@ -22,6 +22,7 @@ import {
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import {
     ASSIGNABLE_ROLES,
+    losingTheLastAdmin as losesTheLastAdmin,
     roleTagClass,
     VISIBILITIES,
     visibilityLabel,
@@ -39,28 +40,38 @@ const { members, environments, canManage } = defineProps<{
 
 const slug = useTeamSlug();
 
-const processing = ref(false);
-// Role changes are refused by the server in one case the interface cannot
-// predict on its own (the last admin besides the owner demoting themselves),
-// so the message it sends back is shown rather than swallowed.
-const error = ref<string | null>(null);
+// One form for both writes, the phase's single submit idiom: it carries the
+// in-flight flag and the validation messages, so neither is rebuilt by hand
+// here. transform() is set on every submit (the same shape the application
+// forms use) because the removal has no payload of its own and must not
+// carry the update's fields in its DELETE body.
+const form = useForm<App.Data.Teams.UpdateMemberData>({
+    role: null,
+    visibility: null,
+    environmentIds: [],
+});
+
+// Every message the server sent back, not a chosen one: a rejected
+// environment keys as "environmentIds.0" rather than "environmentIds", so
+// naming the fields by hand left the dialog showing nothing and looking
+// stuck. Deduplicated, because two rejected ids carry the same sentence.
+// A 403, a 404 or a throttle's 429 is not a validation response and is
+// handled by the exception handler, not here.
+const errors = computed<string[]>(() => [
+    ...new Set(
+        Object.values(form.errors as Record<string, string | undefined>).filter(
+            (message): message is string => typeof message === 'string',
+        ),
+    ),
+]);
 
 const manualFor = ref<App.Data.Teams.MemberData | null>(null);
 const manualIds = ref<number[]>([]);
-const manualError = ref<string | null>(null);
 
 const removing = ref<App.Data.Teams.MemberData | null>(null);
 
-// Removing yourself as the last admin besides the owner is allowed — the
-// owner keeps every admin permission and can promote somebody again — but
-// it is the one removal whose consequence is not obvious from the row, so
-// the dialog says it out loud. This is the interlock ChangeMemberRole
-// deliberately does not repeat here (see RemoveMember's docblock).
-const losingTheLastAdmin = computed(
-    () =>
-        removing.value?.isSelf === true &&
-        removing.value.role === 'admin' &&
-        members.filter((member) => member.role === 'admin').length === 1,
+const losingTheLastAdmin = computed(() =>
+    losesTheLastAdmin(removing.value, removing.value?.isSelf === true, members),
 );
 
 // The owner's row has no menu: TeamPolicy::updateMember and removeMember
@@ -69,43 +80,31 @@ const losingTheLastAdmin = computed(
 const isActionable = (member: App.Data.Teams.MemberData) =>
     canManage && !member.isOwner;
 
-// A rejected environment keys as "environmentIds.0", not "environmentIds",
-// so picking the field names by hand leaves the dialog showing nothing and
-// looking stuck.
-function firstError(errors: Record<string, string>): string | null {
-    const key = Object.keys(errors).find(
-        (name) =>
-            name === 'role' ||
-            name === 'visibility' ||
-            name.startsWith('environmentIds'),
-    );
-
-    return key ? errors[key] : (Object.values(errors)[0] ?? null);
-}
-
 function patch(
     member: App.Data.Teams.MemberData,
-    data: Record<string, string | number | number[]>,
-    report: (message: string | null) => void,
+    fields: Partial<App.Data.Teams.UpdateMemberData>,
     onSuccess?: () => void,
 ) {
-    router.visit(updateMember([slug.value, member.id]), {
-        data,
-        preserveScroll: true,
-        onStart: () => {
-            processing.value = true;
-            report(null);
+    // Everything not being changed goes back to its empty value:
+    // UpdateMemberData wants exactly one of role and visibility, and asks
+    // for environmentIds only with "manual".
+    form.role = fields.role ?? null;
+    form.visibility = fields.visibility ?? null;
+    form.environmentIds = fields.environmentIds ?? [];
+
+    form.transform((data) => data).patch(
+        updateMember([slug.value, member.id]).url,
+        {
+            preserveScroll: true,
+            onSuccess: () => onSuccess?.(),
         },
-        onFinish: () => (processing.value = false),
-        onError: (errors) => report(firstError(errors)),
-        onSuccess: () => onSuccess?.(),
-    });
+    );
 }
 
 const changeRole = (
     member: App.Data.Teams.MemberData,
     role: App.Enums.TeamRole,
-) => patch(member, { role }, (message) => (error.value = message));
+) => patch(member, { role });
 
 function changeVisibility(
     member: App.Data.Teams.MemberData,
@@ -117,12 +116,12 @@ function changeVisibility(
         // whole list, so opening on an empty set would revoke every grant
         // the admin did not re-tick.
         manualIds.value = [...member.visibleEnvironmentIds];
-        manualError.value = null;
+        form.clearErrors();
 
         return;
     }
 
-    patch(member, { visibility }, (message) => (error.value = message));
+    patch(member, { visibility });
 }
 
 function saveManual() {
@@ -135,7 +134,6 @@ function saveManual() {
     patch(
         member,
         { visibility: 'manual', environmentIds: manualIds.value },
-        (message) => (manualError.value = message),
         () => (manualFor.value = null),
     );
 }
@@ -147,32 +145,29 @@ function confirmRemove() {
         return;
     }
 
-    router.visit(destroyMember([slug.value, member.id]), {
-        preserveScroll: true,
-        onStart: () => {
-            processing.value = true;
-            error.value = null;
+    // Closed either way, with any reason left in the banner above the table
+    // rather than inside a dialog that is gone. onError is unreachable
+    // today: nothing in MemberController::destroy raises a
+    // ValidationException. It stays as the landing place for the first rule
+    // that refuses a removal.
+    form.transform(() => ({})).delete(
+        destroyMember([slug.value, member.id]).url,
+        {
+            preserveScroll: true,
+            onSuccess: () => (removing.value = null),
+            onError: () => (removing.value = null),
         },
-        onFinish: () => (processing.value = false),
-        // Closed either way, with the reason left in the banner above the
-        // table rather than inside a dialog that is gone. onError is
-        // unreachable today: nothing in MemberController::destroy raises a
-        // ValidationException, and a 403 or a 404 is not an Inertia error
-        // response. It stays as the landing place for the first rule that
-        // refuses a removal.
-        onSuccess: () => (removing.value = null),
-        onError: (errors) => {
-            removing.value = null;
-            error.value = firstError(errors);
-        },
-    });
+    );
 }
 </script>
 
 <template>
     <SectionCard :title="`${$t('Members')} · ${members.length}`">
+        <!-- Hidden while the manual-visibility dialog is open: that dialog
+             shows the same messages next to the checkboxes they belong
+             to. -->
         <div
-            v-if="error"
+            v-if="errors.length && manualFor === null"
             class="mb-[var(--nc-space-3)]"
             style="
                 border-radius: var(--nc-radius-md);
@@ -183,7 +178,7 @@ function confirmRemove() {
             "
             role="alert"
         >
-            {{ error }}
+            <p v-for="message in errors" :key="message">{{ message }}</p>
         </div>
 
         <div class="overflow-x-auto">
@@ -285,7 +280,7 @@ function confirmRemove() {
                                                 name: member.name,
                                             })
                                         "
-                                        :disabled="processing"
+                                        :disabled="form.processing"
                                     >
                                         <PhDotsThree :size="16" />
                                     </button>
@@ -386,11 +381,12 @@ function confirmRemove() {
             </div>
 
             <p
-                v-if="manualError"
+                v-for="message in errors"
+                :key="message"
                 style="font-size: 12px; color: var(--st-down)"
                 role="alert"
             >
-                {{ manualError }}
+                {{ message }}
             </p>
 
             <DialogFooter class="gap-2">
@@ -404,7 +400,7 @@ function confirmRemove() {
                 <button
                     type="button"
                     class="nc-btn nc-btn-primary"
-                    :disabled="processing"
+                    :disabled="form.processing"
                     @click="saveManual"
                 >
                     {{ $t('Save') }}
@@ -460,7 +456,7 @@ function confirmRemove() {
                     type="button"
                     class="nc-btn nc-btn-primary"
                     style="background: var(--st-down)"
-                    :disabled="processing"
+                    :disabled="form.processing"
                     @click="confirmRemove"
                 >
                     {{ $t('Remove') }}

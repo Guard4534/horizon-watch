@@ -87,14 +87,7 @@ class MembersQuery
                     email: $membership->user->email,
                     initials: $this->initials($membership->user->name),
                     role: $membership->role,
-                    // The mockup writes the role names in lower case and they
-                    // read the same in both languages, so the tag carries the
-                    // enum value as it is. Only the owner gets a sentence: the
-                    // spec shows them as "Owner · admin", because they have the
-                    // admin's permissions plus deleting the organization.
-                    roleLabel: $membership->role === TeamRole::Owner
-                        ? __('Owner · admin')
-                        : $membership->role->value,
+                    roleLabel: User::roleLabel($membership->role),
                     visibility: $membership->visibility,
                     visibilityLabel: $membership->visibility->label(),
                     visibleEnvironmentIds: $grantedIds,
@@ -154,7 +147,7 @@ class MembersQuery
                 id: $invitation->id,
                 email: $invitation->email,
                 role: $invitation->role,
-                roleLabel: $invitation->role->value,
+                roleLabel: User::roleLabel($invitation->role),
                 visibility: $invitation->visibility,
                 visibilityLabel: $invitation->visibility->label(),
                 invitedAt: $invitation->created_at?->toIso8601String(),

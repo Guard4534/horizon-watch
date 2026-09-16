@@ -418,3 +418,21 @@ test('removing a stranger from the members view is a 404, not a false success', 
         ->delete(route('members.destroy', ['current_team' => $this->team->slug, 'user' => $stranger->id]))
         ->assertNotFound();
 });
+
+test('a role tag reads the same on the members view and on the team settings page', function () {
+    // One format, one function (HasTeams::roleLabel): the lowercase enum
+    // value, as the mockup writes its tags, plus the owner's sentence. These
+    // two pages used to disagree — "member" here, "Member" there — under the
+    // same prop name.
+    $this->actingAs($this->admin)
+        ->get(route('members.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.members.0.roleLabel', 'Owner · admin')
+            ->where('page.members.1.roleLabel', 'admin'));
+
+    $this->actingAs($this->admin)
+        ->get(route('teams.edit', $this->team))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('members.0.role_label', 'Owner · admin')
+            ->where('members.1.role_label', 'admin'));
+});

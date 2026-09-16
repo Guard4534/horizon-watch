@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { router } from '@inertiajs/vue3';
+import { useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
@@ -15,8 +15,14 @@ const { invitations } = defineProps<{
 
 const slug = useTeamSlug();
 
+// Neither action has a payload; useForm is here so the whole phase submits
+// the same way, and its submit() takes the route object's own method (POST
+// to resend, DELETE to revoke).
+const form = useForm({});
+
 // The id of the invitation a request is in flight for, so only its own two
-// buttons go quiet.
+// buttons go quiet. form.processing cannot say which row that is, and there
+// is one form for every row.
 const busy = ref<number | null>(null);
 
 function act(
@@ -26,14 +32,13 @@ function act(
     // The id, never the code: the join code is the invitee's credential and
     // would end up in the web server's access log (see routes/settings.php).
     //
-    // Resending is rate limited to six a minute. A 429 is not an Inertia
-    // response, so it surfaces as Inertia's own "unexpected response"
-    // modal rather than as a toast; turning it into one means an
-    // Inertia-aware handler in the exception layer, which is shared ground
-    // and not this component's to claim.
-    router.visit(route([slug.value, invitation.id]), {
+    // Resending is rate limited to six a minute; that 429 and the 409 on an
+    // invitation somebody has just accepted are handled by the exception
+    // handler, not here.
+    busy.value = invitation.id;
+
+    form.submit(route([slug.value, invitation.id]), {
         preserveScroll: true,
-        onStart: () => (busy.value = invitation.id),
         onFinish: () => (busy.value = null),
     });
 }

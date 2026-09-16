@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { useForm } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -30,16 +29,16 @@ const emit = defineEmits<{
     'update:open': [value: boolean];
 }>();
 
-const processing = ref(false);
+// No payload: the membership to drop is in the URL. useForm is the phase's
+// one submit idiom and it owns the in-flight flag.
+const form = useForm({});
 
 const removeMember = () => {
     if (!props.member) {
         return;
     }
 
-    router.visit(destroyMember([props.team.slug, props.member.id]), {
-        onStart: () => (processing.value = true),
-        onFinish: () => (processing.value = false),
+    form.delete(destroyMember([props.team.slug, props.member.id]).url, {
         onSuccess: () => emit('update:open', false),
     });
 };
@@ -80,7 +79,7 @@ const removeMember = () => {
                 <Button
                     data-test="remove-member-confirm"
                     variant="destructive"
-                    :disabled="processing"
+                    :disabled="form.processing"
                     @click="removeMember"
                 >
                     {{ $t('Remove member') }}
