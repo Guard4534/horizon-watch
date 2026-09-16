@@ -2,12 +2,10 @@
 import { Form, Head } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
-import TeamInvitationAlert from '@/components/TeamInvitationAlert.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Spinner } from '@/components/ui/spinner';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
-import type { TeamInvitationContext } from '@/types';
 
 defineOptions({
     layout: {
@@ -20,7 +18,6 @@ defineOptions({
 defineProps<{
     status?: string;
     canResetPassword: boolean;
-    teamInvitation?: TeamInvitationContext | null;
 }>();
 </script>
 
@@ -34,8 +31,6 @@ defineProps<{
     >
         {{ status }}
     </div>
-
-    <TeamInvitationAlert v-if="teamInvitation" :invitation="teamInvitation" />
 
     <Form
         v-bind="store.form()"

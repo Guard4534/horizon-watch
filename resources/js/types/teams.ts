@@ -29,11 +29,6 @@ export type TeamInvitation = {
     created_at: string;
 };
 
-export type TeamInvitationContext = {
-    code: string;
-    teamName: string;
-};
-
 export type TeamPermissions = {
     canUpdateTeam: boolean;
     canDeleteTeam: boolean;
