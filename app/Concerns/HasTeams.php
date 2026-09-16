@@ -172,9 +172,22 @@ trait HasTeams
             slug: $team->slug,
             isPersonal: $team->is_personal,
             role: $role?->value,
-            roleLabel: $role?->label(),
+            roleLabel: $role === null ? null : $this->roleLabel($role),
             isCurrent: $this->isCurrentTeam($team),
         );
+    }
+
+    /**
+     * The human-facing label of a role. Only the owner is translated: admin,
+     * member and viewer are vocabulary the interface keeps in English, which
+     * is why TeamRole::label() stays out of __() and this sits at the call
+     * site instead — see that docblock, and MembersQuery::permissionLabel()
+     * for the same shape. TeamController::roleLabel() is its twin, for the
+     * memberships of other people.
+     */
+    private function roleLabel(TeamRole $role): string
+    {
+        return $role === TeamRole::Owner ? __('Owner') : $role->label();
     }
 
     /**

@@ -68,7 +68,7 @@ class TeamController extends Controller
                     'email' => $member->email,
                     'avatar' => $member->avatar ?? null,
                     'role' => $membership->role->value,
-                    'role_label' => $membership->role->label(),
+                    'role_label' => $this->roleLabel($membership->role),
                 ];
             }),
             'invitations' => $team->invitations()
@@ -167,5 +167,19 @@ class TeamController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Team deleted.')]);
 
         return to_route('teams.index');
+    }
+
+    /**
+     * The human-facing label of a role, the twin of
+     * HasTeams::roleLabel(): only the owner is translated, because admin,
+     * member and viewer are vocabulary the interface keeps in English. See
+     * TeamRole::label() for why this is not on the enum.
+     *
+     * The invitation rows below need none of this: an invitation can never
+     * carry the owner role (InviteMemberData's rule excludes it).
+     */
+    private function roleLabel(TeamRole $role): string
+    {
+        return $role === TeamRole::Owner ? __('Owner') : $role->label();
     }
 }

@@ -25,8 +25,14 @@ enum TeamRole: string
      * And this label is built outside a request: assignable() below is a
      * static table, exercised by tests/Unit/TeamRoleTest.php with no
      * application booted, so a __() here would make a pure enum depend on
-     * the container. Where a role does need translating, it happens at the
-     * call site — the convention MembersQuery::permissionLabel() records.
+     * the container. So the owner is translated at the call site instead —
+     * the convention MembersQuery::permissionLabel() records — in
+     * HasTeams::toUserTeam() and TeamController::edit(), the two places a
+     * membership's own label is rendered. The invitation paths
+     * (InvitationController, TeamInvitation, assignable()) need no arm at
+     * all: an invitation can never carry the owner role, because
+     * InviteMemberData is the only way one is written and its rule excludes
+     * it.
      */
     public function label(): string
     {
