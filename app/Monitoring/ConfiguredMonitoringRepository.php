@@ -16,6 +16,7 @@ use App\Enums\NotificationChannel;
 use App\Enums\RuleOrigin;
 use App\Enums\SentNotificationKind;
 use App\Enums\SeriesRange;
+use App\Enums\TeamPermission;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
@@ -48,6 +49,14 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         'worker-batch' => ['job.runtime' => 900, 'workers.missing' => 2],
     ];
 
+    // The three caches below are per instance and are never invalidated: a
+    // repository instance must not span a mutation that changes visibility
+    // or the set of environments/applications, or it will keep serving what
+    // it saw first. That holds today because the binding is transient (a
+    // fresh instance per resolution) and every write in this app ends in a
+    // redirect, which resolves a new instance on the next request — nothing
+    // currently keeps one instance alive across a write.
+
     /**
      * The team's visible environments, with application eager loaded, fetched
      * from the database at most once per request no matter how many
@@ -67,6 +76,16 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
      * @var array<int, Collection<string, Environment>>
      */
     private array $visibleEnvironmentsBySlugByTeam = [];
+
+    /**
+     * Applications with zero environments, for members allowed to manage
+     * them (see visibleApplications()). A separate query because these
+     * applications never show up among the visible environments' eager
+     * loaded "application" — there's no environment to carry one.
+     *
+     * @var array<int, EloquentCollection<int, Application>>
+     */
+    private array $emptyApplicationsByTeam = [];
 
     public function __construct(
         private readonly Guard $auth,
@@ -268,15 +287,34 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
      * from this member must not appear either (spec: "Un applicativo di cui
      * non si vede nessun ambiente non compare nell'elenco").
      *
+     * Exception: an application with *zero* environments (not one whose
+     * environments are merely hidden) still appears to a member who can
+     * manage applications, or an admin who empties one via DeleteEnvironment
+     * would lose it forever — an orphaned row nobody could ever reach again
+     * to add an environment to. A restricted member still doesn't see it:
+     * there's nothing they could do about it anyway.
+     *
      * @return Collection<int, Application>
      */
     private function visibleApplications(Team $team): Collection
     {
-        return $this->visibleEnvironmentModels($team)
+        $applications = $this->visibleEnvironmentModels($team)
             ->pluck('application')
-            ->unique('id')
-            ->sortBy('id')
-            ->values();
+            ->unique('id');
+
+        if ($this->currentUser()->hasTeamPermission($team, TeamPermission::ManageApplications)) {
+            $applications = $applications->concat($this->emptyApplications($team))->unique('id');
+        }
+
+        return $applications->sortBy('id')->values();
+    }
+
+    /**
+     * @return EloquentCollection<int, Application>
+     */
+    private function emptyApplications(Team $team): EloquentCollection
+    {
+        return $this->emptyApplicationsByTeam[$team->id] ??= $team->applications()->doesntHave('environments')->get();
     }
 
     private function findEnvironment(Team $team, string $environmentId): ?Environment

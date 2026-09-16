@@ -95,6 +95,48 @@ test('an application with no visible environment does not appear, even though it
     expect(app(WallQuery::class)->handle($this->team)->applicationCount)->toBe(1);
 });
 
+test('an admin sees an application with zero environments, so they can still reach it', function () {
+    // $this->user is Admin (see beforeEach): allowed to manage applications.
+    $empty = Application::factory()->for($this->team)->create(['name' => 'Empty']);
+
+    $applications = $this->repository->applications($this->team);
+
+    expect($applications)->toHaveCount(1)
+        ->and($applications[0]->id)->toBe($empty->slug)
+        ->and($this->repository->application($this->team, $empty->slug))->not->toBeNull();
+});
+
+test('a viewer does not see an application with zero environments', function () {
+    $viewer = User::factory()->create();
+    $this->team->members()->attach($viewer, [
+        'role' => TeamRole::Viewer->value,
+        'visibility' => MemberVisibility::All->value,
+    ]);
+    $empty = Application::factory()->for($this->team)->create(['name' => 'Empty']);
+
+    $this->actingAs($viewer);
+    $repository = app(MonitoringRepository::class);
+
+    expect($repository->applications($this->team))->toBe([])
+        ->and($repository->application($this->team, $empty->slug))->toBeNull();
+});
+
+test('an application whose environments are all hidden stays hidden even for an admin', function () {
+    // $this->user is Admin — has ManageApplications — but their own
+    // visibility is manual and grants nothing: the zero-environment
+    // exception must not leak into "has environments, all hidden".
+    $application = Application::factory()->for($this->team)->create(['name' => 'Fatturaomatic']);
+    Environment::factory()->for($application)->production()->create();
+
+    $this->user->teamMemberships()->where('team_id', $this->team->id)->first()
+        ->update(['visibility' => MemberVisibility::Manual->value]);
+
+    $repository = app(MonitoringRepository::class);
+
+    expect($repository->applications($this->team))->toBe([])
+        ->and($repository->application($this->team, $application->slug))->toBeNull();
+});
+
 test('non_production visibility hides production environments, including from alert counts', function () {
     // Fixed incident slug, so this environment is deterministically unhealthy.
     $application = Application::factory()->for($this->team)->create(['name' => 'Fatturaomatic']);
