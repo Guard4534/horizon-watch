@@ -50,9 +50,13 @@ Route::prefix('{current_team}')
     ->group(function () {
         Route::post('members/invitations', [TeamInvitationController::class, 'store'])->name('members.invitations.store');
 
-        Route::post('members/invitations/{invitation}/resend', [TeamInvitationController::class, 'resend'])
+        // "{invitation:id}" rather than the model's route key: the code is
+        // the invitee's own credential, and a URL ends up in the web
+        // server's access log. Only "invitations.show" — the link mailed to
+        // the invitee — carries it.
+        Route::post('members/invitations/{invitation:id}/resend', [TeamInvitationController::class, 'resend'])
             ->middleware('throttle:6,1')
             ->name('members.invitations.resend');
 
-        Route::delete('members/invitations/{invitation}', [TeamInvitationController::class, 'destroy'])->name('members.invitations.destroy');
+        Route::delete('members/invitations/{invitation:id}', [TeamInvitationController::class, 'destroy'])->name('members.invitations.destroy');
     });

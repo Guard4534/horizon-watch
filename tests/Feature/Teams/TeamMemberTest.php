@@ -1,6 +1,9 @@
 <?php
 
+use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
+use App\Models\Application;
+use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
 
@@ -166,4 +169,74 @@ test('removed member current team is set to personal team', function () {
         ->delete(route('teams.members.destroy', [$team, $member]));
 
     expect($member->fresh()->current_team_id)->toEqual($personalTeam->id);
+});
+
+// The settings routes and the phase 2 Members view are two doors onto the
+// same two rules. These tests stand at this door, so the two cannot drift
+// apart again (their twins live in MembersPageTest).
+test('the settings route refuses the sole-admin self-demotion too', function () {
+    $owner = User::factory()->create();
+    $admin = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $team->members()->attach($admin, ['role' => TeamRole::Admin->value]);
+
+    $this->actingAs($admin)
+        ->patch(route('teams.members.update', [$team, $admin]), [
+            'role' => TeamRole::Member->value,
+        ])
+        ->assertSessionHasErrors('role');
+
+    expect($admin->fresh()->teamRole($team))->toBe(TeamRole::Admin);
+});
+
+test('the settings route lets an admin demote themselves once somebody else is an admin', function () {
+    $owner = User::factory()->create();
+    $admin = User::factory()->create();
+    $second = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $team->members()->attach($admin, ['role' => TeamRole::Admin->value]);
+    $team->members()->attach($second, ['role' => TeamRole::Admin->value]);
+
+    $this->actingAs($admin)
+        ->patch(route('teams.members.update', [$team, $admin]), [
+            'role' => TeamRole::Viewer->value,
+        ])
+        ->assertRedirect(route('teams.edit', $team));
+
+    expect($admin->fresh()->teamRole($team))->toBe(TeamRole::Viewer);
+});
+
+test('removing a member through the settings route clears their environment grants', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $team->members()->attach($member, [
+        'role' => TeamRole::Member->value,
+        'visibility' => MemberVisibility::Manual->value,
+    ]);
+
+    $environment = Environment::factory()->create([
+        'application_id' => Application::factory()->create(['team_id' => $team->id])->id,
+    ]);
+
+    $team->memberships()
+        ->where('user_id', $member->id)
+        ->firstOrFail()
+        ->visibleEnvironments()
+        ->attach($environment);
+
+    $this->actingAs($owner)
+        ->delete(route('teams.members.destroy', [$team, $member]))
+        ->assertRedirect(route('teams.edit', $team));
+
+    $this->assertDatabaseMissing('environment_user', [
+        'user_id' => $member->id,
+        'environment_id' => $environment->id,
+    ]);
 });

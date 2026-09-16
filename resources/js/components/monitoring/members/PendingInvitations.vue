@@ -21,11 +21,17 @@ const busy = ref<number | null>(null);
 
 function act(
     invitation: App.Data.Teams.InvitationData,
-    // Resending is rate limited server-side; the request that comes back 429
-    // is an Inertia error, and the flash toast says what happened.
     route: typeof resendInvitation | typeof revokeInvitation,
 ) {
-    router.visit(route([slug.value, invitation.code]), {
+    // The id, never the code: the join code is the invitee's credential and
+    // would end up in the web server's access log (see routes/settings.php).
+    //
+    // Resending is rate limited to six a minute. A 429 is not an Inertia
+    // response, so it surfaces as Inertia's own "unexpected response"
+    // modal rather than as a toast; turning it into one means an
+    // Inertia-aware handler in the exception layer, which is shared ground
+    // and not this component's to claim.
+    router.visit(route([slug.value, invitation.id]), {
         preserveScroll: true,
         onStart: () => (busy.value = invitation.id),
         onFinish: () => (busy.value = null),
@@ -46,7 +52,7 @@ function act(
             <table class="nc-table">
                 <thead>
                     <tr>
-                        <th>Email</th>
+                        <th>{{ $t('Email') }}</th>
                         <th>{{ $t('Role') }}</th>
                         <th>{{ $t('Visible environments') }}</th>
                         <th>{{ $t('Sent') }}</th>

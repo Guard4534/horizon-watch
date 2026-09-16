@@ -12,6 +12,17 @@ class RemoveMember
      * Drop a membership, together with the environment grants it carried.
      * Whether the actor may do this is the TeamPolicy's business
      * (removeMember refuses when the target is the owner).
+     *
+     * Deliberately asymmetric with ChangeMemberRole: the last admin
+     * besides the owner may not demote *herself*, but she may remove
+     * herself. Demotion is the accident — the row stays, the buttons
+     * quietly go, and nobody notices the organization has no working admin
+     * left. Removing yourself is an unmistakable act with an unmistakable
+     * result (you lose the organization from your switcher), it is the
+     * same thing "teams.leave" already allows without a guard, and the
+     * owner can always invite you back. If that judgement is wrong, the
+     * guard to add is the same one, on $team->memberships() minus the
+     * target, right here.
      */
     public function handle(Team $team, User $target): void
     {

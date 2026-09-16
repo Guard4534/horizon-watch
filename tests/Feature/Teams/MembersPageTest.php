@@ -8,8 +8,42 @@ use App\Models\Environment;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
+
+/**
+ * Switch a membership to manual visibility and grant it one environment,
+ * through the team-scoped relation the application itself reads.
+ */
+function grantManually(Team $team, User $user, Environment $environment): void
+{
+    $team->memberships()
+        ->where('user_id', $user->id)
+        ->update(['visibility' => MemberVisibility::Manual->value]);
+
+    $team->memberships()
+        ->where('user_id', $user->id)
+        ->firstOrFail()
+        ->visibleEnvironments()
+        ->attach($environment);
+}
+
+/**
+ * A second organization where the same person holds a manual grant, so a
+ * write scoped to the wrong column shows up as a deleted row here.
+ */
+function otherOrganizationGrant(User $user): Environment
+{
+    $team = Team::factory()->create();
+    $environment = Environment::factory()->production()->create([
+        'application_id' => Application::factory()->create(['team_id' => $team->id])->id,
+    ]);
+
+    $team->members()->attach($user, ['role' => TeamRole::Viewer->value]);
+
+    grantManually($team, $user, $environment);
+
+    return $environment;
+}
 
 beforeEach(function () {
     $this->team = Team::factory()->create();
@@ -104,14 +138,7 @@ test('pending invitations and the environment picker stay out of the props witho
 });
 
 test('a manual member lists the environments they can actually see', function () {
-    $this->team->memberships()
-        ->where('user_id', $this->member->id)
-        ->update(['visibility' => MemberVisibility::Manual->value]);
-
-    DB::table('environment_user')->insert([
-        'user_id' => $this->member->id,
-        'environment_id' => $this->staging->id,
-    ]);
+    grantManually($this->team, $this->member, $this->staging);
 
     $this->actingAs($this->admin)
         ->get(route('members.index', ['current_team' => $this->team->slug]))
@@ -216,14 +243,7 @@ test('manual visibility records the chosen environments', function () {
 });
 
 test('leaving manual visibility clears the explicit environments', function () {
-    $this->team->memberships()
-        ->where('user_id', $this->member->id)
-        ->update(['visibility' => MemberVisibility::Manual->value]);
-
-    DB::table('environment_user')->insert([
-        'user_id' => $this->member->id,
-        'environment_id' => $this->staging->id,
-    ]);
+    grantManually($this->team, $this->member, $this->staging);
 
     $this->actingAs($this->admin)
         ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), [
@@ -252,14 +272,7 @@ test('an update with neither a role nor a visibility is refused', function () {
 });
 
 test('an admin removes a member, together with their environment grants', function () {
-    $this->team->memberships()
-        ->where('user_id', $this->member->id)
-        ->update(['visibility' => MemberVisibility::Manual->value]);
-
-    DB::table('environment_user')->insert([
-        'user_id' => $this->member->id,
-        'environment_id' => $this->staging->id,
-    ]);
+    grantManually($this->team, $this->member, $this->staging);
 
     $this->actingAs($this->admin)
         ->delete(route('members.destroy', ['current_team' => $this->team->slug, 'user' => $this->member->id]))
@@ -286,4 +299,103 @@ test('a stranger to the organization is a 404, not a 403', function () {
             'role' => TeamRole::Member->value,
         ])
         ->assertNotFound();
+});
+
+test('changing visibility leaves the manual grants of other organizations alone', function () {
+    // assertDatabaseMissing('environment_user', ['user_id' => …]) passes just
+    // as happily for an unscoped delete, so the scoping only becomes a fact
+    // once a second organization is in the table.
+    $elsewhere = otherOrganizationGrant($this->member);
+
+    grantManually($this->team, $this->member, $this->staging);
+
+    $this->actingAs($this->admin)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), [
+            'visibility' => MemberVisibility::All->value,
+        ])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('environment_user', [
+        'user_id' => $this->member->id,
+        'environment_id' => $elsewhere->id,
+    ]);
+
+    $this->assertDatabaseMissing('environment_user', [
+        'user_id' => $this->member->id,
+        'environment_id' => $this->staging->id,
+    ]);
+});
+
+test('removing a member leaves the manual grants of other organizations alone', function () {
+    $elsewhere = otherOrganizationGrant($this->member);
+
+    grantManually($this->team, $this->member, $this->staging);
+
+    $this->actingAs($this->admin)
+        ->delete(route('members.destroy', ['current_team' => $this->team->slug, 'user' => $this->member->id]))
+        ->assertRedirect();
+
+    expect($this->member->fresh()->belongsToTeam($this->team))->toBeFalse();
+
+    $this->assertDatabaseHas('environment_user', [
+        'user_id' => $this->member->id,
+        'environment_id' => $elsewhere->id,
+    ]);
+
+    $this->assertDatabaseMissing('environment_user', [
+        'user_id' => $this->member->id,
+        'environment_id' => $this->staging->id,
+    ]);
+});
+
+test('the members props carry the granted environment ids, so the dialog can reopen on them', function () {
+    grantManually($this->team, $this->member, $this->staging);
+
+    $this->actingAs($this->admin)
+        ->get(route('members.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.members', function ($members) {
+                $member = collect($members)->firstWhere('email', $this->member->email);
+
+                return $member['visibleEnvironmentIds'] === [$this->staging->id]
+                    && $member['visibleEnvironmentNames'] === ['Billing / staging'];
+            }));
+
+    // Gated exactly like the names: a member who cannot manage members is
+    // told nothing about which environments exist.
+    $this->actingAs($this->member)
+        ->get(route('members.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.members', fn ($members) => collect($members)
+                ->every(fn (array $member) => $member['visibleEnvironmentIds'] === []
+                    && $member['visibleEnvironmentNames'] === [])));
+});
+
+test('the invite form still gets the environments without the member-management permission', function () {
+    // canInvite and canManageMembers are the same permission set today, so
+    // this only pins the gate's shape: the picker follows either one.
+    $this->actingAs($this->owner)
+        ->get(route('members.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.permissions.canInvite', true)
+            ->has('page.environments', 2));
+});
+
+test('no invitation prop carries the join code', function () {
+    TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    $response = $this->actingAs($this->admin)
+        ->get(route('members.index', ['current_team' => $this->team->slug]));
+
+    $response->assertInertia(fn (Assert $page) => $page->has('page.invitations', 1));
+
+    $code = TeamInvitation::where('team_id', $this->team->id)->firstOrFail()->code;
+
+    // The code is the invitee's credential: it belongs in the emailed link
+    // and nowhere else, props included.
+    $response->assertDontSee($code, escape: false);
 });

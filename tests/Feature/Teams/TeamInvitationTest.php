@@ -122,7 +122,7 @@ test('team invitations can be revoked by owners', function () {
 
     $response = $this
         ->actingAs($this->owner)
-        ->delete(route('members.invitations.destroy', ['current_team' => $this->team->slug, 'invitation' => $invitation->code]));
+        ->delete(route('members.invitations.destroy', ['current_team' => $this->team->slug, 'invitation' => $invitation->id]));
 
     $response->assertRedirect();
 

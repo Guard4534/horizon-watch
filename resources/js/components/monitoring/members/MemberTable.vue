@@ -57,6 +57,20 @@ const removing = ref<App.Data.Teams.MemberData | null>(null);
 const isActionable = (member: App.Data.Teams.MemberData) =>
     canManage && !member.isOwner;
 
+// A rejected environment keys as "environmentIds.0", not "environmentIds",
+// so picking the field names by hand leaves the dialog showing nothing and
+// looking stuck.
+function firstError(errors: Record<string, string>): string | null {
+    const key = Object.keys(errors).find(
+        (name) =>
+            name === 'role' ||
+            name === 'visibility' ||
+            name.startsWith('environmentIds'),
+    );
+
+    return key ? errors[key] : (Object.values(errors)[0] ?? null);
+}
+
 function patch(
     member: App.Data.Teams.MemberData,
     data: Record<string, string | number | number[]>,
@@ -71,13 +85,7 @@ function patch(
             report(null);
         },
         onFinish: () => (processing.value = false),
-        onError: (errors) =>
-            report(
-                errors.role ??
-                    errors.visibility ??
-                    errors.environmentIds ??
-                    null,
-            ),
+        onError: (errors) => report(firstError(errors)),
         onSuccess: () => onSuccess?.(),
     });
 }
@@ -93,7 +101,10 @@ function changeVisibility(
 ) {
     if (visibility === 'manual') {
         manualFor.value = member;
-        manualIds.value = [];
+        // Seeded from what the member already has: the payload replaces the
+        // whole list, so opening on an empty set would revoke every grant
+        // the admin did not re-tick.
+        manualIds.value = [...member.visibleEnvironmentIds];
         manualError.value = null;
 
         return;
@@ -126,10 +137,17 @@ function confirmRemove() {
 
     router.visit(destroyMember([slug.value, member.id]), {
         preserveScroll: true,
-        onStart: () => (processing.value = true),
-        onFinish: () => {
-            processing.value = false;
+        onStart: () => {
+            processing.value = true;
+            error.value = null;
+        },
+        onFinish: () => (processing.value = false),
+        // Closed on success only: a removal that failed must not look like
+        // one that worked.
+        onSuccess: () => (removing.value = null),
+        onError: (errors) => {
             removing.value = null;
+            error.value = firstError(errors);
         },
     });
 }
@@ -232,9 +250,9 @@ function confirmRemove() {
                                 color: var(--nc-neutral-600);
                             "
                         >
-                            <!-- No "last seen" is recorded anywhere yet: see
-                                 MemberController::index. -->
-                            —
+                            <!-- Always the em dash today: nothing records a
+                                 last access yet, see MemberController::index. -->
+                            {{ member.lastSeenAt ?? '—' }}
                         </td>
                         <td class="text-right">
                             <DropdownMenu v-if="isActionable(member)">
@@ -316,7 +334,7 @@ function confirmRemove() {
                 <DialogDescription>
                     {{
                         $t(
-                            'Only the environments you tick here will be visible to this person.',
+                            'Saving replaces the whole list: this person will see exactly the environments ticked here, and nothing else.',
                         )
                     }}
                 </DialogDescription>

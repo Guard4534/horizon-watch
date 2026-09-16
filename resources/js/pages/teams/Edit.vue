@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head, Link, router } from '@inertiajs/vue3';
+import { Form, Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     PhCaretDown,
     PhEnvelopeSimple,
@@ -89,6 +89,12 @@ const confirmRemoveMember = (member: TeamMember) => {
     memberToRemove.value = member;
     removeMemberDialogOpen.value = true;
 };
+
+// The role change is a bare visit, so its validation errors (the sole-admin
+// self-demotion guard in ChangeMemberRole, and "owner is not assignable")
+// would otherwise land in the props and never be drawn.
+const inertiaPage = usePage();
+const roleError = computed(() => inertiaPage.props.errors?.role);
 </script>
 
 <template>
@@ -164,6 +170,8 @@ const confirmRemoveMember = (member: TeamMember) => {
                     </Link>
                 </Button>
             </div>
+
+            <InputError :message="roleError" />
 
             <div class="space-y-3">
                 <div
@@ -256,39 +264,44 @@ const confirmRemoveMember = (member: TeamMember) => {
             </div>
         </div>
 
-        <!-- Pending Invitations Section -->
+        <!-- Pending Invitations Section. Resending and revoking live in the
+             Members view, which also shows the role, the visibility and the
+             expiry: a second read-only copy here would only be a place for
+             the two to disagree. -->
         <div v-if="invitations.length > 0" class="space-y-6">
             <Heading
                 variant="small"
                 :title="$t('Pending invitations')"
-                :description="$t('Invitations that haven\'t been accepted yet')"
+                :description="
+                    $tChoice(
+                        ':count invitation is waiting to be accepted.|:count invitations are waiting to be accepted.',
+                        invitations.length,
+                    )
+                "
             />
 
-            <div class="space-y-3">
-                <div
-                    v-for="invitation in invitations"
-                    :key="invitation.code"
-                    data-test="invitation-row"
-                    class="flex items-center justify-between rounded-lg border p-4"
-                >
-                    <div class="flex items-center gap-4">
-                        <div
-                            class="bg-muted flex h-10 w-10 items-center justify-center rounded-full"
-                        >
-                            <PhEnvelopeSimple
-                                class="text-muted-foreground h-5 w-5"
-                            />
-                        </div>
-                        <div>
-                            <div class="font-medium">
-                                {{ invitation.email }}
-                            </div>
-                            <div class="text-muted-foreground text-sm">
-                                {{ invitation.role_label }}
-                            </div>
-                        </div>
+            <div
+                data-test="invitation-row"
+                class="flex items-center justify-between rounded-lg border p-4"
+            >
+                <div class="flex items-center gap-4">
+                    <div
+                        class="bg-muted flex h-10 w-10 items-center justify-center rounded-full"
+                    >
+                        <PhEnvelopeSimple
+                            class="text-muted-foreground h-5 w-5"
+                        />
+                    </div>
+                    <div class="text-muted-foreground text-sm">
+                        {{ $t('Manage them from the Members view.') }}
                     </div>
                 </div>
+
+                <Button as-child variant="secondary">
+                    <Link :href="membersIndex(team.slug)">
+                        {{ $t('Members') }}
+                    </Link>
+                </Button>
             </div>
         </div>
 

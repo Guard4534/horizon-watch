@@ -43,7 +43,7 @@ function reset() {
             @success="reset"
         >
             <div class="nc-field">
-                <label for="invite-email">Email</label>
+                <label for="invite-email">{{ $t('Email') }}</label>
                 <input
                     id="invite-email"
                     class="nc-input"

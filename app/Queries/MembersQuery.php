@@ -31,14 +31,19 @@ class MembersQuery
         $canManageMembers = $gate->allows('updateMember', $team)
             && $gate->allows('removeMember', $team);
 
+        // Feeds both the invite form (canInvite) and the manual-visibility
+        // dialog (canManageMembers); gated because an environment must not
+        // be named to someone it is not visible to (see the spec,
+        // "Visibilità degli ambienti").
+        $environments = $canInvite || $canManageMembers ? $this->environments($team) : [];
+
         return new MembersPageData(
-            members: $this->members($team, $viewer, $canManageMembers),
-            // Gated, not merely hidden in the template: an invitation
-            // carries its join code, and anyone who can read the page
-            // props can read it.
+            members: $this->members($team, $viewer, $canManageMembers ? $environments : []),
+            // Who has been invited where is an admin's business, and only
+            // an admin has anything to do with the two buttons next to each
+            // row.
             invitations: $canInvite ? $this->invitations($team) : [],
-            // Gated for the same reason as visibleEnvironmentNames below.
-            environments: $canManageMembers ? $this->environments($team) : [],
+            environments: $environments,
             permissions: new MembersPermissionsData(
                 canInvite: $canInvite,
                 canManageMembers: $canManageMembers,
@@ -51,10 +56,21 @@ class MembersQuery
      * The members, owner first, then admins, members, viewers, and by name
      * inside each role.
      *
+     * $environments is the organization's environments when the viewer may
+     * manage members, and empty otherwise: it doubles as the permission
+     * flag and as the id/label map the manual grants are rendered from.
+     *
+     * @param  array<int, EnvironmentOptionData>  $environments
      * @return array<int, MemberData>
      */
-    private function members(Team $team, User $viewer, bool $withEnvironmentNames): array
+    private function members(Team $team, User $viewer, array $environments): array
     {
+        $labels = [];
+
+        foreach ($environments as $option) {
+            $labels[$option->id] = $option->name;
+        }
+
         return $team->memberships()
             ->with('user')
             ->get()
@@ -62,50 +78,61 @@ class MembersQuery
                 fn (Membership $a, Membership $b) => $b->role->level() <=> $a->role->level(),
                 fn (Membership $a, Membership $b) => strcasecmp($a->user->name, $b->user->name),
             ])
-            ->map(fn (Membership $membership) => new MemberData(
-                id: $membership->user_id,
-                name: $membership->user->name,
-                email: $membership->user->email,
-                initials: $this->initials($membership->user->name),
-                role: $membership->role,
-                // The mockup writes the role names in lower case and they
-                // read the same in both languages, so the tag carries the
-                // enum value as it is. Only the owner gets a sentence: the
-                // spec shows them as "Owner · admin", because they have the
-                // admin's permissions plus deleting the organization.
-                roleLabel: $membership->role === TeamRole::Owner
-                    ? __('Owner · admin')
-                    : $membership->role->value,
-                visibility: $membership->visibility,
-                visibilityLabel: $membership->visibility->label(),
-                visibleEnvironmentNames: $withEnvironmentNames
-                    ? $this->manualEnvironmentNames($team, $membership)
-                    : [],
-                lastSeenAt: null,
-                isOwner: $membership->role === TeamRole::Owner,
-                isSelf: $membership->user_id === $viewer->id,
-            ))
+            ->map(function (Membership $membership) use ($team, $viewer, $labels) {
+                $grantedIds = $labels === [] ? [] : $this->manualEnvironmentIds($team, $membership);
+
+                return new MemberData(
+                    id: $membership->user_id,
+                    name: $membership->user->name,
+                    email: $membership->user->email,
+                    initials: $this->initials($membership->user->name),
+                    role: $membership->role,
+                    // The mockup writes the role names in lower case and they
+                    // read the same in both languages, so the tag carries the
+                    // enum value as it is. Only the owner gets a sentence: the
+                    // spec shows them as "Owner · admin", because they have the
+                    // admin's permissions plus deleting the organization.
+                    roleLabel: $membership->role === TeamRole::Owner
+                        ? __('Owner · admin')
+                        : $membership->role->value,
+                    visibility: $membership->visibility,
+                    visibilityLabel: $membership->visibility->label(),
+                    visibleEnvironmentIds: $grantedIds,
+                    visibleEnvironmentNames: array_values(array_filter(array_map(
+                        fn (int $id) => $labels[$id] ?? null,
+                        $grantedIds,
+                    ))),
+                    lastSeenAt: null,
+                    isOwner: $membership->role === TeamRole::Owner,
+                    isSelf: $membership->user_id === $viewer->id,
+                );
+            })
             ->values()
             ->all();
     }
 
     /**
-     * The environments a "manual" member may see. Read through
-     * VisibleEnvironments so the rule stays in one place; the other
-     * visibilities say everything in their label already.
+     * The environments a "manual" member has been granted. Read through
+     * VisibleEnvironments, because the spec puts that filter in exactly one
+     * class; the other visibilities say everything in their label already.
      *
-     * @return array<int, string>
+     * One query per manual member: pluck() skips the relation the query
+     * eager loads, and the labels are joined in memory from the map the
+     * page already carries. Reproducing the join here to make it a single
+     * query would mean a second copy of the visibility rule, which is the
+     * thing the spec forbids.
+     *
+     * @return array<int, int>
      */
-    private function manualEnvironmentNames(Team $team, Membership $membership): array
+    private function manualEnvironmentIds(Team $team, Membership $membership): array
     {
         if ($membership->visibility !== MemberVisibility::Manual) {
             return [];
         }
 
         return $this->visible->query($team, $membership->user)
-            ->get()
-            ->map(fn (Environment $environment) => $this->environmentLabel($environment))
-            ->values()
+            ->pluck('environments.id')
+            ->map(fn (int $id) => $id)
             ->all();
     }
 
@@ -120,7 +147,6 @@ class MembersQuery
             ->get()
             ->map(fn (TeamInvitation $invitation) => new InvitationData(
                 id: $invitation->id,
-                code: $invitation->code,
                 email: $invitation->email,
                 role: $invitation->role,
                 roleLabel: $invitation->role->value,

@@ -2,30 +2,45 @@
 
 namespace App\Http\Controllers\Teams;
 
+use App\Actions\Teams\ChangeMemberRole;
+use App\Actions\Teams\RemoveMember;
 use App\Enums\TeamRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Teams\UpdateTeamMemberRequest;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 
+/**
+ * The starter kit's own member routes, kept alongside the phase 2 Members
+ * view (see MemberController). Both go through the same two actions on
+ * purpose: when these methods wrote the membership themselves, the rule
+ * that an admin may not demote the last admin besides the owner held on
+ * one route and not the other, and removing someone here left their
+ * environment_user grants behind.
+ */
 class TeamMemberController extends Controller
 {
     /**
      * Update the specified team member's role.
      */
-    public function update(UpdateTeamMemberRequest $request, Team $team, User $user): RedirectResponse
-    {
+    public function update(
+        UpdateTeamMemberRequest $request,
+        Team $team,
+        User $user,
+        ChangeMemberRole $changeMemberRole,
+    ): RedirectResponse {
         Gate::authorize('updateMember', [$team, $user]);
 
-        $newRole = TeamRole::from($request->validated('role'));
-
-        $team->memberships()
-            ->where('user_id', $user->id)
-            ->firstOrFail()
-            ->update(['role' => $newRole]);
+        $changeMemberRole->handle(
+            $team,
+            $request->user(),
+            $user,
+            TeamRole::from($request->validated('role')),
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Member role updated.')]);
 
@@ -35,20 +50,21 @@ class TeamMemberController extends Controller
     /**
      * Remove the specified team member.
      */
-    public function destroy(Team $team, User $user): RedirectResponse
-    {
+    public function destroy(
+        Request $request,
+        Team $team,
+        User $user,
+        RemoveMember $removeMember,
+    ): RedirectResponse {
         Gate::authorize('removeMember', [$team, $user]);
 
-        $team->memberships()
-            ->where('user_id', $user->id)
-            ->delete();
-
-        if ($user->isCurrentTeam($team)) {
-            $user->switchTeam($user->personalTeam());
-        }
+        $removeMember->handle($team, $user);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Member removed.')]);
 
-        return to_route('teams.edit', ['team' => $team->slug]);
+        // Removing yourself makes this page a 403 on the way back.
+        return $request->user()?->is($user)
+            ? to_route('home')
+            : to_route('teams.edit', ['team' => $team->slug]);
     }
 }

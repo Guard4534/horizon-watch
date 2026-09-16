@@ -429,7 +429,7 @@ test('resend regenerates only the expiry, keeps the code, and respects the rate 
     $this->travelTo(now()->addHour());
 
     $this->actingAs($this->owner)
-        ->post(route('members.invitations.resend', ['current_team' => $this->team->slug, 'invitation' => $invitation->code]))
+        ->post(route('members.invitations.resend', ['current_team' => $this->team->slug, 'invitation' => $invitation->id]))
         ->assertRedirect();
 
     $invitation->refresh();
@@ -441,11 +441,11 @@ test('resend regenerates only the expiry, keeps the code, and respects the rate 
     // here reach the limit, and the seventh is blocked.
     for ($i = 0; $i < 5; $i++) {
         $this->actingAs($this->owner)
-            ->post(route('members.invitations.resend', ['current_team' => $this->team->slug, 'invitation' => $invitation->code]));
+            ->post(route('members.invitations.resend', ['current_team' => $this->team->slug, 'invitation' => $invitation->id]));
     }
 
     $this->actingAs($this->owner)
-        ->post(route('members.invitations.resend', ['current_team' => $this->team->slug, 'invitation' => $invitation->code]))
+        ->post(route('members.invitations.resend', ['current_team' => $this->team->slug, 'invitation' => $invitation->id]))
         ->assertStatus(429);
 });
 
@@ -458,7 +458,7 @@ test('destroy revokes the invitation, which then reports state revoked', functio
     ]);
 
     $this->actingAs($this->owner)
-        ->delete(route('members.invitations.destroy', ['current_team' => $this->team->slug, 'invitation' => $invitation->code]))
+        ->delete(route('members.invitations.destroy', ['current_team' => $this->team->slug, 'invitation' => $invitation->id]))
         ->assertRedirect();
 
     expect($invitation->fresh()->isRevoked())->toBeTrue();

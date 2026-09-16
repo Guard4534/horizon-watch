@@ -22,12 +22,23 @@ class MemberData extends Data
         public MemberVisibility $visibility,
         public string $visibilityLabel,
         /**
-         * The environments a "manual" member may see, as
-         * "application / environment". Empty for the other visibilities
-         * (the label already says everything) and empty for a viewer of
-         * this page who cannot manage members: the spec forbids showing an
-         * environment to someone it is not visible to, and this is an
-         * Inertia prop, so whatever it holds reaches the client.
+         * The ids of the environments a "manual" member has been granted.
+         * The dialog that edits the list needs them: it sends the whole
+         * list back, so opening it without them would silently drop every
+         * grant the admin did not re-tick.
+         *
+         * @var array<int, int>
+         */
+        public array $visibleEnvironmentIds,
+        /**
+         * The same grants as "application / environment" labels, in the
+         * same order.
+         *
+         * Both lists are empty for the other visibilities (the label
+         * already says everything) and for a viewer of this page who
+         * cannot manage members: the spec forbids naming an environment to
+         * someone it is not visible to, and this is an Inertia prop, so
+         * whatever it holds reaches the client.
          *
          * @var array<int, string>
          */
