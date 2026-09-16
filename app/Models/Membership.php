@@ -63,11 +63,20 @@ class Membership extends Pivot
      * meaningful when visibility is "manual" — other visibilities compute
      * their environments from the team's applications instead.
      *
+     * environment_user is keyed by user_id, not by membership id, so the
+     * raw pivot holds the grants of every organization this person belongs
+     * to. The relation therefore narrows reads to this membership's own
+     * team: without that, reading it would report (and a sync() would
+     * delete) another organization's grants. Writes still touch the pivot
+     * directly, so anything that removes rows must scope them itself — see
+     * ChangeMemberVisibility.
+     *
      * @return BelongsToMany<Environment, $this>
      */
     public function visibleEnvironments(): BelongsToMany
     {
-        return $this->belongsToMany(Environment::class, 'environment_user', 'user_id', 'environment_id', 'user_id');
+        return $this->belongsToMany(Environment::class, 'environment_user', 'user_id', 'environment_id', 'user_id')
+            ->whereHas('application', fn ($applications) => $applications->where('team_id', $this->team_id));
     }
 
     /**

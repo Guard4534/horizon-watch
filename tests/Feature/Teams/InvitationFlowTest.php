@@ -131,6 +131,46 @@ test('manual visibility invites copy the chosen environments on acceptance', fun
         ->not->toContain($discarded->id);
 });
 
+test('accepting an invitation leaves the manual visibility of other organizations alone', function () {
+    Notification::fake();
+
+    // The same person, already a restricted member somewhere else:
+    // environment_user is keyed by user_id, so a careless sync() on
+    // acceptance would drop the grant they hold in the other organization.
+    $user = User::factory()->create(['email' => 'invited@example.com']);
+
+    $otherTeam = Team::factory()->create();
+    $otherApplication = Application::factory()->for($otherTeam)->create();
+    $otherEnvironment = Environment::factory()->for($otherApplication)->create(['name' => 'production']);
+    $otherTeam->members()->attach($user, ['role' => TeamRole::Viewer->value, 'visibility' => MemberVisibility::Manual->value]);
+    $otherMembership = $otherTeam->memberships()->where('user_id', $user->id)->firstOrFail();
+    $otherMembership->visibleEnvironments()->attach($otherEnvironment);
+
+    $application = Application::factory()->for($this->team)->create();
+    $environment = Environment::factory()->for($application)->create(['name' => 'staging']);
+
+    $this->actingAs($this->owner)
+        ->post(route('members.invitations.store', ['current_team' => $this->team->slug]), [
+            'email' => 'invited@example.com',
+            'role' => TeamRole::Viewer->value,
+            'visibility' => MemberVisibility::Manual->value,
+            'environmentIds' => [$environment->id],
+        ])
+        ->assertRedirect();
+
+    $invitation = TeamInvitation::where('email', 'invited@example.com')->firstOrFail();
+
+    $this->actingAs($user)
+        ->post(route('invitations.accept', $invitation->code))
+        ->assertRedirect(route('wall', ['current_team' => $this->team->slug]));
+
+    expect($otherMembership->visibleEnvironments()->pluck('environments.id')->all())
+        ->toBe([$otherEnvironment->id])
+        ->and($this->team->memberships()->where('user_id', $user->id)->firstOrFail()
+            ->visibleEnvironments()->pluck('environments.id')->all())
+        ->toBe([$environment->id]);
+});
+
 test('a guest opens the invitation, sees it is open, and registers to accept it', function () {
     $invitation = TeamInvitation::factory()->create([
         'team_id' => $this->team->id,

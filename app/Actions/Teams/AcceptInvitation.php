@@ -2,7 +2,6 @@
 
 namespace App\Actions\Teams;
 
-use App\Enums\MemberVisibility;
 use App\Models\Membership;
 use App\Models\Team;
 use App\Models\TeamInvitation;
@@ -11,6 +10,8 @@ use Illuminate\Support\Facades\DB;
 
 class AcceptInvitation
 {
+    public function __construct(private readonly ChangeMemberVisibility $changeVisibility) {}
+
     /**
      * Create the membership with the invitation's role and visibility,
      * copy the chosen environments into environment_user, mark the
@@ -37,9 +38,20 @@ class AcceptInvitation
                 ['role' => $locked->role, 'visibility' => $locked->visibility],
             );
 
-            if ($locked->visibility === MemberVisibility::Manual) {
-                $membership->visibleEnvironments()->sync(
-                    $locked->environments()->pluck('environments.id'),
+            // Only for a membership this call created: accepting a second
+            // invitation to an organization one already belongs to must not
+            // silently rewrite the role and visibility an admin set there.
+            //
+            // The write goes through ChangeMemberVisibility because
+            // environment_user is keyed by user_id, not by membership: a
+            // sync() here would detach the manual grants this person holds
+            // in every *other* organization.
+            if ($membership->wasRecentlyCreated) {
+                $this->changeVisibility->handle(
+                    $team,
+                    $user,
+                    $locked->visibility,
+                    $locked->environments()->pluck('environments.id')->all(),
                 );
             }
 
