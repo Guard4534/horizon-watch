@@ -14,10 +14,21 @@ class UpdateEnvironment
      * decrypted value when absent) means the encrypted column already in
      * the database is never read out and rewritten.
      *
-     * Clearing the username clears the stored password with it. Basic auth
-     * needs both halves, the password can never be read back out to be
-     * re-paired with a new username, and leaving it behind would keep the
-     * edit page reporting "password set" for a credential nobody can use.
+     * Clearing the username clears the stored password with it, which is
+     * what the edit page promises: basic auth needs both halves, so a
+     * password left behind alone could never authenticate, could never be
+     * shown, and would keep the page reporting "password set" for a
+     * credential nobody can use. Sending a *different* username with a
+     * blank password deliberately keeps the stored password and re-pairs it
+     * with the new username — the page says "leave blank to keep it", and
+     * that is the only reading of a blank field it offers.
+     *
+     * "Absent" and "cleared" are the same thing here, because the two forms
+     * that reach this action always send the whole object. A partial PATCH
+     * client that omitted basicAuthUser would destroy the credential
+     * without meaning to; if one is ever added, it has to distinguish the
+     * two before calling this.
+     *
      * Validation keeps the mirror case (a password with no username) from
      * ever reaching here, see EnvironmentFormData::rules().
      */

@@ -45,8 +45,22 @@ class EnvironmentFormData extends Data
             // "environments.N", where a bare "basicAuthPassword" would look
             // for a top-level field that never exists and the rule would
             // quietly never fire.
-            'basicAuthUser' => ['nullable', 'string', 'max:255', 'required_with:'.self::key($context, 'basicAuthPassword')],
-            'basicAuthPassword' => ['nullable', 'string'],
+            //
+            // The shape rule is what keeps a username of three spaces out of
+            // the column: TrimStrings plus ConvertEmptyStringsToNull already
+            // turn that into null over HTTP, but this does not want to
+            // depend on two global middlewares staying in the stack. A colon
+            // is out for a harder reason — basic auth transmits
+            // "user:password", so a username containing one cannot be
+            // encoded at all (RFC 7617).
+            'basicAuthUser' => [
+                'nullable',
+                'string',
+                'max:255',
+                'regex:/^[^\s:]+$/',
+                'required_with:'.self::key($context, 'basicAuthPassword'),
+            ],
+            'basicAuthPassword' => ['nullable', 'string', ...self::passwordRequiredWithUsernameRules($context)],
             'pollIntervalSeconds' => ['integer', 'between:5,300'],
         ];
     }
@@ -64,38 +78,91 @@ class EnvironmentFormData extends Data
     }
 
     /**
+     * Requiring the password whenever a username is given, but only where
+     * "no password" can mean nothing else. On the edit page an empty
+     * password field means "keep the one on file" (hasNewPassword()), so
+     * the rule would make every save of an existing credential impossible;
+     * on the two create paths there is nothing to keep, and a username
+     * saved alone would be a credential that cannot authenticate.
+     *
+     * @return array<int, string>
+     */
+    private static function passwordRequiredWithUsernameRules(ValidationContext $context): array
+    {
+        return self::environmentBeingUpdated() === null
+            ? ['required_with:'.self::key($context, 'basicAuthUser')]
+            : [];
+    }
+
+    /**
      * The per-application uniqueness of the name, which the database also
      * enforces (environments' unique index on application_id + name):
      * without it a duplicate reaches the insert and the browser gets a 500
      * instead of a message on the field.
      *
-     * The parent application is never in the payload. It is the
-     * "{application}" route segment when adding an environment, and the
-     * edited environment's own application when updating — both already
-     * resolved to models by scoped route model binding (see
-     * routes/monitoring.php), the same way InviteMemberData reads
-     * "{current_team}". The wizard is the third case: it posts to
-     * applications.store, where the application does not exist yet, so
-     * there is nothing to be unique against and ApplicationWizardData's
-     * "distinct" is what catches two identical rows.
+     * The parent application is never in the payload, it comes from the
+     * route (see parentApplication()), and the wizard has no application to
+     * be unique against yet: there, ApplicationWizardData's "distinct" is
+     * what catches two identical rows.
      *
      * @return array<int, Unique>
      */
     private static function uniqueNameRules(): array
     {
-        $route = request()->route();
-        $environment = $route?->parameter('environment');
-        $application = $environment instanceof Environment
-            ? $environment->application
-            : $route?->parameter('application');
+        $application = self::parentApplication();
 
-        if (! $application instanceof Application) {
+        if ($application === null) {
             return [];
         }
 
+        $environment = self::environmentBeingUpdated();
         $rule = Rule::unique('environments', 'name')->where('application_id', $application->id);
 
-        return [$environment instanceof Environment ? $rule->ignore($environment) : $rule];
+        return [$environment === null ? $rule : $rule->ignore($environment)];
+    }
+
+    /**
+     * The environment this request is updating, or null on either create
+     * path. Also null outside an HTTP request — see parentApplication() for
+     * what that means.
+     */
+    private static function environmentBeingUpdated(): ?Environment
+    {
+        $environment = request()->route()?->parameter('environment');
+
+        return $environment instanceof Environment ? $environment : null;
+    }
+
+    /**
+     * The application these rules validate against. It is never in the
+     * payload: it is the "{application}" route segment when adding an
+     * environment and the edited environment's own application when
+     * updating, both already resolved to models by scoped route model
+     * binding (see routes/monitoring.php) — the same way InviteMemberData
+     * reads "{current_team}".
+     *
+     * There are two ways to get null. The wizard posts to
+     * applications.store, where the application does not exist yet. And
+     * outside an HTTP request — a console command or a queued job calling
+     * EnvironmentFormData::validate() — there is no route at all, so the
+     * uniqueness rule disappears and a duplicate name would reach the
+     * insert and raise a QueryException on the unique index instead of a
+     * validation error. Nothing in the panel writes environments that way
+     * today (every write goes through the two controllers); a writer that
+     * does will have to check uniqueness itself, or be given the
+     * application explicitly.
+     */
+    private static function parentApplication(): ?Application
+    {
+        $environment = self::environmentBeingUpdated();
+
+        if ($environment !== null) {
+            return $environment->application;
+        }
+
+        $application = request()->route()?->parameter('application');
+
+        return $application instanceof Application ? $application : null;
     }
 
     /**
@@ -110,21 +177,30 @@ class EnvironmentFormData extends Data
     }
 
     /**
-     * Whether this submission is trying to set or replace the basic-auth
-     * credentials, as opposed to only the name, color, URL or poll
+     * Whether this submission changes the basic-auth credentials of the
+     * given environment, as opposed to only its name, color, URL or poll
      * interval. Gates the separate "manage credentials" permission
      * (EnvironmentPolicy::manageCredentials()), distinct from "manage
-     * applications" even though today's role matrix grants both to the
-     * same roles.
+     * applications" even though today's role matrix grants both to the same
+     * roles.
      *
-     * This sees the payload only, and *removing* a credential does not show
-     * up in it: ConvertEmptyStringsToNull turns a cleared username field
-     * into null, which is byte-for-byte what "no username was sent" looks
-     * like. Telling those apart needs the stored row, so the controller
-     * checks for it separately (EnvironmentController::clearsCredentials()).
+     * The comparison needs the stored row, and cannot be made on the
+     * payload alone, in both directions. The edit form prefills the
+     * username, so an untouched save resends it: a payload-only check would
+     * demand the credentials permission for every edit of every environment
+     * that has a username, and a role holding "manage applications" without
+     * it could not even change a poll interval. And a *removal* does not
+     * show up in the payload at all, because ConvertEmptyStringsToNull
+     * turns the cleared username field into null, which is byte-for-byte
+     * what "this form never had a username" sends.
+     *
+     * Pass a transient Environment when creating one: with no attributes
+     * set, any username or password in the payload reads as a change, which
+     * is what it is.
      */
-    public function touchesCredentials(): bool
+    public function changesCredentialsOf(Environment $environment): bool
     {
-        return $this->basicAuthUser !== null || $this->hasNewPassword();
+        return $this->basicAuthUser !== $environment->basic_auth_user
+            || $this->hasNewPassword();
     }
 }

@@ -262,6 +262,7 @@
     "Two-factor authentication enabled": "Autenticazione a due fattori attivata",
     "Two-factor authentication is now enabled. Scan the QR code or enter the setup key in your authenticator app.": "L’autenticazione a due fattori è ora attiva. Scansiona il codice QR o inserisci la chiave di configurazione nella tua app di autenticazione.",
     "Type": "Digita",
+    "Type :name to confirm": "Digita :name per confermare",
     "Update password": "Aggiorna password",
     "Update your name and email address": "Aggiorna il tuo nome e indirizzo email",
     "Update your team name and settings": "Aggiorna il nome e le impostazioni del team",

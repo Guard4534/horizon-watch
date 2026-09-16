@@ -208,8 +208,8 @@ const submit = () => {
 
         <SectionCard v-else :title="$t('Confirmation')">
             <div
-                v-for="message in unplacedErrors"
-                :key="message"
+                v-for="(message, index) in unplacedErrors"
+                :key="index"
                 class="mb-[var(--nc-space-3)]"
                 style="font-size: 12px; color: var(--st-down)"
             >

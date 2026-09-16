@@ -24,6 +24,24 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // A failed validation flashes the submitted input into the session,
+        // and sessions live in PostgreSQL unencrypted: the basic-auth
+        // password of an environment must never be part of that. Laravel's
+        // own list only covers password/password_confirmation.
+        //
+        // "environments" is excluded whole rather than by
+        // "environments.*.basicAuthPassword" because the wizard nests one
+        // password per row and Arr::except(), which is what dontFlash()
+        // feeds, has no wildcard support: the wildcard key matches nothing
+        // and strips nothing (checked against this version of the
+        // framework). Nothing is lost by dropping the whole array — every
+        // form here is an Inertia form that keeps its state client-side and
+        // never reads old input back.
+        $exceptions->dontFlash([
+            'basicAuthPassword',
+            'environments',
+        ]);
+
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );

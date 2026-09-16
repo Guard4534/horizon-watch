@@ -194,6 +194,34 @@ test('a wizard row with a password but no username is rejected on that row', fun
     expect(Application::where('name', 'Orphan')->exists())->toBeFalse();
 });
 
+test('a failed wizard does not flash any row password into the session', function () {
+    // Arr::except(), which is what dontFlash() feeds, has no wildcard
+    // support, so "environments.*.basicAuthPassword" would strip nothing:
+    // bootstrap/app.php excludes the whole "environments" array instead.
+    // This is the test that would catch it going back to a wildcard.
+    $this->actingAs($this->admin)
+        ->post(route('applications.store', ['current_team' => $this->team->slug]), [
+            'application' => ['name' => 'Flashed', 'host' => 'flashed.example.com'],
+            'environments' => [
+                [
+                    ...($this->environmentPayload)('production'),
+                    'basicAuthUser' => 'monitor',
+                    'basicAuthPassword' => 'first-must-not-persist',
+                ],
+                [
+                    ...($this->environmentPayload)('production'),
+                    'basicAuthUser' => 'monitor',
+                    'basicAuthPassword' => 'second-must-not-persist',
+                ],
+            ],
+        ])
+        ->assertInvalid(['environments.1.name']);
+
+    expect(json_encode(session()->all(), JSON_THROW_ON_ERROR))
+        ->not->toContain('first-must-not-persist')
+        ->not->toContain('second-must-not-persist');
+});
+
 test('renaming an application does not change its slug', function () {
     $originalSlug = $this->application->slug;
 

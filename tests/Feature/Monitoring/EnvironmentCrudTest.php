@@ -110,16 +110,60 @@ test('updating an environment with a blank or whitespace-only password keeps the
     expect($environment->basic_auth_password)->toBe('original-secret');
 })->with(['', '   ']);
 
-test('creating an environment with a blank password stores no credential', function () {
+test('creating an environment with neither half stores no credential', function () {
     $this->actingAs($this->admin)->post(
         route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
-        ($this->validPayload)(['basicAuthPassword' => '']),
+        ($this->validPayload)(['basicAuthUser' => null, 'basicAuthPassword' => '']),
     )->assertRedirect();
 
     $environment = Environment::where('application_id', $this->application->id)->where('name', 'production')->firstOrFail();
 
-    expect($environment->basic_auth_password)->toBeNull();
+    expect($environment->basic_auth_user)->toBeNull()
+        ->and($environment->basic_auth_password)->toBeNull();
 });
+
+test('a username with no password is rejected on create but allowed on update', function () {
+    // On create there is nothing a blank password could mean except "no
+    // password", and a username alone cannot authenticate.
+    $this->actingAs($this->admin)->post(
+        route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+        ($this->validPayload)(['basicAuthUser' => 'monitor', 'basicAuthPassword' => '']),
+    )->assertInvalid(['basicAuthPassword']);
+
+    expect(Environment::where('application_id', $this->application->id)->count())->toBe(0);
+
+    // On update the same submission means "keep the password on file", so
+    // the rule must not apply there or no credentialed environment could
+    // ever be edited again.
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+
+    $this->actingAs($this->admin)->patch(
+        route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
+        ($this->validPayload)(['basicAuthUser' => 'monitor', 'basicAuthPassword' => '']),
+    )->assertRedirect();
+
+    expect($environment->refresh()->basic_auth_password)->toBe('original-secret');
+});
+
+test('a username of whitespace, or one carrying a colon, is rejected', function (string $username) {
+    $this->actingAs($this->admin)->post(
+        route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+        ($this->validPayload)(['basicAuthUser' => $username, 'basicAuthPassword' => 'secret-value']),
+    )->assertInvalid(['basicAuthUser']);
+
+    expect(Environment::where('application_id', $this->application->id)->count())->toBe(0);
+})->with([
+    // Trimmed to "" and then to null by the global middlewares, which turns
+    // it into "a password with no username" instead — either way it never
+    // reaches the column.
+    '   ',
+    // Basic auth transmits "user:password", so this one cannot be encoded.
+    'mon:itor',
+]);
 
 test('touching credentials requires the manage-credentials permission in addition to update', function () {
     $environment = Environment::factory()->for($this->application)->create([
@@ -167,10 +211,40 @@ test('touching credentials requires the manage-credentials permission in additio
     $bare->refresh();
     expect($bare->basic_auth_user)->toBeNull();
 
+    // The case the gate must NOT catch: an environment that has
+    // credentials, edited without changing them. The edit page prefills the
+    // username, so an untouched save resends it — if that counted as
+    // touching the credentials, a role with "manage applications" but not
+    // "manage credentials" could not change a poll interval.
+    $this->actingAs($this->admin)->patch(
+        route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
+        ($this->validPayload)([
+            'name' => 'production',
+            'basicAuthUser' => 'monitor',
+            'basicAuthPassword' => null,
+            'pollIntervalSeconds' => 45,
+        ]),
+    )->assertRedirect();
+
+    $environment->refresh();
+    expect($environment->poll_interval_seconds)->toBe(45)
+        ->and($environment->basic_auth_user)->toBe('monitor')
+        ->and($environment->basic_auth_password)->toBe('original-secret');
+
+    // Replacing the username of a credential that exists is a change, and
+    // is denied.
+    $this->actingAs($this->admin)->patch(
+        route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
+        ($this->validPayload)(['name' => 'production', 'basicAuthUser' => 'someone-else', 'basicAuthPassword' => null]),
+    )->assertForbidden();
+
+    expect($environment->refresh()->basic_auth_user)->toBe('monitor');
+
     // Clearing the credentials of an environment that has them is a
     // credential change too, and the only one the payload alone cannot
     // show: the cleared username field arrives as null, exactly like a form
-    // that never had one (see EnvironmentController::clearsCredentials()).
+    // that never had one (see
+    // EnvironmentFormData::changesCredentialsOf()).
     $this->actingAs($this->admin)->patch(
         route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
         ($this->validPayload)(['name' => 'production', 'basicAuthUser' => null, 'basicAuthPassword' => null]),
@@ -218,6 +292,23 @@ test('a password without a username is rejected instead of stored unusable', fun
     )->assertInvalid(['basicAuthUser']);
 
     expect(Environment::where('application_id', $this->application->id)->count())->toBe(0);
+});
+
+test('a failed validation does not flash the basic-auth password into the session', function () {
+    // The flash is what feeds old() after a redirect, and sessions live in
+    // PostgreSQL unencrypted: see bootstrap/app.php's dontFlash(). Nothing
+    // here reads old input back — Inertia forms keep their own state — so
+    // the only thing the flash could do with a password is store it.
+    $this->actingAs($this->admin)->post(
+        route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+        ($this->validPayload)(['basicAuthPassword' => 'plaintext-must-not-persist', 'pollIntervalSeconds' => 9999]),
+    )->assertInvalid(['pollIntervalSeconds']);
+
+    expect(json_encode(session()->all(), JSON_THROW_ON_ERROR))
+        ->not->toContain('plaintext-must-not-persist')
+        // The rest of the submission is still there: this is an exclusion,
+        // not the flash being switched off.
+        ->toContain('monitor');
 });
 
 test('an environment name is unique per application, and a field error says so', function () {

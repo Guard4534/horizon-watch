@@ -101,17 +101,21 @@ class ApplicationController extends Controller
      */
     private function authorizeCredentialsIfTouched(ApplicationWizardData $data, Team $team): void
     {
-        $touchesCredentials = collect($data->environments)
-            ->contains(fn (EnvironmentFormData $environment): bool => $environment->touchesCredentials());
-
-        if (! $touchesCredentials) {
-            return;
-        }
-
         $environment = (new Environment)->setRelation(
             'application',
             (new Application)->setRelation('team', $team),
         );
+
+        $touchesCredentials = collect($data->environments)->contains(
+            // Every row is new, so the transient environment above — with no
+            // credentials of its own — is the right thing to compare each
+            // one against.
+            fn (EnvironmentFormData $row): bool => $row->changesCredentialsOf($environment)
+        );
+
+        if (! $touchesCredentials) {
+            return;
+        }
 
         Gate::authorize('manageCredentials', $environment);
     }
