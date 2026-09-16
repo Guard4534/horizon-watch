@@ -23,6 +23,15 @@ const shared = usePage();
 // an unconfigured organization.
 const nothingVisible = computed(() => page.groups.length === 0);
 
+// Restricted only means something is being kept from this member if the
+// organization holds anything at all: a viewer limited to non-production
+// in an empty organization has nothing hidden from them.
+const somethingIsHidden = computed(
+    () =>
+        shared.props.visibilityRestricted &&
+        shared.props.organizationHasEnvironments,
+);
+
 const groups = computed(() => {
     const needle = search.value.trim().toLowerCase();
 
@@ -75,7 +84,7 @@ const groups = computed(() => {
             :kicker="$t('Nothing connected')"
             :title="$t('No applications yet')"
             :body="
-                shared.props.visibilityRestricted
+                somethingIsHidden
                     ? $t(
                           'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
                       )

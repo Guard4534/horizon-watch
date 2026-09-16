@@ -27,6 +27,15 @@ const nothingVisible = computed(
         page.scopes.find((scope) => scope.id === 'organization')
             ?.environmentCount === 0,
 );
+
+// Restricted only means something is being kept from this member if the
+// organization holds anything at all: a viewer limited to non-production
+// in an empty organization has nothing hidden from them.
+const somethingIsHidden = computed(
+    () =>
+        shared.props.visibilityRestricted &&
+        shared.props.organizationHasEnvironments,
+);
 </script>
 
 <template>
@@ -38,7 +47,7 @@ const nothingVisible = computed(
             :kicker="$t('Nothing to watch')"
             :title="$t('No thresholds yet')"
             :body="
-                shared.props.visibilityRestricted
+                somethingIsHidden
                     ? $t(
                           'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
                       )

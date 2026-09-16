@@ -24,6 +24,15 @@ const shared = usePage();
 // nothing to describe, so the page is just the explanation.
 const nothingVisible = computed(() => page.environmentCount === 0);
 
+// Restricted only means something is being kept from this member if the
+// organization holds anything at all: a viewer limited to non-production
+// in an empty organization has nothing hidden from them.
+const somethingIsHidden = computed(
+    () =>
+        shared.props.visibilityRestricted &&
+        shared.props.organizationHasEnvironments,
+);
+
 const state = computed({
     get: () => page.state,
     set: (next: App.Enums.AlertState) =>
@@ -56,7 +65,7 @@ const alerts = computed(() => {
             :kicker="$t('Nothing to watch')"
             :title="$t('No alerts yet')"
             :body="
-                shared.props.visibilityRestricted
+                somethingIsHidden
                     ? $t(
                           'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
                       )

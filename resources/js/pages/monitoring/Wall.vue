@@ -41,17 +41,23 @@ const nothingVisible = computed(() => page.environments.length === 0);
 const canManageApplications = computed(
     () => shared.props.canManageApplications,
 );
-const visibilityRestricted = computed(() => shared.props.visibilityRestricted);
+// Restricted only means something is being kept from this member if the
+// organization holds anything at all: a viewer limited to non-production
+// in an empty organization has nothing hidden from them.
+const somethingIsHidden = computed(
+    () =>
+        shared.props.visibilityRestricted &&
+        shared.props.organizationHasEnvironments,
+);
 
 // An application survives losing its last environment (on purpose: nothing
-// else could ever reach it again), so an unrestricted admin can land here
-// with applications and no environment. Adding another application is not
-// what they need — adding an environment to the one they have is.
+// else could ever reach it again), so an admin can land here with
+// applications and no environment. Adding another application is not what
+// they need — adding an environment to the one they have is. Checked after
+// somethingIsHidden, so a restricted admin who really is missing a whole
+// environment is not sent to configure a second one.
 const needsEnvironment = computed(
-    () =>
-        !visibilityRestricted.value &&
-        canManageApplications.value &&
-        page.applicationCount > 0,
+    () => canManageApplications.value && page.applicationCount > 0,
 );
 
 const query = new URLSearchParams(window.location.search);
@@ -165,7 +171,7 @@ const kpis = computed(() => [
                 :kicker="$t('Nothing connected')"
                 :title="$t('No environments yet')"
                 :body="
-                    visibilityRestricted
+                    somethingIsHidden
                         ? $t(
                               'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
                           )
@@ -183,15 +189,17 @@ const kpis = computed(() => [
                 "
             >
                 <Link
-                    v-if="needsEnvironment"
+                    v-if="!somethingIsHidden && needsEnvironment"
                     class="nc-btn nc-btn-primary"
+                    style="margin-top: var(--nc-space-2)"
                     :href="applicationsIndex(slug)"
                 >
-                    <PhPlus :size="14" />{{ $t('Add an environment') }}
+                    <PhPlus :size="14" />{{ $t('Add environment') }}
                 </Link>
                 <Link
                     v-else-if="canManageApplications"
                     class="nc-btn nc-btn-primary"
+                    style="margin-top: var(--nc-space-2)"
                     :href="createApplication(slug)"
                 >
                     <PhPlus :size="14" />{{ $t('Add application') }}

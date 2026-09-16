@@ -53,7 +53,8 @@ test('an organization with nothing configured still answers, and offers the way 
         ->assertInertia(fn (Assert $page) => $page
             ->component($component)
             ->where('canManageApplications', true)
-            ->where('visibilityRestricted', false));
+            ->where('visibilityRestricted', false)
+            ->where('organizationHasEnvironments', false));
 })->with('monitoring pages');
 
 test('each page carries the count its empty state keys off', function () {
@@ -94,10 +95,11 @@ test('a member who sees no environment gets the same pages without the action', 
         ->assertInertia(fn (Assert $page) => $page
             ->component($component)
             ->where('canManageApplications', false)
-            ->where('visibilityRestricted', true));
+            ->where('visibilityRestricted', true)
+            ->where('organizationHasEnvironments', true));
 })->with('monitoring pages');
 
-test('a member who sees no environment is told nothing is configured, even though something is', function () {
+test('a member who sees no environment gets empty counts, and the flags that say why', function () {
     [$member, $slug] = memberWhoSeesNothing();
 
     $this->actingAs($member);
@@ -105,6 +107,11 @@ test('a member who sees no environment is told nothing is configured, even thoug
     $this->get(route('wall', ['current_team' => $slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environments', [])
+            // The pair that makes the wall say "hidden from you" rather
+            // than "nothing configured": the organization does hold
+            // environments, this member just sees none of them.
+            ->where('visibilityRestricted', true)
+            ->where('organizationHasEnvironments', true)
             // Not even the application behind the hidden environments: a
             // member with no permission to manage them sees no orphan.
             ->where('page.applicationCount', 0));
@@ -163,8 +170,8 @@ test('the two shared flags follow their own axis', function (string $role, Membe
             ->where('canManageApplications', $canManage)
             ->where('visibilityRestricted', $restricted));
 })->with([
-    // The restricted admin: gets the action, but must be told the
-    // organization may hold environments they cannot see.
+    // The restricted admin: keeps the action, and is told about the
+    // environments they cannot see whenever there are any.
     'admin · manual' => ['admin', MemberVisibility::Manual, true, true],
     'owner · non_production' => ['owner', MemberVisibility::NonProduction, true, true],
     // The unrestricted viewer: must never be offered a wider visibility,
@@ -195,7 +202,8 @@ test('a restricted admin of an organization that has environments is not told to
             // visibilityRestricted can tell the wall which wording to use.
             ->where('page.environments', [])
             ->where('canManageApplications', true)
-            ->where('visibilityRestricted', true));
+            ->where('visibilityRestricted', true)
+            ->where('organizationHasEnvironments', true));
 });
 
 test('the wall tells an application with no environment apart from no application at all', function () {
@@ -210,7 +218,10 @@ test('the wall tells an application with no environment apart from no applicatio
             // point at adding an environment, not another application.
             ->where('page.applicationCount', 1)
             ->where('visibilityRestricted', false)
-            ->where('canManageApplications', true));
+            ->where('canManageApplications', true)
+            // The organization holds no environment, so nothing is hidden
+            // from anyone: what is missing is an environment, not access.
+            ->where('organizationHasEnvironments', false));
 });
 
 test('the shared flags describe the requested organization, not the stale current one', function () {
@@ -251,4 +262,55 @@ test('the wall goes back to its tiles as soon as one environment is visible', fu
         ->assertInertia(fn (Assert $page) => $page
             ->has('page.environments', 1)
             ->where('page.applicationCount', 1));
+});
+
+test('a restricted viewer of an empty organization is not told something is hidden', function () {
+    $viewer = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($viewer, [
+        'role' => TeamRole::Viewer->value,
+        'visibility' => MemberVisibility::NonProduction->value,
+    ]);
+
+    $viewer->switchTeam($team);
+
+    $this->actingAs($viewer)
+        ->get(route('wall', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            // Restricted, yet nothing at all is hidden: the organization is
+            // empty. Only the second flag keeps the wall from claiming
+            // there are environments this viewer cannot see.
+            ->where('visibilityRestricted', true)
+            ->where('organizationHasEnvironments', false)
+            ->where('canManageApplications', false)
+            ->where('page.environments', []));
+});
+
+test('a restricted admin whose only application has no environment hears about the environment', function () {
+    $admin = User::factory()->create();
+    $team = Team::factory()->create();
+
+    Application::factory()->for($team)->create();
+
+    $team->members()->attach($admin, [
+        'role' => TeamRole::Admin->value,
+        'visibility' => MemberVisibility::Manual->value,
+    ]);
+
+    $admin->switchTeam($team);
+
+    $this->actingAs($admin)
+        ->get(route('wall', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            // Restricted and empty-handed, but nothing is being kept from
+            // them: the application they can see simply has no environment
+            // yet, which is what the wall must say.
+            ->where('visibilityRestricted', true)
+            ->where('organizationHasEnvironments', false)
+            ->where('canManageApplications', true)
+            ->where('page.applicationCount', 1)
+            ->where('page.environments', []));
 });
