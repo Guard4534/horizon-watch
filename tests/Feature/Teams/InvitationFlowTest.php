@@ -381,6 +381,40 @@ test('registering against an expired invitation is rejected', function () {
     $this->assertDatabaseMissing('users', ['email' => 'invited@example.com']);
 });
 
+test('registering an address that already has an account is refused, and the page says to sign in', function () {
+    $existing = User::factory()->create(['email' => 'invited@example.com']);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    // The invitation is open, but not to a guest who cannot be this
+    // account: stateFor() answers sign_in_required, which register()'s
+    // abort_unless(state === 'open') turns into a 410 before
+    // RegisterInvitedUser (and its 409 race guard) is ever reached.
+    $this->get(route('invitations.show', $invitation->code))
+        ->assertInertia(fn (Assert $page) => $page->where('page.state', 'sign_in_required'));
+
+    $this->post(route('invitations.register', $invitation->code), [
+        'name' => 'Ivy Guest',
+        'password' => 'password1234',
+        'password_confirmation' => 'password1234',
+    ])->assertStatus(410);
+
+    expect(User::where('email', 'invited@example.com')->count())->toBe(1)
+        ->and($existing->fresh()->belongsToTeam($this->team))->toBeFalse();
+
+    // Signing in turns the same link into the ordinary accept page.
+    $this->actingAs($existing)
+        ->get(route('invitations.show', $invitation->code))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.state', 'open')
+            ->where('page.authenticated', true));
+});
+
 test('resend regenerates only the expiry, keeps the code, and respects the rate limit', function () {
     Notification::fake();
 

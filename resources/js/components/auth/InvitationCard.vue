@@ -9,6 +9,10 @@ const props = defineProps<{
     organizationName: string;
     roleLabel: string;
     visibilityLabel: string;
+    // Named environments, only for a "manual" visibility: the label alone
+    // ("Manual selection") tells the invitee nothing about what they will
+    // see. Empty for the other two, where the label says it all.
+    visibleEnvironmentNames: string[];
 }>();
 
 const initials = computed(() => getInitials(props.organizationName));
@@ -52,6 +56,18 @@ const initials = computed(() => getInitials(props.organizationName));
                         visibility: visibilityLabel,
                     })
                 }}
+            </div>
+            <div
+                v-if="visibleEnvironmentNames.length > 0"
+                style="
+                    font-size: 11px;
+                    color: var(--nc-neutral-600);
+                    margin-top: 2px;
+                    overflow-wrap: anywhere;
+                "
+                data-test="invitation-visible-environments"
+            >
+                {{ visibleEnvironmentNames.join(', ') }}
             </div>
         </div>
     </div>

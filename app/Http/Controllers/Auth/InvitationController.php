@@ -7,6 +7,7 @@ use App\Actions\Teams\DeclineInvitation;
 use App\Actions\Teams\RegisterInvitedUser;
 use App\Data\Pages\InvitationPageData;
 use App\Data\Teams\AcceptInvitationData;
+use App\Enums\MemberVisibility;
 use App\Http\Controllers\Controller;
 use App\Models\TeamInvitation;
 use App\Models\User;
@@ -21,12 +22,13 @@ class InvitationController extends Controller
 {
     /**
      * Show the invitation: the front end decides what to render from
-     * `state` (open, expired, revoked, accepted, wrong_account) and
-     * `authenticated`, never from a raw invitation record. The
-     * organization/role/visibility/email are only ever sent when the
-     * invitation is actionable by whoever is asking — every other state
-     * must say nothing more ("senza dettagli", per the spec), and this is
-     * an Inertia prop: it reaches the client whatever the page renders.
+     * `state` (open, sign_in_required, expired, revoked, accepted,
+     * wrong_account) and `authenticated`, never from a raw invitation
+     * record. The organization/role/visibility/email are only ever sent
+     * when the invitation is actionable by whoever is asking — every other
+     * state must say nothing more ("senza dettagli", per the spec), and
+     * this is an Inertia prop: it reaches the client whatever the page
+     * renders.
      */
     public function show(string $code): Response
     {
@@ -37,10 +39,18 @@ class InvitationController extends Controller
 
         return Inertia::render('auth/Invitation', [
             'page' => new InvitationPageData(
+                code: $invitation->code,
                 organizationName: $canSeeDetails ? $invitation->team->name : null,
                 roleLabel: $canSeeDetails ? $invitation->role->label() : null,
                 visibilityLabel: $canSeeDetails ? $invitation->visibility->label() : null,
                 email: $canSeeDetails ? $invitation->email : null,
+                // Named only for a manual selection: for the other two
+                // visibilities the label already says what is included,
+                // and listing the organization's environments to someone
+                // who hasn't joined it yet would say too much.
+                visibleEnvironmentNames: $canSeeDetails && $invitation->visibility === MemberVisibility::Manual
+                    ? $invitation->environments->pluck('name')->all()
+                    : [],
                 state: $state,
                 authenticated: $user !== null,
             ),
@@ -120,7 +130,7 @@ class InvitationController extends Controller
     private function findOrFail(string $code): TeamInvitation
     {
         return TeamInvitation::query()
-            ->with('team')
+            ->with(['team', 'environments'])
             ->where('code', $code)
             ->firstOr(fn () => abort(404));
     }
@@ -130,6 +140,10 @@ class InvitationController extends Controller
         return Str::lower($invitation->email) === Str::lower($user->email);
     }
 
+    /**
+     * Every state but "open" is a dead end for whoever is asking, and
+     * show() nulls the invitation's details for all of them.
+     */
     private function stateFor(TeamInvitation $invitation, ?User $user): string
     {
         return match (true) {
@@ -137,7 +151,25 @@ class InvitationController extends Controller
             $invitation->isRevoked() => 'revoked',
             $invitation->isExpired() => 'expired',
             $user !== null && ! $this->sameEmail($invitation, $user) => 'wrong_account',
+            // Nobody is signed in but the address already has an account:
+            // that person signs in and accepts, they don't register a
+            // second account under the same address. Keeping it out of
+            // "open" is what makes register() refuse it (410) instead of
+            // letting RegisterInvitedUser's race guard answer a plain
+            // form submission with a bare 409.
+            $user === null && $this->accountExists($invitation) => 'sign_in_required',
             default => 'open',
         };
+    }
+
+    /**
+     * Case-insensitively, like sameEmail(): an account that differs only
+     * in case is still the account this person has to sign in to.
+     */
+    private function accountExists(TeamInvitation $invitation): bool
+    {
+        return User::query()
+            ->whereRaw('LOWER(email) = ?', [Str::lower($invitation->email)])
+            ->exists();
     }
 }

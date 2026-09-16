@@ -2,6 +2,8 @@
 
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
+use App\Models\Application;
+use App\Models\Environment;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
@@ -29,10 +31,14 @@ test('a guest sees the registration state with the organization, the role and th
             ->component('auth/Invitation')
             ->where('page.state', 'open')
             ->where('page.authenticated', false)
+            ->where('page.code', $invitation->code)
             ->where('page.organizationName', 'Acme Group')
             ->where('page.roleLabel', 'Member')
             ->where('page.visibilityLabel', 'All environments')
-            ->where('page.email', 'invited@example.com'));
+            ->where('page.email', 'invited@example.com')
+            // "All environments" says it all; naming the organization's
+            // environments to someone who hasn't joined it would not.
+            ->where('page.visibleEnvironmentNames', []));
 });
 
 test('the invited user, already signed in, sees the accept and decline state', function () {
@@ -104,7 +110,8 @@ test('a closed invitation says only what happened', function (string $factorySta
             ->where('page.organizationName', null)
             ->where('page.roleLabel', null)
             ->where('page.visibilityLabel', null)
-            ->where('page.email', null));
+            ->where('page.email', null)
+            ->where('page.visibleEnvironmentNames', []));
 })->with([
     'expired' => ['expired', 'expired'],
     'revoked' => ['revoked', 'revoked'],
@@ -113,6 +120,53 @@ test('a closed invitation says only what happened', function (string $factorySta
 
 test('an unknown code is a 404, not an empty invitation page', function () {
     $this->get(route('invitations.show', 'does-not-exist'))->assertNotFound();
+});
+
+test('a manual invitation names the environments the invitee will see', function () {
+    $application = Application::factory()->for($this->team)->create();
+    $staging = Environment::factory()->for($application)->create(['name' => 'staging']);
+    Environment::factory()->for($application)->create(['name' => 'production']);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'role' => TeamRole::Viewer,
+        'visibility' => MemberVisibility::Manual,
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+    $invitation->environments()->sync([$staging->id]);
+
+    $this->get(route('invitations.show', $invitation->code))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.state', 'open')
+            ->where('page.visibilityLabel', 'Manual selection')
+            ->where('page.visibleEnvironmentNames', ['staging']));
+});
+
+test('a guest whose address already has an account is asked to sign in, not to register', function () {
+    User::factory()->create(['email' => 'Invited@example.com']);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    $this->get(route('invitations.show', $invitation->code))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('auth/Invitation')
+            // The account differs only in case, and is still theirs.
+            ->where('page.state', 'sign_in_required')
+            ->where('page.authenticated', false)
+            ->where('page.organizationName', null)
+            ->where('page.roleLabel', null)
+            ->where('page.visibilityLabel', null)
+            ->where('page.email', null)
+            ->where('page.visibleEnvironmentNames', []));
 });
 
 // The starter kit passed a "teamInvitation" banner to the login page from an

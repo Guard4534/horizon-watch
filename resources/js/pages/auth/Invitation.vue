@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Form, Head } from '@inertiajs/vue3';
+import { Form, Head, Link, router } from '@inertiajs/vue3';
+import { PhSignOut } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import InvitationCard from '@/components/auth/InvitationCard.vue';
 import InputError from '@/components/InputError.vue';
@@ -7,8 +8,7 @@ import PasswordInput from '@/components/PasswordInput.vue';
 import TeamInvitationAlert from '@/components/TeamInvitationAlert.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Spinner } from '@/components/ui/spinner';
-import { useCurrentUrl } from '@/composables/useCurrentUrl';
-import { login } from '@/routes';
+import { login, logout } from '@/routes';
 import { accept, decline, register } from '@/routes/invitations';
 
 defineOptions({
@@ -22,18 +22,22 @@ const props = defineProps<{
     page: App.Data.Pages.InvitationPageData;
 }>();
 
-// The invitation code is not a page prop: it is the {code} segment of the
-// URL this page is served at (/invitations/{code}), and copying it into the
-// props would only give it a second place to be wrong.
-const { currentUrl } = useCurrentUrl();
-const code = computed(
-    () => currentUrl.value.split('/').filter(Boolean)[1] ?? '',
-);
-
 // Only an open invitation carries an organization, a role, a visibility and
 // an email: for every other state InvitationPageData holds nulls on purpose,
-// so those states render their message and nothing else.
+// so those states render their message and one way out.
 const isOpen = computed(() => props.page.state === 'open');
+
+// The three states nobody can do anything about. sign_in_required and
+// wrong_account are excluded on purpose: each has its own action below, and
+// GET /login is guest-gated, so the link would bounce the signed-in visitor
+// of wrong_account straight back into the panel.
+const showLoginFooter = computed(() =>
+    ['expired', 'revoked', 'accepted'].includes(props.page.state),
+);
+
+// Drops the cached pages of the account being left behind, like the user
+// menu's own sign-out does.
+const flushOnSignOut = () => router.flushAll();
 </script>
 
 <template>
@@ -54,11 +58,12 @@ const isOpen = computed(() => props.page.state === 'open');
             :organization-name="page.organizationName ?? ''"
             :role-label="page.roleLabel ?? ''"
             :visibility-label="page.visibilityLabel ?? ''"
+            :visible-environment-names="page.visibleEnvironmentNames"
         />
 
         <Form
             v-if="!page.authenticated"
-            v-bind="register.form(code)"
+            v-bind="register.form(page.code)"
             :reset-on-success="['password', 'password_confirmation']"
             v-slot="{ errors, processing }"
             class="flex flex-col gap-[var(--nc-space-3)]"
@@ -146,7 +151,7 @@ const isOpen = computed(() => props.page.state === 'open');
                 style="margin-top: var(--nc-space-4)"
             >
                 <Form
-                    v-bind="accept.form(code)"
+                    v-bind="accept.form(page.code)"
                     v-slot="{ processing }"
                     class="flex-1"
                     data-test="invitation-accept-form"
@@ -163,7 +168,7 @@ const isOpen = computed(() => props.page.state === 'open');
                 </Form>
 
                 <Form
-                    v-bind="decline.form(code)"
+                    v-bind="decline.form(page.code)"
                     v-slot="{ processing }"
                     data-test="invitation-decline-form"
                 >
@@ -182,13 +187,37 @@ const isOpen = computed(() => props.page.state === 'open');
 
     <template v-else>
         <TeamInvitationAlert :state="page.state" />
+
+        <!-- The address already has an account: signing in is the only way
+             forward, so it is the primary action rather than a footnote. -->
+        <Link
+            v-if="page.state === 'sign_in_required'"
+            :href="login()"
+            class="nc-btn nc-btn-primary nc-btn-block"
+            style="margin-top: var(--nc-space-4)"
+            data-test="invitation-sign-in-button"
+        >
+            {{ $t('Sign in') }}
+        </Link>
+
+        <!-- Signed in as somebody else: POST to logout, because GET /login
+             is guest-gated and would only bounce back into the panel. -->
+        <Link
+            v-if="page.state === 'wrong_account'"
+            :href="logout()"
+            as="button"
+            class="nc-btn nc-btn-primary nc-btn-block"
+            style="margin-top: var(--nc-space-4)"
+            @click="flushOnSignOut"
+            data-test="invitation-sign-out-button"
+        >
+            <PhSignOut :size="14" />
+            {{ $t('Sign out and open the link again') }}
+        </Link>
     </template>
 
-    <!-- Every state but "open and already signed in" ends on the login
-         page: the four closed states have nowhere else to go, and a guest
-         who already has an account signs in and reopens the link. -->
     <div
-        v-if="!isOpen || !page.authenticated"
+        v-if="showLoginFooter"
         class="text-center"
         style="
             font-size: 12px;
