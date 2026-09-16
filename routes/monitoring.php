@@ -4,6 +4,7 @@ use App\Http\Controllers\Monitoring\AlertController;
 use App\Http\Controllers\Monitoring\AlertRuleController;
 use App\Http\Controllers\Monitoring\ApplicationController;
 use App\Http\Controllers\Monitoring\EnvironmentController;
+use App\Http\Controllers\Monitoring\MemberController;
 use App\Http\Controllers\Monitoring\WallController;
 use App\Http\Middleware\EnsureTeamMembership;
 use Illuminate\Support\Facades\Route;
@@ -69,6 +70,21 @@ Route::delete('environments/{environment}', [EnvironmentController::class, 'dest
     ->middleware(EnsureTeamMembership::class.':admin')
     ->scopeBindings()
     ->name('environments.destroy');
+
+// The Members view replaces "settings/teams/{team}" in the sidebar. Reading
+// it is open to every member (the actions inside are not); changing a role
+// or a visibility and removing someone need admin, and the TeamPolicy
+// decides again per target.
+//
+// "members/invitations/…" (sending, resending and revoking) lives in
+// routes/settings.php next to the rest of the invitation flow.
+Route::get('members', [MemberController::class, 'index'])->name('members.index');
+Route::patch('members/{user}', [MemberController::class, 'update'])
+    ->middleware(EnsureTeamMembership::class.':admin')
+    ->name('members.update');
+Route::delete('members/{user}', [MemberController::class, 'destroy'])
+    ->middleware(EnsureTeamMembership::class.':admin')
+    ->name('members.destroy');
 
 Route::get('alerts', [AlertController::class, 'index'])->name('alerts.index');
 Route::get('alert-rules/{scope?}', [AlertRuleController::class, 'index'])->name('alert-rules.index');

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head, router } from '@inertiajs/vue3';
+import { Form, Head, Link, router } from '@inertiajs/vue3';
 import {
     PhCaretDown,
     PhEnvelopeSimple,
@@ -8,11 +8,9 @@ import {
 } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed, ref } from 'vue';
-import CancelInvitationModal from '@/components/CancelInvitationModal.vue';
 import DeleteTeamModal from '@/components/DeleteTeamModal.vue';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
-import InviteMemberModal from '@/components/InviteMemberModal.vue';
 import RemoveMemberModal from '@/components/RemoveMemberModal.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +30,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useInitials } from '@/composables/useInitials';
+import { index as membersIndex } from '@/routes/members';
 import { edit, index, update } from '@/routes/teams';
 import { update as updateMember } from '@/routes/teams/members';
 import type {
@@ -69,12 +68,9 @@ defineOptions({
 
 const { getInitials } = useInitials();
 
-const inviteDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
 const removeMemberDialogOpen = ref(false);
 const memberToRemove = ref<TeamMember | null>(null);
-const cancelInvitationDialogOpen = ref(false);
-const invitationToCancel = ref<TeamInvitation | null>(null);
 
 const pageTitle = computed(() =>
     trans(props.permissions.canUpdateTeam ? 'Edit :team' : 'View :team', {
@@ -92,11 +88,6 @@ const updateMemberRole = (member: TeamMember, newRole: string) => {
 const confirmRemoveMember = (member: TeamMember) => {
     memberToRemove.value = member;
     removeMemberDialogOpen.value = true;
-};
-
-const confirmCancelInvitation = (invitation: TeamInvitation) => {
-    invitationToCancel.value = invitation;
-    cancelInvitationDialogOpen.value = true;
 };
 </script>
 
@@ -160,12 +151,17 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                     "
                 />
 
+                <!-- Inviting, resending and revoking happen in the Members
+                     view now (phase 2): this page keeps the organization's
+                     own settings. -->
                 <Button
                     v-if="permissions.canCreateInvitation"
+                    as-child
                     data-test="invite-member-button"
-                    @click="inviteDialogOpen = true"
                 >
-                    <PhUserPlus /> {{ $t('Invite member') }}
+                    <Link :href="membersIndex(team.slug)">
+                        <PhUserPlus /> {{ $t('Invite member') }}
+                    </Link>
                 </Button>
             </div>
 
@@ -292,24 +288,6 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                             </div>
                         </div>
                     </div>
-
-                    <TooltipProvider v-if="permissions.canCancelInvitation">
-                        <Tooltip>
-                            <TooltipTrigger as-child>
-                                <Button
-                                    data-test="invitation-cancel-button"
-                                    variant="ghost"
-                                    size="sm"
-                                    @click="confirmCancelInvitation(invitation)"
-                                >
-                                    <PhX class="h-4 w-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{{ $t('Cancel invitation') }}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
                 </div>
             </div>
         </div>
@@ -355,26 +333,11 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
         </div>
     </div>
 
-    <InviteMemberModal
-        v-if="permissions.canCreateInvitation"
-        :team="team"
-        :available-roles="availableRoles"
-        :open="inviteDialogOpen"
-        @update:open="inviteDialogOpen = $event"
-    />
-
     <RemoveMemberModal
         :team="team"
         :member="memberToRemove"
         :open="removeMemberDialogOpen"
         @update:open="removeMemberDialogOpen = $event"
-    />
-
-    <CancelInvitationModal
-        :team="team"
-        :invitation="invitationToCancel"
-        :open="cancelInvitationDialogOpen"
-        @update:open="cancelInvitationDialogOpen = $event"
     />
 
     <DeleteTeamModal
