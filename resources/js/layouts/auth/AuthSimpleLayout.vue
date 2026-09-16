@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import LocaleSwitch from '@/components/LocaleSwitch.vue';
 import BrandMark from '@/components/nocturne/BrandMark.vue';
-import { useLocale } from '@/composables/useLocale';
 
 const {
     title = '',
@@ -11,8 +11,6 @@ const {
     description?: string;
     kicker?: string;
 }>();
-
-const { locale, setLocale } = useLocale();
 </script>
 
 <template>
@@ -55,21 +53,6 @@ const { locale, setLocale } = useLocale();
             <slot />
         </section>
 
-        <div class="nc-seg" style="border-radius: var(--nc-radius-sm)">
-            <label
-                v-for="option in ['it', 'en'] as const"
-                :key="option"
-                class="nc-seg-opt"
-                style="padding: 1px 7px; font-size: 10px"
-            >
-                <input
-                    type="radio"
-                    name="auth-locale"
-                    :checked="locale === option"
-                    @change="setLocale(option)"
-                />
-                {{ option.toUpperCase() }}
-            </label>
-        </div>
+        <LocaleSwitch name="auth-locale" />
     </div>
 </template>

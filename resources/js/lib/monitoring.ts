@@ -1,7 +1,13 @@
+import {
+    PhPauseCircle,
+    PhPlugs,
+    PhWarning,
+    PhWarningOctagon,
+} from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
-import type { EnvironmentColor, EnvironmentStatus } from '@/types/monitoring';
+import type { Component } from 'vue';
 
-const STATUS_COLORS: Record<EnvironmentStatus, string> = {
+const STATUS_COLORS: Record<App.Enums.EnvironmentStatus, string> = {
     active: 'var(--st-ok)',
     degraded: 'var(--st-warn)',
     paused: 'var(--st-off)',
@@ -9,21 +15,33 @@ const STATUS_COLORS: Record<EnvironmentStatus, string> = {
     unreachable: 'var(--st-down)',
 };
 
-export function statusColor(status: EnvironmentStatus): string {
+export function statusColor(status: App.Enums.EnvironmentStatus): string {
     return STATUS_COLORS[status];
 }
 
-export function envColor(color: EnvironmentColor): string {
+export function envColor(color: App.Enums.EnvironmentColor): string {
     return `var(--env-${color})`;
 }
 
 // Horizon's own states stay English in every language; only "unreachable" is ours.
-export function statusLabel(status: EnvironmentStatus): string {
+export function statusLabel(status: App.Enums.EnvironmentStatus): string {
     return status === 'unreachable' ? trans('unreachable') : status;
 }
 
-export function isDown(status: EnvironmentStatus): boolean {
+export function isDown(status: App.Enums.EnvironmentStatus): boolean {
     return status === 'inactive' || status === 'unreachable';
+}
+
+const STATUS_ICONS: Record<App.Enums.EnvironmentStatus, Component> = {
+    active: PhWarning,
+    degraded: PhWarning,
+    paused: PhPauseCircle,
+    inactive: PhWarningOctagon,
+    unreachable: PhPlugs,
+};
+
+export function statusIcon(status: App.Enums.EnvironmentStatus): Component {
+    return STATUS_ICONS[status];
 }
 
 export function formatCount(value: number): string {

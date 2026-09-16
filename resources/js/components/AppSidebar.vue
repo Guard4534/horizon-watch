@@ -8,11 +8,11 @@ import {
     PhUsersThree,
 } from '@phosphor-icons/vue';
 import { computed } from 'vue';
+import LocaleSwitch from '@/components/LocaleSwitch.vue';
 import BrandMark from '@/components/nocturne/BrandMark.vue';
 import NavUser from '@/components/NavUser.vue';
 import SidebarLink from '@/components/SidebarLink.vue';
 import TeamSwitcher from '@/components/TeamSwitcher.vue';
-import { useLocale } from '@/composables/useLocale';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { wall } from '@/routes';
 import { index as alertsIndex } from '@/routes/alerts';
@@ -22,7 +22,6 @@ import { edit as editTeam } from '@/routes/teams';
 
 const page = usePage();
 const slug = useTeamSlug();
-const { locale, setLocale } = useLocale();
 
 const path = computed(() => page.url.split('?')[0]);
 const startsWith = (...prefixes: string[]) =>
@@ -43,25 +42,11 @@ const startsWith = (...prefixes: string[]) =>
             style="padding: 0 var(--nc-space-2)"
         >
             <BrandMark />
-            <div
-                class="nc-seg ml-auto"
-                style="border-radius: var(--nc-radius-sm)"
-            >
-                <label
-                    v-for="option in ['it', 'en'] as const"
-                    :key="option"
-                    class="nc-seg-opt"
-                    style="padding: 1px 5px; font-size: 10px"
-                >
-                    <input
-                        type="radio"
-                        name="sidebar-locale"
-                        :checked="locale === option"
-                        @change="setLocale(option)"
-                    />
-                    {{ option.toUpperCase() }}
-                </label>
-            </div>
+            <LocaleSwitch
+                name="sidebar-locale"
+                padding="1px 5px"
+                class="ml-auto"
+            />
         </div>
 
         <nav class="flex flex-col gap-[2px]">

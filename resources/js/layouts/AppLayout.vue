@@ -2,6 +2,9 @@
 import AppSidebarLayout from '@/layouts/app/AppSidebarLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 
+// breadcrumbs survives from the starter kit only to supply the header title
+// when no explicit `title` is given (its last item's `title`); the trail
+// itself is not rendered.
 const {
     title,
     subtitle,

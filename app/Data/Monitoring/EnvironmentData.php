@@ -26,4 +26,15 @@ class EnvironmentData extends Data
         public float $redisMemoryGb,
         public int $latencyMs,
     ) {}
+
+    /**
+     * The wall's ordering, and anywhere else that needs "worst first": lowest
+     * severity wins, ties broken by the most pending jobs. The single owner
+     * of this rule — every other call site (PHP or TypeScript) should use it
+     * instead of re-implementing the tuple comparison.
+     */
+    public static function compareBySeverityThenPending(self $a, self $b): int
+    {
+        return [$a->status->severity(), $b->pending] <=> [$b->status->severity(), $a->pending];
+    }
 }

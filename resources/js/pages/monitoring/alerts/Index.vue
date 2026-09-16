@@ -61,15 +61,15 @@ const alerts = computed(() => {
                     :options="[
                         {
                             value: 'open',
-                            label: `${$t('Open')} ${page.counts.open}`,
+                            label: `${$t('Open alerts')} ${page.counts.open}`,
                         },
                         {
                             value: 'muted',
-                            label: `${$t('Muted')} ${page.counts.muted}`,
+                            label: `${$t('Muted alerts')} ${page.counts.muted}`,
                         },
                         {
                             value: 'resolved',
-                            label: `${$t('Resolved')} ${page.counts.resolved}`,
+                            label: `${$t('Resolved alerts')} ${page.counts.resolved}`,
                         },
                     ]"
                 />
@@ -77,7 +77,7 @@ const alerts = computed(() => {
                     v-model="search"
                     class="nc-input ml-auto"
                     style="max-width: 230px"
-                    :placeholder="$t('Filter by application or queue')"
+                    :placeholder="$t('Filter by application')"
                 />
             </div>
             <AlertTable :alerts="alerts" />

@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { envColor } from '@/lib/monitoring';
-import type { EnvironmentColor } from '@/types/monitoring';
 
 const {
     color,
     shape = 'square',
     size = 10,
 } = defineProps<{
-    color: EnvironmentColor;
+    color: App.Enums.EnvironmentColor;
     shape?: 'square' | 'bar' | 'edge';
     size?: number;
 }>();

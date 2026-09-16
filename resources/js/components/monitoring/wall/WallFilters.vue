@@ -66,7 +66,7 @@ const chips = computed(() => {
                 v-model="search"
                 class="nc-input"
                 style="max-width: 250px"
-                :placeholder="$t('Filter by application, environment or queue')"
+                :placeholder="$t('Filter by application or environment')"
             />
             <span
                 class="ml-auto"

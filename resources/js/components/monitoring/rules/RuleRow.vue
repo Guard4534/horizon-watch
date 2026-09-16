@@ -27,28 +27,16 @@ const { rule, organizationScope } = defineProps<{
                     style="color: var(--nc-neutral-400)"
                 />
                 {{ $t(ruleLabel(rule.metric)) }}
+                <!-- "override" stays English in both languages: the mockup keeps
+                     rule-origin badges untranslated on purpose. -->
                 <span
                     v-if="rule.origin === 'override'"
-                    class="flex-none"
-                    style="
-                        font-size: 10px;
-                        padding: 1px 6px;
-                        border-radius: var(--nc-radius-sm);
-                        background: var(--nc-accent-800);
-                        color: var(--nc-accent-100);
-                    "
+                    class="nc-tag nc-tag-sm nc-tag-accent flex-none"
                     >override</span
                 >
                 <span
                     v-else-if="!organizationScope"
-                    class="flex-none"
-                    style="
-                        font-size: 10px;
-                        padding: 1px 6px;
-                        border-radius: var(--nc-radius-sm);
-                        background: var(--nc-neutral-900);
-                        color: var(--nc-neutral-400);
-                    "
+                    class="nc-tag nc-tag-sm nc-tag-neutral flex-none"
                     >{{ $t('from org') }}</span
                 >
             </div>

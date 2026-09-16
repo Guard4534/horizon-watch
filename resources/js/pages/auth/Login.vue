@@ -35,11 +35,7 @@ defineProps<{
         {{ status }}
     </div>
 
-    <TeamInvitationAlert
-        v-if="teamInvitation"
-        :invitation="teamInvitation"
-        action="Log in"
-    />
+    <TeamInvitationAlert v-if="teamInvitation" :invitation="teamInvitation" />
 
     <Form
         v-bind="store.form()"

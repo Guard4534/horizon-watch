@@ -18,6 +18,8 @@ defineProps<{
         <div class="overflow-x-auto">
             <table class="nc-table">
                 <thead>
+                    <!-- Headers stay untranslated in both languages: the mockup
+                         keeps this table's headers as Horizon/English vocabulary. -->
                     <tr>
                         <th>Queue</th>
                         <th>Supervisor</th>

@@ -17,6 +17,8 @@ defineProps<{
         <div class="overflow-x-auto">
             <table class="nc-table">
                 <thead>
+                    <!-- Job/Queue/Exception/Tries stay untranslated in both
+                         languages: the mockup keeps this table's headers English. -->
                     <tr>
                         <th>Job</th>
                         <th>Queue</th>

@@ -57,8 +57,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends nginx supervisor \
     && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default \
     && ln -s /usr/sbin/php-fpm${PHP_VERSION} /usr/local/sbin/php-fpm
-COPY --from=vendor --chown=www-data:www-data /var/www/html /var/www/html
-COPY --from=assets --chown=www-data:www-data /var/www/html/public/build /var/www/html/public/build
+COPY --from=vendor /var/www/html /var/www/html
+COPY --from=assets /var/www/html/public/build /var/www/html/public/build
 COPY docker/prod/nginx.conf /etc/nginx/nginx.conf
 COPY docker/prod/php-fpm.conf /etc/php/${PHP_VERSION}/fpm/horizon-watch.conf
 COPY docker/prod/php.ini /etc/php/${PHP_VERSION}/fpm/conf.d/99-horizon-watch.ini

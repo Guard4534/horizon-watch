@@ -52,6 +52,8 @@ type Tile = {
 };
 
 // Notes are English keys with placeholders, translated in the template.
+// Labels stay untranslated: the mockup keeps these metric names English in
+// both languages, so MetricTile receives them as-is, without $t().
 const tiles = computed<Tile[]>(() => [
     {
         label: 'Master',
@@ -256,7 +258,7 @@ const tiles = computed<Tile[]>(() => [
                 <EffectiveRules
                     :rules="page.rules"
                     :override-count="page.overrideCount"
-                    :environment-name="environment.name"
+                    :scope="page.scope"
                 />
                 <ConnectionCard :environment="environment" />
             </div>

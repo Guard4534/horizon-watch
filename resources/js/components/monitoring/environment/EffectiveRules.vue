@@ -5,10 +5,10 @@ import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatThreshold, ruleIcon, ruleLabel } from '@/lib/alertRules';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 
-const { rules, overrideCount, environmentName } = defineProps<{
+const { rules, overrideCount, scope } = defineProps<{
     rules: App.Data.Monitoring.AlertRuleData[];
     overrideCount: number;
-    environmentName: string;
+    scope: string;
 }>();
 
 const slug = useTeamSlug();
@@ -18,12 +18,7 @@ const slug = useTeamSlug();
     <SectionCard :title="$t('Effective alert rules')">
         <template #actions>
             <Link
-                :href="
-                    alertRulesIndex({
-                        current_team: slug,
-                        scope: overrideCount ? environmentName : 'organization',
-                    })
-                "
+                :href="alertRulesIndex({ current_team: slug, scope })"
                 style="font-size: 11px"
                 >{{ $t('Edit') }}</Link
             >
@@ -67,23 +62,14 @@ const slug = useTeamSlug();
                     style="letter-spacing: 0.01em; color: var(--nc-neutral-300)"
                     >{{ formatThreshold(rule.threshold, rule.unit) }}</span
                 >
+                <!-- "override" / "org" stay English in both languages: the mockup
+                     keeps rule-origin badges untranslated on purpose. -->
                 <span
-                    class="flex-none"
-                    style="
-                        font-size: 10px;
-                        padding: 1px 6px;
-                        border-radius: var(--nc-radius-sm);
-                    "
-                    :style="
+                    class="nc-tag nc-tag-sm flex-none"
+                    :class="
                         rule.origin === 'override'
-                            ? {
-                                  background: 'var(--nc-accent-800)',
-                                  color: 'var(--nc-accent-100)',
-                              }
-                            : {
-                                  background: 'var(--nc-neutral-900)',
-                                  color: 'var(--nc-neutral-400)',
-                              }
+                            ? 'nc-tag-accent'
+                            : 'nc-tag-neutral'
                     "
                     >{{ rule.origin === 'override' ? 'override' : 'org' }}</span
                 >

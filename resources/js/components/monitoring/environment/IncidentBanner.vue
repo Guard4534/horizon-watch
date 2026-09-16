@@ -1,13 +1,7 @@
 <script setup lang="ts">
-import {
-    PhPauseCircle,
-    PhPlugs,
-    PhWarning,
-    PhWarningOctagon,
-} from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import { formatRule } from '@/lib/alertRules';
-import { isDown, statusColor } from '@/lib/monitoring';
+import { isDown, statusColor, statusIcon } from '@/lib/monitoring';
 
 const { environment, alert } = defineProps<{
     environment: App.Data.Monitoring.EnvironmentData;
@@ -15,14 +9,7 @@ const { environment, alert } = defineProps<{
 }>();
 
 const color = computed(() => statusColor(environment.status));
-const icon = computed(
-    () =>
-        ({
-            unreachable: PhPlugs,
-            paused: PhPauseCircle,
-            inactive: PhWarningOctagon,
-        })[environment.status as string] ?? PhWarning,
-);
+const icon = computed(() => statusIcon(environment.status));
 
 const title = computed(() => {
     switch (environment.status) {

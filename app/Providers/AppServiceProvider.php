@@ -39,6 +39,6 @@ class AppServiceProvider extends ServiceProvider
 
         // Self-hosted panels may run without internet, so no uncompromised()
         // lookup; ten characters matches what the interface asks for.
-        Password::defaults(fn (): Password => Password::min(10));
+        Password::defaults(fn (): Password => Password::min(10)->letters()->numbers());
     }
 }

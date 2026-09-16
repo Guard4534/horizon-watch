@@ -34,9 +34,8 @@ class CompleteSetup
                 'name' => $data->name,
                 'email' => $data->email,
                 'password' => $data->password,
+                'email_verified_at' => now(),
             ]);
-
-            $user->forceFill(['email_verified_at' => now()])->save();
 
             $this->createTeam->handle($user, $data->organization);
 

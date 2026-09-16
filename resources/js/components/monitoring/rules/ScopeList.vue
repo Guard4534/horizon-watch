@@ -45,14 +45,7 @@ const slug = useTeamSlug();
                     }}</span>
                     <span
                         v-if="scope.overrideCount"
-                        class="ml-auto flex-none"
-                        style="
-                            font-size: 10px;
-                            padding: 1px 6px;
-                            border-radius: var(--nc-radius-sm);
-                            background: var(--nc-accent-800);
-                            color: var(--nc-accent-100);
-                        "
+                        class="nc-tag nc-tag-sm nc-tag-accent ml-auto flex-none"
                         >{{
                             $tChoice(
                                 ':count override|:count overrides',

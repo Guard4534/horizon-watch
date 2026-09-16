@@ -4,7 +4,6 @@
     "type": "module",
     "scripts": {
         "build": "php artisan typescript:transform && vp build",
-        "build:ssr": "vp build && vp build --ssr",
         "dev": "vp dev",
         "check": "vp check",
         "check:fix": "vp check --fix",

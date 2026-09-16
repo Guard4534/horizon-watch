@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', HomeController::class)->name('home');
 
 Route::prefix('{current_team}')
-    ->middleware(['auth', 'verified', EnsureTeamMembership::class])
+    ->middleware(['auth', EnsureTeamMembership::class])
     ->group(__DIR__.'/monitoring.php');
 
 Route::middleware(['auth'])->group(function () {

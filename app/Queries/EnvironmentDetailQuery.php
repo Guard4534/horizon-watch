@@ -21,7 +21,8 @@ class EnvironmentDetailQuery
         $environment = $this->monitoring->environment($team, $environmentId) ?? abort(404);
 
         $scopeIds = array_map(fn (RuleScopeData $scope) => $scope->id, $this->monitoring->ruleScopes($team));
-        $rules = $this->monitoring->alertRules($team, in_array($environment->name, $scopeIds, true) ? $environment->name : 'organization');
+        $scope = in_array($environment->name, $scopeIds, true) ? $environment->name : 'organization';
+        $rules = $this->monitoring->alertRules($team, $scope);
 
         $openAlerts = array_filter(
             $this->monitoring->alerts($team, AlertState::Open),
@@ -40,6 +41,7 @@ class EnvironmentDetailQuery
             maxWait: $this->monitoring->maxWaitSeries($team, $environment->id, $range),
             rules: $rules,
             overrideCount: count(array_filter($rules, fn (AlertRuleData $rule) => $rule->origin === RuleOrigin::Override)),
+            scope: $scope,
         );
     }
 }

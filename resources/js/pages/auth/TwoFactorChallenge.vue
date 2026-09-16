@@ -21,23 +21,23 @@ defineOptions({
 const showRecoveryInput = ref<boolean>(false);
 const code = ref<string>('');
 
-const authConfigContent = computed<TwoFactorConfigContent>(() => {
-    if (showRecoveryInput.value) {
-        return {
-            title: 'Recovery code',
-            description:
-                'Please confirm access to your account by entering one of your emergency recovery codes.',
-            buttonText: 'login using an authentication code',
-        };
-    }
+const authConfigContent = computed<Omit<TwoFactorConfigContent, 'title'>>(
+    () => {
+        if (showRecoveryInput.value) {
+            return {
+                description:
+                    'Please confirm access to your account by entering one of your emergency recovery codes.',
+                buttonText: 'login using an authentication code',
+            };
+        }
 
-    return {
-        title: 'Authentication code',
-        description:
-            'Enter the authentication code provided by your authenticator application.',
-        buttonText: 'login using a recovery code',
-    };
-});
+        return {
+            description:
+                'Enter the authentication code provided by your authenticator application.',
+            buttonText: 'login using a recovery code',
+        };
+    },
+);
 
 watchEffect(() => {
     setLayoutProps({

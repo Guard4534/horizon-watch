@@ -23,19 +23,6 @@ usePoll(15000, { only: ['page', 'openAlertCount'] });
 const slug = useTeamSlug();
 const environments = computed(() => page.cards.map((card) => card.environment));
 
-const worst = computed(
-    () =>
-        [...environments.value].sort(
-            (a, b) => severity(a.status) - severity(b.status),
-        )[0],
-);
-
-function severity(status: App.Enums.EnvironmentStatus): number {
-    return { inactive: 0, unreachable: 0, paused: 1, degraded: 2, active: 3 }[
-        status
-    ];
-}
-
 const stats = computed(() => [
     {
         label: 'Environments',
@@ -64,8 +51,10 @@ const stats = computed(() => [
     },
     {
         label: 'Worst status',
-        value: worst.value ? statusLabel(worst.value.status) : '—',
-        color: worst.value ? statusColor(worst.value.status) : 'var(--nc-text)',
+        value: page.worstStatus ? statusLabel(page.worstStatus) : '—',
+        color: page.worstStatus
+            ? statusColor(page.worstStatus)
+            : 'var(--nc-text)',
     },
 ]);
 </script>

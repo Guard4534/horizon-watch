@@ -32,15 +32,6 @@ export type TeamInvitationContext = {
     teamName: string;
 };
 
-export type DashboardInvitation = {
-    code: string;
-    inviterName: string;
-    team: {
-        name: string;
-        slug: string;
-    };
-};
-
 export type TeamPermissions = {
     canUpdateTeam: boolean;
     canDeleteTeam: boolean;

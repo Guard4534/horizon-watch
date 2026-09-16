@@ -55,7 +55,7 @@ function handleOpenChange(value: boolean) {
                 :key="formKey"
                 v-bind="storeInvitation.form(props.team.slug)"
                 class="space-y-6"
-                v-slot="{ errors, processing }"
+                v-slot="{ errors }"
                 @success="emit('update:open', false)"
             >
                 <DialogHeader>
@@ -115,7 +115,8 @@ function handleOpenChange(value: boolean) {
                     <Button
                         type="submit"
                         data-test="invite-submit"
-                        :disabled="processing"
+                        disabled
+                        :title="$t('Available soon')"
                     >
                         {{ $t('Send invitation') }}
                     </Button>

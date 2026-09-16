@@ -19,6 +19,10 @@ beforeEach(function () {
         fn ($environment) => $environment->toArray(),
         $this->monitoring->environments($this->team),
     );
+    $this->longRunningJobsSnapshot = fn () => array_map(
+        fn ($job) => $job->toArray(),
+        $this->monitoring->longRunningJobs($this->team, 'fatturaomatic-production'),
+    );
 });
 
 test('the container resolves the fake repository', function () {
@@ -44,6 +48,28 @@ test('the numbers move on the next polling interval', function () {
     $this->travel(15)->seconds();
 
     expect(($this->snapshot)())->not->toBe($first);
+});
+
+test('long-running jobs hold still within one polling interval', function () {
+    $first = ($this->longRunningJobsSnapshot)();
+
+    $this->travel(14)->seconds();
+
+    expect(($this->longRunningJobsSnapshot)())->toBe($first);
+});
+
+test('long-running jobs move on the next polling interval', function () {
+    // elapsedSeconds for this repository's scripted jobs does not depend on
+    // the tick, so only startedAt (formatted "H:i") can show the move — pick
+    // a boundary that also crosses a minute, or the assertion below would be
+    // comparing two identical-looking timestamps.
+    $this->travelTo(CarbonImmutable::createFromTimestampUTC(1_789_000_005));
+
+    $first = ($this->longRunningJobsSnapshot)();
+
+    $this->travel(15)->seconds();
+
+    expect(($this->longRunningJobsSnapshot)())->not->toBe($first);
 });
 
 test('the scripted incidents are always there', function () {

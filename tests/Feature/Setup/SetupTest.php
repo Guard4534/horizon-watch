@@ -12,8 +12,8 @@ function setupPayload(array $overrides = []): array
     return [
         'name' => 'Ada Example',
         'email' => 'ada@example.com',
-        'password' => 'correct-horse-battery',
-        'password_confirmation' => 'correct-horse-battery',
+        'password' => 'correct-horse-battery-9',
+        'password_confirmation' => 'correct-horse-battery-9',
         'organization' => 'Example Ops',
         ...$overrides,
     ];

@@ -20,7 +20,6 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             locale: App.Enums.Locale;
-            sidebarOpen: boolean;
             currentTeam: Team | null;
             teams: Team[];
             openAlertCount: number | null;

@@ -71,7 +71,8 @@ test('the environment page follows the requested range', function () {
             ->has('page.nodes', 3)
             ->has('page.queues', 5)
             ->has('page.rules', 8)
-            ->where('page.overrideCount', 3));
+            ->where('page.overrideCount', 3)
+            ->where('page.scope', 'production'));
 });
 
 test('the alert log defaults to open alerts and can switch state', function () {
@@ -82,6 +83,12 @@ test('the alert log defaults to open alerts and can switch state', function () {
     $this->actingAs($this->user)
         ->get(route('alerts.index', ['current_team' => $this->slug, 'state' => 'resolved']))
         ->assertInertia(fn (Assert $page) => $page->where('page.state', 'resolved')->has('page.alerts', 2));
+});
+
+test('the application page reports its worst environment status', function () {
+    $this->actingAs($this->user)
+        ->get(route('applications.show', ['current_team' => $this->slug, 'application' => 'fatturaomatic']))
+        ->assertInertia(fn (Assert $page) => $page->where('page.worstStatus', 'inactive'));
 });
 
 test('alert rules default to the organization scope', function () {

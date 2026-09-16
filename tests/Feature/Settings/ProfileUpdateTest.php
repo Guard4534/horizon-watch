@@ -30,7 +30,9 @@ test('profile information can be updated', function () {
 
     expect($user->name)->toBe('Test User');
     expect($user->email)->toBe('test@example.com');
-    expect($user->email_verified_at)->toBeNull();
+    // No email confirmation flow exists (invite-only panel), so changing the
+    // address never resets verification.
+    expect($user->email_verified_at)->not->toBeNull();
 });
 
 test('email verification status is unchanged when the email address is unchanged', function () {

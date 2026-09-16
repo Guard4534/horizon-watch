@@ -36,9 +36,14 @@ load_app_key() {
     local key_file=/data/app-key
 
     if [ ! -s "$key_file" ]; then
-        as_app php -r 'echo "base64:".base64_encode(random_bytes(32));' > "$key_file"
-        chown www-data:www-data "$key_file"
-        chmod 600 "$key_file"
+        # Write to a temp file and rename into place: a process killed mid-write
+        # can never leave a truncated file that later passes the `-s` check above.
+        local tmp_key_file
+        tmp_key_file="$(mktemp /data/app-key.XXXXXX)"
+        as_app php -r 'echo "base64:".base64_encode(random_bytes(32));' > "$tmp_key_file"
+        chown www-data:www-data "$tmp_key_file"
+        chmod 600 "$tmp_key_file"
+        mv "$tmp_key_file" "$key_file"
     fi
 
     export APP_KEY="$(cat "$key_file")"
@@ -67,6 +72,7 @@ case "$role" in
         exec setpriv --reuid=www-data --regid=www-data --init-groups php artisan queue:work --max-time=3600 --tries=3
         ;;
     *)
+        # Escape hatch (e.g. a debug shell): runs as root on purpose, unlike the roles above.
         load_app_key
         exec "$@"
         ;;

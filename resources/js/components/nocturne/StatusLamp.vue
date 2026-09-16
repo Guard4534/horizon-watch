@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { statusColor } from '@/lib/monitoring';
-import type { EnvironmentStatus } from '@/types/monitoring';
 
 const { status, size = 9 } = defineProps<{
-    status: EnvironmentStatus;
+    status: App.Enums.EnvironmentStatus;
     size?: number;
 }>();
 

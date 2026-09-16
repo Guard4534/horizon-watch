@@ -1,15 +1,9 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import {
-    PhPauseCircle,
-    PhPlugs,
-    PhWarning,
-    PhWarningOctagon,
-} from '@phosphor-icons/vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatMinutesAgo, statusColor } from '@/lib/monitoring';
+import { formatMinutesAgo, statusColor, statusIcon } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 import { show as showEnvironment } from '@/routes/environments';
 
@@ -18,14 +12,6 @@ defineProps<{
 }>();
 
 const slug = useTeamSlug();
-
-const ICONS = {
-    inactive: PhWarningOctagon,
-    unreachable: PhPlugs,
-    paused: PhPauseCircle,
-    degraded: PhWarning,
-    active: PhWarning,
-};
 
 const TITLES: Record<App.Enums.EnvironmentStatus, string> = {
     inactive: 'Master supervisor inactive, queues not draining',
@@ -57,7 +43,7 @@ const TITLES: Record<App.Enums.EnvironmentStatus, string> = {
             >
                 <span class="flex items-start gap-[9px]">
                     <component
-                        :is="ICONS[alert.environmentStatus]"
+                        :is="statusIcon(alert.environmentStatus)"
                         :size="15"
                         class="mt-[2px]"
                         :style="{ color: statusColor(alert.environmentStatus) }"

@@ -33,5 +33,11 @@ class EnvironmentDetailPageData extends Data
         /** @var array<int, AlertRuleData> */
         public array $rules,
         public int $overrideCount,
+        // The effective rule scope backing $rules: the environment's own name
+        // when it has one, otherwise 'organization'. Computed here so the
+        // front end stops re-deriving it from overrideCount (a non-zero
+        // override count and a real per-environment scope are not the same
+        // thing).
+        public string $scope,
     ) {}
 }

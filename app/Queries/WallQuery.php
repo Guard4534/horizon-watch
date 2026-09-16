@@ -18,7 +18,7 @@ class WallQuery
     public function handle(Team $team): WallPageData
     {
         $environments = $this->monitoring->environments($team);
-        usort($environments, fn (EnvironmentData $a, EnvironmentData $b) => [$a->status->severity(), $b->pending] <=> [$b->status->severity(), $a->pending]);
+        usort($environments, EnvironmentData::compareBySeverityThenPending(...));
 
         $anomalies = $this->monitoring->alerts($team, AlertState::Open);
         $sum = fn (callable $value) => array_sum(array_map($value, $environments));

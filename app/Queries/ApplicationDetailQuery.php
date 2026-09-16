@@ -30,6 +30,9 @@ class ApplicationDetailQuery
             fn (AlertData $alert) => in_array($alert->environmentId, $environmentIds, true),
         );
 
+        $worstEnvironments = $environments;
+        usort($worstEnvironments, EnvironmentData::compareBySeverityThenPending(...));
+
         return new ApplicationDetailPageData(
             application: $application,
             cards: array_map(fn (EnvironmentData $environment) => new EnvironmentCardData(
@@ -37,6 +40,7 @@ class ApplicationDetailQuery
                 sparkline: array_slice($this->monitoring->throughputSeries($team, $environment->id, SeriesRange::ThreeHours), -24),
             ), $environments),
             recentAlerts: array_slice(array_values($alerts), 0, 3),
+            worstStatus: $worstEnvironments[0]->status ?? null,
         );
     }
 }

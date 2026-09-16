@@ -10,9 +10,14 @@ application and environment, with alerts when queues stop draining.
 
 Requirements: Docker with Compose v2.
 
+Once the image is published on GHCR, installing will be a matter of fetching
+`compose.prod.yaml` and running `docker compose -f compose.prod.yaml up -d` — no clone
+needed. Until then, `compose.prod.yaml` builds the image from a local clone:
+
 ```bash
-curl -O https://raw.githubusercontent.com/<owner>/horizon-watch/main/compose.prod.yaml
-docker compose -f compose.prod.yaml up -d
+git clone https://github.com/<owner>/horizon-watch.git
+cd horizon-watch
+docker compose -f compose.prod.yaml up -d --build
 ```
 
 Open `http://localhost:8080`. The first visit asks you to create the administrator and
@@ -40,23 +45,34 @@ you store. Losing it makes those credentials unreadable. Back up both volumes:
 
 ## Update
 
+Once the image is published on GHCR:
+
 ```bash
 docker compose -f compose.prod.yaml pull
 docker compose -f compose.prod.yaml up -d
 ```
+
+Until then, pull the latest clone and rebuild instead: `git pull && docker compose -f
+compose.prod.yaml up -d --build`.
 
 Migrations run automatically when the `web` container starts.
 
 ## Development
 
 ```bash
-cp .env.example .env
 composer install
 ./vendor/bin/sail up -d
-./vendor/bin/sail npm install
-./vendor/bin/sail artisan migrate
+./vendor/bin/sail composer run setup
 ./vendor/bin/sail composer run dev
 ```
+
+`composer run setup` copies `.env.example` to `.env`, generates `APP_KEY`, migrates the
+database and builds the front-end assets — running the commands separately and skipping
+`key:generate` is the most common reason the first request fails.
+
+Sail also starts Mailpit, a dev-only mail catcher: with the default `.env.example` values
+(`MAIL_MAILER=smtp` to `mailpit:1025`) every email sent by the app — invitations, password
+resets — lands in its UI at `http://localhost:8025` instead of a real inbox.
 
 Checks: `./vendor/bin/sail composer check` (Pint, Larastan, Pest) and
 `./vendor/bin/sail npm run types:check`.

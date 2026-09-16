@@ -22,6 +22,7 @@ use App\Enums\RuleOrigin;
 use App\Enums\SentNotificationKind;
 use App\Enums\SeriesRange;
 use App\Models\Team;
+use Carbon\CarbonImmutable;
 
 /**
  * Stands in for real Horizon readings until polling exists. Every team sees
@@ -242,7 +243,10 @@ class FakeMonitoringRepository implements MonitoringRepository
                 job: $job,
                 queue: $queueNames[$index % count($queueNames)],
                 elapsedSeconds: $elapsed,
-                startedAt: now()->subSeconds($elapsed)->format('H:i'),
+                // Quantized to the tick, like every other reading: an unquantized
+                // now() would format differently across a minute boundary even
+                // within the same 15s tick, breaking "same tick, same numbers".
+                startedAt: $this->quantizedNow()->subSeconds($elapsed)->format('H:i'),
             );
         }
 
@@ -268,7 +272,7 @@ class FakeMonitoringRepository implements MonitoringRepository
     public function alerts(Team $team, AlertState $state): array
     {
         $environments = $this->environments($team);
-        usort($environments, fn (EnvironmentData $a, EnvironmentData $b) => [$a->status->severity(), $b->pending] <=> [$b->status->severity(), $a->pending]);
+        usort($environments, EnvironmentData::compareBySeverityThenPending(...));
 
         $unhealthy = array_values(array_filter($environments, fn (EnvironmentData $environment) => ! $environment->status->isHealthy()));
         $healthy = array_values(array_filter($environments, fn (EnvironmentData $environment) => $environment->status->isHealthy()));
@@ -279,11 +283,16 @@ class FakeMonitoringRepository implements MonitoringRepository
                 $unhealthy,
                 array_keys($unhealthy),
             ),
-            AlertState::Muted => [$this->makeAlert($healthy[0], $state, AlertRuleMetric::WorkersMissing, 95)],
-            AlertState::Resolved => [
-                $this->makeAlert($healthy[1], $state, AlertRuleMetric::QueuePending, 140),
-                $this->makeAlert($healthy[2], $state, AlertRuleMetric::QueueMaxWait, 310),
-            ],
+            // Guarded: fewer healthy environments (a smaller incident table, or a
+            // looser $r > 0.93 rule) must yield fewer sample alerts, not a null passed
+            // to makeAlert().
+            AlertState::Muted => isset($healthy[0])
+                ? [$this->makeAlert($healthy[0], $state, AlertRuleMetric::WorkersMissing, 95)]
+                : [],
+            AlertState::Resolved => array_values(array_filter([
+                isset($healthy[1]) ? $this->makeAlert($healthy[1], $state, AlertRuleMetric::QueuePending, 140) : null,
+                isset($healthy[2]) ? $this->makeAlert($healthy[2], $state, AlertRuleMetric::QueueMaxWait, 310) : null,
+            ])),
         };
     }
 
@@ -450,6 +459,15 @@ class FakeMonitoringRepository implements MonitoringRepository
     private function tick(): int
     {
         return intdiv(now()->getTimestamp(), self::TICK_SECONDS);
+    }
+
+    /**
+     * "Now", rounded down to the current tick, so anything formatted from it
+     * (e.g. a job's start time) stays identical for the whole 15s window.
+     */
+    private function quantizedNow(): CarbonImmutable
+    {
+        return CarbonImmutable::createFromTimestamp($this->tick() * self::TICK_SECONDS);
     }
 
     /**

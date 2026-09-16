@@ -325,12 +325,18 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                 :description="$t('Permanently delete your team')"
             />
             <div
-                class="space-y-4 rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-200/10 dark:bg-red-700/10"
+                class="space-y-4 rounded-lg p-4"
+                style="
+                    border: 1px solid var(--st-down);
+                    background: color-mix(
+                        in srgb,
+                        var(--st-down) 10%,
+                        transparent
+                    );
+                "
             >
-                <div
-                    class="relative space-y-0.5 text-red-600 dark:text-red-100"
-                >
-                    <p class="font-medium">{{ $t('Warning') }}</p>
+                <div class="relative space-y-0.5" style="color: var(--st-down)">
+                    <p class="font-medium">{{ $t('Caution') }}</p>
                     <p class="text-sm">
                         {{
                             $t(
