@@ -45,21 +45,21 @@ defineOptions({
 </script>
 
 <template>
-    <Head title="Teams" />
+    <Head :title="$t('Teams')" />
 
-    <h1 class="sr-only">Teams</h1>
+    <h1 class="sr-only">{{ $t('Teams') }}</h1>
 
     <div class="flex flex-col space-y-6">
         <div class="flex items-center justify-between">
             <Heading
                 variant="small"
-                title="Teams"
-                description="Manage your teams and team memberships"
+                :title="$t('Teams')"
+                :description="$t('Manage your teams and team memberships')"
             />
 
             <CreateTeamModal>
                 <Button data-test="teams-new-team-button">
-                    <PhPlus /> New team
+                    <PhPlus /> {{ $t('New team') }}
                 </Button>
             </CreateTeamModal>
         </div>
@@ -76,7 +76,7 @@ defineOptions({
                         <div class="flex items-center gap-2">
                             <span class="font-medium">{{ team.name }}</span>
                             <Badge v-if="team.isPersonal" variant="secondary">
-                                Personal
+                                {{ $t('Personal') }}
                             </Badge>
                         </div>
                         <span class="text-muted-foreground text-sm">
@@ -99,7 +99,7 @@ defineOptions({
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>Leave team</p>
+                                <p>{{ $t('Leave team') }}</p>
                             </TooltipContent>
                         </Tooltip>
 
@@ -117,7 +117,7 @@ defineOptions({
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>View team</p>
+                                <p>{{ $t('View team') }}</p>
                             </TooltipContent>
                         </Tooltip>
 
@@ -135,7 +135,7 @@ defineOptions({
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>Edit team</p>
+                                <p>{{ $t('Edit team') }}</p>
                             </TooltipContent>
                         </Tooltip>
                     </div>
@@ -146,7 +146,7 @@ defineOptions({
                 v-if="teams.length === 0"
                 class="text-muted-foreground py-8 text-center"
             >
-                You don't belong to any teams yet.
+                {{ $t('You don\'t belong to any teams yet.') }}
             </p>
         </div>
     </div>

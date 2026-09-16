@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { PhInfo } from '@phosphor-icons/vue';
+import { computed } from 'vue';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import type { TeamInvitationContext } from '@/types';
 
@@ -8,7 +9,13 @@ type Props = {
     action: 'Log in' | 'Register';
 };
 
-defineProps<Props>();
+const props = defineProps<Props>();
+
+// Two full-sentence keys instead of a concatenated one: word order and
+// agreement around ":team" differ once translated.
+const message = computed(() =>
+    props.action === 'Log in' ? 'Log in to join the :team team.' : 'Register to join the :team team.',
+);
 </script>
 
 <template>
@@ -18,7 +25,7 @@ defineProps<Props>();
         >
             <PhInfo class="size-4" />
             <AlertDescription class="text-blue-900 dark:text-blue-100">
-                {{ action }} to join the "{{ invitation.teamName }}" team.
+                {{ $t(message, { team: invitation.teamName }) }}
             </AlertDescription>
         </Alert>
     </div>
