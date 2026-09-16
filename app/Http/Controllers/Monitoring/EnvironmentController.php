@@ -5,18 +5,16 @@ namespace App\Http\Controllers\Monitoring;
 use App\Actions\Environments\AddEnvironment;
 use App\Actions\Environments\DeleteEnvironment;
 use App\Actions\Environments\UpdateEnvironment;
-use App\Data\Applications\ApplicationFormData;
 use App\Data\Applications\ConfirmByNameData;
 use App\Data\Applications\EnvironmentFormData;
-use App\Data\Applications\EnvironmentSummaryData;
-use App\Data\Pages\EnvironmentFormPageData;
-use App\Enums\EnvironmentColor;
 use App\Enums\SeriesRange;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
+use App\Queries\EnvironmentCreateQuery;
 use App\Queries\EnvironmentDetailQuery;
+use App\Queries\EnvironmentEditQuery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -32,25 +30,19 @@ class EnvironmentController extends Controller
         ]);
     }
 
-    public function create(Team $current_team, Application $application): Response
+    public function create(Team $current_team, Application $application, EnvironmentCreateQuery $query): Response
     {
-        $this->ensureBelongsToTeam($application, $current_team);
         Gate::authorize('create', [Environment::class, $application]);
 
         return Inertia::render('monitoring/environments/Create', [
-            'page' => new EnvironmentFormPageData(
-                environment: null,
-                application: ApplicationFormData::from($application),
-                colors: EnvironmentColor::options(),
-                hasPassword: false,
-            ),
+            'page' => $query->handle($application),
         ]);
     }
 
     public function store(Team $current_team, Application $application, EnvironmentFormData $data, AddEnvironment $addEnvironment): RedirectResponse
     {
-        $this->ensureBelongsToTeam($application, $current_team);
         Gate::authorize('create', [Environment::class, $application]);
+        $this->authorizeCredentialsIfTouched($data, $application);
 
         $addEnvironment->handle($application, $data);
 
@@ -59,32 +51,19 @@ class EnvironmentController extends Controller
         return to_route('applications.show', ['current_team' => $current_team->slug, 'application' => $application->slug]);
     }
 
-    public function edit(Team $current_team, Environment $environment): Response
+    public function edit(Team $current_team, Environment $environment, EnvironmentEditQuery $query): Response
     {
-        $this->ensureEnvironmentBelongsToTeam($environment, $current_team);
         Gate::authorize('update', $environment);
 
         return Inertia::render('monitoring/environments/Edit', [
-            'page' => new EnvironmentFormPageData(
-                environment: new EnvironmentSummaryData(
-                    name: $environment->name,
-                    color: $environment->color,
-                    horizonUrl: $environment->horizon_url,
-                    basicAuthUser: $environment->basic_auth_user,
-                    pollIntervalSeconds: $environment->poll_interval_seconds,
-                ),
-                application: ApplicationFormData::from($environment->application),
-                colors: EnvironmentColor::options(),
-                // Presence check only: never reads the decrypted value.
-                hasPassword: $environment->basic_auth_password !== null,
-            ),
+            'page' => $query->handle($environment),
         ]);
     }
 
     public function update(Team $current_team, Environment $environment, EnvironmentFormData $data, UpdateEnvironment $updateEnvironment): RedirectResponse
     {
-        $this->ensureEnvironmentBelongsToTeam($environment, $current_team);
         Gate::authorize('update', $environment);
+        $this->authorizeCredentialsIfTouched($data, $environment);
 
         $updateEnvironment->handle($environment, $data);
 
@@ -95,7 +74,6 @@ class EnvironmentController extends Controller
 
     public function destroy(Team $current_team, Environment $environment, ConfirmByNameData $data, DeleteEnvironment $deleteEnvironment): RedirectResponse
     {
-        $this->ensureEnvironmentBelongsToTeam($environment, $current_team);
         Gate::authorize('delete', $environment);
 
         $application = $environment->application;
@@ -108,22 +86,29 @@ class EnvironmentController extends Controller
     }
 
     /**
-     * See ApplicationController::ensureBelongsToTeam(): same reason, for the
-     * application a new environment is being attached to.
+     * "Manage applications" (checked above via create/update) and "manage
+     * credentials" are separate permissions in the spec, granted to the
+     * same roles today but not guaranteed to stay that way (see
+     * EnvironmentPolicy::manageCredentials()). Only consult the second gate
+     * when the submission actually touches basicAuthUser/basicAuthPassword,
+     * so editing just the name, color, URL or poll interval never requires
+     * it.
+     *
+     * @param  Application|Environment  $forExisting  The application when
+     *                                                creating (no Environment row exists yet — a transient one
+     *                                                carrying only the application relation is enough, since that's
+     *                                                all the policy method reads) or the environment when updating.
      */
-    private function ensureBelongsToTeam(Application $application, Team $team): void
+    private function authorizeCredentialsIfTouched(EnvironmentFormData $data, Application|Environment $forExisting): void
     {
-        abort_unless($application->team_id === $team->id, 404);
-    }
+        if (! $data->touchesCredentials()) {
+            return;
+        }
 
-    /**
-     * An environment resolved by slug alone doesn't know which organization
-     * it belongs to (it only points at its application); without this check
-     * an admin of one team could act on another team's environment just by
-     * guessing its slug.
-     */
-    private function ensureEnvironmentBelongsToTeam(Environment $environment, Team $team): void
-    {
-        abort_unless($environment->application->team_id === $team->id, 404);
+        $environment = $forExisting instanceof Environment
+            ? $forExisting
+            : (new Environment)->setRelation('application', $forExisting);
+
+        Gate::authorize('manageCredentials', $environment);
     }
 }

@@ -176,3 +176,23 @@ test('an application from another organization responds 404', function () {
 
     expect(Application::find($foreignApplication->id))->not->toBeNull();
 });
+
+test('two organizations sharing the same application slug each resolve their own', function () {
+    $otherTeam = Team::factory()->create();
+    $otherAdmin = User::factory()->create();
+    $otherTeam->members()->attach($otherAdmin, ['role' => TeamRole::Admin->value]);
+    // Same name as $this->application, in a different organization:
+    // slugs are only unique per team (unique(['team_id', 'slug'])), so
+    // this legitimately produces the same slug in both organizations.
+    $otherApplication = Application::factory()->for($otherTeam)->create(['name' => $this->application->name]);
+
+    expect($otherApplication->slug)->toBe($this->application->slug);
+
+    $this->actingAs($this->admin)
+        ->get(route('applications.edit', ['current_team' => $this->team->slug, 'application' => $this->application->slug]))
+        ->assertOk();
+
+    $this->actingAs($otherAdmin)
+        ->get(route('applications.edit', ['current_team' => $otherTeam->slug, 'application' => $otherApplication->slug]))
+        ->assertOk();
+});

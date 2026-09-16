@@ -9,9 +9,10 @@ class UpdateEnvironment
 {
     /**
      * Update the environment. The password key is only included in the
-     * update when the form actually sent one: omitting it (rather than
-     * writing back the decrypted value when absent) means the encrypted
-     * column already in the database is never read out and rewritten.
+     * update when the form actually sent a real one (hasNewPassword():
+     * neither absent nor blank): omitting it (rather than writing back the
+     * decrypted value when absent) means the encrypted column already in
+     * the database is never read out and rewritten.
      */
     public function handle(Environment $environment, EnvironmentFormData $data): Environment
     {
@@ -23,7 +24,7 @@ class UpdateEnvironment
             'poll_interval_seconds' => $data->pollIntervalSeconds,
         ];
 
-        if ($data->basicAuthPassword !== null) {
+        if ($data->hasNewPassword()) {
             $attributes['basic_auth_password'] = $data->basicAuthPassword;
         }
 

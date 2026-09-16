@@ -35,4 +35,28 @@ class EnvironmentFormData extends Data
             'pollIntervalSeconds' => ['integer', 'between:5,300'],
         ];
     }
+
+    /**
+     * Whether the submission actually included a new password. A blank or
+     * whitespace-only string means "no change", the same as a missing one:
+     * an untouched password input commonly submits "" rather than omitting
+     * the field, and that must not wipe the credential already on file.
+     */
+    public function hasNewPassword(): bool
+    {
+        return filled($this->basicAuthPassword);
+    }
+
+    /**
+     * Whether this submission is trying to change the basic-auth
+     * credentials at all, as opposed to only the name, color, URL or poll
+     * interval. Gates the separate "manage credentials" permission
+     * (EnvironmentPolicy::manageCredentials()), distinct from "manage
+     * applications" even though today's role matrix grants both to the
+     * same roles.
+     */
+    public function touchesCredentials(): bool
+    {
+        return $this->basicAuthUser !== null || $this->hasNewPassword();
+    }
 }

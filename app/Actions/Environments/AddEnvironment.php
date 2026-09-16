@@ -15,7 +15,9 @@ class AddEnvironment
             'color' => $data->color,
             'horizon_url' => $data->horizonUrl,
             'basic_auth_user' => $data->basicAuthUser,
-            'basic_auth_password' => $data->basicAuthPassword,
+            // A blank submission ("" from an untouched input) means "no
+            // password", not a literal empty-string credential.
+            'basic_auth_password' => $data->hasNewPassword() ? $data->basicAuthPassword : null,
             'poll_interval_seconds' => $data->pollIntervalSeconds,
         ]);
     }

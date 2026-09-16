@@ -8,11 +8,12 @@ use App\Actions\Applications\UpdateApplication;
 use App\Data\Applications\ApplicationFormData;
 use App\Data\Applications\ApplicationWizardData;
 use App\Data\Applications\ConfirmByNameData;
-use App\Data\Pages\ApplicationFormPageData;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Team;
+use App\Queries\ApplicationCreateQuery;
 use App\Queries\ApplicationDetailQuery;
+use App\Queries\ApplicationEditQuery;
 use App\Queries\ApplicationListQuery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
@@ -35,12 +36,12 @@ class ApplicationController extends Controller
         ]);
     }
 
-    public function create(Team $current_team): Response
+    public function create(Team $current_team, ApplicationCreateQuery $query): Response
     {
         Gate::authorize('create', [Application::class, $current_team]);
 
         return Inertia::render('monitoring/applications/Create', [
-            'page' => new ApplicationFormPageData(application: null),
+            'page' => $query->handle(),
         ]);
     }
 
@@ -55,21 +56,17 @@ class ApplicationController extends Controller
         return to_route('applications.edit', ['current_team' => $current_team->slug, 'application' => $application->slug]);
     }
 
-    public function edit(Team $current_team, Application $application): Response
+    public function edit(Team $current_team, Application $application, ApplicationEditQuery $query): Response
     {
-        $this->ensureBelongsToTeam($application, $current_team);
         Gate::authorize('update', $application);
 
         return Inertia::render('monitoring/applications/Edit', [
-            'page' => new ApplicationFormPageData(
-                application: ApplicationFormData::from($application),
-            ),
+            'page' => $query->handle($application),
         ]);
     }
 
     public function update(Team $current_team, Application $application, ApplicationFormData $data, UpdateApplication $updateApplication): RedirectResponse
     {
-        $this->ensureBelongsToTeam($application, $current_team);
         Gate::authorize('update', $application);
 
         $updateApplication->handle($application, $data);
@@ -81,7 +78,6 @@ class ApplicationController extends Controller
 
     public function destroy(Team $current_team, Application $application, ConfirmByNameData $data, DeleteApplication $deleteApplication): RedirectResponse
     {
-        $this->ensureBelongsToTeam($application, $current_team);
         Gate::authorize('delete', $application);
 
         $deleteApplication->handle($application, $data);
@@ -89,15 +85,5 @@ class ApplicationController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Application deleted.')]);
 
         return to_route('applications.index', ['current_team' => $current_team->slug]);
-    }
-
-    /**
-     * An application resolved by slug alone doesn't know which organization
-     * it belongs to: without this check, an admin of one team could act on
-     * another team's application just by guessing its slug.
-     */
-    private function ensureBelongsToTeam(Application $application, Team $team): void
-    {
-        abort_unless($application->team_id === $team->id, 404);
     }
 }
