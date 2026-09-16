@@ -38,13 +38,17 @@ const nothingVisible = computed(
             :kicker="$t('Nothing to watch')"
             :title="$t('No thresholds yet')"
             :body="
-                shared.props.canManageApplications
+                shared.props.visibilityRestricted
                     ? $t(
-                          'Configure an application with at least one environment first: its thresholds can be reviewed here afterwards.',
+                          'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
                       )
-                    : $t(
-                          'No environment is visible to you yet. An administrator of this organization can widen your visibility or configure an application.',
-                      )
+                    : shared.props.canManageApplications
+                      ? $t(
+                            'Configure an application with at least one environment first: its thresholds can be reviewed here afterwards.',
+                        )
+                      : $t(
+                            'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                        )
             "
         />
     </div>

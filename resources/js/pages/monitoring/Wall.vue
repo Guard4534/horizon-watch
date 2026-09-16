@@ -12,7 +12,10 @@ import SectionCard from '@/components/nocturne/SectionCard.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCount } from '@/lib/monitoring';
-import { create as createApplication } from '@/routes/applications';
+import {
+    create as createApplication,
+    index as applicationsIndex,
+} from '@/routes/applications';
 
 defineOptions({
     layout: {
@@ -31,12 +34,24 @@ usePoll(15000, { only: ['page', 'openAlertCount'] });
 const slug = useTeamSlug();
 const shared = usePage();
 
-// Nothing visible: either the organization has no environment yet, or this
-// member's visibility covers none of the ones that exist. Both end up here,
-// and only someone who may configure applications gets the way out.
+// Nothing visible: the organization may have no environment yet, or this
+// member's visibility may cover none of the ones that exist. Which of the
+// two it is decides the wording, and it is never the role that says so.
 const nothingVisible = computed(() => page.environments.length === 0);
 const canManageApplications = computed(
     () => shared.props.canManageApplications,
+);
+const visibilityRestricted = computed(() => shared.props.visibilityRestricted);
+
+// An application survives losing its last environment (on purpose: nothing
+// else could ever reach it again), so an unrestricted admin can land here
+// with applications and no environment. Adding another application is not
+// what they need — adding an environment to the one they have is.
+const needsEnvironment = computed(
+    () =>
+        !visibilityRestricted.value &&
+        canManageApplications.value &&
+        page.applicationCount > 0,
 );
 
 const query = new URLSearchParams(window.location.search);
@@ -118,11 +133,13 @@ const kpis = computed(() => [
 
     <div
         class="grid items-start"
-        style="
-            padding: var(--nc-space-6);
-            gap: var(--nc-space-6);
-            grid-template-columns: minmax(0, 1fr) 322px;
-        "
+        :style="{
+            padding: 'var(--nc-space-6)',
+            gap: 'var(--nc-space-6)',
+            gridTemplateColumns: nothingVisible
+                ? 'minmax(0, 1fr)'
+                : 'minmax(0, 1fr) 322px',
+        }"
     >
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
             <div
@@ -148,17 +165,32 @@ const kpis = computed(() => [
                 :kicker="$t('Nothing connected')"
                 :title="$t('No environments yet')"
                 :body="
-                    canManageApplications
+                    visibilityRestricted
                         ? $t(
-                              'Add an application and its environments, and every one of them shows up here.',
+                              'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
                           )
-                        : $t(
-                              'No environment is visible to you yet. An administrator of this organization can widen your visibility or configure an application.',
-                          )
+                        : needsEnvironment
+                          ? $t(
+                                'An application is configured but has no environment yet. Add one to it and it shows up here.',
+                            )
+                          : canManageApplications
+                            ? $t(
+                                  'Add an application and its environments, and every one of them shows up here.',
+                              )
+                            : $t(
+                                  'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                              )
                 "
             >
                 <Link
-                    v-if="canManageApplications"
+                    v-if="needsEnvironment"
+                    class="nc-btn nc-btn-primary"
+                    :href="applicationsIndex(slug)"
+                >
+                    <PhPlus :size="14" />{{ $t('Add an environment') }}
+                </Link>
+                <Link
+                    v-else-if="canManageApplications"
                     class="nc-btn nc-btn-primary"
                     :href="createApplication(slug)"
                 >
@@ -194,7 +226,14 @@ const kpis = computed(() => [
             </template>
         </div>
 
-        <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
+        <!-- Anomalies, throughput and sent notifications all describe
+             environments: with none visible they would contradict the empty
+             state next to them, so the whole column goes. -->
+        <div
+            v-if="!nothingVisible"
+            class="flex min-w-0 flex-col"
+            style="gap: var(--nc-space-4)"
+        >
             <AnomalyList :anomalies="page.anomalies" />
 
             <SectionCard :title="$t('Organization throughput')">

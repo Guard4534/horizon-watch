@@ -75,13 +75,17 @@ const groups = computed(() => {
             :kicker="$t('Nothing connected')"
             :title="$t('No applications yet')"
             :body="
-                shared.props.canManageApplications
+                shared.props.visibilityRestricted
                     ? $t(
-                          'Add an application and its environments, and every one of them shows up here.',
+                          'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
                       )
-                    : $t(
-                          'No environment is visible to you yet. An administrator of this organization can widen your visibility or configure an application.',
-                      )
+                    : shared.props.canManageApplications
+                      ? $t(
+                            'Add an application and its environments, and every one of them shows up here.',
+                        )
+                      : $t(
+                            'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                        )
             "
         />
         <ApplicationSection

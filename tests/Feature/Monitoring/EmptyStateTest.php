@@ -52,7 +52,8 @@ test('an organization with nothing configured still answers, and offers the way 
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component($component)
-            ->where('canManageApplications', true));
+            ->where('canManageApplications', true)
+            ->where('visibilityRestricted', false));
 })->with('monitoring pages');
 
 test('each page carries the count its empty state keys off', function () {
@@ -92,7 +93,8 @@ test('a member who sees no environment gets the same pages without the action', 
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component($component)
-            ->where('canManageApplications', false));
+            ->where('canManageApplications', false)
+            ->where('visibilityRestricted', true));
 })->with('monitoring pages');
 
 test('a member who sees no environment is told nothing is configured, even though something is', function () {
@@ -137,6 +139,108 @@ test('the shared permission follows the role, not the empty organization', funct
     'member' => ['member', false],
     'viewer' => ['viewer', false],
 ]);
+
+/**
+ * Role and visibility are independent: an admin may hold "manual" and a
+ * viewer "all". The empty states pick their wording from both flags, so
+ * neither may be inferred from the other.
+ */
+test('the two shared flags follow their own axis', function (string $role, MemberVisibility $visibility, bool $canManage, bool $restricted) {
+    $user = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($user, [
+        'role' => $role,
+        'visibility' => $visibility->value,
+    ]);
+
+    $user->switchTeam($team);
+
+    $this->actingAs($user)
+        ->get(route('wall', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('canManageApplications', $canManage)
+            ->where('visibilityRestricted', $restricted));
+})->with([
+    // The restricted admin: gets the action, but must be told the
+    // organization may hold environments they cannot see.
+    'admin · manual' => ['admin', MemberVisibility::Manual, true, true],
+    'owner · non_production' => ['owner', MemberVisibility::NonProduction, true, true],
+    // The unrestricted viewer: must never be offered a wider visibility,
+    // because theirs is already as wide as it gets.
+    'viewer · all' => ['viewer', MemberVisibility::All, false, false],
+    'member · all' => ['member', MemberVisibility::All, false, false],
+]);
+
+test('a restricted admin of an organization that has environments is not told to add another application', function () {
+    $admin = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $application = Application::factory()->for($team)->create();
+    Environment::factory()->for($application)->production()->create();
+
+    $team->members()->attach($admin, [
+        'role' => TeamRole::Admin->value,
+        'visibility' => MemberVisibility::NonProduction->value,
+    ]);
+
+    $admin->switchTeam($team);
+
+    $this->actingAs($admin)
+        ->get(route('wall', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            // Nothing visible, yet the organization is configured: only
+            // visibilityRestricted can tell the wall which wording to use.
+            ->where('page.environments', [])
+            ->where('canManageApplications', true)
+            ->where('visibilityRestricted', true));
+});
+
+test('the wall tells an application with no environment apart from no application at all', function () {
+    Application::factory()->for($this->admin->currentTeam)->create();
+
+    $this->actingAs($this->admin)
+        ->get(route('wall', ['current_team' => $this->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.environments', [])
+            // An application kept alive by DeleteEnvironment: the wall must
+            // point at adding an environment, not another application.
+            ->where('page.applicationCount', 1)
+            ->where('visibilityRestricted', false)
+            ->where('canManageApplications', true));
+});
+
+test('the shared flags describe the requested organization, not the stale current one', function () {
+    $user = User::factory()->create();
+
+    $member = Team::factory()->create();
+    $member->members()->attach($user, [
+        'role' => TeamRole::Member->value,
+        'visibility' => MemberVisibility::Manual->value,
+    ]);
+
+    $administered = Team::factory()->create();
+    $administered->members()->attach($user, [
+        'role' => TeamRole::Admin->value,
+        'visibility' => MemberVisibility::All->value,
+    ]);
+
+    // Both flags would come out the other way round if they read the team
+    // the user happens to be on instead of the one EnsureTeamMembership
+    // switched them to.
+    $user->switchTeam($member);
+
+    $this->actingAs($user)
+        ->get(route('wall', ['current_team' => $administered->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('currentTeam.slug', $administered->slug)
+            ->where('canManageApplications', true)
+            ->where('visibilityRestricted', false));
+});
 
 test('the wall goes back to its tiles as soon as one environment is visible', function () {
     $application = Application::factory()->for($this->admin->currentTeam)->create();

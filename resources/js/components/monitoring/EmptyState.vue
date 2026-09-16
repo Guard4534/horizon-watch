@@ -55,8 +55,9 @@ defineProps<{
             {{ body }}
         </p>
 
-        <div v-if="$slots.default" style="margin-top: var(--nc-space-2)">
-            <slot />
-        </div>
+        <!-- No wrapper: a caller whose action is itself conditional still
+             passes a slot, and a div around an empty one would leave a gap
+             under the text where no button ever appears. -->
+        <slot />
     </section>
 </template>

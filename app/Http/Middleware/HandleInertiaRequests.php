@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Data\Auth\AuthUserData;
 use App\Enums\AlertState;
+use App\Enums\MemberVisibility;
 use App\Models\Application;
 use App\Monitoring\MonitoringRepository;
 use Illuminate\Http\Request;
@@ -53,13 +54,29 @@ class HandleInertiaRequests extends Middleware
             'openAlertCount' => fn () => $user?->currentTeam
                 ? count(app(MonitoringRepository::class)->alerts($user->currentTeam, AlertState::Open))
                 : null,
-            // Shared, not a page prop: the empty states of the wall, the
-            // application list, the alerts and the alert settings all need
-            // it, and none of them has anything else to ask the server for.
-            // Read through ApplicationPolicy so the answer stays the same
-            // one the routes enforce.
+            // The two flags the empty states of the wall, the application
+            // list, the alerts and the alert settings choose their wording
+            // from. Shared rather than page props because all four need
+            // them and none of them has anything else to ask the server
+            // for. They are not free: each one costs an indexed membership
+            // query on every full Inertia response, including the pages
+            // that never read them. Inertia::optional() would remove that
+            // and cost a second round-trip on every monitoring page, which
+            // is the worse trade.
+            //
+            // The two answer different questions and neither implies the
+            // other: what this member may do, read through
+            // ApplicationPolicy so it matches what the routes enforce, and
+            // how much of the organization they see. An admin restricted
+            // to "manual" gets the button and the restricted wording; an
+            // unrestricted viewer gets neither. No membership at all (never
+            // reachable behind EnsureTeamMembership) counts as restricted:
+            // such a user really does see nothing.
             'canManageApplications' => fn () => $user?->currentTeam
                 ? $user->can('create', [Application::class, $user->currentTeam])
+                : false,
+            'visibilityRestricted' => fn () => $user?->currentTeam
+                ? $user->teamVisibility($user->currentTeam) !== MemberVisibility::All
                 : false,
         ];
     }

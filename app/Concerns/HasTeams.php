@@ -4,6 +4,7 @@ namespace App\Concerns;
 
 use App\Data\TeamPermissions;
 use App\Data\UserTeam;
+use App\Enums\MemberVisibility;
 use App\Enums\TeamPermission;
 use App\Enums\TeamRole;
 use App\Models\Membership;
@@ -126,6 +127,22 @@ trait HasTeams
             ->where('team_id', $team->id)
             ->first()
             ?->role;
+    }
+
+    /**
+     * Get the user's environment visibility on the given team.
+     *
+     * Visibility is an axis of its own: a role says what someone may do,
+     * this says how much of the organization they see. An admin can hold
+     * "manual" visibility and an owner "non_production", so nothing may
+     * infer one from the other.
+     */
+    public function teamVisibility(Team $team): ?MemberVisibility
+    {
+        return $this->teamMemberships()
+            ->where('team_id', $team->id)
+            ->first()
+            ?->visibility;
     }
 
     /**
