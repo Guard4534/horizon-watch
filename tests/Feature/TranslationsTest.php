@@ -7,9 +7,14 @@ use Symfony\Component\Finder\Finder;
  * because it uses double quotes. A backreference (\1) ties the closing quote to
  * the opening one instead of duplicating the alternative for each quote style.
  *
+ * $excludeDoubleQuotedInterpolation only makes sense for PHP: it only interpolates
+ * variables inside double-quoted strings, never in single-quoted PHP or in any JS
+ * string, so callers for those must leave it false or a legitimate key such as
+ * __('Price: $5 today') or $t('Cost is $10') would be silently skipped.
+ *
  * @return array<int, string>
  */
-function literalTranslationKeys(string $directory, string $pattern, array $names): array
+function literalTranslationKeys(string $directory, string $pattern, array $names, bool $excludeDoubleQuotedInterpolation = false): array
 {
     $keys = [];
 
@@ -17,10 +22,11 @@ function literalTranslationKeys(string $directory, string $pattern, array $names
         preg_match_all($pattern, $file->getContents(), $matches, PREG_SET_ORDER);
 
         foreach ($matches as $match) {
-            $raw = $match[2];
+            [, $quote, $raw] = $match;
 
-            // An unescaped "$" means variable interpolation, not a static translation key.
-            if (preg_match('/(?<!\\\\)\$/', $raw) === 1) {
+            // An unescaped "$" in a PHP double-quoted string means variable
+            // interpolation, not a static translation key.
+            if ($excludeDoubleQuotedInterpolation && $quote === '"' && preg_match('/(?<!\\\\)\$/', $raw) === 1) {
                 continue;
             }
 
@@ -44,7 +50,7 @@ test('every interface string has an italian translation', function () {
 
     $keys = [
         ...literalTranslationKeys('resources/js', $javascriptCall, ['*.vue', '*.ts']),
-        ...literalTranslationKeys('app', $phpCall, ['*.php']),
+        ...literalTranslationKeys('app', $phpCall, ['*.php'], excludeDoubleQuotedInterpolation: true),
     ];
 
     $missing = array_values(array_filter($keys, fn (string $key) => ! array_key_exists($key, $italian)));
