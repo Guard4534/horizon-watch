@@ -3,6 +3,10 @@
 use Symfony\Component\Finder\Finder;
 
 /**
+ * Matches both quote styles so a literal like __("It's fine") isn't missed just
+ * because it uses double quotes. A backreference (\1) ties the closing quote to
+ * the opening one instead of duplicating the alternative for each quote style.
+ *
  * @return array<int, string>
  */
 function literalTranslationKeys(string $directory, string $pattern, array $names): array
@@ -10,10 +14,17 @@ function literalTranslationKeys(string $directory, string $pattern, array $names
     $keys = [];
 
     foreach (Finder::create()->files()->in(base_path($directory))->name($names)->exclude(['generated', 'routes', 'actions', 'wayfinder', 'components/ui']) as $file) {
-        preg_match_all($pattern, $file->getContents(), $matches);
+        preg_match_all($pattern, $file->getContents(), $matches, PREG_SET_ORDER);
 
-        foreach ($matches[1] as $key) {
-            $keys[] = stripcslashes($key);
+        foreach ($matches as $match) {
+            $raw = $match[2];
+
+            // An unescaped "$" means variable interpolation, not a static translation key.
+            if (preg_match('/(?<!\\\\)\$/', $raw) === 1) {
+                continue;
+            }
+
+            $keys[] = stripcslashes($raw);
         }
     }
 
@@ -24,11 +35,11 @@ test('every interface string has an italian translation', function () {
     $italian = json_decode(file_get_contents(lang_path('it.json')), true, flags: JSON_THROW_ON_ERROR);
 
     $javascriptCall = <<<'REGEX'
-    /(?:\$t|\$tChoice|\btrans|\bwTrans)\(\s*'((?:[^'\\]|\\.)*)'/
+    /(?:\$t|\$tChoice|\btrans|\bwTrans)\(\s*(['"])((?:(?!\1)[^\\]|\\.)*)\1/
     REGEX;
 
     $phpCall = <<<'REGEX'
-    /__\(\s*'((?:[^'\\]|\\.)*)'/
+    /__\(\s*(['"])((?:(?!\1)[^\\]|\\.)*)\1/
     REGEX;
 
     $keys = [
