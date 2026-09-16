@@ -53,6 +53,10 @@ test('applications and environments come from the database, ordered as phase 1',
             $charlieProduction->slug, $charlieStaging->slug,
         ]);
 
+    // Unrestricted: every row of both views is watched.
+    expect(collect($this->repository->environments($this->team))->every->watched)->toBeTrue()
+        ->and(collect($this->repository->configurableEnvironments($this->team))->every->watched)->toBeTrue();
+
     expect($this->repository->environment($this->team, $bravoStaging->slug)?->id)->toBe($bravoStaging->slug)
         ->and($this->repository->configurableApplication($this->team, $bravo->slug)?->id)->toBe($bravo->slug);
 });
@@ -154,7 +158,10 @@ test('an application whose environments are all hidden still reaches the Applica
     expect($repository->configurableApplications($this->team))->toHaveCount(1)
         ->and($repository->configurableApplication($this->team, $application->slug))->not->toBeNull()
         ->and(array_map(fn ($item) => $item->id, $repository->configurableEnvironments($this->team)))
-        ->toBe([$environment->slug]);
+        ->toBe([$environment->slug])
+        // Listed by the permission, not watched: the flag the Applications
+        // templates key their links off.
+        ->and($repository->configurableEnvironments($this->team)[0]->watched)->toBeFalse();
 });
 
 test('an application whose environments are all hidden stays hidden for a member', function () {

@@ -211,7 +211,13 @@ const canManageApplications = computed(
                             </span>
                         </td>
                         <td class="whitespace-nowrap" style="text-align: right">
+                            <!-- An environment the viewer configures but
+                                 does not watch (their permission lists it,
+                                 their visibility hides it) has no detail
+                                 page for them: it answers 404. Say so
+                                 instead of linking there; the pencil stays. -->
                             <Link
+                                v-if="environment.watched"
                                 :href="
                                     showEnvironment({
                                         current_team: slug,
@@ -221,6 +227,16 @@ const canManageApplications = computed(
                                 class="nc-btn nc-btn-ghost"
                                 style="font-size: 12px"
                                 >{{ $t('Open') }}</Link
+                            >
+                            <span
+                                v-else
+                                class="nc-tag nc-tag-neutral"
+                                :title="
+                                    $t(
+                                        'Your visibility does not cover this environment: no detail page and no chart, but you can still configure it.',
+                                    )
+                                "
+                                >{{ $t('Not on your wall') }}</span
                             >
                             <Link
                                 v-if="canManageApplications"

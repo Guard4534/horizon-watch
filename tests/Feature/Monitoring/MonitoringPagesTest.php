@@ -184,22 +184,40 @@ test('a restricted admin watches their own environments and configures every one
         ->assertInertia(fn (Assert $page) => $page
             ->has('page.environments', 1)
             ->where('page.environments.0.id', $watched->slug)
+            ->where('page.environments.0.watched', true)
             ->where('page.applicationCount', 1)
             ->where('page.kpis.environmentsTotal', 1));
 
     // The configuration view: the whole organization, with a row (and
-    // therefore an edit link) for the environment the wall never shows.
+    // therefore an edit link) for the environment the wall never shows —
+    // flagged unwatched, which is what keeps the template from linking it
+    // to its 404 detail page (see the template guard test below).
     $this->get(route('applications.index', ['current_team' => $team->slug]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->has('page.groups', 2)
             ->where('page.environmentCount', 2)
+            ->where('page.groups.0.application.id', $mine->slug)
+            ->where('page.groups.0.environments.0.id', $watched->slug)
+            ->where('page.groups.0.environments.0.watched', true)
             ->where('page.groups.1.application.id', $theirs->slug)
-            ->where('page.groups.1.environments.0.id', $hidden->slug));
+            ->where('page.groups.1.environments.0.id', $hidden->slug)
+            ->where('page.groups.1.environments.0.watched', false));
 
+    // Same flag on the card, and no series behind it: the card says the
+    // environment is off this admin's wall instead of drawing nothing.
     $this->get(route('applications.show', ['current_team' => $team->slug, 'application' => $theirs->slug]))
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->where('page.cards.0.environment.id', $hidden->slug));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.cards.0.environment.id', $hidden->slug)
+            ->where('page.cards.0.environment.watched', false)
+            ->where('page.cards.0.sparkline', []));
+
+    $this->get(route('applications.show', ['current_team' => $team->slug, 'application' => $mine->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.cards.0.environment.watched', true)
+            ->has('page.cards.0.sparkline', 24));
 
     // The environment's own page stays the operational view, so it keeps
     // answering 404 even to this admin: they configure it from the list,
@@ -207,3 +225,29 @@ test('a restricted admin watches their own environments and configures every one
     $this->get(route('environments.show', ['current_team' => $team->slug, 'environment' => $hidden->slug]))
         ->assertNotFound();
 });
+
+/**
+ * The other half of the flag above. There is no front-end test runner in
+ * this project, so the only way to keep the Applications pages from
+ * linking an unwatched environment to its 404 detail page is to read the
+ * templates: every tag in them that builds a link to environments.show must
+ * be conditioned on `watched`. Crude on purpose — it reads opening tags,
+ * quoted attributes included, and nothing more — and it refuses to pass
+ * vacuously: each file must still contain such a link.
+ */
+test('the Applications pages only link watched environments to their detail page', function (string $template) {
+    $source = file_get_contents(resource_path("js/components/monitoring/applications/{$template}"));
+
+    preg_match_all('/<[A-Za-z][\w.-]*(?:\s+[^\s=>"\/]+(?:="[^"]*")?)*\s*\/?>/s', $source, $tags);
+
+    $linking = array_values(array_filter($tags[0], fn (string $tag) => str_contains($tag, 'showEnvironment(')));
+
+    expect($linking)->not->toBeEmpty();
+
+    foreach ($linking as $tag) {
+        expect($tag)->toContain('watched');
+    }
+})->with([
+    'the list rows' => 'ApplicationSection.vue',
+    'the application cards' => 'EnvironmentCard.vue',
+]);

@@ -142,7 +142,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     public function environments(Team $team): array
     {
         return $this->visibleEnvironmentModels($team)
-            ->map($this->toEnvironmentData(...))
+            ->map(fn (Environment $environment) => $this->toEnvironmentData($environment, watched: true))
             ->all();
     }
 
@@ -162,8 +162,13 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
     public function configurableEnvironments(Team $team): array
     {
+        $watched = $this->watchedEnvironmentsBySlug($team);
+
         return $this->configurableEnvironmentModels($team)
-            ->map($this->toEnvironmentData(...))
+            ->map(fn (Environment $environment) => $this->toEnvironmentData(
+                $environment,
+                watched: $watched->has($environment->slug),
+            ))
             ->all();
     }
 
@@ -171,7 +176,8 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     {
         $environment = $this->findEnvironment($team, $environmentId);
 
-        return $environment ? $this->toEnvironmentData($environment) : null;
+        // Resolved from the watched list, so it is watched by definition.
+        return $environment ? $this->toEnvironmentData($environment, watched: true) : null;
     }
 
     public function nodes(Team $team, string $environmentId): array
@@ -452,10 +458,20 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
      */
     private function findEnvironment(Team $team, string $environmentId): ?Environment
     {
-        $bySlug = $this->visibleEnvironmentsBySlugByTeam[$team->id]
-            ??= $this->visibleEnvironmentModels($team)->keyBy('slug');
+        return $this->watchedEnvironmentsBySlug($team)->get($environmentId);
+    }
 
-        return $bySlug->get($environmentId);
+    /**
+     * The watched environments by slug: the map findEnvironment() answers
+     * from, and the one configurableEnvironments() asks whether each of its
+     * rows is on this viewer's wall.
+     *
+     * @return Collection<string, Environment>
+     */
+    private function watchedEnvironmentsBySlug(Team $team): Collection
+    {
+        return $this->visibleEnvironmentsBySlugByTeam[$team->id]
+            ??= $this->visibleEnvironmentModels($team)->keyBy('slug');
     }
 
     /**
@@ -475,7 +491,12 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         return new ApplicationData($application->slug, $application->name, $application->host);
     }
 
-    private function toEnvironmentData(Environment $environment): EnvironmentData
+    /**
+     * Never pass this as a first-class callable to map(): the second
+     * argument would arrive as the collection key, which is an int, and
+     * every row would silently report itself unwatched.
+     */
+    private function toEnvironmentData(Environment $environment, bool $watched): EnvironmentData
     {
         $metrics = $this->metrics->metricsFor($environment);
 
@@ -496,6 +517,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             basicAuthUser: $environment->basic_auth_user,
             redisMemoryGb: $metrics->redisMemoryGb,
             latencyMs: $metrics->latencyMs,
+            watched: $watched,
         );
     }
 

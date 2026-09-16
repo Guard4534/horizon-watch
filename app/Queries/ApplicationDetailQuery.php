@@ -40,7 +40,12 @@ class ApplicationDetailQuery
             application: $application,
             cards: array_map(fn (EnvironmentData $environment) => new EnvironmentCardData(
                 environment: $environment,
-                sparkline: array_slice($this->monitoring->throughputSeries($team, $environment->id, SeriesRange::ThreeHours), -24),
+                // No series for an environment off the viewer's wall: the
+                // repository would refuse it anyway (it is the operational
+                // view), and the card says why instead of drawing nothing.
+                sparkline: $environment->watched
+                    ? array_slice($this->monitoring->throughputSeries($team, $environment->id, SeriesRange::ThreeHours), -24)
+                    : [],
             ), $environments),
             recentAlerts: array_slice(array_values($alerts), 0, 3),
             worstStatus: $worstEnvironments[0]->status ?? null,
