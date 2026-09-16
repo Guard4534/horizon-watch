@@ -2,11 +2,13 @@
 
 use App\Models\Team;
 use App\Models\User;
+use Database\Seeders\DatabaseSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
     $this->slug = $this->user->currentTeam->slug;
+    (new DatabaseSeeder)->seedMockupOrganization($this->user->currentTeam);
 });
 
 dataset('pages', [
@@ -96,7 +98,11 @@ test('alert rules default to the organization scope', function () {
         ->get(route('alert-rules.index', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.scope', 'organization')
-            ->has('page.scopes', 5)
+            // organization + every distinct environment name in the mockup
+            // organization (production, preprod, staging, develop, demo,
+            // worker-batch, testing): unlike phase 1's fixed list, this one
+            // is computed from what's actually visible.
+            ->has('page.scopes', 8)
             ->has('page.rules', 8)
             ->where('page.notifications.repeatMinutes', 30));
 });

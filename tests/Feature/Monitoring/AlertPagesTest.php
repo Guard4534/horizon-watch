@@ -1,11 +1,13 @@
 <?php
 
 use App\Models\User;
+use Database\Seeders\DatabaseSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
     $this->slug = $this->user->currentTeam->slug;
+    (new DatabaseSeeder)->seedMockupOrganization($this->user->currentTeam);
 });
 
 test('the email preview shows a critical alert', function () {

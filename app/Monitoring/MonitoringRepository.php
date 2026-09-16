@@ -18,7 +18,7 @@ use App\Enums\SeriesRange;
 use App\Models\Team;
 use Illuminate\Container\Attributes\Bind;
 
-#[Bind(FakeMonitoringRepository::class)]
+#[Bind(ConfiguredMonitoringRepository::class)]
 interface MonitoringRepository
 {
     /** @return array<int, ApplicationData> */
