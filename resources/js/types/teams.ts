@@ -1,4 +1,6 @@
-export type TeamRole = 'owner' | 'admin' | 'member';
+export type TeamRole = 'owner' | 'admin' | 'member' | 'viewer';
+
+export type MemberVisibility = 'all' | 'non_production' | 'manual';
 
 export type Team = {
     id: number;
