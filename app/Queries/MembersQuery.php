@@ -221,7 +221,13 @@ class MembersQuery
             TeamPermission::CreateInvitation => __('Invite someone'),
             TeamPermission::CancelInvitation => __('Revoke an invitation'),
             TeamPermission::ManageApplications => __('Create and edit applications and environments'),
-            TeamPermission::ManageCredentials => __('Manage credentials'),
+            // A separate key from the "Manage credentials" button on the
+            // application page: the mockup writes that one as an order
+            // ("Gestisci credenziali") and this one as a capability
+            // ("Gestire le credenziali"), the same split the rows below
+            // already make between "Test connection" and this table's
+            // "Test the connection".
+            TeamPermission::ManageCredentials => __('Manage the credentials'),
             TeamPermission::ManageAlertRules => __('Edit thresholds and recipients'),
             TeamPermission::MuteAlert => __('Mute an alert'),
             TeamPermission::HandleAnomaly => __('Mark an anomaly handled'),

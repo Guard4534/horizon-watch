@@ -10,7 +10,23 @@ enum TeamRole: string
     case Viewer = 'viewer';
 
     /**
-     * Get the display label for the role.
+     * Get the display label for the role. Deliberately not run through
+     * __(), unlike MemberVisibility::label(). Two reasons, and the second
+     * one is the binding one:
+     *
+     * "admin", "member" and "viewer" are vocabulary, not prose: the Italian
+     * interface uses them as they are (the mockup's role tags, and its
+     * Italian note "gli admin gestiscono ..., i member operano ..., i viewer
+     * guardano"), so three of the four labels would translate to themselves.
+     * The fourth, the owner, is already spelled out in Italian where the
+     * interface actually describes them: MembersQuery renders that row as
+     * __('Owner · admin').
+     *
+     * And this label is built outside a request: assignable() below is a
+     * static table, exercised by tests/Unit/TeamRoleTest.php with no
+     * application booted, so a __() here would make a pure enum depend on
+     * the container. Where a role does need translating, it happens at the
+     * call site — the convention MembersQuery::permissionLabel() records.
      */
     public function label(): string
     {

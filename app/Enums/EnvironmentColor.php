@@ -13,9 +13,11 @@ enum EnvironmentColor: string
     case Testing = 'testing';
 
     /**
-     * Get the display label used in the interface. Not run through __():
-     * consumed dynamically by the front end, same convention as
-     * MemberVisibility::label() and TeamRole::label().
+     * Get the display label used in the interface. Not run through __() on
+     * purpose, unlike MemberVisibility::label(): the seven names are the
+     * environment vocabulary (prod, preprod, staging, develop, demo,
+     * worker, testing), which the Italian interface keeps in English
+     * exactly as it keeps the environment names themselves.
      */
     public function label(): string
     {
