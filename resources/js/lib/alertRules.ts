@@ -22,14 +22,35 @@ const ICONS: Record<App.Enums.AlertRuleMetric, Component> = {
 };
 
 // English source strings: pages pass them through $t().
-const LABELS: Record<App.Enums.AlertRuleMetric, { label: string; hint: string }> = {
-    'horizon.master_inactive': { label: 'Horizon inactive', hint: 'no active master supervisor for' },
-    'endpoint.unreachable': { label: 'Endpoint unreachable', hint: 'timeout or HTTP error for' },
-    'queue.pending': { label: 'Pending jobs', hint: 'total across all queues above' },
-    'queue.max_wait': { label: 'Max wait', hint: 'oldest job waiting longer than' },
+const LABELS: Record<
+    App.Enums.AlertRuleMetric,
+    { label: string; hint: string }
+> = {
+    'horizon.master_inactive': {
+        label: 'Horizon inactive',
+        hint: 'no active master supervisor for',
+    },
+    'endpoint.unreachable': {
+        label: 'Endpoint unreachable',
+        hint: 'timeout or HTTP error for',
+    },
+    'queue.pending': {
+        label: 'Pending jobs',
+        hint: 'total across all queues above',
+    },
+    'queue.max_wait': {
+        label: 'Max wait',
+        hint: 'oldest job waiting longer than',
+    },
     'job.runtime': { label: 'Job runtime', hint: 'job running for more than' },
-    'jobs.failed_per_hour': { label: 'Failed jobs / hour', hint: 'failed jobs in one hour above' },
-    'workers.missing': { label: 'Missing workers', hint: 'active processes below' },
+    'jobs.failed_per_hour': {
+        label: 'Failed jobs / hour',
+        hint: 'failed jobs in one hour above',
+    },
+    'workers.missing': {
+        label: 'Missing workers',
+        hint: 'active processes below',
+    },
     'redis.memory': { label: 'Redis memory', hint: 'memory used above' },
 };
 
@@ -47,7 +68,9 @@ export function ruleHint(metric: App.Enums.AlertRuleMetric): string {
 
 /** "5 min", "60s", "2000", "4 GB": the spacing the mockup uses for each unit. */
 export function formatThreshold(threshold: number, unit: string): string {
-    const value = Number.isInteger(threshold) ? String(threshold) : threshold.toFixed(1);
+    const value = Number.isInteger(threshold)
+        ? String(threshold)
+        : threshold.toFixed(1);
 
     switch (unit) {
         case 's':
@@ -60,6 +83,10 @@ export function formatThreshold(threshold: number, unit: string): string {
     }
 }
 
-export function formatRule(metric: App.Enums.AlertRuleMetric, threshold: number, unit: string): string {
+export function formatRule(
+    metric: App.Enums.AlertRuleMetric,
+    threshold: number,
+    unit: string,
+): string {
     return `${metric} > ${formatThreshold(threshold, unit)}`;
 }

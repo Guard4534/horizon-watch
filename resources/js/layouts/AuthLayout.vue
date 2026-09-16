@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import AuthSimpleLayout from '@/layouts/auth/AuthSimpleLayout.vue';
 
-const { title = '', description = '', kicker = '' } = defineProps<{
+const {
+    title = '',
+    description = '',
+    kicker = '',
+} = defineProps<{
     title?: string;
     description?: string;
     kicker?: string;
@@ -9,7 +13,11 @@ const { title = '', description = '', kicker = '' } = defineProps<{
 </script>
 
 <template>
-    <AuthSimpleLayout :title="title" :description="description" :kicker="kicker">
+    <AuthSimpleLayout
+        :title="title"
+        :description="description"
+        :kicker="kicker"
+    >
         <slot />
     </AuthSimpleLayout>
 </template>

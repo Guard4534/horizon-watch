@@ -61,7 +61,9 @@ const inputEmail = ref(props.email);
         </div>
 
         <div class="nc-field">
-            <label for="password_confirmation">{{ $t('Confirm password') }}</label>
+            <label for="password_confirmation">{{
+                $t('Confirm password')
+            }}</label>
             <PasswordInput
                 id="password_confirmation"
                 class="nc-input"
@@ -72,7 +74,12 @@ const inputEmail = ref(props.email);
             <InputError :message="errors.password_confirmation" />
         </div>
 
-        <button type="submit" class="nc-btn nc-btn-primary nc-btn-block" :disabled="processing" data-test="reset-password-button">
+        <button
+            type="submit"
+            class="nc-btn nc-btn-primary nc-btn-block"
+            :disabled="processing"
+            data-test="reset-password-button"
+        >
             <Spinner v-if="processing" />
             {{ $t('Reset password') }}
         </button>

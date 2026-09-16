@@ -27,7 +27,11 @@ defineProps<{
 <template>
     <Head :title="$t('Log in')" />
 
-    <div v-if="status" style="font-size: 12px; color: var(--st-ok)" class="mb-4 text-center">
+    <div
+        v-if="status"
+        style="font-size: 12px; color: var(--st-ok)"
+        class="mb-4 text-center"
+    >
         {{ status }}
     </div>
 

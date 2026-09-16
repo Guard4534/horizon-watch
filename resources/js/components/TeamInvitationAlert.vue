@@ -14,7 +14,9 @@ const props = defineProps<Props>();
 // Two full-sentence keys instead of a concatenated one: word order and
 // agreement around ":team" differ once translated.
 const message = computed(() =>
-    props.action === 'Log in' ? 'Log in to join the :team team.' : 'Register to join the :team team.',
+    props.action === 'Log in'
+        ? 'Log in to join the :team team.'
+        : 'Register to join the :team team.',
 );
 </script>
 

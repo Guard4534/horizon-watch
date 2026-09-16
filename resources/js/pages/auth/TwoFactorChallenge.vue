@@ -65,7 +65,9 @@ const toggleRecoveryMode = (clearErrors: () => void): void => {
                 #default="{ errors, processing, clearErrors }"
             >
                 <input type="hidden" name="code" :value="code" />
-                <div class="flex flex-col items-center justify-center gap-[var(--nc-space-3)] text-center">
+                <div
+                    class="flex flex-col items-center justify-center gap-[var(--nc-space-3)] text-center"
+                >
                     <div class="flex w-full items-center justify-center">
                         <InputOTP
                             id="otp"
@@ -85,11 +87,18 @@ const toggleRecoveryMode = (clearErrors: () => void): void => {
                     </div>
                     <InputError :message="errors.code" />
                 </div>
-                <button type="submit" class="nc-btn nc-btn-primary nc-btn-block" :disabled="processing">
+                <button
+                    type="submit"
+                    class="nc-btn nc-btn-primary nc-btn-block"
+                    :disabled="processing"
+                >
                     <Spinner v-if="processing" />
                     {{ $t('Continue') }}
                 </button>
-                <div class="text-center" style="font-size: 12px; color: var(--nc-neutral-500)">
+                <div
+                    class="text-center"
+                    style="font-size: 12px; color: var(--nc-neutral-500)"
+                >
                     <span>{{ $t('or you can') }} </span>
                     <button
                         type="button"
@@ -123,12 +132,19 @@ const toggleRecoveryMode = (clearErrors: () => void): void => {
                     />
                 </div>
                 <InputError :message="errors.recovery_code" />
-                <button type="submit" class="nc-btn nc-btn-primary nc-btn-block" :disabled="processing">
+                <button
+                    type="submit"
+                    class="nc-btn nc-btn-primary nc-btn-block"
+                    :disabled="processing"
+                >
                     <Spinner v-if="processing" />
                     {{ $t('Continue') }}
                 </button>
 
-                <div class="text-center" style="font-size: 12px; color: var(--nc-neutral-500)">
+                <div
+                    class="text-center"
+                    style="font-size: 12px; color: var(--nc-neutral-500)"
+                >
                     <span>{{ $t('or you can') }} </span>
                     <button
                         type="button"

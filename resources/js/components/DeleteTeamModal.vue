@@ -57,7 +57,11 @@ const handleOpenChange = (nextOpen: boolean) => {
                 <DialogHeader>
                     <DialogTitle>{{ $t('Are you sure?') }}</DialogTitle>
                     <DialogDescription>
-                        {{ $t('This action cannot be undone. This will permanently delete the team') }}
+                        {{
+                            $t(
+                                'This action cannot be undone. This will permanently delete the team',
+                            )
+                        }}
                         <strong>"{{ props.team.name }}"</strong>.
                     </DialogDescription>
                 </DialogHeader>
@@ -66,7 +70,8 @@ const handleOpenChange = (nextOpen: boolean) => {
                     <div class="grid gap-2">
                         <Label for="confirmation-name">
                             {{ $t('Type') }}
-                            <strong>"{{ props.team.name }}"</strong> {{ $t('to confirm') }}
+                            <strong>"{{ props.team.name }}"</strong>
+                            {{ $t('to confirm') }}
                         </Label>
                         <Input
                             id="confirmation-name"
@@ -82,7 +87,9 @@ const handleOpenChange = (nextOpen: boolean) => {
 
                 <DialogFooter class="gap-2">
                     <DialogClose as-child>
-                        <Button variant="secondary"> {{ $t('Cancel') }} </Button>
+                        <Button variant="secondary">
+                            {{ $t('Cancel') }}
+                        </Button>
                     </DialogClose>
 
                     <Button

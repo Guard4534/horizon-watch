@@ -135,9 +135,7 @@ watch(
                                 class="border-border border-b last:border-b-0"
                             />
                         </div>
-                        <PhScan
-                            class="text-foreground relative z-20 size-6"
-                        />
+                        <PhScan class="text-foreground relative z-20 size-6" />
                     </div>
                 </div>
                 <DialogTitle>{{ $t(modalConfig.title) }}</DialogTitle>
@@ -171,7 +169,9 @@ watch(
                                     <div
                                         v-html="qrCodeSvg"
                                         class="flex aspect-square size-full items-center justify-center"
-                                        style="filter: invert(1) brightness(1.5)"
+                                        style="
+                                            filter: invert(1) brightness(1.5);
+                                        "
                                     />
                                 </div>
                             </div>
@@ -189,9 +189,9 @@ watch(
                             <div
                                 class="bg-border absolute inset-0 top-1/2 h-px w-full"
                             />
-                            <span class="bg-card relative px-2 py-1"
-                                >{{ $t('or, enter the code manually') }}</span
-                            >
+                            <span class="bg-card relative px-2 py-1">{{
+                                $t('or, enter the code manually')
+                            }}</span>
                         </div>
 
                         <div

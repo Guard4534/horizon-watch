@@ -23,14 +23,14 @@ the first organization. Everyone else joins by invitation.
 Everything is optional and set as environment variables (for example in a `.env` file
 next to `compose.prod.yaml`):
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `HORIZON_WATCH_PORT` | `8080` | Port published on the host |
-| `APP_URL` | `http://localhost:8080` | Public URL, used in links and emails |
-| `APP_LOCALE` | `en` | Default language (`en` or `it`) |
-| `DB_PASSWORD` | `horizon_watch` | PostgreSQL password; change it |
-| `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS` | log only | SMTP for invitations and alerts |
-| `APP_KEY` | generated | Leave empty to generate one on first start |
+| Variable                                                                                       | Default                 | Purpose                                    |
+| ---------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------ |
+| `HORIZON_WATCH_PORT`                                                                           | `8080`                  | Port published on the host                 |
+| `APP_URL`                                                                                      | `http://localhost:8080` | Public URL, used in links and emails       |
+| `APP_LOCALE`                                                                                   | `en`                    | Default language (`en` or `it`)            |
+| `DB_PASSWORD`                                                                                  | `horizon_watch`         | PostgreSQL password; change it             |
+| `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS` | log only                | SMTP for invitations and alerts            |
+| `APP_KEY`                                                                                      | generated               | Leave empty to generate one on first start |
 
 ## Back up the data volume
 

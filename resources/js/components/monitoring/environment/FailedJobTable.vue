@@ -10,7 +10,9 @@ defineProps<{
 <template>
     <SectionCard :title="$t('Recent failed jobs')">
         <template #actions>
-            <span style="font-size: 11px; color: var(--nc-neutral-600)">{{ $t('retry happens in Horizon — this panel is read-only') }}</span>
+            <span style="font-size: 11px; color: var(--nc-neutral-600)">{{
+                $t('retry happens in Horizon — this panel is read-only')
+            }}</span>
         </template>
         <div class="overflow-x-auto">
             <table class="nc-table">
@@ -25,11 +27,48 @@ defineProps<{
                 </thead>
                 <tbody>
                     <tr v-for="(job, index) in jobs" :key="index">
-                        <td class="whitespace-nowrap" style="letter-spacing: 0.01em; font-size: 12px">{{ job.job }}</td>
-                        <td style="font-size: 12px; color: var(--nc-neutral-400)">{{ job.queue }}</td>
-                        <td class="max-w-[250px] truncate" style="font-size: 12px; color: var(--nc-neutral-400)" :title="job.exception">{{ job.exception }}</td>
-                        <td style="text-align: right; font-size: 12px; color: var(--nc-neutral-400)">{{ job.tries }}</td>
-                        <td class="whitespace-nowrap" style="font-size: 12px; color: var(--nc-neutral-600)">{{ formatMinutesAgo(job.minutesAgo) }}</td>
+                        <td
+                            class="whitespace-nowrap"
+                            style="letter-spacing: 0.01em; font-size: 12px"
+                        >
+                            {{ job.job }}
+                        </td>
+                        <td
+                            style="
+                                font-size: 12px;
+                                color: var(--nc-neutral-400);
+                            "
+                        >
+                            {{ job.queue }}
+                        </td>
+                        <td
+                            class="max-w-[250px] truncate"
+                            style="
+                                font-size: 12px;
+                                color: var(--nc-neutral-400);
+                            "
+                            :title="job.exception"
+                        >
+                            {{ job.exception }}
+                        </td>
+                        <td
+                            style="
+                                text-align: right;
+                                font-size: 12px;
+                                color: var(--nc-neutral-400);
+                            "
+                        >
+                            {{ job.tries }}
+                        </td>
+                        <td
+                            class="whitespace-nowrap"
+                            style="
+                                font-size: 12px;
+                                color: var(--nc-neutral-600);
+                            "
+                        >
+                            {{ formatMinutesAgo(job.minutesAgo) }}
+                        </td>
                     </tr>
                 </tbody>
             </table>

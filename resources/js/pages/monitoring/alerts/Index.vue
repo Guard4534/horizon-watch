@@ -30,7 +30,11 @@ const alerts = computed(() => {
     const needle = search.value.trim().toLowerCase();
 
     return needle
-        ? page.alerts.filter((alert) => `${alert.applicationName} ${alert.environmentName} ${alert.metric}`.toLowerCase().includes(needle))
+        ? page.alerts.filter((alert) =>
+              `${alert.applicationName} ${alert.environmentName} ${alert.metric}`
+                  .toLowerCase()
+                  .includes(needle),
+          )
         : page.alerts;
 });
 </script>
@@ -38,19 +42,43 @@ const alerts = computed(() => {
 <template>
     <Head :title="$t('Alerts')" />
 
-    <div class="grid items-start" style="padding: var(--nc-space-6); gap: var(--nc-space-6); grid-template-columns: minmax(0, 1fr) 300px">
+    <div
+        class="grid items-start"
+        style="
+            padding: var(--nc-space-6);
+            gap: var(--nc-space-6);
+            grid-template-columns: minmax(0, 1fr) 300px;
+        "
+    >
         <section class="nc-card">
-            <div class="mb-[var(--nc-space-3)] flex flex-wrap items-center" style="gap: var(--nc-space-3)">
+            <div
+                class="mb-[var(--nc-space-3)] flex flex-wrap items-center"
+                style="gap: var(--nc-space-3)"
+            >
                 <SegmentedControl
                     v-model="state"
                     name="alert-state"
                     :options="[
-                        { value: 'open', label: `${$t('Open')} ${page.counts.open}` },
-                        { value: 'muted', label: `${$t('Muted')} ${page.counts.muted}` },
-                        { value: 'resolved', label: `${$t('Resolved')} ${page.counts.resolved}` },
+                        {
+                            value: 'open',
+                            label: `${$t('Open')} ${page.counts.open}`,
+                        },
+                        {
+                            value: 'muted',
+                            label: `${$t('Muted')} ${page.counts.muted}`,
+                        },
+                        {
+                            value: 'resolved',
+                            label: `${$t('Resolved')} ${page.counts.resolved}`,
+                        },
                     ]"
                 />
-                <input v-model="search" class="nc-input ml-auto" style="max-width: 230px" :placeholder="$t('Filter by application or queue')" />
+                <input
+                    v-model="search"
+                    class="nc-input ml-auto"
+                    style="max-width: 230px"
+                    :placeholder="$t('Filter by application or queue')"
+                />
             </div>
             <AlertTable :alerts="alerts" />
         </section>
@@ -59,7 +87,11 @@ const alerts = computed(() => {
             <EmailPreview v-if="page.preview" :alert="page.preview" />
             <SectionCard :title="$t('Delivery policy')">
                 <div style="font-size: 12px; color: var(--nc-neutral-400)">
-                    {{ $t('A critical alert repeats every 30 minutes until it clears or gets muted. Warnings are grouped into a digest every 15 minutes. During quiet hours only criticals get through.') }}
+                    {{
+                        $t(
+                            'A critical alert repeats every 30 minutes until it clears or gets muted. Warnings are grouped into a digest every 15 minutes. During quiet hours only criticals get through.',
+                        )
+                    }}
                 </div>
             </SectionCard>
         </div>

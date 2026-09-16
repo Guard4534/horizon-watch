@@ -33,26 +33,92 @@ const slug = useTeamSlug();
                         <span
                             class="inline-flex items-center gap-[6px]"
                             style="font-size: 12px"
-                            :style="{ color: alert.severity === 'critical' ? 'var(--st-down)' : 'var(--st-warn)' }"
+                            :style="{
+                                color:
+                                    alert.severity === 'critical'
+                                        ? 'var(--st-down)'
+                                        : 'var(--st-warn)',
+                            }"
                         >
-                            <component :is="alert.severity === 'critical' ? PhWarningOctagon : PhWarning" :size="14" />
-                            {{ alert.severity === 'critical' ? $t('Critical') : $t('Warning') }}
+                            <component
+                                :is="
+                                    alert.severity === 'critical'
+                                        ? PhWarningOctagon
+                                        : PhWarning
+                                "
+                                :size="14"
+                            />
+                            {{
+                                alert.severity === 'critical'
+                                    ? $t('Critical')
+                                    : $t('Warning')
+                            }}
                         </span>
                     </td>
-                    <td style="font-size: 12px; letter-spacing: 0.01em">{{ formatRule(alert.metric, alert.threshold, alert.unit) }}</td>
+                    <td style="font-size: 12px; letter-spacing: 0.01em">
+                        {{
+                            formatRule(
+                                alert.metric,
+                                alert.threshold,
+                                alert.unit,
+                            )
+                        }}
+                    </td>
                     <td>
-                        <Link :href="showEnvironment({ current_team: slug, environment: alert.environmentId })" class="inline-flex items-center gap-[7px]" style="font-size: 12px; color: inherit">
-                            <EnvSwatch :color="alert.color" shape="bar" :size="14" />
-                            {{ alert.applicationName }} / {{ alert.environmentName }}
+                        <Link
+                            :href="
+                                showEnvironment({
+                                    current_team: slug,
+                                    environment: alert.environmentId,
+                                })
+                            "
+                            class="inline-flex items-center gap-[7px]"
+                            style="font-size: 12px; color: inherit"
+                        >
+                            <EnvSwatch
+                                :color="alert.color"
+                                shape="bar"
+                                :size="14"
+                            />
+                            {{ alert.applicationName }} /
+                            {{ alert.environmentName }}
                         </Link>
                     </td>
-                    <td class="max-w-[250px]" style="font-size: 12px; color: var(--nc-neutral-400)">
-                        {{ alert.severity === 'critical'
-                            ? $tChoice('0 active workers across :count node|0 active workers across :count nodes', alert.nodeCount)
-                            : $t('max wait :wait on 3 queues', { wait: formatWait(alert.maxWaitSeconds) }) }}
+                    <td
+                        class="max-w-[250px]"
+                        style="font-size: 12px; color: var(--nc-neutral-400)"
+                    >
+                        {{
+                            alert.severity === 'critical'
+                                ? $tChoice(
+                                      '0 active workers across :count node|0 active workers across :count nodes',
+                                      alert.nodeCount,
+                                  )
+                                : $t('max wait :wait on 3 queues', {
+                                      wait: formatWait(alert.maxWaitSeconds),
+                                  })
+                        }}
                     </td>
-                    <td class="whitespace-nowrap" style="font-size: 12px; color: var(--nc-neutral-600)">{{ formatMinutesAgo(alert.minutesAgo) }}</td>
-                    <td class="whitespace-nowrap" style="font-size: 12px; color: var(--nc-neutral-500)">{{ alert.channels.map((channel) => (channel === 'mail' ? $t('email') : $t('webhook'))).join(' · ') }}</td>
+                    <td
+                        class="whitespace-nowrap"
+                        style="font-size: 12px; color: var(--nc-neutral-600)"
+                    >
+                        {{ formatMinutesAgo(alert.minutesAgo) }}
+                    </td>
+                    <td
+                        class="whitespace-nowrap"
+                        style="font-size: 12px; color: var(--nc-neutral-500)"
+                    >
+                        {{
+                            alert.channels
+                                .map((channel) =>
+                                    channel === 'mail'
+                                        ? $t('email')
+                                        : $t('webhook'),
+                                )
+                                .join(' · ')
+                        }}
+                    </td>
                 </tr>
             </tbody>
         </table>

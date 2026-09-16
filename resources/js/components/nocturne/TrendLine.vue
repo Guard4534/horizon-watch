@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-const { values, width, height, color = 'var(--nc-accent)', fill = false } = defineProps<{
+const {
+    values,
+    width,
+    height,
+    color = 'var(--nc-accent)',
+    fill = false,
+} = defineProps<{
     values: number[];
     width: number;
     height: number;
@@ -23,7 +29,9 @@ const line = computed(() => {
         .join(' ');
 });
 
-const area = computed(() => `${line.value} L ${width} ${height} L 0 ${height} Z`);
+const area = computed(
+    () => `${line.value} L ${width} ${height} L 0 ${height} Z`,
+);
 </script>
 
 <template>
@@ -34,7 +42,19 @@ const area = computed(() => `${line.value} L ${width} ${height} L 0 ${height} Z`
         preserveAspectRatio="none"
         class="block"
     >
-        <path v-if="fill" :d="area" :fill="color" opacity="0.12" stroke="none" />
-        <path :d="line" fill="none" :stroke="color" stroke-width="1.5" stroke-linejoin="round" />
+        <path
+            v-if="fill"
+            :d="area"
+            :fill="color"
+            opacity="0.12"
+            stroke="none"
+        />
+        <path
+            :d="line"
+            fill="none"
+            :stroke="color"
+            stroke-width="1.5"
+            stroke-linejoin="round"
+        />
     </svg>
 </template>

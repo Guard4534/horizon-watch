@@ -23,13 +23,37 @@ defineProps<{
                     </tr>
                 </thead>
                 <tbody class="nc-num">
-                    <tr v-for="environment in environments" :key="environment.id">
-                        <td><span class="inline-flex items-center gap-2"><EnvSwatch :color="environment.color" />{{ environment.name }}</span></td>
-                        <td style="text-align: right">{{ formatCount(environment.pending) }}</td>
-                        <td style="text-align: right" :style="{ color: waitColor(environment.maxWaitSeconds) }">{{ formatWait(environment.maxWaitSeconds) }}</td>
-                        <td style="text-align: right">{{ environment.failedLast24Hours }}</td>
-                        <td style="text-align: right">{{ environment.workers }}</td>
-                        <td style="text-align: right">{{ environment.jobsPerMinute }}</td>
+                    <tr
+                        v-for="environment in environments"
+                        :key="environment.id"
+                    >
+                        <td>
+                            <span class="inline-flex items-center gap-2"
+                                ><EnvSwatch :color="environment.color" />{{
+                                    environment.name
+                                }}</span
+                            >
+                        </td>
+                        <td style="text-align: right">
+                            {{ formatCount(environment.pending) }}
+                        </td>
+                        <td
+                            style="text-align: right"
+                            :style="{
+                                color: waitColor(environment.maxWaitSeconds),
+                            }"
+                        >
+                            {{ formatWait(environment.maxWaitSeconds) }}
+                        </td>
+                        <td style="text-align: right">
+                            {{ environment.failedLast24Hours }}
+                        </td>
+                        <td style="text-align: right">
+                            {{ environment.workers }}
+                        </td>
+                        <td style="text-align: right">
+                            {{ environment.jobsPerMinute }}
+                        </td>
                     </tr>
                 </tbody>
             </table>

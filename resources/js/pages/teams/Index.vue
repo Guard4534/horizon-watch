@@ -146,7 +146,7 @@ defineOptions({
                 v-if="teams.length === 0"
                 class="text-muted-foreground py-8 text-center"
             >
-                {{ $t('You don\'t belong to any teams yet.') }}
+                {{ $t("You don't belong to any teams yet.") }}
             </p>
         </div>
     </div>

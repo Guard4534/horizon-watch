@@ -111,7 +111,13 @@
     height: 1px;
     border: 0;
     margin: var(--nc-space-4) 0;
-    background: linear-gradient(to right, transparent, var(--nc-divider) 48px, var(--nc-divider) calc(100% - 48px), transparent);
+    background: linear-gradient(
+        to right,
+        transparent,
+        var(--nc-divider) 48px,
+        var(--nc-divider) calc(100% - 48px),
+        transparent
+    );
 }
 
 .nc-btn {
@@ -131,18 +137,48 @@
     padding: var(--nc-space-2) calc(var(--nc-space-3) * 1.2);
     border-radius: var(--nc-radius-md);
 }
-.nc-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.nc-btn-primary { color: var(--nc-accent); border-color: var(--nc-accent); }
-.nc-btn-primary:not(:disabled):hover { background: color-mix(in srgb, var(--nc-accent) 12%, transparent); }
-.nc-btn-primary:not(:disabled):active { background: color-mix(in srgb, var(--nc-accent) 22%, transparent); }
-.nc-btn-secondary { border-color: var(--nc-divider); }
-.nc-btn-secondary:not(:disabled):hover { background: color-mix(in srgb, var(--nc-text) 7%, transparent); }
-.nc-btn-secondary:not(:disabled):active { background: color-mix(in srgb, var(--nc-text) 14%, transparent); }
-.nc-btn-ghost { color: var(--nc-accent); padding-inline: var(--nc-space-1); }
-.nc-btn-ghost:not(:disabled):hover { background: color-mix(in srgb, var(--nc-accent) 10%, transparent); }
-.nc-btn-ghost:not(:disabled):active { background: color-mix(in srgb, var(--nc-accent) 18%, transparent); }
-.nc-btn-icon { width: 36px; height: 36px; padding: 0; }
-.nc-btn-block { width: 100%; margin-top: var(--nc-space-2); }
+.nc-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.nc-btn-primary {
+    color: var(--nc-accent);
+    border-color: var(--nc-accent);
+}
+.nc-btn-primary:not(:disabled):hover {
+    background: color-mix(in srgb, var(--nc-accent) 12%, transparent);
+}
+.nc-btn-primary:not(:disabled):active {
+    background: color-mix(in srgb, var(--nc-accent) 22%, transparent);
+}
+.nc-btn-secondary {
+    border-color: var(--nc-divider);
+}
+.nc-btn-secondary:not(:disabled):hover {
+    background: color-mix(in srgb, var(--nc-text) 7%, transparent);
+}
+.nc-btn-secondary:not(:disabled):active {
+    background: color-mix(in srgb, var(--nc-text) 14%, transparent);
+}
+.nc-btn-ghost {
+    color: var(--nc-accent);
+    padding-inline: var(--nc-space-1);
+}
+.nc-btn-ghost:not(:disabled):hover {
+    background: color-mix(in srgb, var(--nc-accent) 10%, transparent);
+}
+.nc-btn-ghost:not(:disabled):active {
+    background: color-mix(in srgb, var(--nc-accent) 18%, transparent);
+}
+.nc-btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+}
+.nc-btn-block {
+    width: 100%;
+    margin-top: var(--nc-space-2);
+}
 
 .nc-field > label {
     display: block;
@@ -163,28 +199,81 @@
     border: 1px solid var(--nc-divider);
     border-radius: var(--nc-radius-md);
 }
-.nc-input:hover { border-color: color-mix(in srgb, var(--nc-text) 45%, transparent); }
-.nc-input:focus-visible { border-color: var(--nc-accent); outline-offset: 0; }
-.nc-input:disabled { opacity: 0.45; cursor: not-allowed; }
+.nc-input:hover {
+    border-color: color-mix(in srgb, var(--nc-text) 45%, transparent);
+}
+.nc-input:focus-visible {
+    border-color: var(--nc-accent);
+    outline-offset: 0;
+}
+.nc-input:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
 
-.nc-radio { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+.nc-radio {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
 .nc-radio input,
-.nc-seg-opt input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
-.nc-radio .nc-dot { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 1.5px solid var(--nc-divider); }
-.nc-radio:hover .nc-dot { border-color: var(--nc-accent); }
+.nc-seg-opt input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+.nc-radio .nc-dot {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    border-radius: 50%;
+    border: 1.5px solid var(--nc-divider);
+}
+.nc-radio:hover .nc-dot {
+    border-color: var(--nc-accent);
+}
 .nc-radio input:checked + .nc-dot {
     border-color: var(--nc-accent);
     background: var(--nc-accent);
     box-shadow: inset 0 0 0 4px var(--nc-bg);
 }
-.nc-radio input:focus-visible + .nc-dot { outline: 2px solid var(--nc-accent); outline-offset: 2px; }
+.nc-radio input:focus-visible + .nc-dot {
+    outline: 2px solid var(--nc-accent);
+    outline-offset: 2px;
+}
 
-.nc-seg { display: inline-flex; overflow: hidden; border: 1px solid var(--nc-divider); border-radius: var(--nc-radius-md); }
-.nc-seg-opt { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
-.nc-seg-opt + .nc-seg-opt { border-left: 1px solid var(--nc-divider); }
-.nc-seg-opt:has(input:checked) { color: var(--nc-accent); box-shadow: inset 0 0 0 1px var(--nc-accent); }
-.nc-seg-opt:not(:has(input:checked)):hover { background: color-mix(in srgb, var(--nc-text) 7%, transparent); }
-.nc-seg-opt:has(input:focus-visible) { outline: 2px solid var(--nc-accent); outline-offset: -2px; }
+.nc-seg {
+    display: inline-flex;
+    overflow: hidden;
+    border: 1px solid var(--nc-divider);
+    border-radius: var(--nc-radius-md);
+}
+.nc-seg-opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+}
+.nc-seg-opt + .nc-seg-opt {
+    border-left: 1px solid var(--nc-divider);
+}
+.nc-seg-opt:has(input:checked) {
+    color: var(--nc-accent);
+    box-shadow: inset 0 0 0 1px var(--nc-accent);
+}
+.nc-seg-opt:not(:has(input:checked)):hover {
+    background: color-mix(in srgb, var(--nc-text) 7%, transparent);
+}
+.nc-seg-opt:has(input:focus-visible) {
+    outline: 2px solid var(--nc-accent);
+    outline-offset: -2px;
+}
 
 .nc-card {
     border-radius: var(--nc-radius-md);
@@ -194,12 +283,32 @@
     min-width: 0;
 }
 
-.nc-tag { display: inline-flex; align-items: center; font-size: 11px; letter-spacing: 0.02em; padding: 3px 10px; border-radius: calc(var(--nc-radius-md) * 0.75); }
-.nc-tag-accent { background: var(--nc-accent-800); color: var(--nc-accent-100); }
-.nc-tag-neutral { background: var(--nc-neutral-800); color: var(--nc-neutral-100); }
-.nc-tag-outline { border: 1px solid var(--nc-accent); color: var(--nc-accent); }
+.nc-tag {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 3px 10px;
+    border-radius: calc(var(--nc-radius-md) * 0.75);
+}
+.nc-tag-accent {
+    background: var(--nc-accent-800);
+    color: var(--nc-accent-100);
+}
+.nc-tag-neutral {
+    background: var(--nc-neutral-800);
+    color: var(--nc-neutral-100);
+}
+.nc-tag-outline {
+    border: 1px solid var(--nc-accent);
+    color: var(--nc-accent);
+}
 
-.nc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.nc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
 .nc-table th {
     text-align: left;
     font-size: 11px;
@@ -209,9 +318,18 @@
     color: color-mix(in srgb, var(--nc-text) 60%, transparent);
     padding: var(--nc-space-2);
 }
-.nc-table td { padding: var(--nc-space-2); }
+.nc-table td {
+    padding: var(--nc-space-2);
+}
 .nc-table thead tr {
-    background: linear-gradient(to right, transparent, var(--nc-divider) 48px, var(--nc-divider) calc(100% - 48px), transparent) no-repeat bottom / 100% 1px;
+    background: linear-gradient(
+            to right,
+            transparent,
+            var(--nc-divider) 48px,
+            var(--nc-divider) calc(100% - 48px),
+            transparent
+        )
+        no-repeat bottom / 100% 1px;
 }
 .nc-table tbody tr {
     background: linear-gradient(
@@ -225,15 +343,22 @@
 }
 .nc-table tbody tr:hover {
     background:
-        linear-gradient(color-mix(in srgb, var(--nc-text) 4%, transparent), color-mix(in srgb, var(--nc-text) 4%, transparent)) no-repeat 0 0 / 100% 100%,
+        linear-gradient(
+                color-mix(in srgb, var(--nc-text) 4%, transparent),
+                color-mix(in srgb, var(--nc-text) 4%, transparent)
+            )
+            no-repeat 0 0 / 100% 100%,
         linear-gradient(
                 to right,
                 transparent,
                 color-mix(in srgb, var(--nc-text) 8%, transparent) 48px,
-                color-mix(in srgb, var(--nc-text) 8%, transparent) calc(100% - 48px),
+                color-mix(in srgb, var(--nc-text) 8%, transparent)
+                    calc(100% - 48px),
                 transparent
             )
             no-repeat bottom / 100% 1px;
 }
 
-.nc-num { font-variant-numeric: tabular-nums; }
+.nc-num {
+    font-variant-numeric: tabular-nums;
+}

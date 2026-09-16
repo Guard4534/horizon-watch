@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { Form, Head, router } from '@inertiajs/vue3';
-import { PhCaretDown, PhEnvelopeSimple, PhUserPlus, PhX } from '@phosphor-icons/vue';
+import {
+    PhCaretDown,
+    PhEnvelopeSimple,
+    PhUserPlus,
+    PhX,
+} from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed, ref } from 'vue';
 import CancelInvitationModal from '@/components/CancelInvitationModal.vue';
@@ -72,7 +77,9 @@ const cancelInvitationDialogOpen = ref(false);
 const invitationToCancel = ref<TeamInvitation | null>(null);
 
 const pageTitle = computed(() =>
-    trans(props.permissions.canUpdateTeam ? 'Edit :team' : 'View :team', { team: props.team.name }),
+    trans(props.permissions.canUpdateTeam ? 'Edit :team' : 'View :team', {
+        team: props.team.name,
+    }),
 );
 
 const updateMemberRole = (member: TeamMember, newRole: string) => {
@@ -272,7 +279,9 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                         <div
                             class="bg-muted flex h-10 w-10 items-center justify-center rounded-full"
                         >
-                            <PhEnvelopeSimple class="text-muted-foreground h-5 w-5" />
+                            <PhEnvelopeSimple
+                                class="text-muted-foreground h-5 w-5"
+                            />
                         </div>
                         <div>
                             <div class="font-medium">
@@ -323,7 +332,11 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                 >
                     <p class="font-medium">{{ $t('Warning') }}</p>
                     <p class="text-sm">
-                        {{ $t('Please proceed with caution, this cannot be undone.') }}
+                        {{
+                            $t(
+                                'Please proceed with caution, this cannot be undone.',
+                            )
+                        }}
                     </p>
                 </div>
                 <Button

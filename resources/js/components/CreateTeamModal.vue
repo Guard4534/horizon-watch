@@ -45,7 +45,9 @@ function handleOpenChange(value: boolean) {
                 <DialogHeader>
                     <DialogTitle>{{ $t('Create a new team') }}</DialogTitle>
                     <DialogDescription>
-                        {{ $t('Create a new team to collaborate with others.') }}
+                        {{
+                            $t('Create a new team to collaborate with others.')
+                        }}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -63,7 +65,9 @@ function handleOpenChange(value: boolean) {
 
                 <DialogFooter class="gap-2">
                     <DialogClose as-child>
-                        <Button variant="secondary"> {{ $t('Cancel') }} </Button>
+                        <Button variant="secondary">
+                            {{ $t('Cancel') }}
+                        </Button>
                     </DialogClose>
 
                     <Button

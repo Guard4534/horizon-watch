@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { PhPauseCircle, PhPlugs, PhWarning, PhWarningOctagon } from '@phosphor-icons/vue';
+import {
+    PhPauseCircle,
+    PhPlugs,
+    PhWarning,
+    PhWarningOctagon,
+} from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import { formatRule } from '@/lib/alertRules';
 import { isDown, statusColor } from '@/lib/monitoring';
@@ -10,7 +15,14 @@ const { environment, alert } = defineProps<{
 }>();
 
 const color = computed(() => statusColor(environment.status));
-const icon = computed(() => ({ unreachable: PhPlugs, paused: PhPauseCircle, inactive: PhWarningOctagon }[environment.status as string] ?? PhWarning));
+const icon = computed(
+    () =>
+        ({
+            unreachable: PhPlugs,
+            paused: PhPauseCircle,
+            inactive: PhWarningOctagon,
+        })[environment.status as string] ?? PhWarning,
+);
 
 const title = computed(() => {
     switch (environment.status) {
@@ -35,15 +47,37 @@ const body = computed(() =>
 <template>
     <div
         class="flex items-start gap-[11px]"
-        style="padding: var(--nc-space-3) var(--nc-space-4); border-radius: var(--nc-radius-md)"
-        :style="{ border: `1px solid ${color}`, background: `color-mix(in srgb, ${color} 10%, transparent)` }"
+        style="
+            padding: var(--nc-space-3) var(--nc-space-4);
+            border-radius: var(--nc-radius-md);
+        "
+        :style="{
+            border: `1px solid ${color}`,
+            background: `color-mix(in srgb, ${color} 10%, transparent)`,
+        }"
     >
-        <component :is="icon" :size="18" class="mt-[2px] flex-none" :style="{ color }" />
+        <component
+            :is="icon"
+            :size="18"
+            class="mt-[2px] flex-none"
+            :style="{ color }"
+        />
         <div class="min-w-0">
             <div style="font-size: 14px">{{ $t(title) }}</div>
-            <div class="mt-[3px]" style="font-size: 12px; color: var(--nc-neutral-300)">{{ $t(body) }}</div>
-            <div v-if="alert" class="mt-[5px]" style="font-size: 11px; color: var(--nc-neutral-500)">
-                {{ $t('Rule:') }} {{ formatRule(alert.metric, alert.threshold, alert.unit) }} · {{ $t('notified over email and webhook') }}
+            <div
+                class="mt-[3px]"
+                style="font-size: 12px; color: var(--nc-neutral-300)"
+            >
+                {{ $t(body) }}
+            </div>
+            <div
+                v-if="alert"
+                class="mt-[5px]"
+                style="font-size: 11px; color: var(--nc-neutral-500)"
+            >
+                {{ $t('Rule:') }}
+                {{ formatRule(alert.metric, alert.threshold, alert.unit) }} ·
+                {{ $t('notified over email and webhook') }}
             </div>
         </div>
     </div>

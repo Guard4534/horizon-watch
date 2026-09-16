@@ -9,7 +9,8 @@ defineOptions({
     layout: {
         kicker: 'Security',
         title: 'Confirm your password',
-        description: 'This is a secure area of the application. Please confirm your password before continuing.',
+        description:
+            'This is a secure area of the application. Please confirm your password before continuing.',
     },
 });
 </script>
@@ -36,7 +37,12 @@ defineOptions({
             <InputError :message="errors.password" />
         </div>
 
-        <button type="submit" class="nc-btn nc-btn-primary nc-btn-block" :disabled="processing" data-test="confirm-password-button">
+        <button
+            type="submit"
+            class="nc-btn nc-btn-primary nc-btn-block"
+            :disabled="processing"
+            data-test="confirm-password-button"
+        >
             <Spinner v-if="processing" />
             {{ $t('Confirm password') }}
         </button>

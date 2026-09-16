@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Monitoring\MonitoringRepository;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -21,7 +22,7 @@ test('a down environment carries its incident', function () {
 });
 
 test('a healthy environment has no incident', function () {
-    $healthy = collect(app(\App\Monitoring\MonitoringRepository::class)->environments($this->user->currentTeam))
+    $healthy = collect(app(MonitoringRepository::class)->environments($this->user->currentTeam))
         ->first(fn ($environment) => $environment->status->isHealthy());
 
     $this->actingAs($this->user)

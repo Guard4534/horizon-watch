@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { Form } from '@inertiajs/vue3';
-import { PhEye, PhEyeSlash, PhLockKey, PhArrowsClockwise } from '@phosphor-icons/vue';
+import {
+    PhEye,
+    PhEyeSlash,
+    PhLockKey,
+    PhArrowsClockwise,
+} from '@phosphor-icons/vue';
 import { nextTick, onMounted, ref, useTemplateRef } from 'vue';
 import AlertError from '@/components/AlertError.vue';
 import { Button } from '@/components/ui/button';
@@ -45,7 +50,11 @@ onMounted(async () => {
                 <PhLockKey class="size-4" />{{ $t('2FA recovery codes') }}
             </CardTitle>
             <CardDescription>
-                {{ $t('Recovery codes let you regain access if you lose your 2FA device. Store them in a secure password manager.') }}
+                {{
+                    $t(
+                        'Recovery codes let you regain access if you lose your 2FA device. Store them in a secure password manager.',
+                    )
+                }}
             </CardDescription>
         </CardHeader>
         <CardContent>
@@ -57,7 +66,11 @@ onMounted(async () => {
                         :is="isRecoveryCodesVisible ? PhEyeSlash : PhEye"
                         class="size-4"
                     />
-                    {{ isRecoveryCodesVisible ? $t('Hide recovery codes') : $t('View recovery codes') }}
+                    {{
+                        isRecoveryCodesVisible
+                            ? $t('Hide recovery codes')
+                            : $t('View recovery codes')
+                    }}
                 </Button>
 
                 <Form
@@ -109,8 +122,15 @@ onMounted(async () => {
                         </div>
                     </div>
                     <p class="text-muted-foreground text-xs select-none">
-                        {{ $t('Each recovery code can be used once to access your account and will be removed after use. If you need more, click') }}
-                        <span class="font-bold">{{ $t('Regenerate codes') }}</span> {{ $t('above.') }}
+                        {{
+                            $t(
+                                'Each recovery code can be used once to access your account and will be removed after use. If you need more, click',
+                            )
+                        }}
+                        <span class="font-bold">{{
+                            $t('Regenerate codes')
+                        }}</span>
+                        {{ $t('above.') }}
                     </p>
                 </div>
             </div>

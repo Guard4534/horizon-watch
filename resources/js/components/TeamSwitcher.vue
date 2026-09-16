@@ -73,11 +73,22 @@ onUnmounted(() => {
                 class="org-card block w-full text-left"
             >
                 <span class="nc-label block">{{ $t('Organization') }}</span>
-                <span class="mt-[3px] flex items-center gap-[6px]" style="font-size: 13px">
+                <span
+                    class="mt-[3px] flex items-center gap-[6px]"
+                    style="font-size: 13px"
+                >
                     {{ currentTeam?.name ?? $t('Select organization') }}
-                    <PhCaretUpDown :size="13" class="ml-auto" style="color: var(--nc-neutral-500)" />
+                    <PhCaretUpDown
+                        :size="13"
+                        class="ml-auto"
+                        style="color: var(--nc-neutral-500)"
+                    />
                 </span>
-                <span class="mt-[2px] block" style="font-size: 11px; color: var(--nc-neutral-500)">{{ currentTeam?.roleLabel }}</span>
+                <span
+                    class="mt-[2px] block"
+                    style="font-size: 11px; color: var(--nc-neutral-500)"
+                    >{{ currentTeam?.roleLabel }}</span
+                >
             </button>
         </DropdownMenuTrigger>
 
@@ -111,7 +122,9 @@ onUnmounted(() => {
                     @select.prevent
                 >
                     <PhPlus class="h-4 w-4" />
-                    <span class="text-muted-foreground">{{ $t('New organization') }}</span>
+                    <span class="text-muted-foreground">{{
+                        $t('New organization')
+                    }}</span>
                 </DropdownMenuItem>
             </CreateTeamModal>
         </DropdownMenuContent>

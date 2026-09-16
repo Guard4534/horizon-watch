@@ -19,8 +19,15 @@ defineProps<{
         <span
             v-if="badge"
             class="nc-num ml-auto"
-            style="font-size: 10px; padding: 1px 6px; border-radius: 99px; background: var(--nc-accent-800); color: var(--nc-accent-100)"
-        >{{ badge }}</span>
+            style="
+                font-size: 10px;
+                padding: 1px 6px;
+                border-radius: 99px;
+                background: var(--nc-accent-800);
+                color: var(--nc-accent-100);
+            "
+            >{{ badge }}</span
+        >
     </Link>
 </template>
 

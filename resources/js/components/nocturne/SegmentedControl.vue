@@ -10,7 +10,12 @@ const model = defineModel<T>({ required: true });
 <template>
     <div class="nc-seg">
         <label v-for="option in options" :key="option.value" class="nc-seg-opt">
-            <input v-model="model" type="radio" :name="name" :value="option.value" />
+            <input
+                v-model="model"
+                type="radio"
+                :name="name"
+                :value="option.value"
+            />
             {{ option.label }}
         </label>
     </div>

@@ -11,7 +11,10 @@ defineProps<{
 </script>
 
 <template>
-    <div class="flex min-h-screen items-stretch" style="background: var(--nc-bg); font-size: 15px">
+    <div
+        class="flex min-h-screen items-stretch"
+        style="background: var(--nc-bg); font-size: 15px"
+    >
         <AppSidebar />
         <main class="flex min-w-0 flex-1 flex-col">
             <AppHeaderBar :title="title" :subtitle="subtitle" :live="live" />

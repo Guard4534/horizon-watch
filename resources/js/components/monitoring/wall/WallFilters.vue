@@ -9,21 +9,37 @@ const { environments, problemCount } = defineProps<{
 }>();
 
 const filter = defineModel<'all' | 'problems'>('filter', { required: true });
-const environmentName = defineModel<string>('environmentName', { required: true });
+const environmentName = defineModel<string>('environmentName', {
+    required: true,
+});
 const search = defineModel<string>('search', { required: true });
 
-const ORDER = ['production', 'preprod', 'staging', 'develop', 'demo', 'worker-batch', 'testing'];
+const ORDER = [
+    'production',
+    'preprod',
+    'staging',
+    'develop',
+    'demo',
+    'worker-batch',
+    'testing',
+];
 
 const chips = computed(() => {
-    const names = ORDER.filter((name) => environments.some((environment) => environment.name === name));
+    const names = ORDER.filter((name) =>
+        environments.some((environment) => environment.name === name),
+    );
 
     return names.map((name) => {
-        const sample = environments.find((environment) => environment.name === name)!;
+        const sample = environments.find(
+            (environment) => environment.name === name,
+        )!;
 
         return {
             name,
             color: envColor(sample.color),
-            count: environments.filter((environment) => environment.name === name).length,
+            count: environments.filter(
+                (environment) => environment.name === name,
+            ).length,
         };
     });
 });
@@ -36,24 +52,63 @@ const chips = computed(() => {
                 v-model="filter"
                 name="wall-filter"
                 :options="[
-                    { value: 'all', label: `${$t('All')} ${environments.length}` },
-                    { value: 'problems', label: `${$t('Problems')} ${problemCount}` },
+                    {
+                        value: 'all',
+                        label: `${$t('All')} ${environments.length}`,
+                    },
+                    {
+                        value: 'problems',
+                        label: `${$t('Problems')} ${problemCount}`,
+                    },
                 ]"
             />
-            <input v-model="search" class="nc-input" style="max-width: 250px" :placeholder="$t('Filter by application, environment or queue')" />
-            <span class="ml-auto" style="font-size: 11px; color: var(--nc-neutral-600)">{{ $t('sorted by severity, then by pending jobs') }}</span>
+            <input
+                v-model="search"
+                class="nc-input"
+                style="max-width: 250px"
+                :placeholder="$t('Filter by application, environment or queue')"
+            />
+            <span
+                class="ml-auto"
+                style="font-size: 11px; color: var(--nc-neutral-600)"
+                >{{ $t('sorted by severity, then by pending jobs') }}</span
+            >
         </div>
         <div class="flex flex-wrap items-center" style="gap: var(--nc-space-2)">
-            <span class="nc-label" style="margin-right: var(--nc-space-1)">{{ $t('Environment') }}</span>
-            <button type="button" class="chip" :class="{ 'is-active': environmentName === '' }" @click="environmentName = ''">
-                <span class="size-2 flex-none rounded-[2px]" style="background: var(--nc-neutral-500)" />
+            <span class="nc-label" style="margin-right: var(--nc-space-1)">{{
+                $t('Environment')
+            }}</span>
+            <button
+                type="button"
+                class="chip"
+                :class="{ 'is-active': environmentName === '' }"
+                @click="environmentName = ''"
+            >
+                <span
+                    class="size-2 flex-none rounded-[2px]"
+                    style="background: var(--nc-neutral-500)"
+                />
                 {{ $t('All') }}
-                <span class="nc-num" style="color: var(--nc-neutral-600)">{{ environments.length }}</span>
+                <span class="nc-num" style="color: var(--nc-neutral-600)">{{
+                    environments.length
+                }}</span>
             </button>
-            <button v-for="chip in chips" :key="chip.name" type="button" class="chip" :class="{ 'is-active': environmentName === chip.name }" @click="environmentName = chip.name">
-                <span class="size-2 flex-none rounded-[2px]" :style="{ background: chip.color }" />
+            <button
+                v-for="chip in chips"
+                :key="chip.name"
+                type="button"
+                class="chip"
+                :class="{ 'is-active': environmentName === chip.name }"
+                @click="environmentName = chip.name"
+            >
+                <span
+                    class="size-2 flex-none rounded-[2px]"
+                    :style="{ background: chip.color }"
+                />
                 {{ chip.name }}
-                <span class="nc-num" style="color: var(--nc-neutral-600)">{{ chip.count }}</span>
+                <span class="nc-num" style="color: var(--nc-neutral-600)">{{
+                    chip.count
+                }}</span>
             </button>
         </div>
     </div>

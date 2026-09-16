@@ -19,7 +19,12 @@ const selected = computed({
         router.get(
             window.location.pathname,
             { range: next },
-            { only: ['page'], preserveState: true, preserveScroll: true, replace: true },
+            {
+                only: ['page'],
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            },
         ),
 });
 </script>
@@ -27,11 +32,23 @@ const selected = computed({
 <template>
     <SectionCard :title="$t('Throughput & max wait')">
         <template #actions>
-            <span class="inline-flex items-center gap-[5px]" style="font-size: 11px; color: var(--nc-neutral-500)">
-                <span class="h-[2px] w-[14px]" style="background: var(--nc-accent)" />jobs/min
+            <span
+                class="inline-flex items-center gap-[5px]"
+                style="font-size: 11px; color: var(--nc-neutral-500)"
+            >
+                <span
+                    class="h-[2px] w-[14px]"
+                    style="background: var(--nc-accent)"
+                />jobs/min
             </span>
-            <span class="inline-flex items-center gap-[5px]" style="font-size: 11px; color: var(--nc-neutral-500)">
-                <span class="h-[2px] w-[14px]" style="background: var(--st-warn)" />max wait
+            <span
+                class="inline-flex items-center gap-[5px]"
+                style="font-size: 11px; color: var(--nc-neutral-500)"
+            >
+                <span
+                    class="h-[2px] w-[14px]"
+                    style="background: var(--st-warn)"
+                />max wait
             </span>
             <SegmentedControl
                 v-model="selected"
@@ -46,7 +63,12 @@ const selected = computed({
         <div class="relative">
             <TrendLine :values="throughput" :width="520" :height="108" fill />
             <div class="absolute inset-0">
-                <TrendLine :values="maxWait" :width="520" :height="108" color="var(--st-warn)" />
+                <TrendLine
+                    :values="maxWait"
+                    :width="520"
+                    :height="108"
+                    color="var(--st-warn)"
+                />
             </div>
         </div>
     </SectionCard>

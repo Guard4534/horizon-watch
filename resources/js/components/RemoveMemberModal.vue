@@ -47,7 +47,8 @@ const removeMember = () => {
                 <DialogTitle>{{ $t('Remove team member') }}</DialogTitle>
                 <DialogDescription>
                     {{ $t('Are you sure you want to remove') }}
-                    <strong>{{ props.member?.name }}</strong> {{ $t('from this team?') }}
+                    <strong>{{ props.member?.name }}</strong>
+                    {{ $t('from this team?') }}
                 </DialogDescription>
             </DialogHeader>
 

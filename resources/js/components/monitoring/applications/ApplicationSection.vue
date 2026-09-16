@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { PhGearSix, PhLockSimple, PhLockSimpleOpen, PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
+import {
+    PhGearSix,
+    PhLockSimple,
+    PhLockSimpleOpen,
+    PhPencilSimple,
+    PhPlus,
+} from '@phosphor-icons/vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCount, statusColor, statusLabel } from '@/lib/monitoring';
@@ -16,22 +22,74 @@ const slug = useTeamSlug();
 
 <template>
     <section class="nc-card">
-        <div class="mb-[var(--nc-space-2)] flex flex-wrap items-center" style="gap: var(--nc-space-3)">
-            <Link :href="showApplication({ current_team: slug, application: group.application.id })" class="app-name">
+        <div
+            class="mb-[var(--nc-space-2)] flex flex-wrap items-center"
+            style="gap: var(--nc-space-3)"
+        >
+            <Link
+                :href="
+                    showApplication({
+                        current_team: slug,
+                        application: group.application.id,
+                    })
+                "
+                class="app-name"
+            >
                 {{ group.application.name }}
             </Link>
-            <span style="font-size: 11px; color: var(--nc-neutral-500); letter-spacing: 0.01em">{{ group.application.host }}</span>
+            <span
+                style="
+                    font-size: 11px;
+                    color: var(--nc-neutral-500);
+                    letter-spacing: 0.01em;
+                "
+                >{{ group.application.host }}</span
+            >
             <span
                 v-if="group.triageCount"
-                style="font-size: 11px; padding: 2px 8px; border-radius: var(--nc-radius-sm); background: color-mix(in srgb, var(--st-down) 16%, transparent); color: var(--st-down)"
-            >{{ $t(':count to triage', { count: String(group.triageCount) }) }}</span>
-            <span v-else style="font-size: 11px; padding: 2px 8px; border-radius: var(--nc-radius-sm); background: var(--nc-neutral-900); color: var(--nc-neutral-400)">
+                style="
+                    font-size: 11px;
+                    padding: 2px 8px;
+                    border-radius: var(--nc-radius-sm);
+                    background: color-mix(
+                        in srgb,
+                        var(--st-down) 16%,
+                        transparent
+                    );
+                    color: var(--st-down);
+                "
+                >{{
+                    $t(':count to triage', { count: String(group.triageCount) })
+                }}</span
+            >
+            <span
+                v-else
+                style="
+                    font-size: 11px;
+                    padding: 2px 8px;
+                    border-radius: var(--nc-radius-sm);
+                    background: var(--nc-neutral-900);
+                    color: var(--nc-neutral-400);
+                "
+            >
                 {{ $t('all good') }}
             </span>
-            <button type="button" class="nc-btn nc-btn-ghost ml-auto" style="font-size: 12px" disabled :title="$t('Available soon')">
+            <button
+                type="button"
+                class="nc-btn nc-btn-ghost ml-auto"
+                style="font-size: 12px"
+                disabled
+                :title="$t('Available soon')"
+            >
                 <PhPlus :size="13" />{{ $t('Environment') }}
             </button>
-            <button type="button" class="nc-btn nc-btn-ghost" style="font-size: 12px; color: var(--nc-neutral-400)" disabled :title="$t('Available soon')">
+            <button
+                type="button"
+                class="nc-btn nc-btn-ghost"
+                style="font-size: 12px; color: var(--nc-neutral-400)"
+                disabled
+                :title="$t('Available soon')"
+            >
                 <PhGearSix :size="14" />
             </button>
         </div>
@@ -50,31 +108,105 @@ const slug = useTeamSlug();
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="environment in group.environments" :key="environment.id">
+                    <tr
+                        v-for="environment in group.environments"
+                        :key="environment.id"
+                    >
                         <td>
-                            <span class="inline-flex items-center gap-2"><EnvSwatch :color="environment.color" />{{ environment.name }}</span>
+                            <span class="inline-flex items-center gap-2"
+                                ><EnvSwatch :color="environment.color" />{{
+                                    environment.name
+                                }}</span
+                            >
                         </td>
-                        <td style="font-size: 12px; color: var(--nc-neutral-400); letter-spacing: 0.01em">{{ environment.horizonUrl.replace('https://', '') }}</td>
+                        <td
+                            style="
+                                font-size: 12px;
+                                color: var(--nc-neutral-400);
+                                letter-spacing: 0.01em;
+                            "
+                        >
+                            {{ environment.horizonUrl.replace('https://', '') }}
+                        </td>
                         <td style="font-size: 12px">
-                            <span class="inline-flex items-center gap-[5px]" style="color: var(--nc-neutral-300)">
-                                <component :is="environment.basicAuthUser ? PhLockSimple : PhLockSimpleOpen" :size="13" />
-                                {{ environment.basicAuthUser ? `Basic · ${environment.basicAuthUser}` : $t('none') }}
+                            <span
+                                class="inline-flex items-center gap-[5px]"
+                                style="color: var(--nc-neutral-300)"
+                            >
+                                <component
+                                    :is="
+                                        environment.basicAuthUser
+                                            ? PhLockSimple
+                                            : PhLockSimpleOpen
+                                    "
+                                    :size="13"
+                                />
+                                {{
+                                    environment.basicAuthUser
+                                        ? `Basic · ${environment.basicAuthUser}`
+                                        : $t('none')
+                                }}
                             </span>
                         </td>
-                        <td style="font-size: 12px; color: var(--nc-neutral-400)">{{ environment.nodeCount }}</td>
-                        <td>
-                            <span class="nc-tag nc-tag-neutral">{{ environment.name === 'production' ? $t('Prod override') : $t('Org default') }}</span>
+                        <td
+                            style="
+                                font-size: 12px;
+                                color: var(--nc-neutral-400);
+                            "
+                        >
+                            {{ environment.nodeCount }}
                         </td>
-                        <td class="nc-num" style="text-align: right">{{ formatCount(environment.pending) }}</td>
                         <td>
-                            <span class="inline-flex items-center gap-[5px]" style="font-size: 12px" :style="{ color: statusColor(environment.status) }">
-                                <span class="size-[6px] rounded-full" :style="{ background: statusColor(environment.status) }" />
+                            <span class="nc-tag nc-tag-neutral">{{
+                                environment.name === 'production'
+                                    ? $t('Prod override')
+                                    : $t('Org default')
+                            }}</span>
+                        </td>
+                        <td class="nc-num" style="text-align: right">
+                            {{ formatCount(environment.pending) }}
+                        </td>
+                        <td>
+                            <span
+                                class="inline-flex items-center gap-[5px]"
+                                style="font-size: 12px"
+                                :style="{
+                                    color: statusColor(environment.status),
+                                }"
+                            >
+                                <span
+                                    class="size-[6px] rounded-full"
+                                    :style="{
+                                        background: statusColor(
+                                            environment.status,
+                                        ),
+                                    }"
+                                />
                                 {{ statusLabel(environment.status) }}
                             </span>
                         </td>
                         <td class="whitespace-nowrap" style="text-align: right">
-                            <Link :href="showEnvironment({ current_team: slug, environment: environment.id })" class="nc-btn nc-btn-ghost" style="font-size: 12px">{{ $t('Open') }}</Link>
-                            <button type="button" class="nc-btn nc-btn-ghost" style="font-size: 12px; color: var(--nc-neutral-400)" disabled :title="$t('Available soon')">
+                            <Link
+                                :href="
+                                    showEnvironment({
+                                        current_team: slug,
+                                        environment: environment.id,
+                                    })
+                                "
+                                class="nc-btn nc-btn-ghost"
+                                style="font-size: 12px"
+                                >{{ $t('Open') }}</Link
+                            >
+                            <button
+                                type="button"
+                                class="nc-btn nc-btn-ghost"
+                                style="
+                                    font-size: 12px;
+                                    color: var(--nc-neutral-400);
+                                "
+                                disabled
+                                :title="$t('Available soon')"
+                            >
                                 <PhPencilSimple :size="13" />
                             </button>
                         </td>

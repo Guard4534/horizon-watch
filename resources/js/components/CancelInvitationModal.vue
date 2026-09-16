@@ -46,7 +46,9 @@ const cancelInvitation = () => {
             <DialogHeader>
                 <DialogTitle>{{ $t('Cancel invitation') }}</DialogTitle>
                 <DialogDescription>
-                    {{ $t('Are you sure you want to cancel the invitation for') }}
+                    {{
+                        $t('Are you sure you want to cancel the invitation for')
+                    }}
                     <strong>{{ props.invitation?.email }}</strong
                     >?
                 </DialogDescription>
@@ -54,7 +56,9 @@ const cancelInvitation = () => {
 
             <DialogFooter class="gap-2">
                 <DialogClose as-child>
-                    <Button variant="secondary"> {{ $t('Keep invitation') }} </Button>
+                    <Button variant="secondary">
+                        {{ $t('Keep invitation') }}
+                    </Button>
                 </DialogClose>
 
                 <Button

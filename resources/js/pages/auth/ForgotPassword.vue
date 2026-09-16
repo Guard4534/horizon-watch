@@ -22,11 +22,19 @@ defineProps<{
 <template>
     <Head :title="$t('Forgot your password?')" />
 
-    <div v-if="status" style="font-size: 12px; color: var(--st-ok)" class="mb-4 text-center">
+    <div
+        v-if="status"
+        style="font-size: 12px; color: var(--st-ok)"
+        class="mb-4 text-center"
+    >
         {{ status }}
     </div>
 
-    <Form v-bind="email.form()" v-slot="{ errors, processing }" class="flex flex-col gap-[var(--nc-space-3)]">
+    <Form
+        v-bind="email.form()"
+        v-slot="{ errors, processing }"
+        class="flex flex-col gap-[var(--nc-space-3)]"
+    >
         <div class="nc-field">
             <label for="email">{{ $t('Email') }}</label>
             <input
@@ -41,13 +49,25 @@ defineProps<{
             <InputError :message="errors.email" />
         </div>
 
-        <button type="submit" class="nc-btn nc-btn-primary nc-btn-block" :disabled="processing" data-test="email-password-reset-link-button">
+        <button
+            type="submit"
+            class="nc-btn nc-btn-primary nc-btn-block"
+            :disabled="processing"
+            data-test="email-password-reset-link-button"
+        >
             <Spinner v-if="processing" />
             {{ $t('Email password reset link') }}
         </button>
     </Form>
 
-    <div class="text-center" style="font-size: 12px; color: var(--nc-neutral-500); margin-top: var(--nc-space-4)">
+    <div
+        class="text-center"
+        style="
+            font-size: 12px;
+            color: var(--nc-neutral-500);
+            margin-top: var(--nc-space-4);
+        "
+    >
         <span>{{ $t('Or, return to') }}</span>
         <TextLink :href="login()">{{ $t('log in') }}</TextLink>
     </div>

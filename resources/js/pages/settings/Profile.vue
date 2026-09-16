@@ -71,9 +71,10 @@ const user = computed(() => page.props.auth.user);
                 <InputError class="mt-2" :message="errors.email" />
             </div>
 
-
             <div class="flex items-center gap-4">
-                <Button :disabled="processing" data-test="update-profile-button"
+                <Button
+                    :disabled="processing"
+                    data-test="update-profile-button"
                     >{{ $t('Save') }}</Button
                 >
             </div>

@@ -87,7 +87,9 @@ function handleOpenChange(value: boolean) {
                             data-test="invite-role"
                         >
                             <SelectTrigger class="w-full">
-                                <SelectValue :placeholder="$t('Select a role')" />
+                                <SelectValue
+                                    :placeholder="$t('Select a role')"
+                                />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem
@@ -105,7 +107,9 @@ function handleOpenChange(value: boolean) {
 
                 <DialogFooter class="gap-2">
                     <DialogClose as-child>
-                        <Button variant="secondary"> {{ $t('Cancel') }} </Button>
+                        <Button variant="secondary">
+                            {{ $t('Cancel') }}
+                        </Button>
                     </DialogClose>
 
                     <Button
