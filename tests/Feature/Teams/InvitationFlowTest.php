@@ -1,6 +1,8 @@
 <?php
 
 use App\Actions\Teams\AcceptInvitation;
+use App\Actions\Teams\RegisterInvitedUser;
+use App\Data\Teams\AcceptInvitationData;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Models\Application;
@@ -11,6 +13,7 @@ use App\Models\User;
 use App\Notifications\Teams\TeamInvitation as TeamInvitationNotification;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 beforeEach(function () {
     $this->team = Team::factory()->create();
@@ -225,13 +228,34 @@ test('an authenticated user with a different email sees wrong_account and cannot
 
     $this->actingAs($otherUser)
         ->get(route('invitations.show', $invitation->code))
-        ->assertInertia(fn (Assert $page) => $page->where('page.state', 'wrong_account'));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.state', 'wrong_account')
+            ->where('page.organizationName', null)
+            ->where('page.roleLabel', null)
+            ->where('page.visibilityLabel', null)
+            ->where('page.email', null));
 
     $this->actingAs($otherUser)
         ->post(route('invitations.accept', $invitation->code))
         ->assertForbidden();
 
     expect($otherUser->fresh()->belongsToTeam($this->team))->toBeFalse();
+});
+
+test('decline is gated like accept: an invitation that is no longer open cannot be declined', function () {
+    $user = User::factory()->create(['email' => 'invited@example.com']);
+
+    $invitation = TeamInvitation::factory()->accepted()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $this->owner->id,
+    ]);
+
+    $this->actingAs($user)
+        ->delete(route('invitations.decline', $invitation->code))
+        ->assertStatus(410);
+
+    $this->assertDatabaseHas('team_invitations', ['id' => $invitation->id]);
 });
 
 test('an expired invitation reports its state and rejects acceptance', function () {
@@ -244,7 +268,12 @@ test('an expired invitation reports its state and rejects acceptance', function 
     ]);
 
     $this->get(route('invitations.show', $invitation->code))
-        ->assertInertia(fn (Assert $page) => $page->where('page.state', 'expired'));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.state', 'expired')
+            ->where('page.organizationName', null)
+            ->where('page.roleLabel', null)
+            ->where('page.visibilityLabel', null)
+            ->where('page.email', null));
 
     $this->actingAs($user)
         ->post(route('invitations.accept', $invitation->code))
@@ -262,7 +291,12 @@ test('a revoked invitation reports its state and rejects acceptance', function (
     ]);
 
     $this->get(route('invitations.show', $invitation->code))
-        ->assertInertia(fn (Assert $page) => $page->where('page.state', 'revoked'));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.state', 'revoked')
+            ->where('page.organizationName', null)
+            ->where('page.roleLabel', null)
+            ->where('page.visibilityLabel', null)
+            ->where('page.email', null));
 
     $this->actingAs($user)
         ->post(route('invitations.accept', $invitation->code))
@@ -279,7 +313,12 @@ test('an already accepted invitation reports its state and rejects acceptance', 
     ]);
 
     $this->get(route('invitations.show', $invitation->code))
-        ->assertInertia(fn (Assert $page) => $page->where('page.state', 'accepted'));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.state', 'accepted')
+            ->where('page.organizationName', null)
+            ->where('page.roleLabel', null)
+            ->where('page.visibilityLabel', null)
+            ->where('page.email', null));
 
     $this->actingAs($user)
         ->post(route('invitations.accept', $invitation->code))
@@ -370,4 +409,36 @@ test('accepting the same invitation twice creates only one membership', function
     $action->handle($invitation->fresh(), $user);
 
     expect($this->team->memberships()->where('user_id', $user->id)->count())->toBe(1);
+});
+
+test('registering the same invitation twice does not create two users', function () {
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'role' => TeamRole::Member,
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    $data = new AcceptInvitationData('Ivy Guest', 'password1234');
+    $registerInvitedUser = app(RegisterInvitedUser::class);
+    $acceptInvitation = app(AcceptInvitation::class);
+
+    $registerInvitedUser->handle($invitation, $data, $acceptInvitation);
+
+    // Both calls start from the same (stale, pre-acceptance) invitation
+    // instance, simulating two simultaneous submissions of the same form
+    // that both read "no account yet" before either committed. The second
+    // must abort cleanly (409), not race the email's unique constraint
+    // into a raw QueryException.
+    $secondAttemptStatus = null;
+
+    try {
+        $registerInvitedUser->handle($invitation, $data, $acceptInvitation);
+    } catch (HttpException $exception) {
+        $secondAttemptStatus = $exception->getStatusCode();
+    }
+
+    expect($secondAttemptStatus)->toBe(409)
+        ->and(User::where('email', 'invited@example.com')->count())->toBe(1);
 });

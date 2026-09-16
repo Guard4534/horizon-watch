@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Actions\Teams\AcceptInvitation;
 use App\Actions\Teams\DeclineInvitation;
+use App\Actions\Teams\RegisterInvitedUser;
 use App\Data\Pages\InvitationPageData;
 use App\Data\Teams\AcceptInvitationData;
 use App\Http\Controllers\Controller;
@@ -12,7 +13,6 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -22,20 +22,26 @@ class InvitationController extends Controller
     /**
      * Show the invitation: the front end decides what to render from
      * `state` (open, expired, revoked, accepted, wrong_account) and
-     * `authenticated`, never from a raw invitation record.
+     * `authenticated`, never from a raw invitation record. The
+     * organization/role/visibility/email are only ever sent when the
+     * invitation is actionable by whoever is asking — every other state
+     * must say nothing more ("senza dettagli", per the spec), and this is
+     * an Inertia prop: it reaches the client whatever the page renders.
      */
     public function show(string $code): Response
     {
         $invitation = $this->findOrFail($code);
         $user = Auth::user();
+        $state = $this->stateFor($invitation, $user);
+        $canSeeDetails = $state === 'open';
 
         return Inertia::render('auth/Invitation', [
             'page' => new InvitationPageData(
-                organizationName: $invitation->team->name,
-                roleLabel: $invitation->role->label(),
-                visibilityLabel: $invitation->visibility->label(),
-                email: $invitation->email,
-                state: $this->stateFor($invitation, $user),
+                organizationName: $canSeeDetails ? $invitation->team->name : null,
+                roleLabel: $canSeeDetails ? $invitation->role->label() : null,
+                visibilityLabel: $canSeeDetails ? $invitation->visibility->label() : null,
+                email: $canSeeDetails ? $invitation->email : null,
+                state: $state,
                 authenticated: $user !== null,
             ),
         ]);
@@ -45,33 +51,16 @@ class InvitationController extends Controller
      * The guest path: public registration is disabled, so this is the only
      * way a new account gets created. The invitation's own token stands in
      * for both an invite and an email confirmation — hence
-     * email_verified_at set right away.
+     * email_verified_at set right away. Account creation and acceptance
+     * are locked together in RegisterInvitedUser: see there for why.
      */
-    public function register(Request $request, string $code, AcceptInvitationData $data, AcceptInvitation $acceptInvitation): RedirectResponse
+    public function register(Request $request, string $code, AcceptInvitationData $data, RegisterInvitedUser $registerInvitedUser, AcceptInvitation $acceptInvitation): RedirectResponse
     {
         $invitation = $this->findOrFail($code);
 
         abort_unless($this->stateFor($invitation, null) === 'open', 410);
 
-        // An account for this email already exists (created outside this
-        // invitation, e.g. it owns another organization): that person
-        // should log in and accept, not register a second account under
-        // the same address — blocked by the unique constraint anyway, but
-        // this fails clearly instead of a raw query exception.
-        abort_if(User::where('email', $invitation->email)->exists(), 409);
-
-        $user = DB::transaction(function () use ($invitation, $data, $acceptInvitation) {
-            $user = User::create([
-                'name' => $data->name,
-                'email' => $invitation->email,
-                'password' => $data->password,
-                'email_verified_at' => now(),
-            ]);
-
-            $acceptInvitation->handle($invitation, $user);
-
-            return $user;
-        });
+        $user = $registerInvitedUser->handle($invitation, $data, $acceptInvitation);
 
         Auth::login($user);
         $request->session()->regenerate();
@@ -109,6 +98,12 @@ class InvitationController extends Controller
 
         abort_if($user === null, 403);
         abort_unless($this->sameEmail($invitation, $user), 403);
+
+        // Decline is gated the same as accept: only an open invitation can
+        // be answered either way. Without this, a same-email user could
+        // "decline" (delete) an invitation that's already accepted,
+        // revoked or expired — nothing left to say no to at that point.
+        abort_unless($this->stateFor($invitation, $user) === 'open', 410);
 
         $declineInvitation->handle($invitation);
 
