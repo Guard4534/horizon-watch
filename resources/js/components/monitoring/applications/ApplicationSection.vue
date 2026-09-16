@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import {
     PhGearSix,
     PhLockSimple,
@@ -7,17 +7,33 @@ import {
     PhPencilSimple,
     PhPlus,
 } from '@phosphor-icons/vue';
+import { computed } from 'vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCount, statusColor, statusLabel } from '@/lib/monitoring';
-import { show as showApplication } from '@/routes/applications';
-import { show as showEnvironment } from '@/routes/environments';
+import {
+    edit as editApplication,
+    show as showApplication,
+} from '@/routes/applications';
+import {
+    create as createEnvironment,
+    edit as editEnvironment,
+    show as showEnvironment,
+} from '@/routes/environments';
 
 defineProps<{
     group: App.Data.Pages.ApplicationGroupData;
 }>();
 
 const slug = useTeamSlug();
+const shared = usePage();
+
+// Reading an application needs membership, configuring it needs the
+// permission: a member or a viewer sees the same table without the three
+// ways into the forms (which would answer 403 anyway).
+const canManageApplications = computed(
+    () => shared.props.canManageApplications,
+);
 </script>
 
 <template>
@@ -74,24 +90,33 @@ const slug = useTeamSlug();
             >
                 {{ $t('all good') }}
             </span>
-            <button
-                type="button"
-                class="nc-btn nc-btn-ghost ml-auto"
-                style="font-size: 12px"
-                disabled
-                :title="$t('Available soon')"
-            >
-                <PhPlus :size="13" />{{ $t('Environment') }}
-            </button>
-            <button
-                type="button"
-                class="nc-btn nc-btn-ghost"
-                style="font-size: 12px; color: var(--nc-neutral-400)"
-                disabled
-                :title="$t('Available soon')"
-            >
-                <PhGearSix :size="14" />
-            </button>
+            <template v-if="canManageApplications">
+                <Link
+                    class="nc-btn nc-btn-ghost ml-auto"
+                    style="font-size: 12px"
+                    :href="
+                        createEnvironment({
+                            current_team: slug,
+                            application: group.application.id,
+                        })
+                    "
+                >
+                    <PhPlus :size="13" />{{ $t('Environment') }}
+                </Link>
+                <Link
+                    class="nc-btn nc-btn-ghost"
+                    style="font-size: 12px; color: var(--nc-neutral-400)"
+                    :href="
+                        editApplication({
+                            current_team: slug,
+                            application: group.application.id,
+                        })
+                    "
+                    :title="$t('Edit application')"
+                >
+                    <PhGearSix :size="14" />
+                </Link>
+            </template>
         </div>
         <div class="overflow-x-auto">
             <table class="nc-table">
@@ -197,18 +222,23 @@ const slug = useTeamSlug();
                                 style="font-size: 12px"
                                 >{{ $t('Open') }}</Link
                             >
-                            <button
-                                type="button"
+                            <Link
+                                v-if="canManageApplications"
                                 class="nc-btn nc-btn-ghost"
                                 style="
                                     font-size: 12px;
                                     color: var(--nc-neutral-400);
                                 "
-                                disabled
-                                :title="$t('Available soon')"
+                                :href="
+                                    editEnvironment({
+                                        current_team: slug,
+                                        environment: environment.id,
+                                    })
+                                "
+                                :title="$t('Edit environment')"
                             >
                                 <PhPencilSimple :size="13" />
-                            </button>
+                            </Link>
                         </td>
                     </tr>
                 </tbody>

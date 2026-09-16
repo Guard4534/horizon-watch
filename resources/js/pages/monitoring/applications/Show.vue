@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, usePoll } from '@inertiajs/vue3';
+import { Head, Link, usePage, usePoll } from '@inertiajs/vue3';
 import { PhKey } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import EnvironmentCard from '@/components/monitoring/applications/EnvironmentCard.vue';
@@ -9,6 +9,7 @@ import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCount, statusColor, statusLabel } from '@/lib/monitoring';
 import { index as applicationsIndex } from '@/routes/applications';
+import { edit as editEnvironment } from '@/routes/environments';
 
 defineOptions({
     layout: { title: 'Application detail', live: true },
@@ -21,7 +22,14 @@ const { page } = defineProps<{
 usePoll(15000, { only: ['page', 'openAlertCount'] });
 
 const slug = useTeamSlug();
+const shared = usePage();
 const environments = computed(() => page.cards.map((card) => card.environment));
+
+// Credentials are stored per environment, so "manage credentials" is one way
+// in per environment, and only for whoever may configure them.
+const canManageApplications = computed(
+    () => shared.props.canManageApplications,
+);
 
 const stats = computed(() => [
     {
@@ -138,15 +146,30 @@ const stats = computed(() => [
                             )
                         }}
                     </div>
-                    <button
-                        type="button"
-                        class="nc-btn nc-btn-secondary mt-[var(--nc-space-3)]"
-                        style="font-size: 12px"
-                        disabled
-                        :title="$t('Available soon')"
-                    >
-                        <PhKey :size="13" />{{ $t('Manage credentials') }}
-                    </button>
+                    <template v-if="canManageApplications">
+                        <div class="nc-label mt-[var(--nc-space-4)]">
+                            {{ $t('Manage credentials') }}
+                        </div>
+                        <div
+                            class="flex flex-wrap"
+                            style="gap: var(--nc-space-2)"
+                        >
+                            <Link
+                                v-for="environment in environments"
+                                :key="environment.id"
+                                class="nc-btn nc-btn-secondary"
+                                style="font-size: 12px"
+                                :href="
+                                    editEnvironment({
+                                        current_team: slug,
+                                        environment: environment.id,
+                                    })
+                                "
+                            >
+                                <PhKey :size="13" />{{ environment.name }}
+                            </Link>
+                        </div>
+                    </template>
                 </SectionCard>
             </div>
         </div>

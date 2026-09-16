@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import EmptyState from '@/components/monitoring/EmptyState.vue';
 import ApplicationSection from '@/components/monitoring/applications/ApplicationSection.vue';
+import { useTeamSlug } from '@/composables/useTeamSlug';
+import { create as createApplication } from '@/routes/applications';
 
 defineOptions({
     layout: { title: 'Applications' },
@@ -14,6 +16,7 @@ const { page } = defineProps<{
 }>();
 
 const search = ref('');
+const slug = useTeamSlug();
 const shared = usePage();
 
 // page.groups, not the filtered list: a search that matches nothing is not
@@ -58,14 +61,13 @@ const groups = computed(() => {
                 style="max-width: 230px"
                 :placeholder="$t('Search application')"
             />
-            <button
-                type="button"
+            <Link
+                v-if="shared.props.canManageApplications"
                 class="nc-btn nc-btn-primary"
-                disabled
-                :title="$t('Available soon')"
+                :href="createApplication(slug)"
             >
                 <PhPlus :size="14" />{{ $t('Add application') }}
-            </button>
+            </Link>
         </div>
         <EmptyState
             v-if="nothingVisible"

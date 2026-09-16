@@ -16,6 +16,7 @@ class EnvironmentCreateQuery
             application: ApplicationFormData::from($application),
             colors: EnvironmentColor::options(),
             hasPassword: false,
+            applicationSlug: $application->slug,
         );
     }
 }
