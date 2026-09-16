@@ -79,7 +79,9 @@ const removeEnvironment = (index: number) => {
 };
 
 // Server-side validation has to land the user back on the step that owns the
-// offending field, or the message would be invisible.
+// offending field, or the message would be invisible. Anything that belongs
+// to neither step falls through to step 3, which renders it (unplacedErrors)
+// rather than swallowing it.
 const stepOf = (keys: string[]): number => {
     if (keys.some((key) => key.startsWith('application'))) {
         return 1;
@@ -87,6 +89,20 @@ const stepOf = (keys: string[]): number => {
 
     return keys.some((key) => key.startsWith('environments')) ? 2 : 3;
 };
+
+// No rule produces such a key today — ApplicationWizardData validates
+// "environments" as a whole plus the two nested Data objects — but one added
+// later must not vanish between the steps.
+const unplacedErrors = computed(() =>
+    Object.entries(errors.value)
+        .filter(
+            ([key]) =>
+                !key.startsWith('application') &&
+                !key.startsWith('environments'),
+        )
+        .map(([, message]) => message)
+        .filter((message): message is string => Boolean(message)),
+);
 
 const submit = () => {
     form.post(store(slug.value).url, {
@@ -191,6 +207,14 @@ const submit = () => {
         </template>
 
         <SectionCard v-else :title="$t('Confirmation')">
+            <div
+                v-for="message in unplacedErrors"
+                :key="message"
+                class="mb-[var(--nc-space-3)]"
+                style="font-size: 12px; color: var(--st-down)"
+            >
+                {{ message }}
+            </div>
             <div
                 class="grid"
                 style="

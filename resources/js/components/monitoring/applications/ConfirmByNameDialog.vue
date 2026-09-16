@@ -104,9 +104,11 @@ const submit = () => {
             </ul>
 
             <form class="nc-field" @submit.prevent="submit">
+                <!-- One key, not "Type" + the name + "to confirm": the
+                     name's place in the sentence is the translator's to
+                     move. -->
                 <label for="confirm-by-name">
-                    {{ $t('Type') }} <strong>{{ resourceName }}</strong>
-                    {{ $t('to confirm') }}
+                    {{ $t('Type :name to confirm', { name: resourceName }) }}
                 </label>
                 <input
                     id="confirm-by-name"

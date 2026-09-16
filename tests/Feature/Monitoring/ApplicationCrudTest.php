@@ -149,6 +149,51 @@ test('the wizard is rejected without at least one environment', function () {
     expect(Application::where('name', 'NoEnv')->exists())->toBeFalse();
 });
 
+test('the wizard is rejected when two rows carry the same environment name', function () {
+    $this->actingAs($this->admin)
+        ->post(route('applications.store', ['current_team' => $this->team->slug]), [
+            'application' => ['name' => 'Twice', 'host' => 'twice.example.com'],
+            'environments' => [
+                ($this->environmentPayload)('production'),
+                ($this->environmentPayload)('production'),
+            ],
+        ])
+        // On the row, not on "environments": the wizard renders the message
+        // under the offending field, on the step that owns it.
+        ->assertInvalid(['environments.1.name']);
+
+    expect(Application::where('name', 'Twice')->exists())->toBeFalse();
+});
+
+test('the wizard accepts two rows that only differ by name', function () {
+    $this->actingAs($this->admin)
+        ->post(route('applications.store', ['current_team' => $this->team->slug]), [
+            'application' => ['name' => 'Pair', 'host' => 'pair.example.com'],
+            'environments' => [
+                ($this->environmentPayload)('production'),
+                ($this->environmentPayload)('preprod'),
+            ],
+        ])
+        ->assertRedirect();
+
+    expect(Application::where('name', 'Pair')->firstOrFail()->environments()->count())->toBe(2);
+});
+
+test('a wizard row with a password but no username is rejected on that row', function () {
+    $this->actingAs($this->admin)
+        ->post(route('applications.store', ['current_team' => $this->team->slug]), [
+            'application' => ['name' => 'Orphan', 'host' => 'orphan.example.com'],
+            'environments' => [
+                [...($this->environmentPayload)('production'), 'basicAuthPassword' => 'orphan-secret'],
+            ],
+        ])
+        // Nested: the rule has to name "environments.0.basicAuthPassword",
+        // not a top-level field that does not exist in this payload.
+        ->assertInvalid(['environments.0.basicAuthUser']);
+
+    expect(Application::where('name', 'Orphan')->exists())->toBeFalse();
+});
+
 test('renaming an application does not change its slug', function () {
     $originalSlug = $this->application->slug;
 

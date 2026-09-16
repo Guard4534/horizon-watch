@@ -15,7 +15,7 @@ const emit = defineEmits<{ select: [step: number] }>();
 
 <template>
     <ol class="flex flex-wrap items-center" style="gap: var(--nc-space-3)">
-        <li v-for="(label, index) in labels" :key="label">
+        <li v-for="(label, index) in labels" :key="index">
             <button
                 type="button"
                 class="step"

@@ -143,22 +143,42 @@ test('touching credentials requires the manage-credentials permission in additio
         }
     }));
 
-    // Untouched credentials: manageCredentials is never consulted, so the
-    // forced denial above doesn't apply and the update goes through.
+    // An environment with nothing on file, updated without credentials:
+    // there is no credential to set, replace or remove, so manageCredentials
+    // is never consulted and the forced denial above doesn't apply.
+    $bare = Environment::factory()->for($this->application)->create([
+        'name' => 'develop',
+        'basic_auth_user' => null,
+        'basic_auth_password' => null,
+    ]);
+
+    $this->actingAs($this->admin)->patch(
+        route('environments.update', ['current_team' => $this->team->slug, 'environment' => $bare->slug]),
+        ($this->validPayload)(['name' => 'develop', 'basicAuthUser' => null, 'basicAuthPassword' => null]),
+    )->assertRedirect();
+
+    // A new username on it touches credentials: denied even though "update"
+    // itself would allow the admin through.
+    $this->actingAs($this->admin)->patch(
+        route('environments.update', ['current_team' => $this->team->slug, 'environment' => $bare->slug]),
+        ($this->validPayload)(['name' => 'develop', 'basicAuthUser' => 'someone-else', 'basicAuthPassword' => null]),
+    )->assertForbidden();
+
+    $bare->refresh();
+    expect($bare->basic_auth_user)->toBeNull();
+
+    // Clearing the credentials of an environment that has them is a
+    // credential change too, and the only one the payload alone cannot
+    // show: the cleared username field arrives as null, exactly like a form
+    // that never had one (see EnvironmentController::clearsCredentials()).
     $this->actingAs($this->admin)->patch(
         route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
         ($this->validPayload)(['name' => 'production', 'basicAuthUser' => null, 'basicAuthPassword' => null]),
-    )->assertRedirect();
-
-    // A new username touches credentials: denied even though "update"
-    // itself would allow the admin through.
-    $this->actingAs($this->admin)->patch(
-        route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
-        ($this->validPayload)(['name' => 'production', 'basicAuthUser' => 'someone-else', 'basicAuthPassword' => null]),
     )->assertForbidden();
 
     $environment->refresh();
-    expect($environment->basic_auth_user)->toBeNull();
+    expect($environment->basic_auth_user)->toBe('monitor')
+        ->and($environment->basic_auth_password)->toBe('original-secret');
 
     // Same on the create path.
     $this->actingAs($this->admin)->post(
@@ -167,6 +187,97 @@ test('touching credentials requires the manage-credentials permission in additio
     )->assertForbidden();
 
     expect(Environment::where('application_id', $this->application->id)->where('name', 'staging')->exists())->toBeFalse();
+});
+
+test('clearing the username clears the stored password with it', function () {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+
+    $this->actingAs($this->admin)->patch(
+        route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
+        ($this->validPayload)(['basicAuthUser' => null, 'basicAuthPassword' => null]),
+    )->assertRedirect();
+
+    $environment->refresh();
+
+    // Basic auth needs both halves: a password left behind without a
+    // username could never be used, never be read back out, and would keep
+    // the edit page reporting "password set".
+    expect($environment->basic_auth_user)->toBeNull()
+        ->and($environment->basic_auth_password)->toBeNull()
+        ->and($environment->getRawOriginal('basic_auth_password'))->toBeNull();
+});
+
+test('a password without a username is rejected instead of stored unusable', function () {
+    $this->actingAs($this->admin)->post(
+        route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+        ($this->validPayload)(['basicAuthUser' => null, 'basicAuthPassword' => 'orphan-secret']),
+    )->assertInvalid(['basicAuthUser']);
+
+    expect(Environment::where('application_id', $this->application->id)->count())->toBe(0);
+});
+
+test('an environment name is unique per application, and a field error says so', function () {
+    Environment::factory()->for($this->application)->create(['name' => 'production']);
+
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+            ($this->validPayload)(['name' => 'production']),
+        )
+        ->assertInvalid(['name']);
+
+    expect(Environment::where('application_id', $this->application->id)->count())->toBe(1);
+
+    // The same name under another application of the same organization is
+    // fine: the unique index is per application, not per organization.
+    $other = Application::factory()->for($this->team)->create(['name' => 'Other']);
+
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $other->slug]),
+            ($this->validPayload)(['name' => 'production']),
+        )
+        ->assertRedirect();
+
+    expect(Environment::where('application_id', $other->id)->count())->toBe(1);
+});
+
+test('renaming an environment onto a sibling is rejected, keeping its own name is not', function () {
+    Environment::factory()->for($this->application)->create(['name' => 'production']);
+    $staging = Environment::factory()->for($this->application)->create([
+        'name' => 'staging',
+        'basic_auth_user' => null,
+        'basic_auth_password' => null,
+    ]);
+
+    $this->actingAs($this->admin)
+        ->patch(
+            route('environments.update', ['current_team' => $this->team->slug, 'environment' => $staging->slug]),
+            ($this->validPayload)(['name' => 'production', 'basicAuthUser' => null, 'basicAuthPassword' => null]),
+        )
+        ->assertInvalid(['name']);
+
+    expect($staging->refresh()->name)->toBe('staging');
+
+    // Its own name must not collide with itself (the rule ignores the row
+    // being updated), or no other field could ever be edited.
+    $this->actingAs($this->admin)
+        ->patch(
+            route('environments.update', ['current_team' => $this->team->slug, 'environment' => $staging->slug]),
+            ($this->validPayload)([
+                'name' => 'staging',
+                'pollIntervalSeconds' => 30,
+                'basicAuthUser' => null,
+                'basicAuthPassword' => null,
+            ]),
+        )
+        ->assertRedirect();
+
+    expect($staging->refresh()->poll_interval_seconds)->toBe(30);
 });
 
 test('an environment from another organization responds 404', function () {

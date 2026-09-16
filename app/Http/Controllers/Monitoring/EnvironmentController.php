@@ -90,9 +90,10 @@ class EnvironmentController extends Controller
      * credentials" are separate permissions in the spec, granted to the
      * same roles today but not guaranteed to stay that way (see
      * EnvironmentPolicy::manageCredentials()). Only consult the second gate
-     * when the submission actually touches basicAuthUser/basicAuthPassword,
-     * so editing just the name, color, URL or poll interval never requires
-     * it.
+     * when the submission actually changes the credentials — setting or
+     * replacing them (visible in the payload) or removing them (only
+     * visible against the stored row, see clearsCredentials()) — so editing
+     * just the name, color, URL or poll interval never requires it.
      *
      * @param  Application|Environment  $forExisting  The application when
      *                                                creating (no Environment row exists yet — a transient one
@@ -101,14 +102,31 @@ class EnvironmentController extends Controller
      */
     private function authorizeCredentialsIfTouched(EnvironmentFormData $data, Application|Environment $forExisting): void
     {
-        if (! $data->touchesCredentials()) {
-            return;
-        }
-
         $environment = $forExisting instanceof Environment
             ? $forExisting
             : (new Environment)->setRelation('application', $forExisting);
 
+        if (! $data->touchesCredentials() && ! $this->clearsCredentials($data, $environment)) {
+            return;
+        }
+
         Gate::authorize('manageCredentials', $environment);
+    }
+
+    /**
+     * Whether the submission removes the credentials this environment has
+     * on file. Setting or replacing them is visible in the payload, so
+     * EnvironmentFormData::touchesCredentials() catches it on its own;
+     * removing them is not, because ConvertEmptyStringsToNull turns the
+     * cleared username field into null, which is exactly what a form that
+     * never had a username sends. Only the stored row tells the two apart,
+     * and dropping a credential is as much a credential change as setting
+     * one — it is the one case that would otherwise walk past the gate this
+     * method exists to apply.
+     */
+    private function clearsCredentials(EnvironmentFormData $data, Environment $environment): bool
+    {
+        return $data->basicAuthUser === null
+            && ($environment->basic_auth_user !== null || $environment->basic_auth_password !== null);
     }
 }

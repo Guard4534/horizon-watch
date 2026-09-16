@@ -13,6 +13,13 @@ class UpdateEnvironment
      * neither absent nor blank): omitting it (rather than writing back the
      * decrypted value when absent) means the encrypted column already in
      * the database is never read out and rewritten.
+     *
+     * Clearing the username clears the stored password with it. Basic auth
+     * needs both halves, the password can never be read back out to be
+     * re-paired with a new username, and leaving it behind would keep the
+     * edit page reporting "password set" for a credential nobody can use.
+     * Validation keeps the mirror case (a password with no username) from
+     * ever reaching here, see EnvironmentFormData::rules().
      */
     public function handle(Environment $environment, EnvironmentFormData $data): Environment
     {
@@ -24,7 +31,9 @@ class UpdateEnvironment
             'poll_interval_seconds' => $data->pollIntervalSeconds,
         ];
 
-        if ($data->hasNewPassword()) {
+        if ($data->basicAuthUser === null) {
+            $attributes['basic_auth_password'] = null;
+        } elseif ($data->hasNewPassword()) {
             $attributes['basic_auth_password'] = $data->basicAuthPassword;
         }
 
