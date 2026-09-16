@@ -8,8 +8,10 @@ use App\Actions\Applications\UpdateApplication;
 use App\Data\Applications\ApplicationFormData;
 use App\Data\Applications\ApplicationWizardData;
 use App\Data\Applications\ConfirmByNameData;
+use App\Data\Applications\EnvironmentFormData;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
+use App\Models\Environment;
 use App\Models\Team;
 use App\Queries\ApplicationCreateQuery;
 use App\Queries\ApplicationDetailQuery;
@@ -48,6 +50,7 @@ class ApplicationController extends Controller
     public function store(Team $current_team, ApplicationWizardData $data, AddApplication $addApplication): RedirectResponse
     {
         Gate::authorize('create', [Application::class, $current_team]);
+        $this->authorizeCredentialsIfTouched($data, $current_team);
 
         $application = $addApplication->handle($current_team, $data);
 
@@ -85,5 +88,31 @@ class ApplicationController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Application deleted.')]);
 
         return to_route('applications.index', ['current_team' => $current_team->slug]);
+    }
+
+    /**
+     * The wizard creates the environments together with the application, so
+     * EnvironmentController's credentials gate has no row to check yet: a
+     * transient environment carrying a transient application carrying the
+     * team is all EnvironmentPolicy::manageCredentials() reads. "Manage
+     * applications" and "manage credentials" are granted to the same roles
+     * today, so this changes nothing now — it keeps the wizard from being
+     * the one write path that skips the second gate if they ever diverge.
+     */
+    private function authorizeCredentialsIfTouched(ApplicationWizardData $data, Team $team): void
+    {
+        $touchesCredentials = collect($data->environments)
+            ->contains(fn (EnvironmentFormData $environment): bool => $environment->touchesCredentials());
+
+        if (! $touchesCredentials) {
+            return;
+        }
+
+        $environment = (new Environment)->setRelation(
+            'application',
+            (new Application)->setRelation('team', $team),
+        );
+
+        Gate::authorize('manageCredentials', $environment);
     }
 }

@@ -6,6 +6,8 @@ use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
+use App\Policies\EnvironmentPolicy;
+use Illuminate\Support\Facades\Gate;
 
 beforeEach(function () {
     $this->team = Team::factory()->create();
@@ -54,6 +56,38 @@ test('an admin creates an application with two environments in one request', fun
         ->and($application->environments()->count())->toBe(2)
         ->and($application->environments()->orderBy('id')->pluck('slug')->all())
         ->toBe(['invoicer-production', 'invoicer-staging']);
+});
+
+test('the wizard consults the manage-credentials permission for the environments it creates', function () {
+    // Same policy swap as EnvironmentCrudTest: today's matrix grants
+    // manageCredentials to the same roles as ManageApplications, so forcing
+    // the denial is the only way to prove the wizard consults the second
+    // gate at all instead of relying on the two staying identical.
+    Gate::policy(Environment::class, get_class(new class extends EnvironmentPolicy
+    {
+        public function manageCredentials(User $user, Environment $environment): bool
+        {
+            return false;
+        }
+    }));
+
+    // No credentials anywhere in the payload: the gate is never consulted.
+    $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
+        'application' => ['name' => 'Plain', 'host' => 'plain.example.com'],
+        'environments' => [($this->environmentPayload)()],
+    ])->assertRedirect();
+
+    // One environment out of two carries a username: the whole request is
+    // refused and nothing is written.
+    $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
+        'application' => ['name' => 'Guarded', 'host' => 'guarded.example.com'],
+        'environments' => [
+            ($this->environmentPayload)('production'),
+            [...($this->environmentPayload)('staging'), 'basicAuthUser' => 'monitor', 'basicAuthPassword' => 'secret'],
+        ],
+    ])->assertForbidden();
+
+    expect(Application::where('team_id', $this->team->id)->where('name', 'Guarded')->exists())->toBeFalse();
 });
 
 test('the created application belongs to the organization it was created in', function () {
