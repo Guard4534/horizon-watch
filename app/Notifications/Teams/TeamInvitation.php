@@ -31,24 +31,25 @@ class TeamInvitation extends Notification implements ShouldQueue
     }
 
     /**
-     * Get the mail representation of the notification.
+     * Get the mail representation of the notification. No sensitive data:
+     * just the organization, the role, and a link — the invitation page
+     * itself decides what the recipient can do with it.
      */
     public function toMail(object $notifiable): MailMessage
     {
         $team = $this->invitation->team;
-        $inviter = $this->invitation->inviter;
 
         return (new MailMessage)
-            ->subject(__("You've been invited to join :teamName", ['teamName' => $team->name]))
-            ->line(__(':inviterName has invited you to join the :teamName team.', [
-                'inviterName' => $inviter->name,
+            ->subject(__('You have been invited to join :teamName', ['teamName' => $team->name]))
+            ->line(__('You have been invited to join the :teamName organization as :role.', [
                 'teamName' => $team->name,
+                'role' => $this->invitation->role->label(),
             ]))
-            ->line(__('An administrator will complete this invitation from inside the panel.'))
             ->action(
-                __('Log in'),
-                route('login', ['invitation' => $this->invitation->code]),
-            );
+                __('Join the organization'),
+                route('invitations.show', $this->invitation->code),
+            )
+            ->line(__('This invitation expires in 7 days.'));
     }
 
     /**

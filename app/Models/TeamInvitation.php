@@ -6,9 +6,11 @@ use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use Database\Factories\TeamInvitationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
@@ -22,12 +24,15 @@ use Illuminate\Support\Str;
  * @property int $invited_by
  * @property Carbon|null $expires_at
  * @property Carbon|null $accepted_at
+ * @property int|null $accepted_by
+ * @property Carbon|null $revoked_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Team $team
  * @property-read User $inviter
+ * @property-read User|null $acceptedBy
  */
-#[Fillable(['team_id', 'email', 'role', 'visibility', 'invited_by', 'expires_at', 'accepted_at'])]
+#[Fillable(['team_id', 'email', 'role', 'visibility', 'invited_by', 'expires_at', 'accepted_at', 'accepted_by', 'revoked_at'])]
 class TeamInvitation extends Model
 {
     /** @use HasFactory<TeamInvitationFactory> */
@@ -68,6 +73,28 @@ class TeamInvitation extends Model
     }
 
     /**
+     * Get the user who accepted the invitation, if any.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function acceptedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'accepted_by');
+    }
+
+    /**
+     * Get the environments picked for a "manual" visibility invite. Only
+     * meaningful before acceptance: AcceptInvitation copies these into
+     * environment_user, where the rest of the app reads them from.
+     *
+     * @return BelongsToMany<Environment, $this>
+     */
+    public function environments(): BelongsToMany
+    {
+        return $this->belongsToMany(Environment::class, 'environment_team_invitation');
+    }
+
+    /**
      * Determine if the invitation has been accepted.
      */
     public function isAccepted(): bool
@@ -76,11 +103,20 @@ class TeamInvitation extends Model
     }
 
     /**
-     * Determine if the invitation is pending.
+     * Determine if the invitation has been revoked.
+     */
+    public function isRevoked(): bool
+    {
+        return $this->revoked_at !== null;
+    }
+
+    /**
+     * Determine if the invitation is still open: not accepted, not revoked,
+     * not expired.
      */
     public function isPending(): bool
     {
-        return $this->accepted_at === null && ! $this->isExpired();
+        return $this->accepted_at === null && $this->revoked_at === null && ! $this->isExpired();
     }
 
     /**
@@ -89,6 +125,22 @@ class TeamInvitation extends Model
     public function isExpired(): bool
     {
         return $this->expires_at !== null && $this->expires_at->isPast();
+    }
+
+    /**
+     * Scope a query to invitations that are still open (see isPending()).
+     *
+     * @param  Builder<TeamInvitation>  $query
+     * @return Builder<TeamInvitation>
+     */
+    public function scopePending(Builder $query): Builder
+    {
+        return $query
+            ->whereNull('accepted_at')
+            ->whereNull('revoked_at')
+            ->where(function (Builder $query) {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            });
     }
 
     /**
@@ -103,6 +155,7 @@ class TeamInvitation extends Model
             'visibility' => MemberVisibility::class,
             'expires_at' => 'datetime',
             'accepted_at' => 'datetime',
+            'revoked_at' => 'datetime',
         ];
     }
 

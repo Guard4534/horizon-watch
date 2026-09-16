@@ -11,6 +11,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Monitoring\ConfiguredMonitoringRepository;
 use App\Monitoring\MonitoringRepository;
+use App\Queries\WallQuery;
 use Carbon\CarbonImmutable;
 
 beforeEach(function () {
@@ -69,6 +70,31 @@ test('an environment of another organization does not appear', function () {
         ->and($this->repository->nodes($this->team, $foreign->slug))->toBe([]);
 });
 
+test('an application with no visible environment does not appear, even though it has one', function () {
+    $alpha = Application::factory()->for($this->team)->create(['name' => 'Alpha']);
+    $bravo = Application::factory()->for($this->team)->create(['name' => 'Bravo']);
+    $charlie = Application::factory()->for($this->team)->create(['name' => 'Charlie']);
+
+    $alphaProduction = Environment::factory()->for($alpha)->production()->create();
+    Environment::factory()->for($bravo)->production()->create();
+    Environment::factory()->for($charlie)->production()->create();
+
+    $membership = $this->user->teamMemberships()->where('team_id', $this->team->id)->first();
+    $membership->update(['visibility' => MemberVisibility::Manual->value]);
+    $membership->visibleEnvironments()->attach([$alphaProduction->id]);
+
+    $applications = $this->repository->applications($this->team);
+
+    expect($applications)->toHaveCount(1)
+        ->and($applications[0]->id)->toBe($alpha->slug)
+        ->and($this->repository->application($this->team, $alpha->slug))->not->toBeNull()
+        ->and($this->repository->application($this->team, $bravo->slug))->toBeNull()
+        ->and($this->repository->application($this->team, $charlie->slug))->toBeNull();
+
+    // The wall's applicationCount goes through the same filtered list.
+    expect(app(WallQuery::class)->handle($this->team)->applicationCount)->toBe(1);
+});
+
 test('non_production visibility hides production environments, including from alert counts', function () {
     // Fixed incident slug, so this environment is deterministically unhealthy.
     $application = Application::factory()->for($this->team)->create(['name' => 'Fatturaomatic']);
@@ -81,10 +107,16 @@ test('non_production visibility hides production environments, including from al
     $this->user->teamMemberships()->where('team_id', $this->team->id)->first()
         ->update(['visibility' => MemberVisibility::NonProduction->value]);
 
-    expect(array_map(fn ($environment) => $environment->id, $this->repository->environments($this->team)))
+    // A fresh instance, as a new request would get: the repository memoizes
+    // visible environments per instance ("the object lives for one
+    // request"), so re-reading a membership change through the very same
+    // instance is not a scenario a real request ever hits.
+    $repository = app(MonitoringRepository::class);
+
+    expect(array_map(fn ($environment) => $environment->id, $repository->environments($this->team)))
         ->toBe([$staging->slug]);
 
-    $openAfter = $this->repository->alerts($this->team, AlertState::Open);
+    $openAfter = $repository->alerts($this->team, AlertState::Open);
     expect(collect($openAfter)->pluck('environmentId'))->not->toContain('fatturaomatic-production');
 });
 

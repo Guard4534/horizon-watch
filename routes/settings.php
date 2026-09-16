@@ -39,8 +39,20 @@ Route::middleware(['auth'])->group(function () {
 
         Route::patch('settings/teams/{team}/members/{user}', [TeamMemberController::class, 'update'])->name('teams.members.update');
         Route::delete('settings/teams/{team}/members/{user}', [TeamMemberController::class, 'destroy'])->name('teams.members.destroy');
-
-        Route::post('settings/teams/{team}/invitations', [TeamInvitationController::class, 'store'])->name('teams.invitations.store');
-        Route::delete('settings/teams/{team}/invitations/{invitation}', [TeamInvitationController::class, 'destroy'])->name('teams.invitations.destroy');
     });
 });
+
+// "{current_team}" rather than the "{team}" used above: this mirrors the
+// monitoring routes' URL shape (see routes/monitoring.php), which the
+// Members view (phase 2, lane E) replaces "settings/teams/{team}" with.
+Route::prefix('{current_team}')
+    ->middleware(['auth', EnsureTeamMembership::class.':admin'])
+    ->group(function () {
+        Route::post('members/invitations', [TeamInvitationController::class, 'store'])->name('members.invitations.store');
+
+        Route::post('members/invitations/{invitation}/resend', [TeamInvitationController::class, 'resend'])
+            ->middleware('throttle:6,1')
+            ->name('members.invitations.resend');
+
+        Route::delete('members/invitations/{invitation}', [TeamInvitationController::class, 'destroy'])->name('members.invitations.destroy');
+    });

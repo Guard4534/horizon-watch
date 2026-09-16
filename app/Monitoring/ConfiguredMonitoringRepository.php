@@ -21,7 +21,8 @@ use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Contracts\Auth\Guard;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Collection;
 
 /**
  * Applications, environments, colors, URLs and basic-auth state come from
@@ -47,6 +48,26 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         'worker-batch' => ['job.runtime' => 900, 'workers.missing' => 2],
     ];
 
+    /**
+     * The team's visible environments, with application eager loaded, fetched
+     * from the database at most once per request no matter how many
+     * repository methods ask for them (the environment detail page alone
+     * asks about eight times) — keyed by team id since nothing here assumes
+     * a repository instance only ever serves one team.
+     *
+     * @var array<int, EloquentCollection<int, Environment>>
+     */
+    private array $visibleEnvironmentsByTeam = [];
+
+    /**
+     * The same environments as above, indexed by slug for O(1) lookup by
+     * every method that resolves one environment (environment(), nodes(),
+     * queues(), …) instead of scanning the list on every call.
+     *
+     * @var array<int, Collection<string, Environment>>
+     */
+    private array $visibleEnvironmentsBySlugByTeam = [];
+
     public function __construct(
         private readonly Guard $auth,
         private readonly VisibleEnvironments $visible,
@@ -55,27 +76,21 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
     public function applications(Team $team): array
     {
-        return $team->applications()
-            // Insertion order, the database analogue of the fixed list phase
-            // 1 hardcoded: not alphabetical, so a team that adds "Acme" after
-            // "Zeta" still sees "Zeta" first, matching creation order.
-            ->orderBy('id')
-            ->get()
+        return $this->visibleApplications($team)
             ->map($this->toApplicationData(...))
             ->all();
     }
 
     public function application(Team $team, string $applicationId): ?ApplicationData
     {
-        $application = $team->applications()->where('slug', $applicationId)->first();
+        $application = $this->visibleApplications($team)->firstWhere('slug', $applicationId);
 
         return $application ? $this->toApplicationData($application) : null;
     }
 
     public function environments(Team $team): array
     {
-        return $this->visibleEnvironments($team)
-            ->get()
+        return $this->visibleEnvironmentModels($team)
             ->map($this->toEnvironmentData(...))
             ->all();
     }
@@ -238,16 +253,38 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     }
 
     /**
-     * @return Builder<Environment>
+     * @return EloquentCollection<int, Environment>
      */
-    private function visibleEnvironments(Team $team): Builder
+    private function visibleEnvironmentModels(Team $team): EloquentCollection
     {
-        return $this->visible->query($team, $this->currentUser());
+        return $this->visibleEnvironmentsByTeam[$team->id] ??= $this->visible->query($team, $this->currentUser())->get();
+    }
+
+    /**
+     * Applications with at least one visible environment, in creation order.
+     * Derived from the visible environments (whose application is already
+     * eager loaded, so this costs no extra query) instead of $team->applications()
+     * directly: an application every one of whose environments is hidden
+     * from this member must not appear either (spec: "Un applicativo di cui
+     * non si vede nessun ambiente non compare nell'elenco").
+     *
+     * @return Collection<int, Application>
+     */
+    private function visibleApplications(Team $team): Collection
+    {
+        return $this->visibleEnvironmentModels($team)
+            ->pluck('application')
+            ->unique('id')
+            ->sortBy('id')
+            ->values();
     }
 
     private function findEnvironment(Team $team, string $environmentId): ?Environment
     {
-        return $this->visibleEnvironments($team)->where('environments.slug', $environmentId)->first();
+        $bySlug = $this->visibleEnvironmentsBySlugByTeam[$team->id]
+            ??= $this->visibleEnvironmentModels($team)->keyBy('slug');
+
+        return $bySlug->get($environmentId);
     }
 
     /**
