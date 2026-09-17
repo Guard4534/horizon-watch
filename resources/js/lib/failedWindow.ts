@@ -42,7 +42,7 @@ export function failedWindowShort(windowMinutes: number): string {
         case 1440:
             return '24h';
         case 10080:
-            return '7d';
+            return trans(':days d', { days: '7' });
         default:
             return `${windowMinutes} min`;
     }

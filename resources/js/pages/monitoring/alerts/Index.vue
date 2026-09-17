@@ -128,10 +128,10 @@ const empty = computed(() =>
                 :options="[
                     {
                         value: 'open',
-                        label: `${$t('Open')} ${page.counts.open}`,
+                        label: `${$t('Open alerts')} ${page.counts.open}`,
                     },
-                    { value: 'muted', label: $t('Muted') },
-                    { value: 'resolved', label: $t('Resolved') },
+                    { value: 'muted', label: $t('Muted alerts') },
+                    { value: 'resolved', label: $t('Resolved alerts') },
                 ]"
             />
         </div>
