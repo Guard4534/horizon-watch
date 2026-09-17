@@ -57,6 +57,11 @@ const initials = computed(() => getInitials(props.organizationName));
                     })
                 }}
             </div>
+            <!--
+                Labelled, not a bare comma-separated line: on its own the
+                list is three unrelated fragments to a screen reader, with
+                nothing to say what they are.
+            -->
             <div
                 v-if="visibleEnvironmentNames.length > 0"
                 style="
@@ -67,7 +72,11 @@ const initials = computed(() => getInitials(props.organizationName));
                 "
                 data-test="invitation-visible-environments"
             >
-                {{ visibleEnvironmentNames.join(', ') }}
+                {{
+                    $t('environments: :list', {
+                        list: visibleEnvironmentNames.join(', '),
+                    })
+                }}
             </div>
         </div>
     </div>

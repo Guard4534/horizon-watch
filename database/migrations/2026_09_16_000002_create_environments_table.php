@@ -14,11 +14,16 @@ return new class extends Migration
         Schema::create('environments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('application_id')->constrained()->cascadeOnDelete();
+            // Denormalized from the application so the uniqueness scope is
+            // on the row: the slug is unique per organization, not per
+            // application (two applications can each have a "production",
+            // and the URL is "/{team}/environments/{slug}"), and a unique
+            // index cannot reach through a join. Applications never move
+            // between organizations — nothing writes applications.team_id
+            // after creation — so this cannot drift; Environment's creating
+            // hook fills it from the application.
+            $table->foreignId('team_id')->constrained()->cascadeOnDelete();
             $table->string('name');
-            // Unique per organization, not per application: the organization
-            // spans several applications and team_id doesn't live on this
-            // table, so the generator (not a SQL constraint) enforces it by
-            // querying every environment of the organization.
             $table->string('slug');
             $table->string('color');
             $table->string('horizon_url');
@@ -29,7 +34,21 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['application_id', 'name']);
-            $table->index('slug');
+            // The rule Environment::generateUniqueSlug() computes, now also
+            // held by the database. The generator is a read-then-write with
+            // no lock, so two admins creating environments at the same time
+            // could both settle on the same slug (applications "acme" with
+            // "shop-prod" and "acme-shop" with "prod" both give
+            // "acme-shop-prod"); the duplicate then reached
+            // keyBy('slug') in the repository, which silently dropped one
+            // row — an environment that exists, is granted, and never
+            // appears on the wall. A rejected insert is a loud, retryable
+            // failure instead.
+            //
+            // This replaces the plain index on slug: every lookup is
+            // already scoped to one organization (Team::environments() and
+            // the scoped route bindings), so the composite serves them.
+            $table->unique(['team_id', 'slug']);
         });
     }
 

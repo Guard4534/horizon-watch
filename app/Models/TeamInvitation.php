@@ -7,6 +7,7 @@ use App\Enums\TeamRole;
 use Database\Factories\TeamInvitationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -87,11 +88,47 @@ class TeamInvitation extends Model
      * meaningful before acceptance: AcceptInvitation copies these into
      * environment_user, where the rest of the app reads them from.
      *
+     * Scoped to the invitation's own organization, for the reason
+     * Membership::visibleEnvironments() was scoped in aec7581: the write
+     * path validates every id against the team twice already
+     * (InviteMemberData's exists() rule, then InviteMember only syncing for
+     * a manual visibility), but a relation that reads unscoped is one
+     * forgotten check away from showing an invitee another organization's
+     * environment, and whoever reads the two relations side by side should
+     * not have to work out why only one of them is safe.
+     *
+     * Scoped by columns, not by "$this->team_id" like its sibling: this
+     * relation IS eager-loaded (InvitationController::show()), and Eloquent
+     * builds an eager-load constraint from a *fresh* model instance, whose
+     * team_id is null — the captured-attribute version would quietly match
+     * nothing and the invitation page would name no environments at all.
+     * The invitation the pivot row belongs to is in the query, so the
+     * comparison can be made there, and environments.team_id (see the
+     * migration) is what makes it one subquery instead of a join.
+     *
      * @return BelongsToMany<Environment, $this>
      */
     public function environments(): BelongsToMany
     {
-        return $this->belongsToMany(Environment::class, 'environment_team_invitation');
+        return $this->belongsToMany(Environment::class, 'environment_team_invitation')
+            ->whereExists(fn ($query) => $query
+                ->from('team_invitations')
+                ->whereColumn('team_invitations.id', 'environment_team_invitation.team_invitation_id')
+                ->whereColumn('team_invitations.team_id', 'environments.team_id'));
+    }
+
+    /**
+     * Normalize the address on the way in, for the same reason User does:
+     * the invitation's email is compared exactly against users.email by
+     * RegisterInvitedUser and by InvitationController, so both sides have
+     * to be canonical or an invitation typed in mixed case can never find
+     * the account it belongs to. See User::email().
+     *
+     * @return Attribute<string, string>
+     */
+    protected function email(): Attribute
+    {
+        return Attribute::set(fn (string $value): string => Str::lower($value));
     }
 
     /**

@@ -16,6 +16,7 @@ use Illuminate\Support\Str;
 /**
  * @property int $id
  * @property int $application_id
+ * @property int $team_id
  * @property string $name
  * @property string $slug
  * @property EnvironmentColor $color
@@ -52,8 +53,15 @@ class Environment extends Model
         parent::boot();
 
         static::creating(function (Environment $environment) {
+            $application = $environment->application ?? Application::findOrFail($environment->application_id);
+
+            // Copied from the application, never mass-assignable: it is the
+            // scope of the unique(['team_id', 'slug']) index, which is the
+            // only thing standing between two concurrent creates and an
+            // environment the wall silently loses. See the migration.
+            $environment->team_id = $application->team_id;
+
             if (empty($environment->slug)) {
-                $application = $environment->application ?? Application::findOrFail($environment->application_id);
                 $environment->slug = static::generateUniqueSlug($application, $environment->name);
             }
         });

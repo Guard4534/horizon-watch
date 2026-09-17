@@ -14,7 +14,6 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -135,9 +134,16 @@ class InvitationController extends Controller
             ->firstOr(fn () => abort(404));
     }
 
+    /**
+     * Exact, not case-insensitive: both columns are normalized on write
+     * (User::email(), TeamInvitation::email()), so this is the same
+     * comparison Fortify's login lookup and RegisterInvitedUser's race
+     * guard make. If the invariant were ever broken this errs towards
+     * "wrong_account", which refuses rather than grants.
+     */
     private function sameEmail(TeamInvitation $invitation, User $user): bool
     {
-        return Str::lower($invitation->email) === Str::lower($user->email);
+        return $invitation->email === $user->email;
     }
 
     /**
@@ -163,13 +169,16 @@ class InvitationController extends Controller
     }
 
     /**
-     * Case-insensitively, like sameEmail(): an account that differs only
-     * in case is still the account this person has to sign in to.
+     * An indexed exact match on the users.email unique index, not a
+     * LOWER(email) scan: both sides are normalized on write, and this runs
+     * on /invitations/{code}, which is public and unthrottled — a
+     * sequential scan there is a free lever on the whole users table for
+     * anyone holding one code.
      */
     private function accountExists(TeamInvitation $invitation): bool
     {
         return User::query()
-            ->whereRaw('LOWER(email) = ?', [Str::lower($invitation->email)])
+            ->where('email', $invitation->email)
             ->exists();
     }
 }

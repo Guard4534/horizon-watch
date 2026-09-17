@@ -146,7 +146,13 @@ test('a manual invitation names the environments the invitee will see', function
 });
 
 test('a guest whose address already has an account is asked to sign in, not to register', function () {
-    User::factory()->create(['email' => 'Invited@example.com']);
+    // Written in mixed case on purpose: the address is normalized where it
+    // enters the system (User::email()), so the check below is an indexed
+    // exact match on users.email rather than the LOWER(email) scan this
+    // public, unthrottled route used to run.
+    $existing = User::factory()->create(['email' => 'Invited@example.com']);
+
+    expect($existing->fresh()->email)->toBe('invited@example.com');
 
     $invitation = TeamInvitation::factory()->create([
         'team_id' => $this->team->id,
@@ -159,7 +165,6 @@ test('a guest whose address already has an account is asked to sign in, not to r
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('auth/Invitation')
-            // The account differs only in case, and is still theirs.
             ->where('page.state', 'sign_in_required')
             ->where('page.authenticated', false)
             ->where('page.organizationName', null)

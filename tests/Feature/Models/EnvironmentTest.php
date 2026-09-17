@@ -4,6 +4,7 @@ use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 test('the slug is composed from the application and the environment name', function () {
@@ -62,4 +63,56 @@ test('deleting an environment cascades to environment_user rows', function () {
     $environment->delete();
 
     expect(DB::table('environment_user')->where('environment_id', $environment->id)->exists())->toBeFalse();
+});
+
+test('the database refuses a duplicate slug inside one organization', function () {
+    // The generator is a read-then-write with no lock, so two concurrent
+    // creates could both settle on the same slug: applications "acme" with
+    // an environment named "shop prod" and "acme shop" with one named
+    // "prod" both compute "acme-shop-prod". The duplicate then reached the
+    // repository's keyBy('slug'), which silently kept one row and dropped
+    // the other — an environment that exists, is granted, and never appears
+    // on the wall. unique(['team_id', 'slug']) makes that a rejected insert
+    // instead. Written straight to the table because the generator is
+    // precisely what a race bypasses.
+    $team = Team::factory()->create();
+    $first = Application::factory()->create(['team_id' => $team->id, 'name' => 'Acme']);
+    $second = Application::factory()->create(['team_id' => $team->id, 'name' => 'Acme Shop']);
+
+    $existing = Environment::factory()->production()->create(['application_id' => $first->id]);
+
+    expect(fn () => DB::table('environments')->insert([
+        'application_id' => $second->id,
+        'team_id' => $team->id,
+        'name' => 'other',
+        'slug' => $existing->slug,
+        'color' => 'prod',
+        'horizon_url' => 'https://other.example.com/horizon/api',
+        'poll_interval_seconds' => 15,
+    ]))->toThrow(UniqueConstraintViolationException::class);
+});
+
+test('the same slug is still free in another organization', function () {
+    // The constraint is per organization, not global: two organizations may
+    // each own an application of the same name, and neither may cost the
+    // other its URLs.
+    $first = Application::factory()->create(['name' => 'Acme']);
+    $second = Application::factory()->create(['name' => 'Acme']);
+
+    $mine = Environment::factory()->production()->create(['application_id' => $first->id]);
+    $theirs = Environment::factory()->production()->create(['application_id' => $second->id]);
+
+    expect($mine->slug)->toBe('acme-production')
+        ->and($theirs->slug)->toBe('acme-production')
+        ->and($mine->team_id)->not->toBe($theirs->team_id);
+});
+
+test('the environment carries its application organization, which is what the constraint is scoped by', function () {
+    $team = Team::factory()->create();
+    $application = Application::factory()->create(['team_id' => $team->id]);
+
+    $environment = Environment::factory()->create(['application_id' => $application->id]);
+
+    expect($environment->team_id)->toBe($team->id)
+        ->and($environment->fresh()->team_id)->toBe($team->id);
 });

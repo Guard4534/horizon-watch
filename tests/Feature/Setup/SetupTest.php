@@ -5,6 +5,7 @@ use App\Data\Auth\SetupData;
 use App\Enums\TeamRole;
 use App\Exceptions\SetupAlreadyCompleted;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
 function setupPayload(array $overrides = []): array
@@ -74,4 +75,33 @@ test('nobody can sign up', function () {
 
     $this->get('/register')->assertNotFound();
     $this->post('/register', setupPayload())->assertNotFound();
+});
+
+test('the administrator address is stored canonically and signs in under either spelling', function () {
+    $this->post(route('setup.store'), setupPayload(['email' => 'Admin@Example.com']))->assertRedirect();
+
+    $user = User::sole();
+
+    // The column, not the model attribute: this is the string the
+    // users.email unique index holds and the string every exact comparison
+    // in the app — Fortify's lookup, RegisterInvitedUser's race guard,
+    // InvitationController's "already has an account" check — is matched
+    // against.
+    expect(DB::table('users')->where('id', $user->id)->value('email'))
+        ->toBe('admin@example.com');
+
+    $this->post(route('logout'));
+
+    // Both spellings have to reach the same row: the one this person typed
+    // at /setup, and the one an invitation to a second organization would
+    // later address them by.
+    foreach (['Admin@Example.com', 'admin@example.com'] as $spelling) {
+        $this->post(route('login.store'), [
+            'email' => $spelling,
+            'password' => 'correct-horse-battery-9',
+        ])->assertRedirect();
+
+        $this->assertAuthenticatedAs($user);
+        $this->post(route('logout'));
+    }
 });

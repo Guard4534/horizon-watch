@@ -24,6 +24,35 @@ services:
         depends_on:
             - pgsql
             - mailpit
+    # The invitation notification is ShouldQueue on the database queue, so
+    # without this service nothing ever reaches Mailpit in development and
+    # the invitation flow looks broken rather than asynchronous.
+    # compose.prod.yaml runs its own worker the same way.
+    queue:
+        build:
+            context: './docker/8.5'
+            dockerfile: Dockerfile
+            args:
+                WWWGROUP: '${WWWGROUP}'
+        image: 'sail-8.5/app'
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+            # Through the image's own supervisord, as the sail user, exactly
+            # like laravel.test — not as a "command:", which start-container
+            # hands to gosu with $WWWUSER and which therefore fails whenever
+            # the stack is started without the sail script exporting it.
+            # queue:listen rather than queue:work: it boots the framework per
+            # job, so an edited notification is picked up without a restart.
+            SUPERVISOR_PHP_COMMAND: '/usr/bin/php -d variables_order=EGPCS /var/www/html/artisan queue:listen --tries=1'
+        volumes:
+            - '.:/var/www/html'
+        networks:
+            - sail
+        depends_on:
+            - laravel.test
     pgsql:
         image: 'postgres:18-alpine'
         ports:
