@@ -58,7 +58,13 @@ class TeamController extends Controller
                 'slug' => $team->slug,
                 'isPersonal' => $team->is_personal,
             ],
-            'members' => $team->members()->get()->map(function (User $member) {
+            // Same order as the members view (MembersQuery): highest role
+            // first, then by name. Without it PostgreSQL returns the rows in
+            // no particular order and the two pages disagree.
+            'members' => $team->members()->get()->sortBy([
+                fn (User $a, User $b) => $b->getRelation('pivot')->role->level() <=> $a->getRelation('pivot')->role->level(),
+                fn (User $a, User $b) => strcasecmp($a->name, $b->name),
+            ])->values()->map(function (User $member) {
                 /** @var Membership $membership */
                 $membership = $member->getRelation('pivot');
 
