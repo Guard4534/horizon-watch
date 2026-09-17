@@ -10,11 +10,19 @@ import {
 
 defineProps<{
     queues: App.Data.Monitoring.QueueData[];
+    // "last known …" when the latest reading failed and these rows are
+    // from an earlier one.
+    note?: string | null;
 }>();
 </script>
 
 <template>
     <SectionCard :title="$t('Workload by queue')">
+        <template v-if="note" #actions>
+            <span style="font-size: 11px; color: var(--st-warn)">{{
+                note
+            }}</span>
+        </template>
         <div class="overflow-x-auto">
             <table class="nc-table">
                 <thead>
@@ -42,7 +50,7 @@ defineProps<{
                                 letter-spacing: 0.01em;
                             "
                         >
-                            {{ queue.supervisor }}
+                            {{ queue.supervisor ?? '—' }}
                         </td>
                         <td class="nc-num" style="text-align: right">
                             {{ queue.workers }}
@@ -64,7 +72,13 @@ defineProps<{
                                 color: var(--nc-neutral-400);
                             "
                         >
-                            {{ queue.runtimeSeconds.toFixed(1) }}s
+                            <!-- Null when Horizon records no metric
+                                 snapshot for the queue. -->
+                            {{
+                                queue.runtimeSeconds === null
+                                    ? '—'
+                                    : `${queue.runtimeSeconds.toFixed(1)}s`
+                            }}
                         </td>
                         <td>
                             <span

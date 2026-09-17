@@ -2,9 +2,16 @@
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { formatDuration } from '@/lib/monitoring';
 
-const { jobs, thresholdSeconds } = defineProps<{
+const {
+    jobs,
+    thresholdSeconds,
+    unknown = false,
+} = defineProps<{
     jobs: App.Data.Monitoring.LongRunningJobData[];
     thresholdSeconds: number;
+    // Reserved jobs are a live measurement: a failed reading empties them
+    // instead of keeping old ones, so the list is unknown, not empty.
+    unknown?: boolean;
 }>();
 
 function color(seconds: number): string {
@@ -22,10 +29,22 @@ function color(seconds: number): string {
             >
         </template>
         <div
+            v-if="!jobs.length"
+            style="font-size: 12px; color: var(--nc-neutral-500)"
+        >
+            {{
+                unknown
+                    ? $t('Unknown until Horizon answers again.')
+                    : $t('No job is running past the threshold.')
+            }}
+        </div>
+        <div
+            v-else
             class="flex flex-col"
             style="gap: var(--nc-space-3); font-size: 12px"
         >
-            <div v-for="job in jobs" :key="job.job">
+            <!-- The same job class can run twice at once. -->
+            <div v-for="(job, index) in jobs" :key="index">
                 <div class="flex gap-2">
                     <span
                         class="min-w-0 truncate"

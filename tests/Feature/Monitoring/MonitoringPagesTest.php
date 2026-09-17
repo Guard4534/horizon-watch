@@ -225,22 +225,22 @@ test('a restricted admin watches their own environments and configures every one
             // Its outage is not this admin's to triage.
             ->where('page.groups.1.triageCount', 0));
 
-    // Same flag on the card, and no series behind it: the card says the
+    // Same flag on the card, and no trend behind it: the card says the
     // environment is off this admin's wall instead of drawing nothing.
     $this->get(route('applications.show', ['current_team' => $team->slug, 'application' => $theirs->slug]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.cards.0.environment.id', $hidden->slug)
-            ->where('page.cards.0.environment.watched', false)
-            ->where('page.cards.0.sparkline', [])
+            ->where('page.environments.0.id', $hidden->slug)
+            ->where('page.environments.0.watched', false)
+            ->where('page.environments.0.trend', [])
             ->where('page.worstStatus', null)
             ->where('page.recentAlerts', []));
 
     $this->get(route('applications.show', ['current_team' => $team->slug, 'application' => $mine->slug]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.cards.0.environment.watched', true)
-            ->has('page.cards.0.sparkline', 24));
+            ->where('page.environments.0.watched', true)
+            ->has('page.environments.0.trend', 12));
 
     // The environment's own page stays the operational view, so it keeps
     // answering 404 even to this admin: they configure it from the list,

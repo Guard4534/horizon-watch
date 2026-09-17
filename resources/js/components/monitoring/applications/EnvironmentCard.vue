@@ -1,23 +1,40 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import {
+    needsAttention,
+    statusText,
+    statusTone,
+} from '@/components/monitoring/environment/readings';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import {
-    formatCount,
-    formatWait,
-    statusColor,
-    statusLabel,
-    waitColor,
-} from '@/lib/monitoring';
+import { formatCount, formatWait, waitColor } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
-defineProps<{
-    card: App.Data.Pages.EnvironmentCardData;
+const { environment } = defineProps<{
+    environment: App.Data.Monitoring.EnvironmentData;
 }>();
 
 const slug = useTeamSlug();
+const tone = computed(() => statusTone(environment));
+
+// The left bar is the environment's own colour, so status lives on the
+// lamp, a tinted ground and a soft halo (as on the wall's tiles).
+const cardStyle = computed(() =>
+    needsAttention(environment)
+        ? {
+              background: `color-mix(in srgb, ${tone.value} 12%, var(--nc-surface))`,
+              boxShadow: `var(--nc-shadow-sm), 0 0 0 4px color-mix(in srgb, ${tone.value} 16%, transparent)`,
+          }
+        : {},
+);
+
+// Without a status the counters are zeros that mean nothing: no reading
+// yet, or a row whose reading the viewer may not see.
+const hasNumbers = computed(() => environment.status !== null);
 </script>
 
 <template>
@@ -25,27 +42,34 @@ const slug = useTeamSlug();
          hidden by their visibility) has no detail page for them, so its
          card is not a link: see EnvironmentData::$watched. -->
     <component
-        :is="card.environment.watched ? Link : 'div'"
+        :is="environment.watched ? Link : 'div'"
         :href="
-            card.environment.watched
+            environment.watched
                 ? showEnvironment({
                       current_team: slug,
-                      environment: card.environment.id,
+                      environment: environment.id,
                   })
                 : undefined
         "
         class="env-card"
-        :class="{ 'env-card-link': card.environment.watched }"
+        :class="{ 'env-card-link': environment.watched }"
+        :style="cardStyle"
     >
-        <EnvSwatch :color="card.environment.color" shape="edge" :size="3" />
+        <EnvSwatch :color="environment.color" shape="edge" :size="4" />
         <span class="flex items-center gap-2">
-            <span style="font-size: 16px">{{ card.environment.name }}</span>
-            <StatusLamp :status="card.environment.status" />
+            <span class="min-w-0">
+                <EnvPill
+                    :name="environment.name"
+                    :color="environment.color"
+                    :size="13"
+                />
+            </span>
+            <StatusLamp :status="environment.status" />
             <span
-                class="ml-auto"
+                class="ml-auto flex-none"
                 style="font-size: 11px"
-                :style="{ color: statusColor(card.environment.status) }"
-                >{{ statusLabel(card.environment.status) }}</span
+                :style="{ color: tone }"
+                >{{ statusText(environment) }}</span
             >
         </span>
         <span
@@ -56,29 +80,35 @@ const slug = useTeamSlug();
                 letter-spacing: 0.01em;
             "
         >
-            {{ card.environment.horizonUrl.replace('https://', '') }}
+            {{ environment.horizonUrl.replace(/^https?:\/\//, '') }}
         </span>
         <span
-            v-if="!card.environment.watched"
+            v-if="!environment.watched"
             class="mt-[var(--nc-space-3)] flex items-center"
-            style="height: 26px; font-size: 11px; color: var(--nc-neutral-500)"
-            :title="
+            style="
+                min-height: 26px;
+                font-size: 11px;
+                line-height: 1.35;
+                color: var(--nc-neutral-500);
+            "
+        >
+            {{
                 $t(
                     'Your visibility does not cover this environment: no detail page and no chart, but you can still configure it.',
                 )
-            "
-        >
-            {{ $t('Not on your wall') }}
+            }}
         </span>
+        <!-- The pending trend of the last hour, as on the wall. -->
         <span v-else class="mt-[var(--nc-space-3)] block">
             <TrendLine
-                :values="card.sparkline"
+                :values="environment.trend"
                 :width="190"
                 :height="26"
                 :color="
-                    card.environment.status === 'active'
+                    environment.status === 'active' ||
+                    environment.status === null
                         ? 'var(--nc-accent)'
-                        : statusColor(card.environment.status)
+                        : tone
                 "
                 fill
             />
@@ -89,53 +119,33 @@ const slug = useTeamSlug();
         >
             <span>
                 <span class="block" style="font-size: 16px">{{
-                    formatCount(card.environment.pending)
+                    hasNumbers ? formatCount(environment.pending) : '—'
                 }}</span>
-                <span
-                    class="block"
-                    style="
-                        font-size: 9px;
-                        letter-spacing: 0.08em;
-                        text-transform: uppercase;
-                        color: var(--nc-neutral-600);
-                    "
-                    >pending</span
-                >
+                <span class="figure-label">pending</span>
             </span>
             <span>
                 <span
                     class="block"
                     style="font-size: 16px"
                     :style="{
-                        color: waitColor(card.environment.maxWaitSeconds),
+                        color: hasNumbers
+                            ? waitColor(environment.maxWaitSeconds)
+                            : undefined,
                     }"
-                    >{{ formatWait(card.environment.maxWaitSeconds) }}</span
+                    >{{
+                        hasNumbers
+                            ? formatWait(environment.maxWaitSeconds)
+                            : '—'
+                    }}</span
                 >
-                <span
-                    class="block"
-                    style="
-                        font-size: 9px;
-                        letter-spacing: 0.08em;
-                        text-transform: uppercase;
-                        color: var(--nc-neutral-600);
-                    "
-                    >max wait</span
-                >
+                <span class="figure-label">max wait</span>
             </span>
             <span>
                 <span class="block" style="font-size: 16px">{{
-                    card.environment.nodeCount
+                    hasNumbers ? environment.nodeCount : '—'
                 }}</span>
-                <span
-                    class="block"
-                    style="
-                        font-size: 9px;
-                        letter-spacing: 0.08em;
-                        text-transform: uppercase;
-                        color: var(--nc-neutral-600);
-                    "
-                >
-                    {{ $tChoice('node|nodes', card.environment.nodeCount) }}
+                <span class="figure-label">
+                    {{ $tChoice('node|nodes', environment.nodeCount) }}
                 </span>
             </span>
         </span>
@@ -159,5 +169,13 @@ const slug = useTeamSlug();
 
 .env-card-link:hover {
     box-shadow: var(--nc-shadow-md);
+}
+
+.figure-label {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--nc-neutral-600);
 }
 </style>

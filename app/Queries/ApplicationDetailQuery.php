@@ -5,9 +5,8 @@ namespace App\Queries;
 use App\Data\Monitoring\AlertData;
 use App\Data\Monitoring\EnvironmentData;
 use App\Data\Pages\ApplicationDetailPageData;
-use App\Data\Pages\EnvironmentCardData;
+use App\Enums\AlertRuleMetric;
 use App\Enums\AlertState;
-use App\Enums\SeriesRange;
 use App\Models\Team;
 use App\Monitoring\MonitoringRepository;
 
@@ -43,17 +42,13 @@ class ApplicationDetailQuery
 
         return new ApplicationDetailPageData(
             application: $application,
-            cards: array_map(fn (EnvironmentData $environment) => new EnvironmentCardData(
-                environment: $environment,
-                // No series for an environment off the viewer's wall: the
-                // repository would refuse it anyway (it is the operational
-                // view), and the card says why instead of drawing nothing.
-                sparkline: $environment->watched
-                    ? array_slice($this->monitoring->throughputSeries($team, $environment->id, SeriesRange::ThreeHours), -24)
-                    : [],
-            ), $environments),
+            // The cards draw each environment's pending trend, already loaded
+            // with the list in one query: no per-environment series here.
+            environments: $environments,
             recentAlerts: array_slice(array_values($alerts), 0, 3),
             worstStatus: $worstEnvironments[0]->status ?? null,
+            // Thresholds are the defaults until phase 4 lets them be edited.
+            failedPerHourThreshold: AlertRuleMetric::JobsFailedPerHour->defaultThreshold(),
         );
     }
 }

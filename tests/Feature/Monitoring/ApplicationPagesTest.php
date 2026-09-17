@@ -24,13 +24,13 @@ test('the application list groups environments under each application', function
             ->where('page.groups.0.triageCount', 1));
 });
 
-test('an application page shows one card per environment with a sparkline', function () {
+test('an application page shows one card per environment with its pending trend', function () {
     $this->actingAs($this->user)
         ->get(route('applications.show', ['current_team' => $this->slug, 'application' => 'fatturaomatic']))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.application.name', 'Fatturaomatic')
-            ->has('page.cards', 4)
-            ->has('page.cards.0.sparkline', 24)
+            ->has('page.environments', 4)
+            ->has('page.environments.0.trend', 12)
             ->has('page.recentAlerts', 1)
             ->where('page.recentAlerts.0.metric', 'horizon.master_inactive'));
 });

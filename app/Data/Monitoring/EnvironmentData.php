@@ -58,6 +58,9 @@ class EnvironmentData extends Data
         // The collection switch of the environment, not Horizon's own
         // "paused" status.
         public bool $pollingEnabled,
+        // Configuration, like $pollingEnabled: how often the scheduler reads
+        // this environment, whatever the viewer's page refresh is.
+        public int $pollIntervalSeconds,
         public ?ReadingError $readingError,
     ) {}
 

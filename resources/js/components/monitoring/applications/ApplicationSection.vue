@@ -8,9 +8,13 @@ import {
     PhPlus,
 } from '@phosphor-icons/vue';
 import { computed } from 'vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
+import {
+    statusText,
+    statusTone,
+} from '@/components/monitoring/environment/readings';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatCount, statusColor, statusLabel } from '@/lib/monitoring';
+import { formatCount } from '@/lib/monitoring';
 import {
     edit as editApplication,
     show as showApplication,
@@ -138,11 +142,10 @@ const canManageApplications = computed(
                         :key="environment.id"
                     >
                         <td>
-                            <span class="inline-flex items-center gap-2"
-                                ><EnvSwatch :color="environment.color" />{{
-                                    environment.name
-                                }}</span
-                            >
+                            <EnvPill
+                                :name="environment.name"
+                                :color="environment.color"
+                            />
                         </td>
                         <td
                             style="
@@ -151,7 +154,12 @@ const canManageApplications = computed(
                                 letter-spacing: 0.01em;
                             "
                         >
-                            {{ environment.horizonUrl.replace('https://', '') }}
+                            {{
+                                environment.horizonUrl.replace(
+                                    /^https?:\/\//,
+                                    '',
+                                )
+                            }}
                         </td>
                         <td style="font-size: 12px">
                             <span
@@ -179,7 +187,11 @@ const canManageApplications = computed(
                                 color: var(--nc-neutral-400);
                             "
                         >
-                            {{ environment.nodeCount }}
+                            {{
+                                environment.status === null
+                                    ? '—'
+                                    : environment.nodeCount
+                            }}
                         </td>
                         <td>
                             <span class="nc-tag nc-tag-neutral">{{
@@ -189,25 +201,30 @@ const canManageApplications = computed(
                             }}</span>
                         </td>
                         <td class="nc-num" style="text-align: right">
-                            {{ formatCount(environment.pending) }}
+                            {{
+                                environment.status === null
+                                    ? '—'
+                                    : formatCount(environment.pending)
+                            }}
                         </td>
                         <td>
                             <span
                                 class="inline-flex items-center gap-[5px]"
                                 style="font-size: 12px"
-                                :style="{
-                                    color: statusColor(environment.status),
-                                }"
+                                :style="{ color: statusTone(environment) }"
                             >
-                                <span
-                                    class="size-[6px] rounded-full"
-                                    :style="{
-                                        background: statusColor(
-                                            environment.status,
-                                        ),
-                                    }"
-                                />
-                                {{ statusLabel(environment.status) }}
+                                <!-- An unwatched row says so in the last
+                                     column; its status is simply unknown. -->
+                                <template v-if="environment.watched">
+                                    <span
+                                        class="size-[6px] rounded-full"
+                                        :style="{
+                                            background: statusTone(environment),
+                                        }"
+                                    />
+                                    {{ statusText(environment) }}
+                                </template>
+                                <template v-else>—</template>
                             </span>
                         </td>
                         <td class="whitespace-nowrap" style="text-align: right">

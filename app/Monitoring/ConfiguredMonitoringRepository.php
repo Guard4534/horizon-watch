@@ -773,6 +773,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             lastReadingAt: $state?->captured_at->toIso8601String(),
             stale: $stale,
             pollingEnabled: $environment->polling_enabled,
+            pollIntervalSeconds: $environment->poll_interval_seconds,
             readingError: $state?->error,
         );
     }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
+import { formatAge } from '@/components/monitoring/environment/readings';
 import { statusColor, statusLabel } from '@/lib/monitoring';
 
 const { node } = defineProps<{
@@ -8,11 +9,21 @@ const { node } = defineProps<{
 }>();
 
 const color = computed(() => statusColor(node.status));
-const heartbeat = computed(() =>
-    node.lastHeartbeatSecondsAgo >= 60
-        ? `${Math.round(node.lastHeartbeatSecondsAgo / 60)} min`
-        : `${node.lastHeartbeatSecondsAgo} s`,
+
+// Status is a tinted ground, not a coloured border, as on the wall's tiles.
+const background = computed(() =>
+    node.status === 'active'
+        ? 'var(--nc-bg)'
+        : `color-mix(in srgb, ${color.value} 8%, var(--nc-bg))`,
 );
+
+// Workers, supervisors and queues are all the API says about a master:
+// memory and per-node throughput are not shown (no source for them).
+const figures = computed(() => [
+    { key: 'workers', value: node.workers },
+    { key: 'supervisors', value: node.supervisorCount },
+    { key: 'queues', value: node.queueCount },
+]);
 </script>
 
 <template>
@@ -21,20 +32,16 @@ const heartbeat = computed(() =>
         style="
             padding: var(--nc-space-3);
             border-radius: var(--nc-radius-md);
-            background: var(--nc-bg);
+            box-shadow: var(--nc-shadow-sm);
         "
-        :style="{
-            boxShadow:
-                node.status === 'active'
-                    ? 'var(--nc-shadow-sm)'
-                    : `0 0 0 1px ${color}`,
-        }"
+        :style="{ background }"
     >
         <div class="flex items-center gap-[7px]">
             <StatusLamp :status="node.status" :size="8" />
             <span
                 class="min-w-0 truncate"
                 style="font-size: 12px; letter-spacing: 0.01em"
+                :title="node.hostname"
                 >{{ node.hostname }}</span
             >
             <span
@@ -48,55 +55,26 @@ const heartbeat = computed(() =>
             class="nc-num mt-[var(--nc-space-3)] grid grid-cols-3"
             style="gap: var(--nc-space-2)"
         >
-            <div>
-                <div style="font-size: 15px">{{ node.workers }}</div>
+            <!-- Horizon vocabulary: English in both languages. -->
+            <div v-for="figure in figures" :key="figure.key">
+                <div style="font-size: 15px">{{ figure.value }}</div>
                 <div
-                    class="nc-label"
-                    style="font-size: 9px; letter-spacing: 0.08em"
+                    style="
+                        font-size: 9px;
+                        letter-spacing: 0.08em;
+                        text-transform: uppercase;
+                        color: var(--nc-neutral-600);
+                    "
                 >
-                    workers
-                </div>
-            </div>
-            <div>
-                <div style="font-size: 15px">{{ node.jobsPerMinute }}</div>
-                <div
-                    class="nc-label"
-                    style="font-size: 9px; letter-spacing: 0.08em"
-                >
-                    jobs/min
-                </div>
-            </div>
-            <div>
-                <div
-                    style="font-size: 15px"
-                    :style="{
-                        color:
-                            node.memoryMb > 320
-                                ? 'var(--st-warn)'
-                                : 'var(--nc-text)',
-                    }"
-                >
-                    {{ node.memoryMb }} MB
-                </div>
-                <div
-                    class="nc-label"
-                    style="font-size: 9px; letter-spacing: 0.08em"
-                >
-                    memory
+                    {{ figure.key }}
                 </div>
             </div>
         </div>
         <div
-            class="mt-[var(--nc-space-3)] flex gap-[6px]"
+            class="nc-num mt-[var(--nc-space-3)]"
             style="font-size: 11px; color: var(--nc-neutral-600)"
         >
-            <span class="min-w-0 truncate"
-                >{{ node.supervisorCount }} supervisor ·
-                {{ node.queueCount }} queue</span
-            >
-            <span class="ml-auto flex-none">{{
-                $t(':time ago', { time: heartbeat })
-            }}</span>
+            {{ $t('seen :time ago', { time: formatAge(node.seenSecondsAgo) }) }}
         </div>
     </div>
 </template>

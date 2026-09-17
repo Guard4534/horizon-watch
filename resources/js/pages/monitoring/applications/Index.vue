@@ -2,8 +2,10 @@
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
+import ApplicationList from '@/components/mobile/applications/ApplicationList.vue';
 import EmptyState from '@/components/monitoring/EmptyState.vue';
 import ApplicationSection from '@/components/monitoring/applications/ApplicationSection.vue';
+import { useIsMobile } from '@/composables/useIsMobile';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { create as createApplication } from '@/routes/applications';
 
@@ -18,6 +20,7 @@ const { page } = defineProps<{
 const search = ref('');
 const slug = useTeamSlug();
 const shared = usePage();
+const isMobile = useIsMobile();
 
 // page.groups, not the filtered list: a search that matches nothing is not
 // an unconfigured organization.
@@ -50,7 +53,12 @@ const groups = computed(() => {
 
     <div
         class="flex flex-col"
-        style="padding: var(--nc-space-6); gap: var(--nc-space-4)"
+        :style="{
+            padding: isMobile
+                ? 'var(--nc-space-3) var(--nc-space-4)'
+                : 'var(--nc-space-6)',
+            gap: isMobile ? 'var(--nc-space-3)' : 'var(--nc-space-4)',
+        }"
     >
         <div class="flex flex-wrap items-center" style="gap: var(--nc-space-3)">
             <div style="font-size: 13px; color: var(--nc-neutral-400)">
@@ -67,7 +75,7 @@ const groups = computed(() => {
             <input
                 v-model="search"
                 class="nc-input ml-auto"
-                style="max-width: 230px"
+                :style="{ maxWidth: isMobile ? '100%' : '230px' }"
                 :placeholder="$t('Search application')"
             />
             <Link
@@ -97,8 +105,9 @@ const groups = computed(() => {
                         )
             "
         />
+        <ApplicationList v-if="isMobile" :groups="groups" />
         <ApplicationSection
-            v-for="group in groups"
+            v-for="group in isMobile ? [] : groups"
             :key="group.application.id"
             :group="group"
         />

@@ -4,17 +4,28 @@ import { formatMinutesAgo } from '@/lib/monitoring';
 
 defineProps<{
     jobs: App.Data.Monitoring.FailedJobData[];
+    // "last known …" when the latest reading failed.
+    note?: string | null;
 }>();
 </script>
 
 <template>
     <SectionCard :title="$t('Recent failed jobs')">
         <template #actions>
+            <span v-if="note" style="font-size: 11px; color: var(--st-warn)">{{
+                note
+            }}</span>
             <span style="font-size: 11px; color: var(--nc-neutral-600)">{{
                 $t('retry happens in Horizon — this panel is read-only')
             }}</span>
         </template>
-        <div class="overflow-x-auto">
+        <div
+            v-if="!jobs.length"
+            style="font-size: 12px; color: var(--nc-neutral-500)"
+        >
+            {{ $t('No failed jobs in the latest reading.') }}
+        </div>
+        <div v-else class="overflow-x-auto">
             <table class="nc-table">
                 <thead>
                     <!-- Job/Queue/Exception/Tries stay untranslated in both
