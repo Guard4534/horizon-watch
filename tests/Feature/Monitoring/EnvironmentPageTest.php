@@ -1,17 +1,40 @@
 <?php
 
+use App\Models\Environment;
 use App\Models\User;
 use App\Monitoring\MonitoringRepository;
 use Database\Seeders\DatabaseSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Readings;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
     $this->slug = $this->user->currentTeam->slug;
     (new DatabaseSeeder)->seedMockupOrganization($this->user->currentTeam);
+    Readings::mockup($this->user->currentTeam);
 });
 
 test('a down environment carries its incident', function () {
+    $failed = fn (int $index) => [
+        'job' => "App\\Jobs\\Job{$index}",
+        'queue' => 'default',
+        'exception' => 'RuntimeException: failed',
+        'tries' => 1,
+        'failedAt' => now()->subMinutes($index)->toIso8601String(),
+    ];
+    $reserved = fn (int $index, int $secondsAgo) => [
+        'job' => "App\\Jobs\\Long{$index}",
+        'queue' => 'reports',
+        'reservedAt' => now()->subSeconds($secondsAgo)->toIso8601String(),
+    ];
+
+    // Five failures and four reserved jobs, one of them still under the
+    // 120-second runtime threshold.
+    Environment::query()->where('slug', 'fatturaomatic-production')->sole()->state->update([
+        'failed_jobs' => array_map($failed, range(1, 5)),
+        'pending_jobs' => [$reserved(1, 600), $reserved(2, 300), $reserved(3, 121), $reserved(4, 30)],
+    ]);
+
     $this->actingAs($this->user)
         ->get(route('environments.show', ['current_team' => $this->slug, 'environment' => 'fatturaomatic-production']))
         ->assertInertia(fn (Assert $page) => $page

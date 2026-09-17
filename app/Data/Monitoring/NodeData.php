@@ -11,10 +11,7 @@ class NodeData extends Data
         public string $hostname,
         public EnvironmentStatus $status,
         public int $workers,
-        public int $jobsPerMinute,
-        public int $memoryMb,
         public int $supervisorCount,
         public int $queueCount,
-        public int $lastHeartbeatSecondsAgo,
     ) {}
 }

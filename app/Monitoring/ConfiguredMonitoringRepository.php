@@ -6,7 +6,11 @@ use App\Data\Monitoring\AlertData;
 use App\Data\Monitoring\AlertRuleData;
 use App\Data\Monitoring\ApplicationData;
 use App\Data\Monitoring\EnvironmentData;
+use App\Data\Monitoring\FailedJobData;
+use App\Data\Monitoring\LongRunningJobData;
+use App\Data\Monitoring\NodeData;
 use App\Data\Monitoring\NotificationSettingsData;
+use App\Data\Monitoring\QueueData;
 use App\Data\Monitoring\RuleScopeData;
 use App\Data\Monitoring\SentNotificationData;
 use App\Enums\AlertRuleMetric;
@@ -19,16 +23,19 @@ use App\Enums\SeriesRange;
 use App\Enums\TeamPermission;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Models\EnvironmentState;
 use App\Models\Team;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Date;
 
 /**
  * Applications, environments, colors, URLs and basic-auth state come from
- * the database, filtered by VisibleEnvironments; the numbers still come
- * from GeneratedMetrics, deterministic per environment slug and tick.
+ * the database, filtered by VisibleEnvironments; the numbers come from the
+ * stored Horizon readings, through StoredReadings, which never filters.
  *
  * The Applications pages are the one exception to that filter — "la
  * visibilità non è un permesso" — and the note above visibleApplications()
@@ -118,6 +125,27 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     private array $emptyApplicationsByTeam = [];
 
     /**
+     * The latest state of every environment this instance has already
+     * resolved, by environment id, with a null for "no reading yet". Keyed
+     * by environment rather than by team or view: a row is only ever looked
+     * up for an Environment model that one of the lists above handed out,
+     * so the visibility decision stays with those lists, and the wider
+     * configuration view only fetches the rows the watched view did not.
+     * One query per view per request at most, however many rows ask.
+     *
+     * @var array<int, EnvironmentState|null>
+     */
+    private array $statesByEnvironment = [];
+
+    /**
+     * The open anomalies of the watched environments, by environment id.
+     * Watched view only: alerts are never read from the configuration view.
+     *
+     * @var array<int, array<int, list<array{metric: AlertRuleMetric, since: CarbonImmutable}>>>
+     */
+    private array $openAnomaliesByTeam = [];
+
+    /**
      * Whether the viewer may manage the team's applications. Memoized
      * because it now decides which of the two views answers and every list
      * asks it, at an indexed membership read each time.
@@ -129,7 +157,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     public function __construct(
         private readonly Guard $auth,
         private readonly VisibleEnvironments $visible,
-        private readonly GeneratedMetrics $metrics,
+        private readonly StoredReadings $readings,
     ) {}
 
     public function applications(Team $team): array
@@ -141,7 +169,10 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
     public function environments(Team $team): array
     {
-        return $this->visibleEnvironmentModels($team)
+        $environments = $this->visibleEnvironmentModels($team);
+        $this->loadStates($environments);
+
+        return $environments
             ->map(fn (Environment $environment) => $this->toEnvironmentData($environment, watched: true))
             ->all();
     }
@@ -163,8 +194,10 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     public function configurableEnvironments(Team $team): array
     {
         $watched = $this->watchedEnvironmentsBySlug($team);
+        $environments = $this->configurableEnvironmentModels($team);
+        $this->loadStates($environments);
 
-        return $this->configurableEnvironmentModels($team)
+        return $environments
             ->map(fn (Environment $environment) => $this->toEnvironmentData(
                 $environment,
                 watched: $watched->has($environment->slug),
@@ -176,94 +209,196 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     {
         $environment = $this->findEnvironment($team, $environmentId);
 
+        if ($environment === null) {
+            return null;
+        }
+
+        $this->stateOf($team, $environment);
+
         // Resolved from the watched list, so it is watched by definition.
-        return $environment ? $this->toEnvironmentData($environment, watched: true) : null;
+        return $this->toEnvironmentData($environment, watched: true);
     }
 
     public function nodes(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
+        $state = $environment ? $this->stateOf($team, $environment) : null;
 
-        return $environment ? $this->metrics->nodes($environment, $this->metrics->metricsFor($environment)) : [];
+        if ($state === null) {
+            return [];
+        }
+
+        return array_map(fn (array $node) => new NodeData(
+            hostname: $node['hostname'],
+            // The detail of a failed reading is the last one that worked:
+            // what those masters do now is unknown, so they carry the
+            // environment's status instead of their stale one.
+            status: match (true) {
+                $state->status->isDown() => $state->status,
+                $node['status'] === 'paused' => EnvironmentStatus::Paused,
+                default => EnvironmentStatus::Active,
+            },
+            workers: $node['workers'],
+            supervisorCount: $node['supervisors'],
+            queueCount: $node['queues'],
+        ), $state->nodes);
     }
 
     public function queues(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
+        $state = $environment ? $this->stateOf($team, $environment) : null;
 
-        return $environment ? $this->metrics->queues($environment, $this->metrics->metricsFor($environment)) : [];
+        if ($state === null) {
+            return [];
+        }
+
+        return array_map(fn (array $queue) => new QueueData(
+            name: $queue['name'],
+            supervisor: $queue['supervisor'],
+            workers: $queue['workers'],
+            pending: $queue['pending'],
+            waitSeconds: $queue['waitSeconds'],
+            runtimeSeconds: $queue['runtimeSeconds'] === null ? null : (float) $queue['runtimeSeconds'],
+            status: $this->queueStatus($state, $queue),
+        ), $state->queues);
     }
 
     public function failedJobs(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
+        $state = $environment ? $this->stateOf($team, $environment) : null;
 
-        return $environment ? $this->metrics->failedJobs($environment) : [];
+        if ($state === null) {
+            return [];
+        }
+
+        $now = $this->now();
+
+        return array_map(fn (array $job) => new FailedJobData(
+            job: $job['job'],
+            queue: $job['queue'],
+            exception: $job['exception'],
+            tries: $job['tries'],
+            minutesAgo: max(0, (int) CarbonImmutable::parse($job['failedAt'])->diffInMinutes($now)),
+        ), $state->failed_jobs);
     }
 
     public function longRunningJobs(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
+        $state = $environment ? $this->stateOf($team, $environment) : null;
 
-        return $environment ? $this->metrics->longRunningJobs($environment, $this->metrics->metricsFor($environment)) : [];
+        if ($state === null) {
+            return [];
+        }
+
+        $now = $this->now();
+        $threshold = AlertRuleMetric::JobRuntime->defaultThreshold();
+        $jobs = [];
+
+        foreach ($state->pending_jobs as $job) {
+            $reservedAt = CarbonImmutable::parse($job['reservedAt']);
+            $elapsed = (int) $reservedAt->diffInSeconds($now);
+
+            if ($elapsed <= $threshold) {
+                continue;
+            }
+
+            $jobs[] = new LongRunningJobData(
+                job: $job['job'],
+                queue: $job['queue'],
+                elapsedSeconds: $elapsed,
+                startedAt: $reservedAt->setTimezone((string) config('app.timezone'))->format('H:i'),
+            );
+        }
+
+        usort($jobs, fn (LongRunningJobData $a, LongRunningJobData $b) => $b->elapsedSeconds <=> $a->elapsedSeconds);
+
+        return $jobs;
     }
 
     public function throughputSeries(Team $team, ?string $environmentId, SeriesRange $range): array
     {
-        if ($environmentId !== null && $this->findEnvironment($team, $environmentId) === null) {
-            return [];
+        if ($environmentId === null) {
+            // The organization's line is the sum of what this viewer
+            // watches, never of the whole organization.
+            return $this->readings->throughputSeries(
+                $this->visibleEnvironmentModels($team)->modelKeys(),
+                $range,
+            );
         }
 
-        return $this->metrics->throughputSeries($environmentId, $range);
+        $environment = $this->findEnvironment($team, $environmentId);
+
+        return $environment ? $this->readings->throughputSeries([$environment->id], $range) : [];
     }
 
     public function maxWaitSeries(Team $team, string $environmentId, SeriesRange $range): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
 
-        if ($environment === null) {
+        return $environment ? $this->readings->maxWaitSeries($environment->id, $range) : [];
+    }
+
+    /**
+     * Open anomalies are computed from the stored readings, worst
+     * environment first and worst anomaly first within it. Muting and
+     * resolving arrive with phase 4, and so do their lists.
+     */
+    public function alerts(Team $team, AlertState $state): array
+    {
+        if ($state !== AlertState::Open) {
             return [];
         }
 
-        return $this->metrics->maxWaitSeries($environmentId, $this->metrics->metricsFor($environment)->status->isDown(), $range);
-    }
-
-    public function alerts(Team $team, AlertState $state): array
-    {
         $environments = $this->environments($team);
         usort($environments, EnvironmentData::compareBySeverityThenPending(...));
 
-        $unhealthy = array_values(array_filter($environments, fn (EnvironmentData $environment) => ! $environment->status->isHealthy()));
-        $healthy = array_values(array_filter($environments, fn (EnvironmentData $environment) => $environment->status->isHealthy()));
+        $models = $this->watchedEnvironmentsBySlug($team);
+        $anomalies = $this->openAnomaliesByTeam[$team->id]
+            ??= $this->readings->openAnomalies($models->values()->all());
+        $now = $this->now();
+        $alerts = [];
 
-        return match ($state) {
-            AlertState::Open => array_map(
-                fn (EnvironmentData $environment, int $index) => $this->makeAlert($environment, $state, $this->openMetric($environment, $index), 3 + $index * 11),
-                $unhealthy,
-                array_keys($unhealthy),
-            ),
-            // Guarded: fewer healthy environments (a smaller incident table, or a
-            // looser $r > 0.93 rule) must yield fewer sample alerts, not a null passed
-            // to makeAlert().
-            AlertState::Muted => isset($healthy[0])
-                ? [$this->makeAlert($healthy[0], $state, AlertRuleMetric::WorkersMissing, 95)]
-                : [],
-            AlertState::Resolved => array_values(array_filter([
-                isset($healthy[1]) ? $this->makeAlert($healthy[1], $state, AlertRuleMetric::QueuePending, 140) : null,
-                isset($healthy[2]) ? $this->makeAlert($healthy[2], $state, AlertRuleMetric::QueueMaxWait, 310) : null,
-            ])),
-        };
+        foreach ($environments as $environment) {
+            $model = $models->get($environment->id);
+
+            foreach ($model ? $anomalies[$model->id] ?? [] : [] as $anomaly) {
+                $alerts[] = $this->makeAlert(
+                    $environment,
+                    $state,
+                    $anomaly['metric'],
+                    max(0, (int) $anomaly['since']->diffInMinutes($now)),
+                );
+            }
+        }
+
+        return $alerts;
     }
 
     public function sentNotifications(Team $team): array
     {
-        // Unchanged from phase 1: sample data for the notification log,
-        // out of scope until phase 4 wires up real delivery.
+        // Sample data until phase 4 wires up real delivery, but named after
+        // environments this viewer watches: a hard-coded subject would tell
+        // a restricted member about an environment hidden from them.
+        $environments = $this->environments($team);
+
+        if ($environments === []) {
+            return [];
+        }
+
+        usort($environments, EnvironmentData::compareBySeverityThenPending(...));
+
+        $subject = fn (EnvironmentData $environment) => "{$environment->applicationName} · {$environment->name}";
+        $worst = $environments[0];
+        $best = $environments[count($environments) - 1];
+
         return [
-            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::CriticalAlert, 'Fatturaomatic · production', 4),
+            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::CriticalAlert, $subject($worst), 4),
             new SentNotificationData(NotificationChannel::Webhook, SentNotificationKind::WebhookDelivery, 'hooks.example.com/horizon · 200', 4),
-            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::WarningDigest, '3', 18),
-            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::Resolved, 'Billing Sync · preprod', 52),
+            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::WarningDigest, (string) min(3, count($environments)), 18),
+            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::Resolved, $subject($best), 52),
         ];
     }
 
@@ -475,6 +610,63 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     }
 
     /**
+     * Fetches the states of the given environments that this instance has
+     * not seen yet, in one query (see $statesByEnvironment).
+     *
+     * @param  iterable<Environment>  $environments
+     */
+    private function loadStates(iterable $environments): void
+    {
+        $missing = [];
+
+        foreach ($environments as $environment) {
+            if (! array_key_exists($environment->id, $this->statesByEnvironment)) {
+                $missing[] = $environment;
+            }
+        }
+
+        if ($missing !== []) {
+            $this->statesByEnvironment += $this->readings->latestFor($missing);
+        }
+    }
+
+    /**
+     * The state of a watched environment. Loads the whole watched list at
+     * once, since a page that asks for one panel asks for the others too.
+     */
+    private function stateOf(Team $team, Environment $environment): ?EnvironmentState
+    {
+        if (! array_key_exists($environment->id, $this->statesByEnvironment)) {
+            $this->loadStates($this->visibleEnvironmentModels($team));
+        }
+
+        return $this->statesByEnvironment[$environment->id] ?? null;
+    }
+
+    /**
+     * A queue follows its environment when the environment is down or
+     * paused; otherwise it is degraded when it breaks a default threshold on
+     * its own, or has work and nobody to do it.
+     *
+     * @param  array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}  $queue
+     */
+    private function queueStatus(EnvironmentState $state, array $queue): EnvironmentStatus
+    {
+        return match (true) {
+            $state->status->isDown(), $state->status === EnvironmentStatus::Paused => $state->status,
+            $queue['waitSeconds'] > AlertRuleMetric::QueueMaxWait->defaultThreshold(),
+            $queue['pending'] > AlertRuleMetric::QueuePending->defaultThreshold(),
+            $queue['workers'] === 0 && $queue['pending'] > 0 => EnvironmentStatus::Degraded,
+            default => EnvironmentStatus::Active,
+        };
+    }
+
+    private function now(): CarbonImmutable
+    {
+        return Date::now()->toImmutable();
+    }
+
+    /**
      * See the class docblock: an authenticated member of the requested team
      * is guaranteed by EnsureTeamMembership before any Query reaches here.
      */
@@ -498,7 +690,9 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
      */
     private function toEnvironmentData(Environment $environment, bool $watched): EnvironmentData
     {
-        $metrics = $this->metrics->metricsFor($environment);
+        // Callers load the states of their whole list first: a miss here
+        // would be one query per row.
+        $state = $this->statesByEnvironment[$environment->id] ?? null;
 
         return new EnvironmentData(
             id: $environment->slug,
@@ -507,18 +701,31 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             name: $environment->name,
             color: $environment->color,
             horizonUrl: $environment->horizon_url,
-            status: $metrics->status,
-            pending: $metrics->pending,
-            maxWaitSeconds: $metrics->maxWaitSeconds,
-            failedLast24Hours: $metrics->failedLast24Hours,
-            workers: $metrics->workers,
-            jobsPerMinute: $metrics->jobsPerMinute,
-            nodeCount: $metrics->nodeCount,
+            // Never read is reported as not answering: nothing says it does.
+            status: $state->status ?? EnvironmentStatus::Unreachable,
+            pending: $this->snapshotNumber($state, 'pending'),
+            maxWaitSeconds: $this->snapshotNumber($state, 'max_wait_seconds'),
+            failedLast24Hours: $this->snapshotNumber($state, 'failed_last_24_hours'),
+            workers: $this->snapshotNumber($state, 'workers'),
+            jobsPerMinute: $this->snapshotNumber($state, 'jobs_per_minute'),
+            nodeCount: $this->snapshotNumber($state, 'node_count'),
             basicAuthUser: $environment->basic_auth_user,
-            redisMemoryGb: $metrics->redisMemoryGb,
-            latencyMs: $metrics->latencyMs,
+            latencyMs: $state?->latency_ms,
             watched: $watched,
+            lastReadingAt: $state?->captured_at->toIso8601String(),
+            stale: $environment->polling_enabled && $this->readings->isStale($environment, $state, $this->now()),
+            pollingEnabled: $environment->polling_enabled,
+            readingError: $state?->error,
         );
+    }
+
+    /**
+     * A number of the latest snapshot, attached to the state by
+     * StoredReadings::latestFor(); 0 without a state or a snapshot.
+     */
+    private function snapshotNumber(?EnvironmentState $state, string $column): int
+    {
+        return (int) $state?->getAttribute("snapshot_{$column}");
     }
 
     private function makeAlert(EnvironmentData $environment, AlertState $state, AlertRuleMetric $metric, int $minutesAgo): AlertData
@@ -541,15 +748,5 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             minutesAgo: $minutesAgo,
             channels: [NotificationChannel::Mail, NotificationChannel::Webhook],
         );
-    }
-
-    private function openMetric(EnvironmentData $environment, int $index): AlertRuleMetric
-    {
-        return match (true) {
-            $environment->status === EnvironmentStatus::Unreachable => AlertRuleMetric::EndpointUnreachable,
-            $environment->status === EnvironmentStatus::Inactive => AlertRuleMetric::HorizonMasterInactive,
-            $index % 2 === 1 => AlertRuleMetric::QueueMaxWait,
-            default => AlertRuleMetric::QueuePending,
-        };
     }
 }

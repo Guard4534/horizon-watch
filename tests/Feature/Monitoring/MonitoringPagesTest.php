@@ -8,11 +8,13 @@ use App\Models\Team;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Readings;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
     $this->slug = $this->user->currentTeam->slug;
     (new DatabaseSeeder)->seedMockupOrganization($this->user->currentTeam);
+    Readings::mockup($this->user->currentTeam);
 });
 
 dataset('pages', [
@@ -61,11 +63,14 @@ test('the wall carries every environment and the key numbers', function () {
             ->has('page.environments', 29)
             ->where('page.kpis.environmentsTotal', 29)
             ->where('page.environments.0.status', fn (string $status) => in_array($status, ['inactive', 'unreachable'], true))
+            ->where('page.kpis.openAnomalies', 6)
+            // Two down, one paused, three degraded.
+            ->where('page.kpis.environmentsUp', 26)
             ->has('page.anomalies', 5)
             ->has('page.throughput', 48)
             ->has('page.notifications', 4)
             ->where('page.applicationCount', 9)
-            ->where('openAlertCount', fn (int $count) => $count >= 6));
+            ->where('openAlertCount', 6));
 });
 
 test('the environment page follows the requested range', function () {
@@ -74,9 +79,11 @@ test('the environment page follows the requested range', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.range', '7d')
             ->where('page.environment.id', 'acme-shop-production')
-            ->has('page.nodes', 3)
-            ->has('page.queues', 5)
-            ->has('page.rules', 8)
+            // The factory's stored detail: one node, three queues.
+            ->has('page.nodes', 1)
+            ->has('page.queues', 3)
+            ->has('page.maxWait', 48)
+            ->has('page.rules', 7)
             ->where('page.overrideCount', 3)
             ->where('page.scope', 'production'));
 });
@@ -84,11 +91,17 @@ test('the environment page follows the requested range', function () {
 test('the alert log defaults to open alerts and can switch state', function () {
     $this->actingAs($this->user)
         ->get(route('alerts.index', ['current_team' => $this->slug]))
-        ->assertInertia(fn (Assert $page) => $page->where('page.state', 'open')->where('page.counts.muted', 1));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.state', 'open')
+            ->where('page.counts.open', 6)
+            ->has('page.alerts', 6)
+            // Muting and resolving arrive with phase 4.
+            ->where('page.counts.muted', 0)
+            ->where('page.counts.resolved', 0));
 
     $this->actingAs($this->user)
         ->get(route('alerts.index', ['current_team' => $this->slug, 'state' => 'resolved']))
-        ->assertInertia(fn (Assert $page) => $page->where('page.state', 'resolved')->has('page.alerts', 2));
+        ->assertInertia(fn (Assert $page) => $page->where('page.state', 'resolved')->where('page.alerts', []));
 });
 
 test('the application page reports its worst environment status', function () {
@@ -107,7 +120,7 @@ test('alert rules default to the organization scope', function () {
             // worker-batch, testing): unlike phase 1's fixed list, this one
             // is computed from what's actually visible.
             ->has('page.scopes', 8)
-            ->has('page.rules', 8)
+            ->has('page.rules', 7)
             ->where('page.notifications.repeatMinutes', 30));
 });
 

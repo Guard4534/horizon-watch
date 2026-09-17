@@ -4,6 +4,7 @@ namespace App\Data\Monitoring;
 
 use App\Enums\EnvironmentColor;
 use App\Enums\EnvironmentStatus;
+use App\Enums\ReadingError;
 use Spatie\LaravelData\Data;
 
 class EnvironmentData extends Data
@@ -23,8 +24,8 @@ class EnvironmentData extends Data
         public int $jobsPerMinute,
         public int $nodeCount,
         public ?string $basicAuthUser,
-        public float $redisMemoryGb,
-        public int $latencyMs,
+        // Null when the latest reading failed: nothing answered to time.
+        public ?int $latencyMs,
         // Whether this environment is on the viewer's wall. False only on
         // the Applications pages, and only for a viewer whose *permission*
         // put it there while their visibility hides it (see the split note
@@ -34,6 +35,15 @@ class EnvironmentData extends Data
         // wall, alerts, environment detail — a row exists only if it is
         // watched, so it is true.
         public bool $watched,
+        // ISO-8601, null until the first reading lands.
+        public ?string $lastReadingAt,
+        // No reading for too many poll intervals. Never true while the
+        // collection is paused: the pause already explains the silence.
+        public bool $stale,
+        // The collection switch of the environment, not Horizon's own
+        // "paused" status.
+        public bool $pollingEnabled,
+        public ?ReadingError $readingError,
     ) {}
 
     /**
