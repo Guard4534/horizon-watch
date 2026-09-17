@@ -261,12 +261,21 @@ test('the Applications pages only link watched environments to their detail page
 
     preg_match_all('/<[A-Za-z][\w.-]*(?:\s+[^\s=>"\/]+(?:="[^"]*")?)*\s*\/?>/s', $source, $tags);
 
-    $linking = array_values(array_filter($tags[0], fn (string $tag) => str_contains($tag, 'showEnvironment(')));
+    $linking = array_values(array_filter(
+        $tags[0],
+        fn (string $tag) => str_contains($tag, 'showEnvironment(')
+            || str_contains($tag, 'environmentHref(')
+            || str_contains($tag, 'openRow('),
+    ));
 
     expect($linking)->not->toBeEmpty();
 
     foreach ($linking as $tag) {
         expect($tag)->toContain('watched');
+    }
+
+    if (str_contains($source, 'openRow(')) {
+        expect($source)->toContain('if (!environment.watched)');
     }
 })->with([
     'the list rows' => 'ApplicationSection.vue',
