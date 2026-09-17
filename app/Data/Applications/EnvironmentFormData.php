@@ -6,6 +6,7 @@ use App\Enums\EnvironmentColor;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Rules\UrlWithoutCredentials;
+use App\Rules\UrlWithoutQueryOrFragment;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Unique;
 use Spatie\LaravelData\Data;
@@ -50,13 +51,14 @@ class EnvironmentFormData extends Data
      * Shared with TestConnectionData, so a URL the form would refuse is
      * never probed either. A URL carrying a user or a password is refused
      * (UrlWithoutCredentials): the URL is shown to every watcher, the
-     * basic-auth fields are not.
+     * basic-auth fields are not. A query string or a fragment is refused
+     * too (UrlWithoutQueryOrFragment): the API path is appended to the URL.
      *
-     * @return array<int, string|UrlWithoutCredentials>
+     * @return array<int, string|UrlWithoutCredentials|UrlWithoutQueryOrFragment>
      */
     public static function horizonUrlRules(): array
     {
-        return ['required', 'url:http,https', 'max:255', new UrlWithoutCredentials];
+        return ['required', 'url:http,https', 'max:255', new UrlWithoutCredentials, new UrlWithoutQueryOrFragment];
     }
 
     /**

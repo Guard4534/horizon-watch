@@ -658,10 +658,23 @@ test('an at sign after the host is not a credential', function () {
     $this->actingAs($this->admin)
         ->post(
             route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
-            ($this->validPayload)(['horizonUrl' => 'https://horizon.example.com/ops@team/horizon?by=a@b']),
+            ($this->validPayload)(['horizonUrl' => 'https://horizon.example.com/ops@team/horizon']),
         )
         ->assertValid();
 
     expect(Environment::where('name', 'production')->sole()->horizon_url)
-        ->toBe('https://horizon.example.com/ops@team/horizon?by=a@b');
+        ->toBe('https://horizon.example.com/ops@team/horizon');
+});
+
+test('an at sign in a query string is refused for the query, not as a credential', function () {
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+            ($this->validPayload)(['name' => 'staging', 'horizonUrl' => 'https://horizon.example.com/ops@team/horizon?by=a@b']),
+        )
+        ->assertInvalid(['horizonUrl' => 'query string']);
+
+    expect(session('errors')->get('horizonUrl'))
+        ->toBe(['Use the address of the Horizon dashboard, without a query string or a fragment.'])
+        ->and(Environment::where('name', 'staging')->exists())->toBeFalse();
 });

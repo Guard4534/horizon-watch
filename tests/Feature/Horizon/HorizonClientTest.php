@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Monitoring\PollEnvironment;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
@@ -12,11 +13,14 @@ use App\Externals\Horizon\Exceptions\HorizonReadFailed;
 use App\Externals\Horizon\HorizonClient;
 use App\Externals\Horizon\HorizonReader;
 use App\Externals\Horizon\HorizonTarget;
+use App\Models\Environment;
+use App\Models\EnvironmentState;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Tests\Fixtures\Horizon\FakeResolver;
+use Tests\Support\TraceArguments;
 
 const CLIENT_TEST_PASSWORD = 'correct-horse-battery';
 
@@ -61,6 +65,32 @@ function fakeHorizonApi(array $overrides = []): ArrayObject
     });
 
     return $sent;
+}
+
+/**
+ * A JSON body written by hand: PHP cannot encode the numbers these tests
+ * need (1e999 decodes to INF).
+ */
+function clientRaw(string $json): Closure
+{
+    return fn () => Http::response($json, 200, ['Content-Type' => 'application/json']);
+}
+
+/**
+ * The stats fixture with some keys replaced by raw JSON values.
+ *
+ * @param  array<string, string>  $values
+ */
+function clientStats(array $values): Closure
+{
+    $stats = json_decode(clientFixture('stats.json'), true);
+    $json = json_encode(array_diff_key($stats, $values));
+
+    foreach ($values as $key => $value) {
+        $json = substr($json, 0, -1).','.json_encode($key).':'.$value.'}';
+    }
+
+    return clientRaw($json);
 }
 
 function clientTarget(?string $username = 'monitor', ?string $password = CLIENT_TEST_PASSWORD, string $url = 'https://shop.example.com/horizon'): HorizonTarget
@@ -259,12 +289,12 @@ test('masters and workload of the wrong shape are refused', function (string $pa
     'workload of strings' => ['workload', ['default']],
 ]);
 
-test('the failed-jobs window falls back to a day when horizon does not state it', function (array $stats) {
+test('the failed-jobs window falls back to horizon\'s own default of a week when it is not usable', function (array $stats) {
     fakeHorizonApi(['stats' => fn () => Http::response($stats)]);
 
     $reading = app(HorizonReader::class)->read(clientTarget());
 
-    expect($reading->stats->failedJobsPeriodMinutes)->toBe(1440)
+    expect($reading->stats->failedJobsPeriodMinutes)->toBe(10080)
         ->and($reading->stats->failedJobs)->toBe(12);
 })->with([
     'no periods' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1]],
@@ -273,6 +303,30 @@ test('the failed-jobs window falls back to a day when horizon does not state it'
     'window not a number' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => 'week']]],
     'window of zero' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => 0]]],
     'negative window' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => -60]]],
+    'null window, as horizon states it without trim keys' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => null]]],
+    'window rounding to zero' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => 0.4]]],
+    'window past an integer column' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => 3000000000]]],
+    'window too large to cast' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => 1e30]]],
+]);
+
+test('a failed-jobs window that is not a finite number falls back to a week', function (string $window) {
+    fakeHorizonApi(['stats' => clientStats(['periods' => '{"failedJobs":'.$window.'}'])]);
+
+    expect(app(HorizonReader::class)->read(clientTarget())->stats->failedJobsPeriodMinutes)->toBe(10080);
+})->with(['1e999', '"-1e999"', 'true']);
+
+test('a usable failed-jobs window is kept as horizon states it', function (mixed $window, int $expected) {
+    fakeHorizonApi(['stats' => fn () => Http::response([
+        'status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => $window],
+    ])]);
+
+    expect(app(HorizonReader::class)->read(clientTarget())->stats->failedJobsPeriodMinutes)->toBe($expected);
+})->with([
+    'one minute' => [1, 1],
+    'a day' => [1440, 1440],
+    'as a string' => ['60', 60],
+    'fractional' => [59.6, 60],
+    'the largest integer column value' => [2147483647, 2147483647],
 ]);
 
 test('any positive failed-jobs window horizon states is kept', function () {
@@ -363,7 +417,7 @@ test('no failure carries the url, the credentials or the body', function (Closur
                 ->and($printed)->not->toContain(CLIENT_TEST_PASSWORD)
                 ->and($printed)->not->toContain('shop.example.com')
                 ->and($printed)->not->toContain('body-secret-value')
-                ->and(appFrameArguments($exception))->not->toContain(CLIENT_TEST_PASSWORD);
+                ->and(TraceArguments::ofAppFrames($exception))->not->toContain(CLIENT_TEST_PASSWORD);
         }
     } finally {
         ini_set('zend.exception_ignore_args', (string) $previous);
@@ -399,3 +453,246 @@ test('probe fails like a reading', function (string $path, Closure $response, Re
     'masters 401' => ['masters', fn () => fn () => Http::response('', 401), ReadingError::Unauthorized],
     'masters unreachable' => ['masters', fn () => Http::failedConnection(), ReadingError::Unreachable],
 ]);
+
+test('a main-call value that is not a finite number fails as not horizon, and only that way', function (string $path, Closure $response) {
+    fakeHorizonApi([$path => $response]);
+
+    expect(clientFailure(fn () => app(HorizonReader::class)->read(clientTarget()))->reason)->toBe(ReadingError::NotHorizon);
+
+    if ($path === 'stats') {
+        expect(clientFailure(fn () => app(HorizonReader::class)->probe(clientTarget()))->reason)->toBe(ReadingError::NotHorizon);
+    }
+})->with([
+    'infinite jobs per minute' => ['stats', fn () => clientStats(['jobsPerMinute' => '1e999'])],
+    'negative infinite failed jobs' => ['stats', fn () => clientStats(['failedJobs' => '-1e999'])],
+    'infinite processes as a string' => ['stats', fn () => clientStats(['processes' => '"1e999"'])],
+    'boolean processes' => ['stats', fn () => clientStats(['processes' => 'true'])],
+    'infinite wait of a queue' => ['workload', fn () => clientRaw('[{"name":"default","length":1,"wait":1e999,"processes":1}]')],
+    'infinite length of a queue' => ['workload', fn () => clientRaw('[{"name":"default","length":"1e999","wait":1,"processes":1}]')],
+]);
+
+test('absurd numbers saturate into what an integer column holds', function () {
+    fakeHorizonApi([
+        'stats' => clientStats([
+            'jobsPerMinute' => '1e20',
+            'failedJobs' => '3000000000',
+            'processes' => '-3',
+            'pausedMasters' => '1e999',
+            'wait' => '{"redis:default":1e999,"redis:emails":-5,"redis:reports":12.6,"redis:huge":"99999999999999999999"}',
+            'periods' => '{"failedJobs":1e999}',
+        ]),
+        'workload' => clientRaw('[{"name":"default","length":"99999999999999999999","wait":-1,"processes":2.4}]'),
+        'masters' => clientRaw('{"w":{"name":"w","status":"running","supervisors":[{"name":"w:s","status":"running","processes":{"redis:default":1e999,"redis:emails":1e12}}]}}'),
+        'jobs/failed' => clientRaw('{"jobs":[{"name":"App\\\\Jobs\\\\A","queue":"default","failed_at":"1789646100","payload":{"attempts":1e20}}]}'),
+        'metrics/queues/default' => clientRaw('[{"runtime":1e300}]'),
+    ]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect($reading->stats->jobsPerMinute)->toBe(2147483647)
+        ->and($reading->stats->failedJobs)->toBe(2147483647)
+        ->and($reading->stats->processes)->toBe(0)
+        ->and($reading->stats->pausedMasters)->toBe(0)
+        ->and($reading->stats->wait)->toBe(['redis:emails' => 0, 'redis:reports' => 13, 'redis:huge' => 2147483647])
+        ->and($reading->stats->failedJobsPeriodMinutes)->toBe(10080)
+        ->and($reading->workload)->toEqual([new HorizonQueueLoad(name: 'default', length: 2147483647, wait: 0, processes: 2)])
+        ->and($reading->masters[0]->supervisors[0]->processes)->toBe(['redis:emails' => 2147483647])
+        ->and($reading->failedJobs[0]->attempts)->toBe(2147483647)
+        ->and($reading->queueRuntimes)->toBe(['default' => 2147483647.0]);
+});
+
+test('a runtime that is not a finite number is simply absent', function (string $body, array $expected) {
+    fakeHorizonApi(['metrics/queues/default' => clientRaw($body)]);
+
+    expect(app(HorizonReader::class)->read(clientTarget())->queueRuntimes)->toBe($expected);
+})->with([
+    'infinite' => ['[{"runtime":1e999}]', []],
+    'infinite string' => ['[{"runtime":"-1e999"}]', []],
+    'negative' => ['[{"runtime":-2}]', ['default' => 0.0]],
+    'only the last snapshot counts' => ['[{"runtime":1.5},{"runtime":1e999}]', []],
+]);
+
+test('a job with an unusable time is skipped and the others are kept', function () {
+    fakeHorizonApi([
+        'jobs/failed' => clientRaw('{"jobs":['
+            .'{"name":"Far","queue":"default","failed_at":1e300},'
+            .'{"name":"Infinite","queue":"default","failed_at":1e999},'
+            .'{"name":"Negative","queue":"default","failed_at":-5},'
+            .'{"name":"Text","queue":"default","failed_at":"yesterday"},'
+            .'{"name":"Missing","queue":"default"},'
+            .'{"name":"Kept","queue":"default","failed_at":"1789646100.5"}]}'),
+        'jobs/pending' => clientRaw('{"jobs":['
+            .'{"name":"Far","queue":"default","status":"reserved","reserved_at":"1e20"},'
+            .'{"name":"Text","queue":"default","status":"reserved","reserved_at":"soon"},'
+            .'{"name":"Waiting","queue":"default","status":"pending","reserved_at":null},'
+            .'{"name":"Running","queue":"default","status":"reserved","reserved_at":1789645200}]}'),
+    ]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect(array_map(fn (HorizonFailedJob $job) => $job->name, $reading->failedJobs))->toBe(['Kept'])
+        ->and(array_map(fn (HorizonPendingJob $job) => $job->name, $reading->pendingJobs))->toBe(['Waiting', 'Running'])
+        ->and($reading->pendingJobs[1]->reservedAt?->getTimestamp())->toBe(1789645200);
+});
+
+test('probe survives absurd numbers too', function () {
+    fakeHorizonApi(['stats' => clientStats(['jobsPerMinute' => '1e20', 'processes' => '"99999999999999999999"'])]);
+
+    expect(app(HorizonReader::class)->probe(clientTarget())->status)->toBe('running');
+});
+
+test('names are cut to 255 characters', function () {
+    $long = str_repeat('é', 300);
+
+    fakeHorizonApi([
+        'masters' => fn () => Http::response([$long => ['name' => $long, 'status' => 'running', 'supervisors' => [['name' => $long, 'status' => $long, 'processes' => []]]]]),
+        'workload' => fn () => Http::response([['name' => $long, 'length' => 1, 'wait' => 0, 'processes' => 1]]),
+        'jobs/failed' => fn () => Http::response(['jobs' => [['name' => $long, 'queue' => $long, 'failed_at' => 1789646100]]]),
+        'jobs/pending' => fn () => Http::response(['jobs' => [['name' => $long, 'queue' => $long, 'status' => $long, 'reserved_at' => null]]]),
+    ]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+    $cut = str_repeat('é', 255);
+
+    expect($reading->masters[0]->name)->toBe($cut)
+        ->and($reading->masters[0]->supervisors[0]->name)->toBe($cut)
+        ->and($reading->masters[0]->supervisors[0]->status)->toBe($cut)
+        ->and($reading->workload[0]->name)->toBe($cut)
+        ->and($reading->failedJobs[0]->name)->toBe($cut)
+        ->and($reading->failedJobs[0]->queue)->toBe($cut)
+        ->and($reading->pendingJobs[0]->name)->toBe($cut)
+        ->and($reading->pendingJobs[0]->queue)->toBe($cut)
+        ->and($reading->pendingJobs[0]->status)->toBe($cut);
+});
+
+test('masters, supervisors and jobs are kept up to 200 each', function () {
+    // One master with 250 supervisors and 249 without: the answer stays
+    // under the body cap.
+    $masters = ['m1' => ['name' => 'm1', 'status' => 'running', 'supervisors' => array_map(
+        fn (int $i) => ['name' => "s{$i}", 'status' => 'running', 'processes' => []],
+        range(1, 250),
+    )]];
+
+    foreach (range(2, 250) as $i) {
+        $masters["m{$i}"] = ['name' => "m{$i}", 'status' => 'running', 'supervisors' => []];
+    }
+
+    $jobs = array_map(fn (int $i) => ['name' => "j{$i}", 'queue' => 'default', 'status' => 'pending', 'failed_at' => 1789646100], range(1, 250));
+
+    fakeHorizonApi([
+        'masters' => fn () => Http::response($masters),
+        'jobs/failed' => fn () => Http::response(['jobs' => $jobs]),
+        'jobs/pending' => fn () => Http::response(['jobs' => $jobs]),
+    ]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect($reading->masters)->toHaveCount(200)
+        ->and($reading->masters[199]->name)->toBe('m200')
+        ->and($reading->masters[0]->supervisors)->toHaveCount(200)
+        ->and($reading->masters[0]->supervisors[199]->name)->toBe('s200')
+        ->and($reading->failedJobs)->toHaveCount(200)
+        ->and($reading->failedJobs[199]->name)->toBe('j200')
+        ->and($reading->pendingJobs)->toHaveCount(200)
+        ->and(app(HorizonReader::class)->probe(clientTarget())->masterCount)->toBe(200);
+});
+
+test('a master past the cap is still checked for its shape', function () {
+    $masters = [];
+
+    foreach (range(1, 200) as $i) {
+        $masters["m{$i}"] = ['name' => "m{$i}", 'status' => 'running', 'supervisors' => []];
+    }
+
+    $masters['broken'] = 'running';
+
+    fakeHorizonApi(['masters' => fn () => Http::response($masters)]);
+
+    expect(clientFailure(fn () => app(HorizonReader::class)->read(clientTarget()))->reason)->toBe(ReadingError::NotHorizon);
+});
+
+test('runtime is asked only for the 100 busiest queues', function () {
+    $queues = array_map(fn (int $i) => ['name' => "q{$i}", 'length' => $i, 'wait' => 0, 'processes' => 1], range(1, 150));
+    $sent = fakeHorizonApi(['workload' => fn () => Http::response($queues)]);
+
+    app(HorizonReader::class)->read(clientTarget());
+
+    $asked = array_values(array_filter(array_keys($sent->getArrayCopy()), fn (string $path) => str_starts_with($path, 'metrics/queues/')));
+
+    expect($asked)->toHaveCount(100)
+        ->and($asked)->toContain('metrics/queues/q150', 'metrics/queues/q51')
+        ->and($asked)->not->toContain('metrics/queues/q50');
+});
+
+test('an answer larger than 2 MiB is not horizon, wherever it comes from', function (string $path, bool $fails) {
+    fakeHorizonApi([$path => fn () => Http::response('['.str_repeat(' ', 2 * 1024 * 1024).']', 200, ['Content-Type' => 'application/json'])]);
+
+    if ($fails) {
+        expect(clientFailure(fn () => app(HorizonReader::class)->read(clientTarget()))->reason)->toBe(ReadingError::NotHorizon);
+    } else {
+        expect(app(HorizonReader::class)->read(clientTarget())->failedJobs)->toBeNull();
+    }
+})->with([
+    'stats' => ['stats', true],
+    'workload' => ['workload', true],
+    'failed jobs' => ['jobs/failed', false],
+]);
+
+test('a url guzzle cannot build is blocked and sends nothing', function (string $url) {
+    $this->resolver = new FakeResolver(['shop.example.com' => ['203.0.113.10']]);
+    $this->app->instance(Resolver::class, $this->resolver);
+    fakeHorizonApi();
+
+    expect(clientFailure(fn () => app(HorizonReader::class)->read(clientTarget(url: $url)))->reason)->toBe(ReadingError::Blocked)
+        ->and(clientFailure(fn () => app(HorizonReader::class)->probe(clientTarget(url: $url)))->reason)->toBe(ReadingError::Blocked);
+
+    Http::assertNothingSent();
+})->with([
+    'invalid utf-8 in the path' => "https://shop.example.com/horizon\xff",
+    'utf-8 in the host' => "https://sh\u{00f6}p.example.com/horizon",
+]);
+
+test('a query string or a fragment saved before the rule does not reach the api path', function (string $url) {
+    fakeHorizonApi();
+
+    app(HorizonReader::class)->probe(clientTarget(url: $url));
+
+    Http::assertSent(fn (Request $request) => $request->url() === 'https://shop.example.com/horizon/api/stats');
+    Http::assertSentCount(2);
+})->with([
+    'query' => 'https://shop.example.com/horizon?x=1',
+    'fragment' => 'https://shop.example.com/horizon#/dashboard',
+    'both' => 'https://shop.example.com/horizon/?x=1#top',
+    'empty query' => 'https://shop.example.com/horizon?',
+]);
+
+test('a poll of an absurd horizon stores a saturated reading', function () {
+    $environment = Environment::factory()->create(['horizon_url' => 'https://shop.example.com/horizon']);
+
+    fakeHorizonApi([
+        'stats' => clientStats(['jobsPerMinute' => '1e20', 'failedJobs' => '3000000000', 'processes' => '-3']),
+        'workload' => clientRaw('[{"name":"default","length":"99999999999999999999","wait":1e20,"processes":1}]'),
+        'metrics/queues/default' => clientRaw('[{"runtime":1e999}]'),
+    ]);
+
+    $snapshot = app(PollEnvironment::class)->handle($environment);
+
+    expect($snapshot)->not->toBeNull()
+        ->and($snapshot->error)->toBeNull()
+        ->and($snapshot->jobs_per_minute)->toBe(2147483647)
+        ->and($snapshot->failed_last_24_hours)->toBe(2147483647)
+        ->and($snapshot->workers)->toBe(0)
+        ->and($snapshot->pending)->toBe(2147483647)
+        ->and($snapshot->max_wait_seconds)->toBe(2147483647);
+
+    $state = EnvironmentState::query()->where('environment_id', $environment->id)->sole();
+
+    expect($state->queues)->toBe([[
+        'name' => 'default',
+        'supervisor' => 'worker-1-a1b2:supervisor-1',
+        'workers' => 1,
+        'pending' => 2147483647,
+        'waitSeconds' => 2147483647,
+        'runtimeSeconds' => null,
+    ]]);
+});

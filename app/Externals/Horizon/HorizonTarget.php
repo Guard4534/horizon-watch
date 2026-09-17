@@ -48,11 +48,13 @@ final readonly class HorizonTarget implements JsonSerializable
     /**
      * The URL people copy from the browser is the dashboard; a trailing
      * slash or an "/api" pasted by mistake is dropped before the API path
-     * is appended.
+     * is appended. So is a query string or a fragment, which the form now
+     * refuses but rows saved before that rule may still carry: appended
+     * after them, the API path would never reach the server as a path.
      */
     public function apiUrl(string $path): string
     {
-        $base = rtrim($this->dashboardUrl, '/');
+        $base = rtrim((string) preg_replace('/[?#].*$/s', '', $this->dashboardUrl), '/');
 
         if (str_ends_with($base, '/api')) {
             $base = substr($base, 0, -strlen('/api'));

@@ -6,6 +6,7 @@ use App\Externals\Horizon\Exceptions\HorizonReadFailed;
 use App\Externals\Horizon\ResolvedTarget;
 use App\Externals\Horizon\SafeUrlGuard;
 use Tests\Fixtures\Horizon\FakeResolver;
+use Tests\Support\TraceArguments;
 
 // Runs without the application: the guard gets its resolver and its
 // private-network switch through the constructor.
@@ -29,19 +30,6 @@ function guardRefusal(SafeUrlGuard $guard, string $url): ?ReadingError
     }
 
     return null;
-}
-
-/**
- * Every string argument of the application frames in the trace, whole: the
- * printed trace cuts strings at 15 characters and would hide a leak.
- */
-function appFrameArguments(Throwable $exception): string
-{
-    return collect($exception->getTrace())
-        ->filter(fn (array $frame) => str_starts_with($frame['class'] ?? '', 'App\\'))
-        ->flatMap(fn (array $frame) => $frame['args'] ?? [])
-        ->filter(fn (mixed $argument) => is_string($argument))
-        ->implode(' ');
 }
 
 dataset('always blocked addresses', [
@@ -208,7 +196,7 @@ test('the url, with its credentials, never reaches the exception', function () {
             ->and($exception->getPrevious())->toBeNull()
             ->and((string) $exception)->not->toContain('correct-horse')
             ->and((string) $exception)->not->toContain('monitor:')
-            ->and(appFrameArguments($exception))->not->toContain('correct-horse');
+            ->and(TraceArguments::ofAppFrames($exception))->not->toContain('correct-horse');
     } finally {
         ini_set('zend.exception_ignore_args', (string) $previous);
     }
@@ -225,3 +213,97 @@ test('the system resolver returns an address literal as it is', function (string
 test('the system resolver reads the hosts file, not only dns', function () {
     expect((new SystemResolver)->resolve('localhost'))->toContain('127.0.0.1');
 });
+
+dataset('ipv6 forms of a metadata address', [
+    'ipv4-compatible' => '::169.254.169.254',
+    'ipv4-compatible hex' => '::a9fe:a9fe',
+    'nat64' => '64:ff9b::a9fe:a9fe',
+    'nat64 dotted' => '64:ff9b::169.254.169.254',
+    'siit' => '::ffff:0:a9fe:a9fe',
+    '6to4' => '2002:a9fe:a9fe::1',
+    'teredo client' => '2001:0:4136:e378:8000:63bf:5601:5601',
+    'local-use nat64 prefix' => '64:ff9b:1::a9fe:a9fe',
+    'ipv4-compatible this network' => '::0.0.0.2',
+]);
+
+test('an ipv6 address that leads to a blocked ipv4 address is refused', function (string $ip, bool $blockPrivateNetworks) {
+    expect(guardRefusal(guardFor(['horizon.example.com' => [$ip]], $blockPrivateNetworks), 'https://horizon.example.com/horizon'))
+        ->toBe(ReadingError::Blocked);
+})->with('ipv6 forms of a metadata address')->with([false, true]);
+
+test('an ipv6 literal that leads to a blocked ipv4 address is refused', function (string $url, bool $blockPrivateNetworks) {
+    expect(guardRefusal(new SafeUrlGuard(new SystemResolver, $blockPrivateNetworks), $url))->toBe(ReadingError::Blocked);
+})->with([
+    'ipv4-compatible' => 'http://[::169.254.169.254]/horizon',
+    'nat64' => 'http://[64:ff9b::a9fe:a9fe]/horizon',
+    '6to4' => 'http://[2002:a9fe:a9fe::1]/horizon',
+    'siit' => 'http://[::ffff:0:a9fe:a9fe]/horizon',
+])->with([false, true]);
+
+test('an ipv6 address that leads to a private ipv4 address follows the switch', function (string $ip) {
+    $url = 'https://horizon.example.com/horizon';
+
+    expect(guardRefusal(guardFor(['horizon.example.com' => [$ip]]), $url))->toBeNull()
+        ->and(guardRefusal(guardFor(['horizon.example.com' => [$ip]], blockPrivateNetworks: true), $url))->toBe(ReadingError::Blocked);
+})->with([
+    'ipv4-compatible' => '::10.0.0.5',
+    'nat64' => '64:ff9b::a00:5',
+    '6to4' => '2002:a00:5::1',
+    'siit' => '::ffff:0:c0a8:10a',
+]);
+
+test('an ipv6 address that leads to a public ipv4 address passes and is pinned as itself', function () {
+    $target = guardFor(['horizon.example.com' => ['64:ff9b::cb00:710a']], blockPrivateNetworks: true)
+        ->check('https://horizon.example.com/horizon');
+
+    expect($target->ip)->toBe('64:ff9b::cb00:710a')
+        ->and($target->curlResolve())->toBe('horizon.example.com:443:[64:ff9b::cb00:710a]');
+});
+
+test('the ipv6 loopback is still judged as loopback, not as an embedded address', function () {
+    expect(guardRefusal(guardFor(['horizon.internal' => ['::1']]), 'http://horizon.internal/horizon'))->toBeNull();
+});
+
+test('a host that is not plain ascii, or not a canonical address, is refused before any lookup', function (string $url) {
+    $guard = guardFor(['shop.example.com' => ['203.0.113.10']], resolver: $resolver);
+
+    expect(guardRefusal($guard, $url))->toBe(ReadingError::Blocked)
+        ->and($resolver->asked)->toBe([]);
+})->with([
+    'raw utf-8' => "http://sh\u{00f6}p.example.com/horizon",
+    'percent-encoded dot' => 'http://shop%2Eexample.com/horizon',
+    'percent-encoded host' => 'http://%73hop.example.com/horizon',
+    'ipv6 zone' => 'http://[fe80::1%25eth0]/horizon',
+    'not an ipv6 literal' => 'http://[shop.example.com]/horizon',
+    'decimal ipv4' => 'http://2130706433/horizon',
+    'octal ipv4' => 'http://0177.0.0.1/horizon',
+    'short ipv4' => 'http://127.1/horizon',
+    'hex ipv4' => 'http://0x7f000001/horizon',
+    'hex octet' => 'http://0x7f.0.0.1/horizon',
+    'leading zero' => 'http://127.0.0.01/horizon',
+    'five parts' => 'http://1.2.3.4.5/horizon',
+    'numeric last label' => 'http://shop.example.123/horizon',
+    'dotted quad with a trailing dot' => 'http://10.0.0.5./horizon',
+    'space in the host' => 'http://shop example.com/horizon',
+]);
+
+test('a url that is not printable ascii is refused', function (string $url) {
+    expect(guardRefusal(guardFor(['shop.example.com' => ['203.0.113.10']]), $url))->toBe(ReadingError::Blocked);
+})->with([
+    'invalid utf-8 in the path' => "https://shop.example.com/horizon\xff",
+    'utf-8 in the path' => "https://shop.example.com/h\u{00f6}rizon",
+    'space in the path' => 'https://shop.example.com/hori zon',
+    'newline' => "https://shop.example.com/horizon\n",
+    'nul' => "https://shop.example.com/horizon\0",
+]);
+
+test('ordinary host names still pass', function (string $url, string $host) {
+    $target = guardFor([$host => ['203.0.113.10']])->check($url);
+
+    expect($target->host)->toBe($host);
+})->with([
+    'punycode' => ['https://xn--shp-sna.example.com/horizon', 'xn--shp-sna.example.com'],
+    'container service name' => ['http://horizon_app:8080/horizon', 'horizon_app'],
+    'digits inside labels' => ['https://app2.123abc.example.com/horizon', 'app2.123abc.example.com'],
+    'single label' => ['http://horizon/horizon', 'horizon'],
+]);

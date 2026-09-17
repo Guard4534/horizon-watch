@@ -25,6 +25,10 @@ final readonly class SafeUrlGuard
         '224.0.0.0/4',
         'ff00::/8',
         '::/128',
+        // Local-use NAT64 prefixes place the IPv4 address according to a
+        // prefix length the guard cannot know, so the range is refused
+        // rather than guessed at.
+        '64:ff9b:1::/48',
     ];
 
     private const array PRIVATE_NETWORKS = [
@@ -56,12 +60,23 @@ final readonly class SafeUrlGuard
      */
     public function check(#[SensitiveParameter] string $url): ResolvedTarget
     {
+        // Anything but printable ASCII is refused before parsing: Guzzle
+        // throws its own exception on invalid UTF-8, and libcurl would
+        // ignore a raw UTF-8 --resolve entry, or decode a percent-encoded
+        // host itself, and look the name up again.
+        if (preg_match('/[^\x21-\x7e]/', $url) === 1) {
+            throw new HorizonReadFailed(ReadingError::Blocked);
+        }
+
         $parts = parse_url($url);
         $scheme = strtolower((string) ($parts['scheme'] ?? ''));
         $urlHost = strtolower((string) ($parts['host'] ?? ''));
         $name = rtrim(trim($urlHost, '[]'), '.');
 
-        if (! in_array($scheme, ['http', 'https'], true) || $name === '' || in_array($name, self::BLOCKED_NAMES, true)) {
+        if (! in_array($scheme, ['http', 'https'], true)
+            || $name === ''
+            || ! $this->usableHost($urlHost)
+            || in_array($name, self::BLOCKED_NAMES, true)) {
             throw new HorizonReadFailed(ReadingError::Blocked);
         }
 
@@ -71,40 +86,72 @@ final readonly class SafeUrlGuard
             throw new HorizonReadFailed(ReadingError::Unreachable);
         }
 
-        $allowed = [];
+        $pins = [];
 
         foreach ($addresses as $address) {
-            $ip = $this->normalize($address);
+            $inspected = $this->inspect($address);
 
-            if ($ip === null || IpUtils::checkIp($ip, $this->blockedRanges())) {
+            if ($inspected === null) {
                 throw new HorizonReadFailed(ReadingError::Blocked);
             }
 
-            $allowed[] = $ip;
+            [$pin, $judged] = $inspected;
+
+            foreach ($judged as $ip) {
+                if (IpUtils::checkIp($ip, $this->blockedRanges())) {
+                    throw new HorizonReadFailed(ReadingError::Blocked);
+                }
+            }
+
+            $pins[] = $pin;
         }
 
         return new ResolvedTarget(
             host: $urlHost,
             port: (int) ($parts['port'] ?? ($scheme === 'https' ? 443 : 80)),
-            ip: $this->preferred($allowed),
+            ip: $this->preferred($pins),
         );
     }
 
     /**
-     * @return list<string>
+     * A name made of letters, digits, dots, hyphens and underscores (the
+     * underscore for container service names), or a bracketed IPv6 literal.
+     *
+     * A name whose last label reads as a number is parsed as an IPv4
+     * address by glibc and libcurl, in forms the pin does not cover
+     * (2130706433, 0177.0.0.1, 127.1, 0x7f.1): only a canonical dotted
+     * quad is accepted there.
      */
-    private function blockedRanges(): array
+    private function usableHost(string $host): bool
     {
-        return $this->blockPrivateNetworks
-            ? [...self::ALWAYS_BLOCKED, ...self::PRIVATE_NETWORKS]
-            : self::ALWAYS_BLOCKED;
+        if (str_starts_with($host, '[')) {
+            return str_ends_with($host, ']')
+                && filter_var(substr($host, 1, -1), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
+        }
+
+        if (preg_match('/^[a-z0-9._-]+$/', $host) !== 1) {
+            return false;
+        }
+
+        $labels = explode('.', rtrim($host, '.'));
+
+        if (preg_match('/^(0x[0-9a-f]*|[0-9]+)$/', (string) end($labels)) === 1) {
+            return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
+        }
+
+        return true;
     }
 
     /**
-     * An IPv4 address mapped into IPv6 (::ffff:a.b.c.d, in any spelling) is
-     * judged as the IPv4 address it reaches.
+     * The address to pin and every address it stands for. An IPv4 address
+     * mapped into IPv6 (::ffff:a.b.c.d, in any spelling) reaches that IPv4
+     * host itself, so it is judged and pinned as IPv4. The IPv6 forms that
+     * carry an IPv4 address for a translator or a relay are judged twice:
+     * as themselves and as the IPv4 address they lead to.
+     *
+     * @return array{0: string, 1: list<string>}|null
      */
-    private function normalize(string $address): ?string
+    private function inspect(string $address): ?array
     {
         $binary = @inet_pton($address);
 
@@ -116,7 +163,44 @@ final readonly class SafeUrlGuard
             $binary = substr($binary, 12);
         }
 
-        return (string) inet_ntop($binary);
+        $ip = (string) inet_ntop($binary);
+        $embedded = strlen($binary) === 16 ? $this->embeddedIpv4($binary) : null;
+
+        return [$ip, $embedded === null ? [$ip] : [$ip, (string) inet_ntop($embedded)]];
+    }
+
+    /**
+     * The four bytes of IPv4 inside an IPv6 address, for the prefixes that
+     * define where they sit.
+     */
+    private function embeddedIpv4(string $binary): ?string
+    {
+        $tail = substr($binary, 12);
+
+        return match (true) {
+            // IPv4-compatible (::a.b.c.d, deprecated). :: and ::1 are IPv6
+            // addresses of their own and are judged as such.
+            str_starts_with($binary, str_repeat("\0", 12)) => in_array($tail, ["\0\0\0\0", "\0\0\0\1"], true) ? null : $tail,
+            // SIIT, ::ffff:0:a.b.c.d.
+            str_starts_with($binary, str_repeat("\0", 8)."\xff\xff\0\0") => $tail,
+            // NAT64 well-known prefix, 64:ff9b::/96.
+            str_starts_with($binary, "\x00\x64\xff\x9b".str_repeat("\0", 8)) => $tail,
+            // 6to4, 2002:a.b.c.d::/48.
+            str_starts_with($binary, "\x20\x02") => substr($binary, 2, 4),
+            // Teredo, 2001:0::/32: the client address, with its bits inverted.
+            str_starts_with($binary, "\x20\x01\x00\x00") => $tail ^ "\xff\xff\xff\xff",
+            default => null,
+        };
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function blockedRanges(): array
+    {
+        return $this->blockPrivateNetworks
+            ? [...self::ALWAYS_BLOCKED, ...self::PRIVATE_NETWORKS]
+            : self::ALWAYS_BLOCKED;
     }
 
     /**
