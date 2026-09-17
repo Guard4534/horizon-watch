@@ -53,6 +53,32 @@ services:
             - sail
         depends_on:
             - laravel.test
+    # Every fifteen seconds it queues the environments due for a reading
+    # (DispatchDuePolls), and once a day it prunes old readings; without it
+    # the pages never receive a new reading in development.
+    # compose.prod.yaml runs its own scheduler the same way.
+    scheduler:
+        build:
+            context: './docker/8.5'
+            dockerfile: Dockerfile
+            args:
+                WWWGROUP: '${WWWGROUP}'
+        image: 'sail-8.5/app'
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+            # Through supervisord as the sail user, for the same reason as
+            # queue. schedule:work starts a fresh schedule:run every minute,
+            # so an edited schedule or action is picked up without a restart.
+            SUPERVISOR_PHP_COMMAND: '/usr/bin/php -d variables_order=EGPCS /var/www/html/artisan schedule:work'
+        volumes:
+            - '.:/var/www/html'
+        networks:
+            - sail
+        depends_on:
+            - laravel.test
     pgsql:
         image: 'postgres:18-alpine'
         ports:
