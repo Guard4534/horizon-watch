@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\EnvironmentStatus;
+use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
 use Carbon\CarbonImmutable;
 use Database\Factories\EnvironmentStateFactory;
@@ -21,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property CarbonImmutable $captured_at
  * @property EnvironmentStatus $status
  * @property ReadingError|null $error
+ * @property HorizonStatus|null $horizon_status
  * @property list<array{hostname: string, status: string, workers: int, supervisors: int, queues: int, seenAt?: string}> $nodes seenAt is absent from states written before it existed
  * @property list<array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}> $queues
  * @property list<array{job: string, queue: string, exception: string, tries: int, failedAt: string}> $failed_jobs
@@ -35,6 +37,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'captured_at',
     'status',
     'error',
+    'horizon_status',
     'nodes',
     'queues',
     'failed_jobs',
@@ -67,6 +70,7 @@ class EnvironmentState extends Model
             'captured_at' => 'immutable_datetime',
             'status' => EnvironmentStatus::class,
             'error' => ReadingError::class,
+            'horizon_status' => HorizonStatus::class,
             'nodes' => 'array',
             'queues' => 'array',
             'failed_jobs' => 'array',

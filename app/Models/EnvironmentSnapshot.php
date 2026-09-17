@@ -24,8 +24,9 @@ use Illuminate\Support\Collection;
  * @property int $pending
  * @property int $max_wait_seconds
  * @property int $jobs_per_minute
- * @property int $failed_last_24_hours counted over failed_window_minutes, despite the name
+ * @property int $failed_in_window counted over failed_window_minutes
  * @property int $failed_window_minutes
+ * @property int $failed_last_hour
  * @property int $workers
  * @property int $node_count
  * @property int|null $latency_ms
@@ -40,8 +41,9 @@ use Illuminate\Support\Collection;
     'pending',
     'max_wait_seconds',
     'jobs_per_minute',
-    'failed_last_24_hours',
+    'failed_in_window',
     'failed_window_minutes',
+    'failed_last_hour',
     'workers',
     'node_count',
     'latency_ms',

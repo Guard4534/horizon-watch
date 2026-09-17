@@ -181,7 +181,7 @@ test('down anomalies and the pause follow the status, and a healthy latest readi
     EnvironmentSnapshot::factory()->for($recovered)->create($at(1));
 
     // Paused, even on a row whose breach list forgot it.
-    EnvironmentSnapshot::factory()->for($paused)->create([...$at(7), 'status' => EnvironmentStatus::Paused, 'breaches' => []]);
+    EnvironmentSnapshot::factory()->for($paused)->create([...$at(17), 'status' => EnvironmentStatus::Paused, 'breaches' => []]);
     EnvironmentSnapshot::factory()->for($paused)->create([...$at(1), 'status' => EnvironmentStatus::Paused, 'breaches' => [AlertRuleMetric::HorizonPaused]]);
 
     $anomalies = $this->readings->openAnomalies([$unreachable, $inactive, $recovered, $paused]);
@@ -189,7 +189,7 @@ test('down anomalies and the pause follow the status, and a healthy latest readi
     expect(array_keys($anomalies))->toEqualCanonicalizing([$unreachable->id, $inactive->id, $paused->id])
         ->and($anomalies[$paused->id])->toHaveCount(1)
         ->and($anomalies[$paused->id][0]['metric'])->toBe(AlertRuleMetric::HorizonPaused)
-        ->and($anomalies[$paused->id][0]['since']->equalTo($this->now->subMinutes(7)))->toBeTrue()
+        ->and($anomalies[$paused->id][0]['since']->equalTo($this->now->subMinutes(17)))->toBeTrue()
         ->and($anomalies[$paused->id][0]['truncated'])->toBeFalse()
         ->and($anomalies[$unreachable->id])->toHaveCount(1)
         ->and($anomalies[$unreachable->id][0]['metric'])->toBe(AlertRuleMetric::EndpointUnreachable)
@@ -198,6 +198,72 @@ test('down anomalies and the pause follow the status, and a healthy latest readi
         ->and($anomalies[$inactive->id][0]['metric'])->toBe(AlertRuleMetric::HorizonMasterInactive)
         ->and($anomalies[$inactive->id][0]['since']->equalTo($this->now->subMinutes(8)))->toBeTrue()
         ->and($this->readings->openAnomalies([]))->toBe([]);
+});
+
+test('a state anomaly opens only once its run has lasted the minutes of its rule', function (EnvironmentStatus $status, AlertRuleMetric $metric, int $minutes) {
+    $young = Environment::factory()->create();
+    $due = Environment::factory()->create();
+    $reading = fn (Environment $environment, CarbonImmutable $at) => EnvironmentSnapshot::factory()->for($environment)->create([
+        'captured_at' => $at,
+        'status' => $status,
+        'error' => $status === EnvironmentStatus::Unreachable ? 'unreachable' : null,
+        'breaches' => [$metric],
+    ]);
+
+    $reading($young, $this->now->subMinutes($minutes)->addSecond());
+    $reading($young, $this->now->subSeconds(15));
+    $reading($due, $this->now->subMinutes($minutes));
+    $reading($due, $this->now->subSeconds(15));
+
+    $anomalies = $this->readings->openAnomalies([$young, $due]);
+
+    expect($anomalies)->not->toHaveKey($young->id)
+        ->and($anomalies[$due->id])->toHaveCount(1)
+        ->and($anomalies[$due->id][0]['metric'])->toBe($metric)
+        ->and($anomalies[$due->id][0]['since']->equalTo($this->now->subMinutes($minutes)))->toBeTrue();
+})->with([
+    'unreachable' => [EnvironmentStatus::Unreachable, AlertRuleMetric::EndpointUnreachable, 2],
+    'inactive' => [EnvironmentStatus::Inactive, AlertRuleMetric::HorizonMasterInactive, 5],
+    'paused' => [EnvironmentStatus::Paused, AlertRuleMetric::HorizonPaused, 15],
+]);
+
+test('a state anomaly is measured up to now, not up to its latest reading', function () {
+    $environment = Environment::factory()->create(['polling_enabled' => false]);
+    EnvironmentSnapshot::factory()->for($environment)->failed()->create(['captured_at' => $this->now->subMinutes(2)]);
+
+    expect($this->readings->openAnomalies([$environment])[$environment->id][0]['metric'])
+        ->toBe(AlertRuleMetric::EndpointUnreachable);
+});
+
+test('a state run truncated by the look-back is open', function () {
+    $environment = Environment::factory()->create();
+    EnvironmentSnapshot::factory()->for($environment)->create([
+        'captured_at' => $this->now->subHours(30),
+        'status' => EnvironmentStatus::Paused,
+        'breaches' => [AlertRuleMetric::HorizonPaused],
+    ]);
+    EnvironmentSnapshot::factory()->for($environment)->create([
+        'captured_at' => $this->now,
+        'status' => EnvironmentStatus::Paused,
+        'breaches' => [AlertRuleMetric::HorizonPaused],
+    ]);
+
+    $anomaly = $this->readings->openAnomalies([$environment])[$environment->id][0];
+
+    expect($anomaly['metric'])->toBe(AlertRuleMetric::HorizonPaused)
+        ->and($anomaly['truncated'])->toBeTrue();
+});
+
+test('the thresholds breached behind a young pause open at once', function () {
+    $environment = Environment::factory()->create();
+    EnvironmentSnapshot::factory()->for($environment)->create([
+        'captured_at' => $this->now->subMinute(),
+        'status' => EnvironmentStatus::Paused,
+        'breaches' => [AlertRuleMetric::HorizonPaused, AlertRuleMetric::QueuePending],
+    ]);
+
+    expect(array_map(fn ($anomaly) => $anomaly['metric'], $this->readings->openAnomalies([$environment])[$environment->id]))
+        ->toBe([AlertRuleMetric::QueuePending]);
 });
 
 test('the latest reading is found even when it is old, walking the composite index', function () {
@@ -221,7 +287,10 @@ test('the latest reading is found even when it is old, walking the composite ind
 
 test('the anomaly query is one bounded statement on the composite index', function () {
     $environments = Environment::factory()->count(3)->create();
-    $environments->each(fn (Environment $environment) => EnvironmentSnapshot::factory()->for($environment)->failed()->create());
+    $environments->each(fn (Environment $environment) => EnvironmentSnapshot::factory()->for($environment)->failed()->count(2)->sequence(
+        ['captured_at' => $this->now->subMinutes(3)],
+        ['captured_at' => $this->now],
+    )->create());
 
     DB::enableQueryLog();
     $anomalies = $this->readings->openAnomalies($environments->all());
@@ -322,14 +391,44 @@ test('an environment polled less often than a bucket is carried over its empty b
         ->and(array_slice($maxWait, 38))->toBe([0, 0, 6, 6, 8, 8, 0, 0, 0, 9]);
 });
 
+test('the carry reaches as far as the tick-rounded interval and its slack', function () {
+    $environment = Environment::factory()->create(['poll_interval_seconds' => 211]);
+    $bucket = fn (int $index) => $this->lastBucket->subSeconds((47 - $index) * 225);
+
+    EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $bucket(40)->addSeconds(224), 'jobs_per_minute' => 10]);
+    EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $bucket(40)->addSeconds(224 + 240), 'jobs_per_minute' => 20]);
+    EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $bucket(45), 'jobs_per_minute' => 30]);
+
+    expect(array_slice($this->readings->throughputSeries([$environment->id], SeriesRange::ThreeHours), 39))
+        ->toBe([0, 10, 10, 20, 20, 0, 30, 30, 0]);
+});
+
+test('a bucket whose only readings failed is never filled, and stops the carry', function () {
+    $environment = Environment::factory()->create(['poll_interval_seconds' => 600]);
+    $bucket = fn (int $index) => $this->lastBucket->subSeconds((47 - $index) * 225);
+
+    EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $bucket(38), 'jobs_per_minute' => 10, 'max_wait_seconds' => 4]);
+    EnvironmentSnapshot::factory()->for($environment)->failed()->create(['captured_at' => $bucket(39)]);
+    EnvironmentSnapshot::factory()->for($environment)->failed()->create(['captured_at' => $bucket(42)]);
+    EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $bucket(42)->addSeconds(10), 'jobs_per_minute' => 20, 'max_wait_seconds' => 7]);
+    EnvironmentSnapshot::factory()->for($environment)->failed()->create(['captured_at' => $bucket(44)]);
+
+    expect(array_slice($this->readings->throughputSeries([$environment->id], SeriesRange::ThreeHours), 37))
+        ->toBe([0, 10, 0, 0, 0, 20, 20, 0, 0, 0, 0])
+        ->and(array_slice($this->readings->maxWaitSeries($environment->id, SeriesRange::ThreeHours), 37))
+        ->toBe([0, 4, 0, 0, 0, 7, 7, 0, 0, 0, 0]);
+});
+
 test('critical anomalies come first', function () {
     $environment = Environment::factory()->create();
 
-    EnvironmentSnapshot::factory()->for($environment)->create([
-        'captured_at' => $this->now,
-        'status' => EnvironmentStatus::Inactive,
-        'breaches' => [AlertRuleMetric::WorkersMissing, AlertRuleMetric::HorizonMasterInactive],
-    ]);
+    foreach ([10, 0] as $minutesAgo) {
+        EnvironmentSnapshot::factory()->for($environment)->create([
+            'captured_at' => $this->now->subMinutes($minutesAgo),
+            'status' => EnvironmentStatus::Inactive,
+            'breaches' => [AlertRuleMetric::WorkersMissing, AlertRuleMetric::HorizonMasterInactive],
+        ]);
+    }
 
     expect(array_map(fn ($anomaly) => $anomaly['metric'], $this->readings->openAnomalies([$environment])[$environment->id]))
         ->toBe([AlertRuleMetric::HorizonMasterInactive, AlertRuleMetric::WorkersMissing]);

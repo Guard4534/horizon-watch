@@ -12,12 +12,11 @@ beforeEach(function () {
     Readings::mockup($this->user->currentTeam);
 });
 
-test('the worst anomaly leads the log, with its channels', function () {
+test('the worst anomaly leads the log', function () {
     $this->actingAs($this->user)
         ->get(route('alerts.index', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.alerts.0.severity', 'critical')
-            ->has('page.alerts.0.channels', 2));
+            ->where('page.alerts.0.severity', 'critical'));
 });
 
 test('a scope with overrides marks them', function () {

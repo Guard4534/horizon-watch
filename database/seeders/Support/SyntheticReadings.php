@@ -3,7 +3,9 @@
 namespace Database\Seeders\Support;
 
 use App\Enums\EnvironmentStatus;
+use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
+use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
 use App\Externals\Horizon\Data\HorizonPendingJob;
 use App\Externals\Horizon\Data\HorizonQueueLoad;
@@ -108,8 +110,9 @@ final class SyntheticReadings
                 'pending' => 0,
                 'max_wait_seconds' => 0,
                 'jobs_per_minute' => 0,
-                'failed_last_24_hours' => 0,
+                'failed_in_window' => 0,
                 'failed_window_minutes' => self::FAILED_WINDOW_MINUTES,
+                'failed_last_hour' => 0,
                 'workers' => 0,
                 'node_count' => 0,
                 'latency_ms' => null,
@@ -126,8 +129,9 @@ final class SyntheticReadings
             'pending' => array_sum(array_column($reading['queues'], 'pending')),
             'max_wait_seconds' => max([0, ...array_column($reading['queues'], 'waitSeconds')]),
             'jobs_per_minute' => $reading['horizon']->stats->jobsPerMinute,
-            'failed_last_24_hours' => $reading['horizon']->stats->failedJobs,
+            'failed_in_window' => $reading['horizon']->stats->failedJobs,
             'failed_window_minutes' => $reading['horizon']->stats->failedJobsPeriodMinutes,
+            'failed_last_hour' => $evaluated->failedLastHour,
             'workers' => $reading['horizon']->stats->processes,
             'node_count' => count($reading['nodes']),
             'latency_ms' => $reading['horizon']->latencyMs,
@@ -157,6 +161,7 @@ final class SyntheticReadings
                 'captured_at' => $until,
                 'status' => $evaluated->status,
                 'error' => $unreachable ? ReadingError::Unreachable : null,
+                'horizon_status' => HorizonStatus::from($reading['horizon']->stats->status),
                 'nodes' => $reading['nodes'],
                 'queues' => $reading['queues'],
                 'failed_jobs' => $this->failedJobs($environment, $detailAt),
@@ -225,7 +230,7 @@ final class SyntheticReadings
             ),
             masters: array_map(fn (array $node) => new HorizonMaster($node['hostname'], $node['status'], []), $nodes),
             workload: array_map(fn (array $queue) => new HorizonQueueLoad($queue['name'], $queue['pending'], $queue['waitSeconds'], $queue['workers']), $queues),
-            failedJobs: null,
+            failedJobs: array_map(fn (array $job) => new HorizonFailedJob($job['job'], $job['queue'], $job['exception'], $job['tries'], CarbonImmutable::parse($job['failedAt'])), $this->failedJobs($environment, CarbonImmutable::now())),
             // Relative to the real clock, because that is the one the
             // evaluator measures against: only the elapsed time matters.
             pendingJobs: array_map(fn (array $job) => new HorizonPendingJob($job['job'], $job['queue'], 'reserved', CarbonImmutable::now()->subSeconds($job['elapsed'])), $reserved),

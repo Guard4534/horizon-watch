@@ -6,7 +6,7 @@ import EnvPill from '@/components/nocturne/EnvPill.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { failedPerHour, failedWindowNote } from '@/lib/failedWindow';
+import { failedWindowNote } from '@/lib/failedWindow';
 import {
     envColor,
     formatCount,
@@ -70,10 +70,7 @@ const trend = computed(() => {
 });
 
 const failedColor = computed(() =>
-    failedPerHour(
-        environment.failedLast24Hours,
-        environment.failedWindowMinutes,
-    ) > failedPerHourThreshold
+    environment.failedLastHour > failedPerHourThreshold
         ? 'var(--st-warn)'
         : 'var(--nc-neutral-600)',
 );
@@ -181,7 +178,7 @@ const silence = computed<string | null>(() => {
                 :style="{ color: failedColor }"
                 :title="failedWindowNote(environment.failedWindowMinutes)"
             >
-                {{ environment.failedLast24Hours }} failed
+                {{ environment.failedInWindow }} failed
             </span>
         </span>
     </Link>

@@ -2,8 +2,7 @@ import { trans } from 'laravel-vue-i18n';
 
 // Horizon counts failed jobs over a window it states itself (often a week,
 // see EnvironmentData::$failedWindowMinutes). A count is shown with its own
-// window and never scaled to another; warnings compare the hourly rate,
-// which is what the jobs.failed_per_hour rule measures.
+// window and never scaled to another.
 
 /** "Failed · 24h", "Failed · 7d", "Failed · 90 min"; null = windows differ. */
 export function failedLabel(windowMinutes: number | null): string {
@@ -47,9 +46,4 @@ export function failedWindowShort(windowMinutes: number): string {
         default:
             return `${windowMinutes} min`;
     }
-}
-
-/** Failures per hour, the same arithmetic as StatusEvaluator. */
-export function failedPerHour(count: number, windowMinutes: number): number {
-    return (count * 60) / Math.max(1, windowMinutes);
 }

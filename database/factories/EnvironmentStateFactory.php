@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\EnvironmentStatus;
+use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
 use App\Models\Environment;
 use App\Models\EnvironmentState;
@@ -26,6 +27,7 @@ class EnvironmentStateFactory extends Factory
             'captured_at' => now(),
             'status' => EnvironmentStatus::Active,
             'error' => null,
+            'horizon_status' => HorizonStatus::Running,
             'nodes' => [
                 ['hostname' => 'worker-1.example.com', 'status' => 'running', 'workers' => 6, 'supervisors' => 2, 'queues' => 3],
             ],

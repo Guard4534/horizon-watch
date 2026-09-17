@@ -7,7 +7,6 @@ use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
 use App\Enums\EnvironmentColor;
 use App\Enums\EnvironmentStatus;
-use App\Enums\NotificationChannel;
 use Spatie\LaravelData\Data;
 
 class AlertData extends Data
@@ -33,7 +32,5 @@ class AlertData extends Data
         // or its readings stopped long enough ago that now is past the cap.
         // Show "more than 24 h", not the capped minutes.
         public bool $sinceTruncated,
-        /** @var array<int, NotificationChannel> */
-        public array $channels,
     ) {}
 }

@@ -2,6 +2,7 @@
 
 namespace App\Actions\Monitoring;
 
+use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
@@ -74,11 +75,22 @@ class PollEnvironment
 
     private function storeReading(Environment $environment, CarbonImmutable $capturedAt, HorizonReading $reading): ?EnvironmentSnapshot
     {
-        $evaluated = $this->evaluator->evaluate($reading);
+        $evaluated = $this->evaluator->evaluate($reading->failedJobs === null
+            ? new HorizonReading(
+                stats: $reading->stats,
+                masters: $reading->masters,
+                workload: $reading->workload,
+                failedJobs: $this->keptFailedJobs($environment),
+                pendingJobs: $reading->pendingJobs,
+                queueRuntimes: $reading->queueRuntimes,
+                latencyMs: $reading->latencyMs,
+            )
+            : $reading);
 
         $state = [
             'status' => $evaluated->status,
             'error' => null,
+            'horizon_status' => HorizonStatus::tryFrom($reading->stats->status),
             'latency_ms' => $reading->latencyMs,
             'nodes' => array_map(fn (HorizonMaster $master) => $this->node($master, $capturedAt), $reading->masters),
             'queues' => array_map(fn (HorizonQueueLoad $queue) => $this->queue($queue, $reading), $reading->workload),
@@ -107,8 +119,9 @@ class PollEnvironment
             'pending' => min(self::MAX_COUNT, array_sum(array_map(fn (HorizonQueueLoad $queue) => $queue->length, $reading->workload))),
             'max_wait_seconds' => max([0, ...array_map(fn (HorizonQueueLoad $queue) => $queue->wait, $reading->workload)]),
             'jobs_per_minute' => $reading->stats->jobsPerMinute,
-            'failed_last_24_hours' => $reading->stats->failedJobs,
+            'failed_in_window' => $reading->stats->failedJobs,
             'failed_window_minutes' => $reading->stats->failedJobsPeriodMinutes,
+            'failed_last_hour' => $evaluated->failedLastHour,
             'workers' => $reading->stats->processes,
             'node_count' => count($reading->masters),
             'latency_ms' => $reading->latencyMs,
@@ -129,8 +142,9 @@ class PollEnvironment
             'pending' => 0,
             'max_wait_seconds' => 0,
             'jobs_per_minute' => 0,
-            'failed_last_24_hours' => 0,
+            'failed_in_window' => 0,
             'failed_window_minutes' => $this->previousFailedWindow($environment),
+            'failed_last_hour' => 0,
             'workers' => 0,
             'node_count' => 0,
             'latency_ms' => null,
@@ -140,6 +154,7 @@ class PollEnvironment
             'latency_ms' => null,
             'pending_jobs' => [],
         ], [
+            'horizon_status' => null,
             'nodes' => [],
             'queues' => [],
             'failed_jobs' => [],
@@ -229,6 +244,25 @@ class PollEnvironment
         return $previous !== null && $previous->environment_id === $environment->id
             ? $previous->failed_window_minutes
             : self::HORIZON_FAILED_WINDOW_MINUTES;
+    }
+
+    /**
+     * @return list<HorizonFailedJob>
+     */
+    private function keptFailedJobs(Environment $environment): array
+    {
+        $jobs = EnvironmentState::query()
+            ->where('environment_id', $environment->id)
+            ->first(['failed_jobs'])
+            ->failed_jobs ?? [];
+
+        return array_map(fn (array $job) => new HorizonFailedJob(
+            name: $job['job'],
+            queue: $job['queue'],
+            exception: $job['exception'],
+            attempts: $job['tries'],
+            failedAt: CarbonImmutable::parse($job['failedAt']),
+        ), $jobs);
     }
 
     /**

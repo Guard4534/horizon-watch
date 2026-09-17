@@ -30,6 +30,10 @@ class StoredReadings
 
     public const LOOKBACK_HOURS = 24;
 
+    private const POLL_TICK_SECONDS = 15;
+
+    private const POLL_SLACK_SECONDS = 15;
+
     // The anomalies a status stands for. Enum values only: they are
     // inlined in the anomaly query as literals.
     private const STATUS_METRICS = [
@@ -75,7 +79,7 @@ class StoredReadings
         // made PostgreSQL sort every row of the environment instead (336 ms
         // per environment whose latest reading is old, on 5 M rows).
         $snapshot = EnvironmentSnapshot::query()
-            ->select(['pending', 'max_wait_seconds', 'jobs_per_minute', 'failed_last_24_hours', 'failed_window_minutes', 'workers', 'node_count'])
+            ->select(['pending', 'max_wait_seconds', 'jobs_per_minute', 'failed_in_window', 'failed_window_minutes', 'failed_last_hour', 'workers', 'node_count'])
             ->whereColumn('environment_snapshots.environment_id', 'environment_states.environment_id')
             ->whereRaw("(environment_snapshots.environment_id, environment_snapshots.captured_at) <= (environment_states.environment_id, 'infinity'::timestamptz)")
             ->orderByDesc('environment_snapshots.environment_id')
@@ -88,8 +92,9 @@ class StoredReadings
             ->selectRaw('latest.pending as snapshot_pending')
             ->selectRaw('latest.max_wait_seconds as snapshot_max_wait_seconds')
             ->selectRaw('latest.jobs_per_minute as snapshot_jobs_per_minute')
-            ->selectRaw('latest.failed_last_24_hours as snapshot_failed_last_24_hours')
+            ->selectRaw('latest.failed_in_window as snapshot_failed_in_window')
             ->selectRaw('latest.failed_window_minutes as snapshot_failed_window_minutes')
+            ->selectRaw('latest.failed_last_hour as snapshot_failed_last_hour')
             ->selectRaw('latest.workers as snapshot_workers')
             ->selectRaw('latest.node_count as snapshot_node_count')
             ->leftJoinLateral($snapshot, 'latest')
@@ -176,12 +181,11 @@ class StoredReadings
                 select s.environment_id,
                        e.poll_interval_seconds as poll_interval,
                        extract(epoch from date_bin(make_interval(secs => ?), s.captured_at, ?::timestamptz))::bigint as bucket,
-                       {$aggregate} as value
+                       {$aggregate} filter (where s.error is null) as value
                 from environment_snapshots s
                 join environments e on e.id = s.environment_id
                 where s.environment_id in ({$placeholders})
                   and s.captured_at >= ?::timestamptz and s.captured_at < ?::timestamptz
-                  and s.error is null
                 group by s.environment_id, e.poll_interval_seconds, bucket
                 SQL,
             [$step, self::SERIES_ORIGIN, ...array_values($environmentIds), $from->toIso8601String(), $until->toIso8601String()],
@@ -194,9 +198,9 @@ class StoredReadings
             $index = intdiv((int) $row->bucket - $from->getTimestamp(), $step);
 
             if ($index >= 0 && $index < self::SERIES_POINTS) {
-                $buckets[(int) $row->environment_id][$index] = (float) $row->value;
-                // Empty buckets an interval of this length can leave in a row.
-                $reach[(int) $row->environment_id] = (int) ceil((int) $row->poll_interval / $step) - 1;
+                $buckets[(int) $row->environment_id][$index] = $row->value === null ? null : (float) $row->value;
+                $gap = (int) ceil((int) $row->poll_interval / self::POLL_TICK_SECONDS) * self::POLL_TICK_SECONDS + self::POLL_SLACK_SECONDS;
+                $reach[(int) $row->environment_id] = (int) ceil($gap / $step) - 1;
             }
         }
 
@@ -207,7 +211,7 @@ class StoredReadings
             for ($index = 0; $index < self::SERIES_POINTS; $index++) {
                 if (array_key_exists($index, $own)) {
                     [$last, $lastIndex] = [$own[$index], $index];
-                    $values[$index] += $last;
+                    $values[$index] += $last ?? 0.0;
                 } elseif ($last !== null && $index - $lastIndex <= $reach[$environmentId]) {
                     $values[$index] += $last;
                 }
@@ -403,6 +407,7 @@ class StoredReadings
         );
 
         $anomalies = [];
+        $now = Date::now()->getTimestamp();
 
         foreach ($rows as $row) {
             $metric = AlertRuleMetric::tryFrom($row->metric);
@@ -411,10 +416,19 @@ class StoredReadings
                 continue;
             }
 
+            $since = Date::parse($row->since)->toImmutable();
+            $truncated = (bool) $row->truncated;
+
+            if (! $truncated
+                && in_array($metric, self::STATUS_METRICS, true)
+                && $now - $since->getTimestamp() < $metric->defaultThreshold() * 60) {
+                continue;
+            }
+
             $anomalies[(int) $row->environment_id][] = [
                 'metric' => $metric,
-                'since' => Date::parse($row->since)->toImmutable(),
-                'truncated' => (bool) $row->truncated,
+                'since' => $since,
+                'truncated' => $truncated,
             ];
         }
 

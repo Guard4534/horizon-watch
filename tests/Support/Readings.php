@@ -4,10 +4,12 @@ namespace Tests\Support;
 
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
+use App\Enums\HorizonStatus;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
 use App\Models\Team;
+use Carbon\CarbonImmutable;
 use Database\Seeders\Support\SyntheticReadings;
 
 /**
@@ -16,6 +18,8 @@ use Database\Seeders\Support\SyntheticReadings;
  */
 final class Readings
 {
+    public const int STATE_RUN_MINUTES = 30;
+
     /**
      * The seeder's scripted incidents, written as readings on the seeded
      * organization; every other environment reads healthy. One anomaly
@@ -60,15 +64,26 @@ final class Readings
             $states = $states->failed();
         }
 
-        $snapshots->create([
+        $row = [
             'status' => $status,
             'breaches' => $failed ? [AlertRuleMetric::EndpointUnreachable] : $breaches,
             ...$snapshot,
-            'captured_at' => $capturedAt,
-        ]);
+        ];
+
+        if (in_array($status, [EnvironmentStatus::Unreachable, EnvironmentStatus::Inactive, EnvironmentStatus::Paused], true)
+            && ! EnvironmentSnapshot::query()->where('environment_id', $environment->id)->exists()) {
+            $snapshots->create([...$row, 'captured_at' => CarbonImmutable::parse($capturedAt)->subMinutes(self::STATE_RUN_MINUTES)]);
+        }
+
+        $snapshots->create([...$row, 'captured_at' => $capturedAt]);
 
         return $states->create([
             'status' => $status,
+            'horizon_status' => match ($status) {
+                EnvironmentStatus::Inactive => HorizonStatus::Inactive,
+                EnvironmentStatus::Paused => HorizonStatus::Paused,
+                default => HorizonStatus::Running,
+            },
             ...$state,
             'captured_at' => $state['captured_at'] ?? $capturedAt,
         ]);

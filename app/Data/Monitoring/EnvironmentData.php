@@ -4,6 +4,7 @@ namespace App\Data\Monitoring;
 
 use App\Enums\EnvironmentColor;
 use App\Enums\EnvironmentStatus;
+use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
 use Spatie\LaravelData\Data;
 
@@ -30,10 +31,9 @@ class EnvironmentData extends Data
         // percent; null when there are not six or the base is 0.
         public ?int $trendPercent,
         public int $maxWaitSeconds,
-        // Counted over $failedWindowMinutes, which Horizon states (often a
-        // week): the name predates the window.
-        public int $failedLast24Hours,
+        public int $failedInWindow,
         public int $failedWindowMinutes,
+        public int $failedLastHour,
         public int $workers,
         public int $jobsPerMinute,
         public int $nodeCount,
@@ -62,6 +62,7 @@ class EnvironmentData extends Data
         // this environment, whatever the viewer's page refresh is.
         public int $pollIntervalSeconds,
         public ?ReadingError $readingError,
+        public ?HorizonStatus $horizonStatus,
     ) {}
 
     /**

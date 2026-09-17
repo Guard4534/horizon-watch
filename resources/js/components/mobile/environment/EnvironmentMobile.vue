@@ -94,10 +94,9 @@ const tiles = computed(() => [
     },
     {
         label: failedLabel(environment.value.failedWindowMinutes),
-        value: formatCount(environment.value.failedLast24Hours),
+        value: formatCount(environment.value.failedInWindow),
         color: failedColor(
-            environment.value.failedLast24Hours,
-            environment.value.failedWindowMinutes,
+            environment.value.failedLastHour,
             threshold('jobs.failed_per_hour'),
         ),
     },

@@ -242,7 +242,7 @@ test('an environment reads its latest stored reading', function () {
         'captured_at' => now()->subSeconds(20),
         'pending' => 2400,
         'max_wait_seconds' => 33,
-        'failed_last_24_hours' => 12,
+        'failed_in_window' => 12,
         'failed_window_minutes' => 10080,
         'workers' => 9,
         'jobs_per_minute' => 180,
@@ -254,7 +254,7 @@ test('an environment reads its latest stored reading', function () {
     expect($data->status)->toBe(EnvironmentStatus::Degraded)
         ->and($data->pending)->toBe(2400)
         ->and($data->maxWaitSeconds)->toBe(33)
-        ->and($data->failedLast24Hours)->toBe(12)
+        ->and($data->failedInWindow)->toBe(12)
         ->and($data->failedWindowMinutes)->toBe(10080)
         ->and($data->workers)->toBe(9)
         ->and($data->jobsPerMinute)->toBe(180)
@@ -281,7 +281,7 @@ test('an environment never read has nothing to say, then does not answer once th
     $data = $this->repository->environment($this->team, $environment->slug);
 
     expect($data->status)->toBe(EnvironmentStatus::Unreachable)
-        ->and([$data->pending, $data->maxWaitSeconds, $data->failedLast24Hours, $data->workers, $data->jobsPerMinute, $data->nodeCount])
+        ->and([$data->pending, $data->maxWaitSeconds, $data->failedInWindow, $data->workers, $data->jobsPerMinute, $data->nodeCount])
         ->toBe([0, 0, 0, 0, 0, 0])
         ->and($data->failedWindowMinutes)->toBe(10080)
         ->and($data->trend)->toBe(array_fill(0, 12, 0))
@@ -522,6 +522,22 @@ test('failed jobs and long-running jobs are dated from the stored timestamps', f
     ]);
 });
 
+test('a young outage is down at once and opens its alert only after the rule minutes', function () {
+    $application = Application::factory()->for($this->team)->create(['name' => 'Alpha']);
+    $production = Environment::factory()->for($application)->production()->create();
+
+    EnvironmentSnapshot::factory()->for($production)->failed()->create(['captured_at' => now()->subSeconds(90)]);
+    Readings::record($production, EnvironmentStatus::Unreachable);
+
+    expect($this->repository->environment($this->team, $production->slug)->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($this->repository->alerts($this->team, AlertState::Open))->toBe([]);
+
+    $this->travel(30)->seconds();
+
+    expect(array_map(fn ($alert) => $alert->id, app()->build(ConfiguredMonitoringRepository::class)->alerts($this->team, AlertState::Open)))
+        ->toBe(["{$production->slug}:endpoint.unreachable"]);
+});
+
 test('open alerts come from the stored anomalies, worst environment first, and nothing else is listed yet', function () {
     $application = Application::factory()->for($this->team)->create(['name' => 'Alpha']);
     $production = Environment::factory()->for($application)->production()->create();
@@ -689,7 +705,7 @@ test('an unwatched row of the configuration view carries no reading at all', fun
 
     expect($row->watched)->toBeFalse()
         ->and($row->status)->toBeNull()
-        ->and([$row->pending, $row->maxWaitSeconds, $row->failedLast24Hours, $row->workers, $row->jobsPerMinute, $row->nodeCount])
+        ->and([$row->pending, $row->maxWaitSeconds, $row->failedInWindow, $row->workers, $row->jobsPerMinute, $row->nodeCount])
         ->toBe([0, 0, 0, 0, 0, 0])
         ->and($row->latencyMs)->toBeNull()
         ->and($row->readingError)->toBeNull()

@@ -82,11 +82,6 @@ const somethingIsHidden = computed(
                             'Thresholds are read-only for now: the defaults below already drive the anomalies.',
                         )
                     }}</span>
-                    <span style="color: var(--nc-neutral-500)">{{
-                        $t(
-                            'Horizon inactive, endpoint unreachable and Horizon paused open an anomaly at the first reading in that state: their minutes are not applied yet.',
-                        )
-                    }}</span>
                     <span
                         v-if="showsOverrides"
                         style="color: var(--nc-neutral-500)"

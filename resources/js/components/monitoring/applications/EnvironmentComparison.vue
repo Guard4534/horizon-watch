@@ -119,13 +119,12 @@ const header = computed(() => {
                                 style="text-align: right"
                                 :style="{
                                     color: failedColor(
-                                        environment.failedLast24Hours,
-                                        environment.failedWindowMinutes,
+                                        environment.failedLastHour,
                                         threshold('jobs.failed_per_hour'),
                                     ),
                                 }"
                             >
-                                {{ formatCount(environment.failedLast24Hours)
+                                {{ formatCount(environment.failedInWindow)
                                 }}<span
                                     v-if="windows.size > 1"
                                     style="

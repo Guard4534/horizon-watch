@@ -17,9 +17,9 @@ import TrendChart from '@/components/monitoring/environment/TrendChart.vue';
 import {
     failedColor,
     formatAge,
+    horizonStatusTone,
     pendingTone,
     statusText,
-    statusTone,
 } from '@/components/monitoring/environment/readings';
 import MetricTile from '@/components/nocturne/MetricTile.vue';
 import StatusPill from '@/components/nocturne/StatusPill.vue';
@@ -93,11 +93,19 @@ type Tile = { label: string; value: string; color: string; note: string };
 const tiles = computed<Tile[]>(() => [
     {
         label: 'Master',
-        value: statusText(environment.value),
-        color: statusTone(environment.value),
-        note: trans('nodes: :count', {
-            count: String(environment.value.nodeCount),
-        }),
+        value:
+            environment.value.horizonStatus ??
+            (environment.value.status === null
+                ? statusText(environment.value)
+                : trans('unknown')),
+        color: horizonStatusTone(environment.value),
+        note:
+            environment.value.readingError !== null &&
+            environment.value.horizonStatus !== null
+                ? trans('last known')
+                : trans('nodes: :count', {
+                      count: String(environment.value.nodeCount),
+                  }),
     },
     {
         label: 'Pending',
@@ -136,10 +144,9 @@ const tiles = computed<Tile[]>(() => [
     },
     {
         label: failedLabel(environment.value.failedWindowMinutes),
-        value: formatCount(environment.value.failedLast24Hours),
+        value: formatCount(environment.value.failedInWindow),
         color: failedColor(
-            environment.value.failedLast24Hours,
-            environment.value.failedWindowMinutes,
+            environment.value.failedLastHour,
             threshold('jobs.failed_per_hour'),
         ),
         note: failedWindowNote(environment.value.failedWindowMinutes),

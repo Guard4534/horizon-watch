@@ -54,14 +54,9 @@ const LABELS: Record<
         label: () => trans('Job runtime'),
         hint: () => trans('job running for more than'),
     },
-    // StatusEvaluator divides Horizon's failed count by the window Horizon
-    // counts it over (often a week), not by the last hour.
     'jobs.failed_per_hour': {
         label: () => trans('Failed jobs / hour'),
-        hint: () =>
-            trans(
-                'hourly average over the window Horizon counts failures in, above',
-            ),
+        hint: () => trans('failed in the last hour, above'),
     },
     // StatusEvaluator counts queues with jobs waiting and no process, and
     // fires at the threshold itself (>=), not below it.
@@ -71,8 +66,6 @@ const LABELS: Record<
     },
 };
 
-// These open an anomaly at the first reading in that state: the minutes of
-// their rule are not applied to the anomaly (see StoredReadings).
 const STATE_METRICS: ReadonlySet<App.Enums.AlertRuleMetric> = new Set([
     'horizon.master_inactive',
     'endpoint.unreachable',
@@ -114,20 +107,13 @@ export function formatThreshold(threshold: number, unit: string): string {
     }
 }
 
-/**
- * The rule as it is evaluated today: a state rule is the state itself (its
- * minutes are not applied yet), missing workers fire at the threshold.
- */
 export function formatRule(
     metric: App.Enums.AlertRuleMetric,
     threshold: number,
     unit: string,
 ): string {
-    if (isStateMetric(metric)) {
-        return metric;
-    }
-
-    const comparison = metric === 'workers.missing' ? '≥' : '>';
+    const comparison =
+        isStateMetric(metric) || metric === 'workers.missing' ? '≥' : '>';
 
     return `${metric} ${comparison} ${formatThreshold(threshold, unit)}`;
 }

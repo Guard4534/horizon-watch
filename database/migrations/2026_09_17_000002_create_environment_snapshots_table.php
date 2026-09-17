@@ -29,12 +29,11 @@ return new class extends Migration
             $table->unsignedInteger('pending')->default(0);
             $table->unsignedInteger('max_wait_seconds')->default(0);
             $table->unsignedInteger('jobs_per_minute')->default(0);
-            // The name predates the window below: the count is over
-            // failed_window_minutes, which Horizon states and is often a week.
-            $table->unsignedInteger('failed_last_24_hours')->default(0);
+            $table->unsignedInteger('failed_in_window')->default(0);
             // Horizon's own window when an application sets none
             // (horizon.trim.failed).
             $table->unsignedInteger('failed_window_minutes')->default(10080);
+            $table->unsignedInteger('failed_last_hour')->default(0);
             $table->unsignedInteger('workers')->default(0);
             $table->unsignedInteger('node_count')->default(0);
             $table->unsignedInteger('latency_ms')->nullable();

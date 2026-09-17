@@ -1,5 +1,4 @@
 import { trans } from 'laravel-vue-i18n';
-import { failedPerHour } from '@/lib/failedWindow';
 import { statusColor, statusLabel } from '@/lib/monitoring';
 
 // Presentation rules for stored readings, shared by the application and
@@ -100,19 +99,35 @@ export function secondsSince(iso: string, now: number): number {
     return Math.max(0, Math.floor((now - Date.parse(iso)) / 1000));
 }
 
-/**
- * The same count means very different things over a day and over a week:
- * the warning follows the hourly rate, as the jobs.failed_per_hour rule does.
- * The label is failedLabel() from @/lib/failedWindow.
- */
 export function failedColor(
-    count: number,
-    windowMinutes: number,
+    failedLastHour: number,
     perHourThreshold: number,
 ): string {
-    return failedPerHour(count, windowMinutes) > perHourThreshold
+    return failedLastHour > perHourThreshold
         ? 'var(--st-warn)'
         : 'var(--nc-text)';
+}
+
+export function horizonStatusTone(
+    environment: Pick<
+        App.Data.Monitoring.EnvironmentData,
+        'horizonStatus' | 'readingError'
+    >,
+): string {
+    if (environment.readingError !== null) {
+        return 'var(--nc-neutral-500)';
+    }
+
+    switch (environment.horizonStatus) {
+        case 'running':
+            return 'var(--st-ok)';
+        case 'paused':
+            return 'var(--st-warn)';
+        case 'inactive':
+            return 'var(--st-down)';
+        default:
+            return 'var(--nc-neutral-500)';
+    }
 }
 
 /** "15s", "1 min", "5 min": a poll interval as the mockup writes it. */

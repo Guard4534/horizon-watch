@@ -32,11 +32,11 @@ class WallQuery
                 environmentsTotal: count($environments),
                 openAnomalies: count($anomalies),
                 pendingTotal: $sum(fn (EnvironmentData $environment) => $environment->pending),
-                failedTotal: $sum(fn (EnvironmentData $environment) => $environment->failedLast24Hours),
+                failedTotal: $sum(fn (EnvironmentData $environment) => $environment->failedInWindow),
                 failedWindowMinutes: $this->commonFailedWindow($environments),
                 environmentsOverFailedRate: count(array_filter(
                     $environments,
-                    fn (EnvironmentData $environment) => $environment->failedLast24Hours * 60 / max(1, $environment->failedWindowMinutes) > $threshold,
+                    fn (EnvironmentData $environment) => $environment->failedLastHour > $threshold,
                 )),
             ),
             environments: $environments,

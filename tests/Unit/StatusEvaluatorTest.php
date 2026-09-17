@@ -3,6 +3,7 @@
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
 use App\Enums\ReadingError;
+use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
 use App\Externals\Horizon\Data\HorizonPendingJob;
 use App\Externals\Horizon\Data\HorizonQueueLoad;
@@ -33,6 +34,7 @@ function evaluatorMaster(string $status = 'running'): HorizonMaster
  * @param  list<HorizonMaster>|null  $masters
  * @param  list<HorizonQueueLoad>|null  $workload
  * @param  list<HorizonPendingJob>|null  $pendingJobs
+ * @param  list<HorizonFailedJob>|null  $failed
  */
 function evaluatorReading(
     string $status = 'running',
@@ -41,6 +43,7 @@ function evaluatorReading(
     ?array $workload = null,
     ?array $pendingJobs = [],
     int $failedWindowMinutes = 1440,
+    ?array $failed = [],
 ): HorizonReading {
     return new HorizonReading(
         stats: new HorizonStats(
@@ -57,11 +60,25 @@ function evaluatorReading(
             new HorizonQueueLoad(name: 'default', length: 10, wait: 2, processes: 3),
             new HorizonQueueLoad(name: 'emails', length: 0, wait: 0, processes: 0),
         ],
-        failedJobs: [],
+        failedJobs: $failed,
         pendingJobs: $pendingJobs,
         queueRuntimes: ['default' => 0.4],
         latencyMs: 35,
     );
+}
+
+/**
+ * @return list<HorizonFailedJob>
+ */
+function failedJobsAgo(int $count, int $secondsAgo = 60): array
+{
+    return array_map(fn () => new HorizonFailedJob(
+        name: 'App\\Jobs\\SendEmail',
+        queue: 'emails',
+        exception: 'RuntimeException: boom',
+        attempts: 1,
+        failedAt: CarbonImmutable::now()->subSeconds($secondsAgo),
+    ), range(1, $count));
 }
 
 function reservedJob(int $secondsAgo, string $status = 'reserved'): HorizonPendingJob
@@ -93,7 +110,7 @@ test('a reading is evaluated in the order of the spec', function (HorizonReading
         [AlertRuleMetric::HorizonMasterInactive],
     ],
     'inactive wins over paused and over thresholds' => fn () => [
-        evaluatorReading(status: 'paused', masters: [], failedJobs: 10_000),
+        evaluatorReading(status: 'paused', masters: [], failed: failedJobsAgo(50)),
         EnvironmentStatus::Inactive,
         [AlertRuleMetric::HorizonMasterInactive],
     ],
@@ -109,7 +126,7 @@ test('a reading is evaluated in the order of the spec', function (HorizonReading
         [AlertRuleMetric::HorizonPaused],
     ],
     'paused still measures the thresholds, and stays paused' => fn () => [
-        evaluatorReading(status: 'paused', failedJobs: 10_000, workload: [
+        evaluatorReading(status: 'paused', failed: failedJobsAgo(50), workload: [
             new HorizonQueueLoad(name: 'default', length: 50_000, wait: 900, processes: 0),
         ]),
         EnvironmentStatus::Paused,
@@ -152,40 +169,48 @@ test('a reading is evaluated in the order of the spec', function (HorizonReading
         [AlertRuleMetric::QueueMaxWait],
     ],
 
-    'failed per hour at the threshold' => fn () => [
-        evaluatorReading(failedJobs: 480),
+    'failed in the last hour at the threshold' => fn () => [
+        evaluatorReading(failed: failedJobsAgo(20)),
         EnvironmentStatus::Active,
         [],
     ],
-    'failed per hour above the threshold' => fn () => [
-        evaluatorReading(failedJobs: 481),
+    'failed in the last hour above the threshold' => fn () => [
+        evaluatorReading(failed: failedJobsAgo(21)),
         EnvironmentStatus::Degraded,
         [AlertRuleMetric::JobsFailedPerHour],
     ],
-
-    // 20 an hour: 3,360 over seven days is on the threshold.
-    'the same count over a seven-day window stays under the threshold' => fn () => [
-        evaluatorReading(failedJobs: 481, failedWindowMinutes: 10080),
+    'a job that failed exactly an hour ago still counts' => fn () => [
+        evaluatorReading(failed: [...failedJobsAgo(20), ...failedJobsAgo(1, secondsAgo: 3600)]),
+        EnvironmentStatus::Degraded,
+        [AlertRuleMetric::JobsFailedPerHour],
+    ],
+    'a job that failed more than an hour ago does not count' => fn () => [
+        evaluatorReading(failed: [...failedJobsAgo(20), ...failedJobsAgo(30, secondsAgo: 3601)]),
         EnvironmentStatus::Active,
         [],
     ],
-    'failed per hour at the threshold over seven days' => fn () => [
-        evaluatorReading(failedJobs: 3360, failedWindowMinutes: 10080),
+    'a job dated after the reading counts' => fn () => [
+        evaluatorReading(failed: [...failedJobsAgo(20), ...failedJobsAgo(1, secondsAgo: -30)]),
+        EnvironmentStatus::Degraded,
+        [AlertRuleMetric::JobsFailedPerHour],
+    ],
+    'a burst is not diluted over the window Horizon counts in' => fn () => [
+        evaluatorReading(failedJobs: 21, failedWindowMinutes: 10080, failed: failedJobsAgo(21)),
+        EnvironmentStatus::Degraded,
+        [AlertRuleMetric::JobsFailedPerHour],
+    ],
+    'the count over the window Horizon states does not decide' => fn () => [
+        evaluatorReading(failedJobs: 10_000, failedWindowMinutes: 30, failed: failedJobsAgo(3)),
         EnvironmentStatus::Active,
         [],
     ],
-    'failed per hour above the threshold over seven days' => fn () => [
-        evaluatorReading(failedJobs: 3361, failedWindowMinutes: 10080),
-        EnvironmentStatus::Degraded,
-        [AlertRuleMetric::JobsFailedPerHour],
+    'failed jobs that could not be read do not count' => fn () => [
+        evaluatorReading(failed: null),
+        EnvironmentStatus::Active,
+        [],
     ],
-    'a window shorter than an hour scales the count up' => fn () => [
-        evaluatorReading(failedJobs: 11, failedWindowMinutes: 30),
-        EnvironmentStatus::Degraded,
-        [AlertRuleMetric::JobsFailedPerHour],
-    ],
-    'a window of zero minutes does not divide by zero' => fn () => [
-        evaluatorReading(failedJobs: 1, failedWindowMinutes: 0),
+    'a full page of failed jobs within the hour breaches' => fn () => [
+        evaluatorReading(failed: failedJobsAgo(50)),
         EnvironmentStatus::Degraded,
         [AlertRuleMetric::JobsFailedPerHour],
     ],
@@ -239,7 +264,7 @@ test('a reading is evaluated in the order of the spec', function (HorizonReading
 
     'several thresholds at once, in enum order' => fn () => [
         evaluatorReading(
-            failedJobs: 1000,
+            failed: failedJobsAgo(21),
             workload: [new HorizonQueueLoad(name: 'default', length: 2500, wait: 90, processes: 3)],
             pendingJobs: [reservedJob(600)],
         ),
@@ -259,3 +284,19 @@ test('a failed reading is unreachable with the endpoint breach', function (Readi
     expect($evaluated->status)->toBe(EnvironmentStatus::Unreachable)
         ->and($evaluated->breaches)->toBe([AlertRuleMetric::EndpointUnreachable]);
 })->with(ReadingError::cases());
+
+test('the failed jobs of the last hour are counted', function () {
+    $evaluated = (new StatusEvaluator)->evaluate(evaluatorReading(
+        failed: [...failedJobsAgo(7), ...failedJobsAgo(4, secondsAgo: 4000)],
+    ));
+
+    expect($evaluated->failedLastHour)->toBe(7);
+});
+
+test('a reading whose failed jobs could not be read counts none', function () {
+    expect((new StatusEvaluator)->evaluate(evaluatorReading(failed: null))->failedLastHour)->toBe(0);
+});
+
+test('a failed reading counts no failed jobs', function () {
+    expect((new StatusEvaluator)->failed(ReadingError::Unreachable)->failedLastHour)->toBe(0);
+});

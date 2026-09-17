@@ -680,7 +680,7 @@ test('a poll of an absurd horizon stores a saturated reading', function () {
     expect($snapshot)->not->toBeNull()
         ->and($snapshot->error)->toBeNull()
         ->and($snapshot->jobs_per_minute)->toBe(2147483647)
-        ->and($snapshot->failed_last_24_hours)->toBe(2147483647)
+        ->and($snapshot->failed_in_window)->toBe(2147483647)
         ->and($snapshot->workers)->toBe(0)
         ->and($snapshot->pending)->toBe(2147483647)
         ->and($snapshot->max_wait_seconds)->toBe(2147483647);

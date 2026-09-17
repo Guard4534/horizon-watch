@@ -5,11 +5,7 @@ import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import {
-    failedPerHour,
-    failedWindowNote,
-    failedWindowShort,
-} from '@/lib/failedWindow';
+import { failedWindowNote, failedWindowShort } from '@/lib/failedWindow';
 import {
     envColor,
     formatCount,
@@ -200,14 +196,12 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                         "
                         :style="{
                             color:
-                                failedPerHour(
-                                    environment.failedLast24Hours,
-                                    environment.failedWindowMinutes,
-                                ) > failedPerHourThreshold
+                                environment.failedLastHour >
+                                failedPerHourThreshold
                                     ? 'var(--st-warn)'
                                     : undefined,
                         }"
-                        >{{ environment.failedLast24Hours }} failed ·
+                        >{{ environment.failedInWindow }} failed ·
                         {{
                             failedWindowShort(environment.failedWindowMinutes)
                         }}</span

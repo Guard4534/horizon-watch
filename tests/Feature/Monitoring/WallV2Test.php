@@ -168,8 +168,8 @@ test('the phone counts only active environments as up', function () {
 });
 
 test('the failed KPI names the window the environments share', function (int $production, int $staging, ?int $expected) {
-    Readings::record($this->production, snapshot: ['failed_last_24_hours' => 30, 'failed_window_minutes' => $production]);
-    Readings::record($this->staging, snapshot: ['failed_last_24_hours' => 12, 'failed_window_minutes' => $staging]);
+    Readings::record($this->production, snapshot: ['failed_in_window' => 30, 'failed_window_minutes' => $production]);
+    Readings::record($this->staging, snapshot: ['failed_in_window' => 12, 'failed_window_minutes' => $staging]);
 
     wallPage($this->admin, $this->team)
         ->assertInertia(fn (Assert $page) => $page
@@ -198,22 +198,21 @@ test('with nothing read yet the failed window is the default the rows carry', fu
         ->assertInertia(fn (Assert $page) => $page->where('page.kpis.failedWindowMinutes', 10080));
 });
 
-test('the failed warning counts environments over the hourly rate, not over a count', function () {
-    // 600 in a week is about 3.6 an hour: under the default of 20.
-    Readings::record($this->production, snapshot: ['failed_last_24_hours' => 600, 'failed_window_minutes' => 10080]);
-    // 21 in an hour is above it, although the count is far smaller.
-    Readings::record($this->staging, snapshot: ['failed_last_24_hours' => 21, 'failed_window_minutes' => 60]);
+test('the failed warning counts environments over the last hour, not over the window count', function () {
+    Readings::record($this->production, snapshot: ['pending' => 200, 'failed_in_window' => 5000, 'failed_window_minutes' => 60, 'failed_last_hour' => 3]);
+    Readings::record($this->staging, snapshot: ['pending' => 100, 'failed_in_window' => 21, 'failed_window_minutes' => 10080, 'failed_last_hour' => 21]);
 
     wallPage($this->admin, $this->team)
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.kpis.environmentsOverFailedRate', 1)
-            ->where('page.kpis.failedTotal', 621));
+            ->where('page.kpis.failedTotal', 5021)
+            ->where('page.environments.0.failedLastHour', 3)
+            ->where('page.environments.1.failedLastHour', 21));
 });
 
-test('a rate exactly at the threshold does not warn, as the evaluator decides', function () {
-    // 480 a day is exactly 20 an hour.
-    Readings::record($this->production, snapshot: ['failed_last_24_hours' => 480, 'failed_window_minutes' => 1440]);
-    Readings::record($this->staging, snapshot: ['failed_last_24_hours' => 481, 'failed_window_minutes' => 1440]);
+test('a last hour exactly at the threshold does not warn, as the evaluator decides', function () {
+    Readings::record($this->production, snapshot: ['failed_last_hour' => 20]);
+    Readings::record($this->staging, snapshot: ['failed_last_hour' => 21]);
 
     wallPage($this->admin, $this->team)
         ->assertInertia(fn (Assert $page) => $page->where('page.kpis.environmentsOverFailedRate', 1));

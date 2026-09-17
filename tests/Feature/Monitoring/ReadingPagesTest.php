@@ -2,6 +2,7 @@
 
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
+use App\Enums\HorizonStatus;
 use App\Enums\MemberVisibility;
 use App\Enums\ReadingError;
 use App\Enums\TeamRole;
@@ -47,7 +48,7 @@ function readingTeamMember(User $owner, TeamRole $role): User
 }
 
 test('a fresh reading reaches the environment page with its age, interval and node sightings', function () {
-    Readings::record($this->environment, snapshot: ['latency_ms' => 84, 'failed_last_24_hours' => 12], state: [
+    Readings::record($this->environment, snapshot: ['latency_ms' => 84, 'failed_in_window' => 12], state: [
         'captured_at' => now()->subSeconds(5),
         'latency_ms' => 84,
         'nodes' => [
@@ -64,8 +65,9 @@ test('a fresh reading reaches the environment page with its age, interval and no
             ->where('page.environment.pollIntervalSeconds', 30)
             ->where('page.environment.readingError', null)
             ->where('page.environment.latencyMs', 84)
-            ->where('page.environment.failedLast24Hours', 12)
+            ->where('page.environment.failedInWindow', 12)
             ->where('page.environment.failedWindowMinutes', 1440)
+            ->where('page.environment.horizonStatus', 'running')
             ->where('page.environment.basicAuthUser', 'monitor')
             ->where('page.nodes.0.seenSecondsAgo', 40)
             ->where('page.nodes.0.supervisorCount', 2)
@@ -137,6 +139,7 @@ test('a failed reading carries its reason, zero counters and the last known deta
         snapshot: ['error' => ReadingError::Unauthorized],
         state: [
             'error' => ReadingError::Unauthorized,
+            'horizon_status' => HorizonStatus::Paused,
             'nodes' => [
                 ['hostname' => 'worker-1.example.com', 'status' => 'running', 'workers' => 6, 'supervisors' => 2, 'queues' => 3, 'seenAt' => now()->subMinutes(7)->toIso8601String()],
             ],
@@ -147,6 +150,7 @@ test('a failed reading carries its reason, zero counters and the last known deta
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environment.status', 'unreachable')
             ->where('page.environment.readingError', 'unauthorized')
+            ->where('page.environment.horizonStatus', 'paused')
             ->where('page.environment.latencyMs', null)
             ->where('page.environment.pending', 0)
             ->where('page.environment.workers', 0)
@@ -166,6 +170,7 @@ test('an environment without readings says nothing yet', function () {
             ->where('page.environment.readingError', null)
             ->where('page.environment.stale', false)
             ->where('page.environment.latencyMs', null)
+            ->where('page.environment.horizonStatus', null)
             ->where('page.nodes', [])
             ->where('page.queues', [])
             ->where('page.openAlert', null));
@@ -178,16 +183,16 @@ test('an environment without readings says nothing yet', function () {
 });
 
 test('a seven-day failed window is carried to every page that shows the count', function () {
-    Readings::record($this->environment, snapshot: ['failed_last_24_hours' => 300, 'failed_window_minutes' => 10080]);
+    Readings::record($this->environment, snapshot: ['failed_in_window' => 300, 'failed_window_minutes' => 10080]);
 
     $this->get(readingEnvironmentUrl($this->environment))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.environment.failedLast24Hours', 300)
+            ->where('page.environment.failedInWindow', 300)
             ->where('page.environment.failedWindowMinutes', 10080));
 
     $this->get(readingApplicationUrl($this->application))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.environments.0.failedLast24Hours', 300)
+            ->where('page.environments.0.failedInWindow', 300)
             ->where('page.environments.0.failedWindowMinutes', 10080)
             ->where('page.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
                 && (float) $thresholds['queue.pending'] === AlertRuleMetric::QueuePending->defaultThreshold()));
@@ -206,7 +211,7 @@ test('the application page carries the recent anomalies with their start', funct
             ->where('page.worstStatus', 'paused')
             ->where('page.recentAlerts.0.metric', 'horizon.paused')
             ->where('page.recentAlerts.0.sinceTruncated', false)
-            ->where('page.recentAlerts.0.minutesAgo', 0));
+            ->where('page.recentAlerts.0.minutesAgo', Readings::STATE_RUN_MINUTES));
 });
 
 test('the application page does not query once per environment', function () {

@@ -3,6 +3,7 @@
 use App\Actions\Monitoring\PollEnvironment;
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
+use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
@@ -131,8 +132,9 @@ test('a reading writes a snapshot and the state in the documented shapes', funct
         ->and($snapshot->pending)->toBe(15)
         ->and($snapshot->max_wait_seconds)->toBe(8)
         ->and($snapshot->jobs_per_minute)->toBe(120)
-        ->and($snapshot->failed_last_24_hours)->toBe(5)
+        ->and($snapshot->failed_in_window)->toBe(5)
         ->and($snapshot->failed_window_minutes)->toBe(10080)
+        ->and($snapshot->failed_last_hour)->toBe(1)
         ->and($snapshot->workers)->toBe(12)
         ->and($snapshot->node_count)->toBe(2)
         ->and($snapshot->latency_ms)->toBe(42);
@@ -143,6 +145,7 @@ test('a reading writes a snapshot and the state in the documented shapes', funct
         ->and($state->captured_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
         ->and($state->status)->toBe(EnvironmentStatus::Active)
         ->and($state->error)->toBeNull()
+        ->and($state->horizon_status)->toBe(HorizonStatus::Running)
         ->and($state->latency_ms)->toBe(42)
         ->and($state->nodes)->toBe([
             ['hostname' => 'worker-1.example.com', 'status' => 'running', 'workers' => 6, 'supervisors' => 2, 'queues' => 4, 'seenAt' => '2026-09-17T10:00:00+00:00'],
@@ -195,6 +198,16 @@ test('a failed reading is stored as unreachable with its reason, keeps the conte
         new HorizonReadFailed(ReadingError::Unauthorized),
     ];
 
+    $this->reader->results[0] = ($this->reading)(['stats' => new HorizonStats(
+        status: 'paused',
+        jobsPerMinute: 0,
+        failedJobs: 0,
+        processes: 0,
+        pausedMasters: 2,
+        wait: [],
+        failedJobsPeriodMinutes: 10080,
+    )]);
+
     ($this->poll)();
     $before = EnvironmentState::query()->sole();
 
@@ -215,6 +228,8 @@ test('a failed reading is stored as unreachable with its reason, keeps the conte
         ->and($after->error)->toBe(ReadingError::Unauthorized)
         ->and($after->captured_at->toDateTimeString())->toBe('2026-09-17 10:00:15')
         ->and($after->latency_ms)->toBeNull()
+        ->and($before->horizon_status)->toBe(HorizonStatus::Paused)
+        ->and($after->horizon_status)->toBe(HorizonStatus::Paused)
         ->and($after->nodes)->toBe($before->nodes)
         ->and($after->queues)->toBe($before->queues)
         ->and($after->failed_jobs)->toBe($before->failed_jobs)
@@ -306,6 +321,7 @@ test('a first reading that fails creates an empty state', function () {
 
     expect($state->status)->toBe(EnvironmentStatus::Unreachable)
         ->and($state->error)->toBe(ReadingError::NotHorizon)
+        ->and($state->horizon_status)->toBeNull()
         ->and($state->nodes)->toBe([])
         ->and($state->queues)->toBe([])
         ->and($state->failed_jobs)->toBe([])
@@ -328,6 +344,68 @@ test('failed secondary calls keep the failed jobs, empty the reserved jobs and r
         ->and($before->pending_jobs)->not->toBe([])
         ->and($after->pending_jobs)->toBe([])
         ->and($after->queues)->toBe([]);
+});
+
+test('the failed jobs of the last hour are stored and decide the failed-rate breach', function () {
+    $burst = array_map(fn (int $minutes) => new HorizonFailedJob(
+        name: 'App\\Jobs\\SendInvoiceEmail',
+        queue: 'emails',
+        exception: 'RuntimeException: The mail server did not answer',
+        attempts: 1,
+        failedAt: CarbonImmutable::now()->subMinutes($minutes),
+    ), [...range(1, 21), 61, 90]);
+
+    $this->reader->results = [($this->reading)(['failedJobs' => $burst])];
+
+    $snapshot = ($this->poll)();
+
+    expect($snapshot->failed_last_hour)->toBe(21)
+        ->and($snapshot->status)->toBe(EnvironmentStatus::Degraded)
+        ->and($snapshot->breaches->all())->toBe([AlertRuleMetric::JobsFailedPerHour]);
+});
+
+test('a failed failed-jobs call counts the kept jobs against the time of the new reading', function () {
+    $burst = array_map(fn (int $minutes) => new HorizonFailedJob(
+        name: 'App\\Jobs\\SendInvoiceEmail',
+        queue: 'emails',
+        exception: 'RuntimeException: The mail server did not answer',
+        attempts: 1,
+        failedAt: CarbonImmutable::now()->subMinutes($minutes),
+    ), range(1, 21));
+
+    $this->reader->results = [
+        ($this->reading)(['failedJobs' => $burst, 'pendingJobs' => []]),
+        ($this->reading)(['failedJobs' => null, 'pendingJobs' => []]),
+        ($this->reading)(['failedJobs' => null, 'pendingJobs' => []]),
+    ];
+
+    ($this->poll)();
+
+    $this->travel(30)->minutes();
+    $kept = ($this->poll)();
+
+    $this->travel(29)->minutes();
+    $aged = ($this->poll)();
+
+    expect($kept->failed_last_hour)->toBe(21)
+        ->and($kept->breaches->all())->toBe([AlertRuleMetric::JobsFailedPerHour])
+        ->and($aged->failed_last_hour)->toBe(1)
+        ->and($aged->breaches->all())->toBe([])
+        ->and(EnvironmentState::query()->sole()->failed_jobs)->toHaveCount(21);
+});
+
+test('a failed failed-jobs call on the first reading counts none', function () {
+    $this->reader->results = [($this->reading)(['failedJobs' => null])];
+
+    expect(($this->poll)()->failed_last_hour)->toBe(0);
+});
+
+test('a failed reading stores no failed jobs for the last hour', function () {
+    $this->reader->results = [($this->reading)(), new HorizonReadFailed(ReadingError::Unreachable)];
+
+    ($this->poll)();
+
+    expect(($this->poll)()->failed_last_hour)->toBe(0);
 });
 
 test('a failed secondary call on the first reading leaves those sections empty', function () {

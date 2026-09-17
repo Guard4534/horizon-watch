@@ -2,6 +2,7 @@
 
 namespace App\Monitoring;
 
+use App\Data\Applications\EnvironmentFormData;
 use App\Data\Monitoring\AlertData;
 use App\Data\Monitoring\AlertRuleData;
 use App\Data\Monitoring\ApplicationData;
@@ -752,7 +753,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             applicationName: $environment->application->name,
             name: $environment->name,
             color: $environment->color,
-            horizonUrl: self::withoutUserinfo($environment->horizon_url),
+            horizonUrl: EnvironmentFormData::withoutUserinfo($environment->horizon_url),
             status: match (true) {
                 ! $watched => null,
                 $state !== null => $state->status,
@@ -765,10 +766,11 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             trend: $watched ? $trend['points'] ?? array_fill(0, StoredReadings::TREND_POINTS, 0) : [],
             trendPercent: $trend['percent'] ?? null,
             maxWaitSeconds: $this->snapshotNumber($state, 'max_wait_seconds'),
-            failedLast24Hours: $this->snapshotNumber($state, 'failed_last_24_hours'),
+            failedInWindow: $this->snapshotNumber($state, 'failed_in_window'),
             // Without a snapshot there is no count to qualify: Horizon's
             // default week, as the column default.
             failedWindowMinutes: $this->snapshotNumber($state, 'failed_window_minutes') ?: 10080,
+            failedLastHour: $this->snapshotNumber($state, 'failed_last_hour'),
             workers: $this->snapshotNumber($state, 'workers'),
             jobsPerMinute: $this->snapshotNumber($state, 'jobs_per_minute'),
             nodeCount: $this->snapshotNumber($state, 'node_count'),
@@ -780,16 +782,8 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             pollingEnabled: $environment->polling_enabled,
             pollIntervalSeconds: $environment->poll_interval_seconds,
             readingError: $state?->error,
+            horizonStatus: $state?->horizon_status,
         );
-    }
-
-    /**
-     * Rows saved before the form refused credentials in the URL may still
-     * carry "user:secret@": never hand that to a page.
-     */
-    private static function withoutUserinfo(string $url): string
-    {
-        return (string) preg_replace('#^([a-z][a-z0-9+.-]*://)[^/?\#]*@#i', '$1', $url);
     }
 
     /**
@@ -820,7 +814,6 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             maxWaitSeconds: $environment->maxWaitSeconds,
             minutesAgo: $minutesAgo,
             sinceTruncated: $sinceTruncated,
-            channels: [NotificationChannel::Mail, NotificationChannel::Webhook],
         );
     }
 }

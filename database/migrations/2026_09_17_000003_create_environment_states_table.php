@@ -25,6 +25,7 @@ return new class extends Migration
             $table->timestampTz('captured_at');
             $table->string('status');
             $table->string('error')->nullable();
+            $table->string('horizon_status')->nullable();
             $table->json('nodes');
             $table->json('queues');
             $table->json('failed_jobs');

@@ -13,5 +13,6 @@ final readonly class EvaluatedStatus
     public function __construct(
         public EnvironmentStatus $status,
         public array $breaches,
+        public int $failedLastHour = 0,
     ) {}
 }

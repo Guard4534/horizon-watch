@@ -33,7 +33,7 @@ defineProps<{
         $t('a job has been running longer than the threshold')
     }}</template>
     <template v-else-if="alert.metric === 'jobs.failed_per_hour'">{{
-        $t('more failures per hour than the threshold, on average')
+        $t('more jobs failed in the last hour than the threshold')
     }}</template>
     <template v-else-if="alert.metric === 'workers.missing'">{{
         $tChoice(
