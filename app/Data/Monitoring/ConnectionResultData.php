@@ -2,6 +2,7 @@
 
 namespace App\Data\Monitoring;
 
+use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
 use Spatie\LaravelData\Data;
 
@@ -9,7 +10,7 @@ class ConnectionResultData extends Data
 {
     public function __construct(
         public bool $reachable,
-        public ?string $horizonStatus,
+        public ?HorizonStatus $horizonStatus,
         public ?int $masterCount,
         public ?int $latencyMs,
         public ?ReadingError $error,

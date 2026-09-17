@@ -4,6 +4,8 @@ namespace App\Externals\Horizon\Data;
 
 final readonly class HorizonStats
 {
+    public const int DEFAULT_FAILED_WINDOW_MINUTES = 10080;
+
     /**
      * @param  array<string, int>  $wait
      */

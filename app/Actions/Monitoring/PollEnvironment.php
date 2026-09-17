@@ -8,6 +8,7 @@ use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
 use App\Externals\Horizon\Data\HorizonPendingJob;
 use App\Externals\Horizon\Data\HorizonQueueLoad;
+use App\Externals\Horizon\Data\HorizonStats;
 use App\Externals\Horizon\Exceptions\HorizonReadFailed;
 use App\Externals\Horizon\HorizonReader;
 use App\Externals\Horizon\HorizonReading;
@@ -26,8 +27,6 @@ use Throwable;
 class PollEnvironment
 {
     private const MAX_COUNT = 2147483647;
-
-    private const HORIZON_FAILED_WINDOW_MINUTES = 10080;
 
     public function __construct(
         private readonly HorizonReader $reader,
@@ -105,7 +104,7 @@ class PollEnvironment
 
     private function storeFailure(Environment $environment, CarbonImmutable $capturedAt, ReadingError $error): ?EnvironmentSnapshot
     {
-        $evaluated = $this->evaluator->failed($error);
+        $evaluated = $this->evaluator->failed();
 
         return $this->store($environment, $capturedAt, $evaluated, [
             'error' => $error,
@@ -132,9 +131,9 @@ class PollEnvironment
     }
 
     /**
-     * @param  array<string, mixed>  $snapshot  counters, on top of the evaluated status
-     * @param  array<string, mixed>  $state  columns written on insert and on update
-     * @param  array<string, mixed>  $insertOnly  columns written only when the environment has no state yet
+     * @param  array<string, mixed>  $snapshot
+     * @param  array<string, mixed>  $state
+     * @param  array<string, mixed>  $insertOnly
      */
     private function store(
         Environment $environment,
@@ -145,9 +144,9 @@ class PollEnvironment
         array $insertOnly,
     ): ?EnvironmentSnapshot {
         return DB::transaction(function () use ($environment, $capturedAt, $evaluated, $snapshot, $state, $insertOnly) {
-            $locked = DB::table('environments')->where('id', $environment->id)->lock('for key share')->value('id');
+            $address = DB::table('environments')->where('id', $environment->id)->lock('for share')->value('horizon_url');
 
-            if ($locked === null) {
+            if ($address !== $environment->horizon_url) {
                 return null;
             }
 
@@ -191,7 +190,7 @@ class PollEnvironment
 
         return $previous !== null && $previous->environment_id === $environment->id
             ? $previous->failed_window_minutes
-            : self::HORIZON_FAILED_WINDOW_MINUTES;
+            : HorizonStats::DEFAULT_FAILED_WINDOW_MINUTES;
     }
 
     /**
@@ -214,8 +213,8 @@ class PollEnvironment
     }
 
     /**
-     * @param  array<string, mixed>  $state  columns written on insert and on update
-     * @param  array<string, mixed>  $insertOnly  columns written only on insert
+     * @param  array<string, mixed>  $state
+     * @param  array<string, mixed>  $insertOnly
      */
     private function upsertState(Environment $environment, array $state, array $insertOnly): void
     {

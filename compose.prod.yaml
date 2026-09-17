@@ -24,6 +24,8 @@ x-app: &app
         MAIL_USERNAME: ${MAIL_USERNAME:-}
         MAIL_PASSWORD: ${MAIL_PASSWORD:-}
         MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-horizon-watch@example.com}
+        HORIZON_WATCH_RETENTION_DAYS: ${HORIZON_WATCH_RETENTION_DAYS:-30}
+        HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS: ${HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS:-false}
     volumes:
         - app-data:/data
 

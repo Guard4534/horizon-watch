@@ -9,6 +9,8 @@ return [
 
     'http_timeout_seconds' => 5,
 
+    'read_budget_seconds' => 20,
+
     'stale_after_intervals' => 3,
 
     'test_connection_per_minute' => 10,

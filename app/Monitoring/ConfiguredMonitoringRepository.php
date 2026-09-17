@@ -22,6 +22,7 @@ use App\Enums\RuleOrigin;
 use App\Enums\SentNotificationKind;
 use App\Enums\SeriesRange;
 use App\Enums\TeamPermission;
+use App\Externals\Horizon\Data\HorizonStats;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\EnvironmentState;
@@ -127,7 +128,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     {
         $watched = $this->watchedEnvironmentsBySlug($team);
         $environments = $this->configurableEnvironmentModels($team);
-        $this->loadStates($environments);
+        $this->loadStates($watched);
 
         return $environments
             ->map(fn (Environment $environment) => $this->toEnvironmentData(
@@ -555,7 +556,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             trendPercent: $trend['percent'] ?? null,
             maxWaitSeconds: $this->snapshotNumber($state, 'max_wait_seconds'),
             failedInWindow: $this->snapshotNumber($state, 'failed_in_window'),
-            failedWindowMinutes: $this->snapshotNumber($state, 'failed_window_minutes') ?: 10080,
+            failedWindowMinutes: $this->snapshotNumber($state, 'failed_window_minutes') ?: HorizonStats::DEFAULT_FAILED_WINDOW_MINUTES,
             failedLastHour: $this->snapshotNumber($state, 'failed_last_hour'),
             workers: $this->snapshotNumber($state, 'workers'),
             jobsPerMinute: $this->snapshotNumber($state, 'jobs_per_minute'),

@@ -2,7 +2,6 @@
 
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
-use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
 use App\Externals\Horizon\Data\HorizonPendingJob;
@@ -274,12 +273,12 @@ test('a reading is evaluated in the order of the spec', function (HorizonReading
     ],
 ]);
 
-test('a failed reading is unreachable with the endpoint breach', function (ReadingError $error) {
-    $evaluated = (new StatusEvaluator)->failed($error);
+test('a failed reading is unreachable with the endpoint breach', function () {
+    $evaluated = (new StatusEvaluator)->failed();
 
     expect($evaluated->status)->toBe(EnvironmentStatus::Unreachable)
         ->and($evaluated->breaches)->toBe([AlertRuleMetric::EndpointUnreachable]);
-})->with(ReadingError::cases());
+});
 
 test('the failed jobs of the last hour are counted', function () {
     $evaluated = (new StatusEvaluator)->evaluate(evaluatorReading(
@@ -294,5 +293,5 @@ test('a reading whose failed jobs could not be read counts none', function () {
 });
 
 test('a failed reading counts no failed jobs', function () {
-    expect((new StatusEvaluator)->failed(ReadingError::Unreachable)->failedLastHour)->toBe(0);
+    expect((new StatusEvaluator)->failed()->failedLastHour)->toBe(0);
 });

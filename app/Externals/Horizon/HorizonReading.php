@@ -15,7 +15,7 @@ final readonly class HorizonReading
      * @param  list<HorizonQueueLoad>  $workload
      * @param  list<HorizonFailedJob>|null  $failedJobs
      * @param  list<HorizonPendingJob>|null  $pendingJobs
-     * @param  array<string, float>  $queueRuntimes  seconds, keyed by queue name; a queue without snapshots is absent
+     * @param  array<string, float>  $queueRuntimes
      */
     public function __construct(
         public HorizonStats $stats,

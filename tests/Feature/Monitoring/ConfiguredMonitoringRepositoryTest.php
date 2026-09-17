@@ -802,3 +802,27 @@ test('the scoped repository does not carry one request into the next', function 
         ->get(route('wall', ['current_team' => $this->team->slug]))
         ->assertInertia(fn ($page) => $page->where('openAlertCount', 0)->where('page.environments', []));
 });
+
+test('the configuration view reads states and trends only for watched rows', function () {
+    $application = Application::factory()->for($this->team)->create(['name' => 'Alpha']);
+    $watched = Environment::factory()->for($application)->staging()->create();
+    $hidden = Environment::factory()->for($application)->production()->create();
+    Readings::record($watched);
+    Readings::record($hidden);
+
+    $membership = $this->user->teamMemberships()->where('team_id', $this->team->id)->first();
+    $membership->update(['visibility' => MemberVisibility::Manual->value]);
+    $membership->visibleEnvironments()->attach([$watched->id]);
+
+    $repository = freshMonitoringRepository();
+    DB::enableQueryLog();
+    $rows = $repository->configurableEnvironments($this->team);
+    $queries = collect(DB::getQueryLog())->filter(fn (array $query) => str_contains($query['query'], 'environment_states')
+        || str_contains($query['query'], 'avg(pending)'));
+    DB::disableQueryLog();
+
+    expect($rows)->toHaveCount(2)
+        ->and($queries)->toHaveCount(2)
+        ->and($queries->every(fn (array $query) => in_array($watched->id, $query['bindings'], true)
+            && ! in_array($hidden->id, $query['bindings'], true)))->toBeTrue();
+});

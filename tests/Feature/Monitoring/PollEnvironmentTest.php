@@ -459,6 +459,30 @@ test('a reading of the same second replaces the state', function () {
     expect(EnvironmentState::query()->sole()->latency_ms)->toBe(11);
 });
 
+test('a reading of an address the environment left while it was read is dropped', function () {
+    $this->reader->results = [function () {
+        Environment::query()->whereKey($this->environment->id)->update(['horizon_url' => 'https://preprod.example.com/horizon']);
+
+        return ($this->reading)();
+    }];
+
+    expect(($this->poll)())->toBeNull()
+        ->and(EnvironmentSnapshot::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->count())->toBe(0)
+        ->and($this->environment->fresh()->last_polled_at)->toBeNull();
+});
+
+test('a reading survives an edit that keeps the address', function () {
+    $this->reader->results = [function () {
+        Environment::query()->whereKey($this->environment->id)->update(['name' => 'renamed', 'poll_interval_seconds' => 60]);
+
+        return ($this->reading)();
+    }];
+
+    expect(($this->poll)())->not->toBeNull()
+        ->and(EnvironmentState::query()->count())->toBe(1);
+});
+
 test('an environment deleted while it is being read ends quietly', function () {
     Exceptions::fake();
 

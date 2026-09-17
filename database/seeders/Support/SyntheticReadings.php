@@ -83,7 +83,7 @@ final class SyntheticReadings
             return $row + [
                 'status' => EnvironmentStatus::Unreachable->value,
                 'error' => ReadingError::Unreachable->value,
-                'breaches' => $this->encodeBreaches($this->evaluator->failed(ReadingError::Unreachable)),
+                'breaches' => $this->encodeBreaches($this->evaluator->failed()),
                 'pending' => 0,
                 'max_wait_seconds' => 0,
                 'jobs_per_minute' => 0,
@@ -124,7 +124,7 @@ final class SyntheticReadings
             ? $this->reading($environment, $detailAt, EnvironmentStatus::Degraded)
             : $this->reading($environment, $detailAt, $incident);
         $evaluated = $unreachable
-            ? $this->evaluator->failed(ReadingError::Unreachable)
+            ? $this->evaluator->failed()
             : $this->evaluator->evaluate($reading['horizon']);
 
         EnvironmentState::query()->updateOrCreate(

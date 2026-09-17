@@ -36,7 +36,7 @@ class EnvironmentFormData extends Data
             'horizonUrl' => self::horizonUrlRules(),
             'basicAuthUser' => self::basicAuthUserRules(self::key($context, 'basicAuthPassword')),
             'basicAuthPassword' => ['nullable', 'string', ...self::passwordRequiredWithUsernameRules($context)],
-            'pollIntervalSeconds' => ['integer', 'between:5,300'],
+            'pollIntervalSeconds' => ['integer', 'between:15,300'],
             'pollingEnabled' => ['boolean'],
         ];
     }

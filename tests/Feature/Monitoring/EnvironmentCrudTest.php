@@ -7,9 +7,12 @@ use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Models\EnvironmentSnapshot;
+use App\Models\EnvironmentState;
 use App\Models\Team;
 use App\Models\User;
 use App\Policies\EnvironmentPolicy;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -789,4 +792,116 @@ test('changesCredentialsOf counts a new address as a credentials change only whe
     expect($data('https://attacker.example.net/collect')->changesCredentialsOf($credentialed))->toBeTrue()
         ->and($data('https://production.example.com/ops/horizon')->changesCredentialsOf($credentialed))->toBeFalse()
         ->and($data('https://attacker.example.net/collect')->changesCredentialsOf($bare))->toBeFalse();
+});
+
+test('the poll interval goes from the scheduler tick of 15 seconds to 300', function (int $seconds, bool $valid) {
+    $response = $this->actingAs($this->admin)->post(
+        route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+        ($this->validPayload)(['pollIntervalSeconds' => $seconds]),
+    );
+
+    $valid ? $response->assertValid() : $response->assertInvalid(['pollIntervalSeconds']);
+})->with([
+    [5, false],
+    [14, false],
+    [15, true],
+    [300, true],
+    [301, false],
+]);
+
+describe('the next reading after an edit', function () {
+    beforeEach(function () {
+        $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:00.600'));
+
+        $this->edited = fn (array $attributes, ?string $nextPollAt): Environment => tap(
+            Environment::factory()->for($this->application)->create([
+                'name' => 'production',
+                'basic_auth_user' => 'monitor',
+                'basic_auth_password' => 'super-secret-value',
+                'horizon_url' => 'https://production.example.com/horizon',
+                ...$attributes,
+            ]),
+            fn (Environment $environment) => $environment->forceFill(['next_poll_at' => $nextPollAt])->save(),
+        );
+
+        $this->save = fn (Environment $environment, array $overrides) => $this->actingAs($this->admin)->patch(
+            route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
+            ($this->validPayload)([
+                'horizonUrl' => 'https://production.example.com/horizon',
+                'basicAuthPassword' => null,
+                ...$overrides,
+            ]),
+        )->assertRedirect();
+
+        $this->nextPollAt = fn (Environment $environment): ?string => $environment->fresh()->next_poll_at?->toDateTimeString();
+    });
+
+    test('a shorter interval brings it within the new interval', function () {
+        $environment = ($this->edited)(['poll_interval_seconds' => 300], '2026-09-17 10:04:50');
+
+        ($this->save)($environment, ['pollIntervalSeconds' => 15]);
+
+        expect(($this->nextPollAt)($environment))->toBe('2026-09-17 10:00:15');
+    });
+
+    test('a longer or unchanged interval, or an environment never read, keeps it', function () {
+        $longer = ($this->edited)(['poll_interval_seconds' => 15], '2026-09-17 10:00:10');
+        $same = ($this->edited)(['name' => 'staging', 'poll_interval_seconds' => 60], '2026-09-17 10:00:50');
+        $never = ($this->edited)(['name' => 'develop', 'poll_interval_seconds' => 300], null);
+
+        ($this->save)($longer, ['pollIntervalSeconds' => 60]);
+        ($this->save)($same, ['name' => 'staging', 'pollIntervalSeconds' => 60]);
+        ($this->save)($never, ['name' => 'develop', 'pollIntervalSeconds' => 15]);
+
+        expect(($this->nextPollAt)($longer))->toBe('2026-09-17 10:00:10')
+            ->and(($this->nextPollAt)($same))->toBe('2026-09-17 10:00:50')
+            ->and(($this->nextPollAt)($never))->toBeNull();
+    });
+
+    test('resuming collection makes it due at once, pausing leaves it alone', function () {
+        $resumed = ($this->edited)(['polling_enabled' => false, 'poll_interval_seconds' => 300], '2026-09-17 10:03:00');
+        $paused = ($this->edited)(['name' => 'staging', 'poll_interval_seconds' => 300], '2026-09-17 10:03:00');
+
+        ($this->save)($resumed, ['pollIntervalSeconds' => 300, 'pollingEnabled' => true]);
+        ($this->save)($paused, ['name' => 'staging', 'pollIntervalSeconds' => 300, 'pollingEnabled' => false]);
+
+        expect(($this->nextPollAt)($resumed))->toBe('2026-09-17 10:00:00')
+            ->and(($this->nextPollAt)($paused))->toBe('2026-09-17 10:03:00');
+    });
+
+    test('a new Horizon address forgets the shown state and is read at once, keeping the history', function (string $url) {
+        $environment = ($this->edited)(['poll_interval_seconds' => 300], '2026-09-17 10:03:00');
+        $other = ($this->edited)(['name' => 'staging'], '2026-09-17 10:03:00');
+        EnvironmentState::factory()->for($environment)->create();
+        EnvironmentState::factory()->for($other)->create();
+        EnvironmentSnapshot::factory()->for($environment)->create();
+
+        ($this->save)($environment, ['horizonUrl' => $url, 'basicAuthPassword' => 'super-secret-value', 'pollIntervalSeconds' => 300]);
+
+        expect(EnvironmentState::query()->where('environment_id', $environment->id)->exists())->toBeFalse()
+            ->and(EnvironmentState::query()->where('environment_id', $other->id)->exists())->toBeTrue()
+            ->and(EnvironmentSnapshot::query()->where('environment_id', $environment->id)->count())->toBe(1)
+            ->and(($this->nextPollAt)($environment))->toBe('2026-09-17 10:00:00')
+            ->and(($this->nextPollAt)($other))->toBe('2026-09-17 10:03:00');
+    })->with([
+        'host' => 'https://preprod.example.com/horizon',
+        'scheme' => 'http://production.example.com/horizon',
+        'port' => 'https://production.example.com:8443/horizon',
+        'path' => 'https://production.example.com/admin/horizon',
+    ]);
+
+    test('the same address written differently keeps the state', function (string $url) {
+        $environment = ($this->edited)(['poll_interval_seconds' => 300], '2026-09-17 10:03:00');
+        EnvironmentState::factory()->for($environment)->create();
+
+        ($this->save)($environment, ['horizonUrl' => $url, 'pollIntervalSeconds' => 300]);
+
+        expect(EnvironmentState::query()->where('environment_id', $environment->id)->exists())->toBeTrue()
+            ->and(($this->nextPollAt)($environment))->toBe('2026-09-17 10:03:00');
+    })->with([
+        'unchanged' => 'https://production.example.com/horizon',
+        'trailing slash' => 'https://production.example.com/horizon/',
+        'api suffix' => 'https://production.example.com/horizon/api',
+        'host case and default port' => 'HTTPS://Production.Example.com:443/horizon',
+    ]);
 });

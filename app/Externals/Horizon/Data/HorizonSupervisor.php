@@ -5,7 +5,7 @@ namespace App\Externals\Horizon\Data;
 final readonly class HorizonSupervisor
 {
     /**
-     * @param  array<string, int>  $processes  keyed by "connection:queue"
+     * @param  array<string, int>  $processes
      */
     public function __construct(
         public string $name,

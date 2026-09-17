@@ -111,3 +111,35 @@ test('runtime is asked for 100 queues, at most 10 at a time', function () {
         ->and($peak)->toBeGreaterThan(1)
         ->and($peak)->toBeLessThanOrEqual(10);
 });
+
+test('no runtime is asked once the main requests used the whole read budget', function () {
+    config(['horizon-watch.read_budget_seconds' => 0.3]);
+
+    $reading = app(HorizonReader::class)->read(hostileTarget('slow-stats'));
+
+    [, , $total] = array_map('intval', explode(' ', (string) file_get_contents($GLOBALS['hostileHorizon']['counter'])));
+
+    expect($reading->stats->status)->toBe('running')
+        ->and($reading->queueRuntimes)->toBe([])
+        ->and($total)->toBe(0);
+
+    config(['horizon-watch.read_budget_seconds' => 20]);
+
+    $reading = app(HorizonReader::class)->read(hostileTarget('slow-stats'));
+
+    [, , $total] = array_map('intval', explode(' ', (string) file_get_contents($GLOBALS['hostileHorizon']['counter'])));
+
+    expect($reading->queueRuntimes)->toBe(['q1' => 0.5])
+        ->and($total)->toBe(1);
+});
+
+test('runtime requests stop at the read budget and leave runtime unknown', function () {
+    config(['horizon-watch.read_budget_seconds' => 0.5]);
+    $started = microtime(true);
+
+    $reading = app(HorizonReader::class)->read(hostileTarget('slow-metrics'));
+
+    expect(microtime(true) - $started)->toBeLessThan(1.2)
+        ->and($reading->workload)->toHaveCount(30)
+        ->and($reading->queueRuntimes)->toBe([]);
+});

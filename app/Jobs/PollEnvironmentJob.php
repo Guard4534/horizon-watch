@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Actions\Monitoring\PollEnvironment;
 use App\Models\Environment;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -42,6 +43,8 @@ class PollEnvironmentJob implements ShouldBeUnique, ShouldQueue
         }
 
         if (now()->getTimestamp() - $this->dispatchedAt > $environment->poll_interval_seconds) {
+            $this->keepDue();
+
             return;
         }
 
@@ -50,5 +53,16 @@ class PollEnvironmentJob implements ShouldBeUnique, ShouldQueue
         }
 
         $poll->handle($environment);
+    }
+
+    private function keepDue(): void
+    {
+        $dispatchedAt = CarbonImmutable::createFromTimestamp($this->dispatchedAt);
+
+        Environment::query()
+            ->whereKey($this->environmentId)
+            ->where('next_poll_at', '>', $dispatchedAt)
+            ->toBase()
+            ->update(['next_poll_at' => $dispatchedAt]);
     }
 }

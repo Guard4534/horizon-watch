@@ -16,6 +16,26 @@ if ($rest === 'horizon/api/masters') {
     return true;
 }
 
+if ($rest === 'horizon/api/workload' && $scenario === 'slow-metrics') {
+    $json(json_encode(array_map(fn (int $i) => ['name' => "q{$i}", 'length' => $i, 'wait' => 0, 'processes' => 1], range(1, 30))));
+
+    return true;
+}
+
+if (str_starts_with($rest, 'horizon/api/metrics/queues/') && $scenario === 'slow-metrics') {
+    header('Content-Type: application/json');
+
+    for ($i = 0; $i < 15 && ! connection_aborted(); $i++) {
+        usleep(100_000);
+        echo ' ';
+        flush();
+    }
+
+    echo '[{"runtime":0.5}]';
+
+    return true;
+}
+
 if ($rest === 'horizon/api/workload') {
     $queues = $scenario === 'many-queues' ? range(1, 150) : [1];
 
@@ -57,8 +77,14 @@ if ($rest !== 'horizon/api/stats') {
 }
 
 switch ($scenario) {
+    case 'slow-metrics':
     case 'valid':
     case 'many-queues':
+        $json($stats.'"}');
+        break;
+
+    case 'slow-stats':
+        usleep(500_000);
         $json($stats.'"}');
         break;
 

@@ -3,6 +3,7 @@
 namespace App\Actions\Monitoring;
 
 use App\Data\Monitoring\ConnectionResultData;
+use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Exceptions\HorizonReadFailed;
 use App\Externals\Horizon\HorizonReader;
@@ -33,7 +34,7 @@ class TestConnection
 
         return new ConnectionResultData(
             reachable: true,
-            horizonStatus: $probe->status,
+            horizonStatus: HorizonStatus::tryFrom($probe->status),
             masterCount: $probe->masterCount,
             latencyMs: $probe->latencyMs,
             error: null,

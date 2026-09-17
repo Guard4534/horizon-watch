@@ -12,6 +12,9 @@ use App\Externals\Horizon\Data\HorizonSupervisor;
 use App\Externals\Horizon\Exceptions\HorizonReadFailed;
 use Carbon\CarbonImmutable;
 use Closure;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Promise\Create;
+use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Exception\MalformedUriException;
 use Illuminate\Container\Attributes\Config;
 use Illuminate\Http\Client\PendingRequest;
@@ -19,6 +22,7 @@ use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Psr\Http\Message\RequestInterface;
 use Throwable;
 
 final readonly class HorizonClient implements HorizonReader
@@ -41,18 +45,20 @@ final readonly class HorizonClient implements HorizonReader
 
     private const int METRICS_CONCURRENCY = 10;
 
-    private const int HORIZON_DEFAULT_FAILED_WINDOW = 10080;
-
     private const int MAX_TIMESTAMP = 253_402_300_799;
 
     public function __construct(
         private SafeUrlGuard $guard,
         #[Config('horizon-watch.http_timeout_seconds', 5)]
         private int $timeoutSeconds = 5,
+        #[Config('horizon-watch.read_budget_seconds', 20)]
+        private int|float $readBudgetSeconds = 20,
     ) {}
 
     public function read(HorizonTarget $target): HorizonReading
     {
+        $deadline = hrtime(true) + (int) ($this->readBudgetSeconds * 1_000_000_000);
+
         $resolved = $this->guard->check($target->apiUrl('stats'));
 
         $paths = ['stats' => 'stats', 'masters' => 'masters', 'workload' => 'workload', 'failed' => 'jobs/failed', 'pending' => 'jobs/pending'];
@@ -71,7 +77,7 @@ final readonly class HorizonClient implements HorizonReader
             workload: $workload,
             failedJobs: $this->secondary(fn () => $this->failedJobs($answers['failed'])),
             pendingJobs: $this->secondary(fn () => $this->pendingJobs($answers['pending'])),
-            queueRuntimes: $this->queueRuntimes($target, $resolved, $workload),
+            queueRuntimes: $this->queueRuntimes($target, $resolved, $workload, $deadline),
             latencyMs: $this->latency($answers['stats'], $elapsed),
         );
     }
@@ -94,20 +100,20 @@ final readonly class HorizonClient implements HorizonReader
     }
 
     /**
-     * @param  array<string, string>  $paths  API path by pool key
+     * @param  array<string, string>  $paths
      * @param  positive-int  $concurrency
      * @return array<string, array{response: mixed, watch: TransferWatch}>
      *
      * @throws HorizonReadFailed
      */
-    private function pool(HorizonTarget $target, ResolvedTarget $resolved, array $paths, int $concurrency): array
+    private function pool(HorizonTarget $target, ResolvedTarget $resolved, array $paths, int $concurrency, ?int $deadline = null): array
     {
         $watches = array_map(fn () => new TransferWatch(self::MAX_BODY_BYTES), $paths);
 
         try {
-            $responses = Http::pool(function (Pool $pool) use ($target, $resolved, $paths, $watches) {
+            $responses = Http::pool(function (Pool $pool) use ($target, $resolved, $paths, $watches, $deadline) {
                 foreach ($paths as $key => $path) {
-                    $this->get($pool->as($key), $target, $resolved, $path, $watches[$key]);
+                    $this->get($pool->as($key), $target, $resolved, $path, $watches[$key], $deadline);
                 }
             }, $concurrency);
         } catch (MalformedUriException) {
@@ -123,7 +129,7 @@ final readonly class HorizonClient implements HorizonReader
         return $answers;
     }
 
-    private function get(PendingRequest $request, HorizonTarget $target, ResolvedTarget $resolved, string $path, TransferWatch $watch): void
+    private function get(PendingRequest $request, HorizonTarget $target, ResolvedTarget $resolved, string $path, TransferWatch $watch, ?int $deadline): void
     {
         $request
             ->connectTimeout($this->timeoutSeconds)
@@ -135,6 +141,10 @@ final readonly class HorizonClient implements HorizonReader
                 'proxy' => ['no' => ['*']],
                 ...$watch->options(),
             ]);
+
+        if ($deadline !== null) {
+            $request->withMiddleware($this->within($deadline));
+        }
 
         if ($target->hasBasicAuth()) {
             $request->withBasicAuth((string) $target->username, (string) $target->password());
@@ -238,7 +248,7 @@ final readonly class HorizonClient implements HorizonReader
         $minutes = is_array($periods) ? $this->finite($periods['failedJobs'] ?? null) : null;
 
         if ($minutes === null || $minutes < 1 || $minutes > self::MAX_NUMBER) {
-            return self::HORIZON_DEFAULT_FAILED_WINDOW;
+            return HorizonStats::DEFAULT_FAILED_WINDOW_MINUTES;
         }
 
         return (int) round($minutes);
@@ -407,7 +417,7 @@ final readonly class HorizonClient implements HorizonReader
      * @param  list<HorizonQueueLoad>  $workload
      * @return array<string, float>
      */
-    private function queueRuntimes(HorizonTarget $target, ResolvedTarget $resolved, array $workload): array
+    private function queueRuntimes(HorizonTarget $target, ResolvedTarget $resolved, array $workload, int $deadline): array
     {
         usort($workload, fn (HorizonQueueLoad $a, HorizonQueueLoad $b) => $b->length <=> $a->length);
 
@@ -416,7 +426,7 @@ final readonly class HorizonClient implements HorizonReader
             $workload,
         ))), 0, self::MAX_METRIC_QUEUES);
 
-        if ($queues === []) {
+        if ($queues === [] || $this->millisecondsLeft($deadline) < 1) {
             return [];
         }
 
@@ -426,7 +436,7 @@ final readonly class HorizonClient implements HorizonReader
             $paths['q'.$index] = 'metrics/queues/'.rawurlencode($queue);
         }
 
-        $answers = $this->pool($target, $resolved, $paths, self::METRICS_CONCURRENCY);
+        $answers = $this->pool($target, $resolved, $paths, self::METRICS_CONCURRENCY, $deadline);
         $runtimes = [];
 
         foreach ($queues as $index => $queue) {
@@ -445,6 +455,29 @@ final readonly class HorizonClient implements HorizonReader
         }
 
         return $runtimes;
+    }
+
+    /**
+     * @return Closure(callable): (Closure(RequestInterface, array<string, mixed>): PromiseInterface)
+     */
+    private function within(int $deadline): Closure
+    {
+        return fn (callable $handler): Closure => function (RequestInterface $request, array $options) use ($handler, $deadline): PromiseInterface {
+            $left = $this->millisecondsLeft($deadline);
+
+            if ($left < 1) {
+                return Create::rejectionFor(new ConnectException('The read budget is spent.', $request));
+            }
+
+            $seconds = min($this->timeoutSeconds * 1000, $left) / 1000;
+
+            return $handler($request, ['connect_timeout' => $seconds, 'timeout' => $seconds] + $options);
+        };
+    }
+
+    private function millisecondsLeft(int $deadline): int
+    {
+        return intdiv($deadline - hrtime(true), 1_000_000);
     }
 
     /**

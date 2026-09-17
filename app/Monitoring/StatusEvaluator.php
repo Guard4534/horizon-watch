@@ -4,7 +4,6 @@ namespace App\Monitoring;
 
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
-use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
 use App\Externals\Horizon\Data\HorizonPendingJob;
@@ -50,7 +49,7 @@ final class StatusEvaluator
         return count(array_filter($jobs, fn (HorizonFailedJob $job) => $job->failedAt->gte($since)));
     }
 
-    public function failed(ReadingError $error): EvaluatedStatus
+    public function failed(): EvaluatedStatus
     {
         return new EvaluatedStatus(EnvironmentStatus::Unreachable, [AlertRuleMetric::EndpointUnreachable]);
     }

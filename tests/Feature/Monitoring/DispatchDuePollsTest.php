@@ -1,6 +1,10 @@
 <?php
 
 use App\Actions\Monitoring\DispatchDuePolls;
+use App\Actions\Monitoring\PollEnvironment;
+use App\Enums\ReadingError;
+use App\Externals\Horizon\Exceptions\HorizonReadFailed;
+use App\Externals\Horizon\HorizonReader;
 use App\Jobs\PollEnvironmentJob;
 use App\Models\Environment;
 use Carbon\CarbonImmutable;
@@ -127,4 +131,79 @@ test('with nothing configured nothing is queued', function () {
     expect(($this->dispatch)())->toBe(0);
 
     Queue::assertNothingPushed();
+});
+
+test('due environments are queued never read first, then oldest due first, id breaking ties', function () {
+    $lateTie = ($this->environment)([], '2026-09-17 09:59:30');
+    $oldest = ($this->environment)([], '2026-09-17 09:58:00');
+    $neverPolled = ($this->environment)();
+    $earlyTie = ($this->environment)([], '2026-09-17 09:59:30');
+
+    ($this->dispatch)();
+
+    $queued = Queue::pushed(PollEnvironmentJob::class)->map(fn (PollEnvironmentJob $job) => $job->environmentId)->values()->all();
+
+    expect($queued)->toBe([$neverPolled->id, $oldest->id, $lateTie->id, $earlyTie->id]);
+});
+
+test('the claim query filters and sorts through the polling index', function () {
+    $queries = [];
+
+    DB::listen(function (QueryExecuted $query) use (&$queries) {
+        if (str_starts_with($query->sql, 'select') && str_contains($query->sql, '"next_poll_at"')) {
+            $queries[] = $query;
+        }
+    });
+
+    ($this->dispatch)();
+
+    expect($queries)->toHaveCount(1);
+
+    DB::statement('set enable_seqscan = off');
+
+    $plan = collect(DB::select('explain '.$queries[0]->sql, $queries[0]->bindings))->pluck('QUERY PLAN')->implode("\n");
+
+    DB::statement('reset enable_seqscan');
+
+    expect($plan)->toContain('environments_polling_enabled_next_poll_at_index');
+});
+
+test('an environment whose job was dropped for its age is queued first on the next tick', function () {
+    $environments = collect(range(1, 3))->map(fn () => ($this->environment)(['poll_interval_seconds' => 15]));
+
+    ($this->dispatch)();
+
+    $release = fn () => $environments->each(fn (Environment $environment) => (new UniqueLock(app(Cache::class)))->release(new PollEnvironmentJob($environment->id)));
+
+    $jobs = Queue::pushed(PollEnvironmentJob::class)->values();
+    $reader = Mockery::mock(HorizonReader::class);
+    $reader->shouldReceive('read')->once()->andThrow(new HorizonReadFailed(ReadingError::Unreachable));
+    $this->app->instance(HorizonReader::class, $reader);
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:15.200'));
+    $jobs[0]->handle(app(PollEnvironment::class));
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:16.200'));
+    $jobs[1]->handle(app(PollEnvironment::class));
+    $jobs[2]->handle(app(PollEnvironment::class));
+    $release();
+
+    expect($environments[0]->fresh()->next_poll_at->toDateTimeString())->toBe('2026-09-17 10:00:15')
+        ->and($environments[1]->fresh()->next_poll_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and($environments[2]->fresh()->next_poll_at->toDateTimeString())->toBe('2026-09-17 10:00:00');
+
+    expect(($this->dispatch)())->toBe(3);
+
+    $queued = Queue::pushed(PollEnvironmentJob::class)->skip(3)->map(fn (PollEnvironmentJob $job) => $job->environmentId)->values()->all();
+
+    expect($queued)->toBe([$environments[1]->id, $environments[2]->id, $environments[0]->id]);
+});
+
+test('a dropped job never moves next_poll_at later', function () {
+    $environment = ($this->environment)(['poll_interval_seconds' => 15], '2026-09-17 09:59:40');
+
+    (new PollEnvironmentJob($environment->id, CarbonImmutable::parse('2026-09-17 09:59:44')->getTimestamp()))
+        ->handle(app(PollEnvironment::class));
+
+    expect($environment->fresh()->next_poll_at->toDateTimeString())->toBe('2026-09-17 09:59:40');
 });

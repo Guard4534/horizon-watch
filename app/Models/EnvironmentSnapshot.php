@@ -24,7 +24,7 @@ use Illuminate\Support\Collection;
  * @property int $pending
  * @property int $max_wait_seconds
  * @property int $jobs_per_minute
- * @property int $failed_in_window counted over failed_window_minutes
+ * @property int $failed_in_window
  * @property int $failed_window_minutes
  * @property int $failed_last_hour
  * @property int $workers

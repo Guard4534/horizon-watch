@@ -1,6 +1,8 @@
 <?php
 
+use App\Actions\Monitoring\TestConnection;
 use App\Data\Applications\TestConnectionData;
+use App\Enums\HorizonStatus;
 use App\Enums\MemberVisibility;
 use App\Enums\ReadingError;
 use App\Enums\TeamRole;
@@ -458,3 +460,15 @@ test('neither route probes a URL that carries credentials, nor flashes it back',
     expect($this->reader->probed)->toBe([])
         ->and(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('url-secret');
 })->with(['environment', 'application']);
+
+test('the master status of a probe is handed out as a Horizon status', function (string $reported, ?HorizonStatus $status) {
+    $this->reader->outcome = new HorizonProbe(status: $reported, masterCount: 1, latencyMs: 10);
+
+    expect(app(TestConnection::class)->handle(new HorizonTarget('https://staging.example.com/horizon', null, null))->horizonStatus)
+        ->toBe($status);
+})->with([
+    ['running', HorizonStatus::Running],
+    ['paused', HorizonStatus::Paused],
+    ['inactive', HorizonStatus::Inactive],
+    ['exploded', null],
+]);

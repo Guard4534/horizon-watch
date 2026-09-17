@@ -35,7 +35,7 @@ function clientJson(string $name): Closure
 }
 
 /**
- * @param  array<string, Closure>  $overrides  keyed by API path, e.g. "stats" or "metrics/queues/default"
+ * @param  array<string, Closure>  $overrides
  * @return ArrayObject<string, array<string, mixed>>
  */
 function fakeHorizonApi(array $overrides = []): ArrayObject

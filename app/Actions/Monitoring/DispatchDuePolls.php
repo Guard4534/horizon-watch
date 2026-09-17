@@ -18,6 +18,7 @@ class DispatchDuePolls
                 ->select(['id', 'poll_interval_seconds'])
                 ->where('polling_enabled', true)
                 ->where(fn ($query) => $query->whereNull('next_poll_at')->orWhere('next_poll_at', '<=', $now))
+                ->orderByRaw('next_poll_at asc nulls first')
                 ->orderBy('id')
                 ->lock('for no key update skip locked')
                 ->get();
