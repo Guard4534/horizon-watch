@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import {
     PhGearSix,
     PhLockSimple,
@@ -38,6 +38,30 @@ const shared = usePage();
 const canManageApplications = computed(
     () => shared.props.canManageApplications,
 );
+function environmentHref(environmentId: string): string {
+    return showEnvironment({
+        current_team: slug.value,
+        environment: environmentId,
+    }).url;
+}
+
+// The whole row opens the environment, for a pointer. The name stays a real
+// link, so keyboard and screen-reader users get the same destination; clicks
+// that land on a link or a button inside the row keep their own meaning.
+function openRow(
+    environment: { id: string; watched: boolean },
+    event: MouseEvent,
+): void {
+    if (!environment.watched) {
+        return;
+    }
+
+    if ((event.target as HTMLElement).closest('a, button, input, select')) {
+        return;
+    }
+
+    router.visit(environmentHref(environment.id));
+}
 </script>
 
 <template>
@@ -140,9 +164,22 @@ const canManageApplications = computed(
                     <tr
                         v-for="environment in group.environments"
                         :key="environment.id"
+                        :class="{ 'row-link': environment.watched }"
+                        @click="openRow(environment, $event)"
                     >
                         <td>
+                            <Link
+                                v-if="environment.watched"
+                                :href="environmentHref(environment.id)"
+                                class="row-anchor"
+                            >
+                                <EnvPill
+                                    :name="environment.name"
+                                    :color="environment.color"
+                                />
+                            </Link>
                             <EnvPill
+                                v-else
                                 :name="environment.name"
                                 :color="environment.color"
                             />
@@ -231,22 +268,10 @@ const canManageApplications = computed(
                             <!-- An environment the viewer configures but
                                  does not watch (their permission lists it,
                                  their visibility hides it) has no detail
-                                 page for them: it answers 404. Say so
-                                 instead of linking there; the pencil stays. -->
-                            <Link
-                                v-if="environment.watched"
-                                :href="
-                                    showEnvironment({
-                                        current_team: slug,
-                                        environment: environment.id,
-                                    })
-                                "
-                                class="nc-btn nc-btn-ghost"
-                                style="font-size: 12px"
-                                >{{ $t('Open') }}</Link
-                            >
+                                 page for them: it answers 404. Its row is
+                                 not a link; say so, and the pencil stays. -->
                             <span
-                                v-else
+                                v-if="!environment.watched"
                                 class="nc-tag nc-tag-neutral"
                                 :title="
                                     $t(
@@ -289,5 +314,15 @@ const canManageApplications = computed(
 
 .app-name:hover {
     color: var(--nc-accent);
+}
+
+.row-link {
+    cursor: pointer;
+}
+
+.row-anchor {
+    display: inline-flex;
+    border-radius: var(--nc-radius-sm);
+    text-decoration: none;
 }
 </style>

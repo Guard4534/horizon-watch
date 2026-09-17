@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import {
     PhBellSlash,
     PhCheck,
@@ -18,6 +18,22 @@ defineProps<{
 }>();
 
 const slug = useTeamSlug();
+
+function openCard(
+    alert: App.Data.Monitoring.AlertData,
+    event: MouseEvent,
+): void {
+    if ((event.target as HTMLElement).closest('a, button')) {
+        return;
+    }
+
+    router.visit(
+        showEnvironment({
+            current_team: slug.value,
+            environment: alert.environmentId,
+        }).url,
+    );
+}
 </script>
 
 <template>
@@ -34,6 +50,8 @@ const slug = useTeamSlug();
             :key="alert.id"
             class="alert-card"
             :class="{ 'is-critical': alert.severity === 'critical' }"
+            style="cursor: pointer"
+            @click="openCard(alert, $event)"
         >
             <div class="flex items-start gap-[9px]">
                 <component

@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import {
-    PhArrowRight,
     PhBellSlash,
     PhCheck,
     PhWarning,
@@ -20,6 +19,27 @@ defineProps<{
 }>();
 
 const slug = useTeamSlug();
+
+function environmentHref(environmentId: string): string {
+    return showEnvironment({
+        current_team: slug.value,
+        environment: environmentId,
+    }).url;
+}
+
+// The whole row opens the environment, for a pointer. The environment name
+// stays a real link for keyboard and screen-reader users; clicks on a button
+// in the row (the disabled phase-4 actions) never navigate.
+function openRow(
+    alert: App.Data.Monitoring.AlertData,
+    event: MouseEvent,
+): void {
+    if ((event.target as HTMLElement).closest('a, button')) {
+        return;
+    }
+
+    router.visit(environmentHref(alert.environmentId));
+}
 </script>
 
 <template>
@@ -45,7 +65,12 @@ const slug = useTeamSlug();
                         {{ empty }}
                     </td>
                 </tr>
-                <tr v-for="alert in alerts" :key="alert.id">
+                <tr
+                    v-for="alert in alerts"
+                    :key="alert.id"
+                    class="row-link"
+                    @click="openRow(alert, $event)"
+                >
                     <td>
                         <span
                             class="inline-flex items-center gap-[6px]"
@@ -82,8 +107,9 @@ const slug = useTeamSlug();
                         }}
                     </td>
                     <td>
-                        <span
-                            class="inline-flex items-center gap-[7px]"
+                        <Link
+                            :href="environmentHref(alert.environmentId)"
+                            class="env-link inline-flex items-center gap-[7px]"
                             style="font-size: 12px"
                         >
                             <EnvSwatch
@@ -93,7 +119,7 @@ const slug = useTeamSlug();
                             />
                             {{ alert.applicationName }} /
                             {{ alert.environmentName }}
-                        </span>
+                        </Link>
                     </td>
                     <td
                         class="max-w-[250px]"
@@ -117,7 +143,8 @@ const slug = useTeamSlug();
                     </td>
                     <td class="whitespace-nowrap" style="text-align: right">
                         <!-- Muting and marking as handled arrive with the
-                             next release; opening the environment works. -->
+                             next release; the row itself opens the
+                             environment. -->
                         <button
                             type="button"
                             class="nc-btn nc-btn-ghost row-action"
@@ -136,19 +163,6 @@ const slug = useTeamSlug();
                         >
                             <PhCheck :size="14" />
                         </button>
-                        <Link
-                            :href="
-                                showEnvironment({
-                                    current_team: slug,
-                                    environment: alert.environmentId,
-                                })
-                            "
-                            class="nc-btn nc-btn-ghost row-action"
-                            :title="$t('Open environment')"
-                            :aria-label="$t('Open environment')"
-                        >
-                            <PhArrowRight :size="14" />
-                        </Link>
                     </td>
                 </tr>
             </tbody>
@@ -157,6 +171,19 @@ const slug = useTeamSlug();
 </template>
 
 <style scoped>
+.row-link {
+    cursor: pointer;
+}
+
+.env-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.env-link:hover {
+    color: var(--nc-accent);
+}
+
 .row-action {
     font-size: 11px;
     padding: 2px 7px;
