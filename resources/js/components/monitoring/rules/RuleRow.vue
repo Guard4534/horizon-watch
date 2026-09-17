@@ -8,16 +8,7 @@ const { rule, organizationScope } = defineProps<{
 </script>
 
 <template>
-    <div
-        class="grid items-center"
-        style="
-            grid-template-columns: minmax(0, 1fr) 128px 122px 96px;
-            gap: var(--nc-space-3);
-            padding-bottom: var(--nc-space-3);
-            border-bottom: 1px solid
-                color-mix(in srgb, var(--nc-text) 7%, transparent);
-        "
-    >
+    <div class="rule-row">
         <div class="min-w-0">
             <div class="flex items-center gap-2" style="font-size: 13px">
                 <component
@@ -83,3 +74,24 @@ const { rule, organizationScope } = defineProps<{
         </label>
     </div>
 </template>
+
+<style scoped>
+.rule-row {
+    display: grid;
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) 128px 122px 96px;
+    gap: var(--nc-space-3);
+    padding-bottom: var(--nc-space-3);
+    border-bottom: 1px solid color-mix(in srgb, var(--nc-text) 7%, transparent);
+}
+
+@media (max-width: 639px) {
+    .rule-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .rule-row > :first-child {
+        grid-column: 1 / -1;
+    }
+}
+</style>

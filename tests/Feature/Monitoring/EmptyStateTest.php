@@ -75,7 +75,7 @@ test('each page carries the count its empty state keys off', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environmentCount', 0)
             ->where('page.alerts', [])
-            ->where('page.preview', null));
+            ->missing('page.preview'));
 
     // The organization scope is the only one left, and it counts nothing:
     // that is what the alert settings page keys off.

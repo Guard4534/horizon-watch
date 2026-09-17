@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
-import { PhSlidersHorizontal } from '@phosphor-icons/vue';
+import { PhInfo, PhSlidersHorizontal } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import EmptyState from '@/components/monitoring/EmptyState.vue';
 import NotificationSettings from '@/components/monitoring/rules/NotificationSettings.vue';
@@ -62,18 +62,34 @@ const somethingIsHidden = computed(
         />
     </div>
 
-    <div
-        v-else
-        class="grid items-start"
-        style="
-            padding: var(--nc-space-6);
-            gap: var(--nc-space-6);
-            grid-template-columns: 224px minmax(0, 1fr);
-        "
-    >
+    <div v-else class="rules-grid">
         <ScopeList :scopes="page.scopes" :current="page.scope" />
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
+            <div class="read-only-note" role="note">
+                <PhInfo :size="15" class="mt-px flex-none" />
+                <div class="flex flex-col" style="gap: 4px">
+                    <span>{{
+                        $t(
+                            'Thresholds are read-only for now: the defaults below already drive the anomalies.',
+                        )
+                    }}</span>
+                    <span style="color: var(--nc-neutral-500)">{{
+                        $t(
+                            'Horizon inactive, endpoint unreachable and Horizon paused open an anomaly at the first reading in that state: their minutes are not applied yet.',
+                        )
+                    }}</span>
+                    <span
+                        v-if="!organization"
+                        style="color: var(--nc-neutral-500)"
+                        >{{
+                            $t(
+                                'The overrides shown here are examples: every environment is measured against the organization defaults until the next release.',
+                            )
+                        }}</span
+                    >
+                </div>
+            </div>
             <section class="nc-card">
                 <div
                     class="flex flex-wrap items-start"
@@ -137,3 +153,33 @@ const somethingIsHidden = computed(
         </div>
     </div>
 </template>
+
+<style scoped>
+.rules-grid {
+    display: grid;
+    align-items: start;
+    padding: var(--nc-space-6);
+    gap: var(--nc-space-6);
+    grid-template-columns: 224px minmax(0, 1fr);
+}
+
+@media (max-width: 767px) {
+    .rules-grid {
+        grid-template-columns: minmax(0, 1fr);
+        padding: var(--nc-space-4);
+        gap: var(--nc-space-4);
+    }
+}
+
+.read-only-note {
+    display: flex;
+    gap: var(--nc-space-2);
+    align-items: flex-start;
+    padding: var(--nc-space-3);
+    border-radius: var(--nc-radius-md);
+    background: color-mix(in srgb, var(--nc-accent) 12%, transparent);
+    font-size: 12px;
+    color: var(--nc-neutral-300);
+    line-height: 1.45;
+}
+</style>

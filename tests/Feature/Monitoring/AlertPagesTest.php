@@ -12,11 +12,11 @@ beforeEach(function () {
     Readings::mockup($this->user->currentTeam);
 });
 
-test('the email preview shows a critical alert', function () {
+test('the worst anomaly leads the log, with its channels', function () {
     $this->actingAs($this->user)
         ->get(route('alerts.index', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.preview.severity', 'critical')
+            ->where('page.alerts.0.severity', 'critical')
             ->has('page.alerts.0.channels', 2));
 });
 

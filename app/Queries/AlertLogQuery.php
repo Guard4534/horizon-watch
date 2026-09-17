@@ -2,10 +2,8 @@
 
 namespace App\Queries;
 
-use App\Data\Monitoring\AlertData;
 use App\Data\Pages\AlertCountsData;
 use App\Data\Pages\AlertLogPageData;
-use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
 use App\Models\Team;
 use App\Monitoring\MonitoringRepository;
@@ -20,8 +18,6 @@ class AlertLogQuery
         $muted = $this->monitoring->alerts($team, AlertState::Muted);
         $resolved = $this->monitoring->alerts($team, AlertState::Resolved);
 
-        $critical = array_values(array_filter($open, fn (AlertData $alert) => $alert->severity === AlertSeverity::Critical));
-
         return new AlertLogPageData(
             state: $state,
             counts: new AlertCountsData(count($open), count($muted), count($resolved)),
@@ -30,7 +26,7 @@ class AlertLogQuery
                 AlertState::Muted => $muted,
                 AlertState::Resolved => $resolved,
             },
-            preview: $critical[0] ?? $open[0] ?? null,
+            notifications: $this->monitoring->notificationSettings($team),
             environmentCount: count($this->monitoring->environments($team)),
         );
     }

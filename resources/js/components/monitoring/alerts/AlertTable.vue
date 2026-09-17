@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { PhWarning, PhWarningOctagon } from '@phosphor-icons/vue';
+import {
+    PhArrowRight,
+    PhBellSlash,
+    PhCheck,
+    PhWarning,
+    PhWarningOctagon,
+} from '@phosphor-icons/vue';
+import AlertDetail from '@/components/monitoring/alerts/AlertDetail.vue';
+import AlertOpened from '@/components/monitoring/alerts/AlertOpened.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatRule } from '@/lib/alertRules';
-import { formatMinutesAgo, formatWait } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
 defineProps<{
     alerts: App.Data.Monitoring.AlertData[];
+    empty: string;
 }>();
 
 const slug = useTeamSlug();
@@ -25,9 +33,18 @@ const slug = useTeamSlug();
                     <th>{{ $t('Detail') }}</th>
                     <th>{{ $t('Opened') }}</th>
                     <th>{{ $t('Channels') }}</th>
+                    <th />
                 </tr>
             </thead>
             <tbody>
+                <tr v-if="alerts.length === 0">
+                    <td
+                        colspan="7"
+                        style="font-size: 12px; color: var(--nc-neutral-500)"
+                    >
+                        {{ empty }}
+                    </td>
+                </tr>
                 <tr v-for="alert in alerts" :key="alert.id">
                     <td>
                         <span
@@ -65,15 +82,9 @@ const slug = useTeamSlug();
                         }}
                     </td>
                     <td>
-                        <Link
-                            :href="
-                                showEnvironment({
-                                    current_team: slug,
-                                    environment: alert.environmentId,
-                                })
-                            "
+                        <span
                             class="inline-flex items-center gap-[7px]"
-                            style="font-size: 12px; color: inherit"
+                            style="font-size: 12px"
                         >
                             <EnvSwatch
                                 :color="alert.color"
@@ -82,28 +93,19 @@ const slug = useTeamSlug();
                             />
                             {{ alert.applicationName }} /
                             {{ alert.environmentName }}
-                        </Link>
+                        </span>
                     </td>
                     <td
                         class="max-w-[250px]"
                         style="font-size: 12px; color: var(--nc-neutral-400)"
                     >
-                        {{
-                            alert.severity === 'critical'
-                                ? $tChoice(
-                                      '0 active workers across :count node|0 active workers across :count nodes',
-                                      alert.nodeCount,
-                                  )
-                                : $t('max wait :wait on 3 queues', {
-                                      wait: formatWait(alert.maxWaitSeconds),
-                                  })
-                        }}
+                        <AlertDetail :alert="alert" />
                     </td>
                     <td
                         class="whitespace-nowrap"
                         style="font-size: 12px; color: var(--nc-neutral-600)"
                     >
-                        {{ formatMinutesAgo(alert.minutesAgo) }}
+                        <AlertOpened :alert="alert" />
                     </td>
                     <td
                         class="whitespace-nowrap"
@@ -119,8 +121,50 @@ const slug = useTeamSlug();
                                 .join(' · ')
                         }}
                     </td>
+                    <td class="whitespace-nowrap" style="text-align: right">
+                        <!-- Muting and marking as handled arrive with the
+                             next release; opening the environment works. -->
+                        <button
+                            type="button"
+                            class="nc-btn nc-btn-ghost row-action"
+                            disabled
+                            :title="$t('Available soon')"
+                            :aria-label="$t('Mute')"
+                        >
+                            <PhBellSlash :size="14" />
+                        </button>
+                        <button
+                            type="button"
+                            class="nc-btn nc-btn-ghost row-action"
+                            disabled
+                            :title="$t('Available soon')"
+                            :aria-label="$t('Handled')"
+                        >
+                            <PhCheck :size="14" />
+                        </button>
+                        <Link
+                            :href="
+                                showEnvironment({
+                                    current_team: slug,
+                                    environment: alert.environmentId,
+                                })
+                            "
+                            class="nc-btn nc-btn-ghost row-action"
+                            :title="$t('Open environment')"
+                            :aria-label="$t('Open environment')"
+                        >
+                            <PhArrowRight :size="14" />
+                        </Link>
+                    </td>
                 </tr>
             </tbody>
         </table>
     </div>
 </template>
+
+<style scoped>
+.row-action {
+    font-size: 11px;
+    padding: 2px 7px;
+}
+</style>
