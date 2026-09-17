@@ -138,6 +138,15 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     private array $statesByEnvironment = [];
 
     /**
+     * The pending trend of the same environments, fetched with their states
+     * and under the same rule: one query per view per request at most, for
+     * environments one of the filtered lists handed out.
+     *
+     * @var array<int, array{points: list<int>, percent: int|null}>
+     */
+    private array $trendsByEnvironment = [];
+
+    /**
      * The open anomalies of the watched environments, by environment id.
      * Watched view only: alerts are never read from the configuration view.
      *
@@ -228,6 +237,8 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             return [];
         }
 
+        $now = $this->now();
+
         return array_map(fn (array $node) => new NodeData(
             hostname: $node['hostname'],
             // The detail of a failed reading is the last one that worked:
@@ -241,6 +252,9 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             workers: $node['workers'],
             supervisorCount: $node['supervisors'],
             queueCount: $node['queues'],
+            // States written before nodes carried seenAt date them from the
+            // reading itself. A worker clock ahead of this one reads as 0.
+            seenSecondsAgo: max(0, (int) (isset($node['seenAt']) ? CarbonImmutable::parse($node['seenAt']) : $state->captured_at)->diffInSeconds($now, false)),
         ), $state->nodes);
     }
 
@@ -610,8 +624,10 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     }
 
     /**
-     * Fetches the states of the given environments that this instance has
-     * not seen yet, in one query (see $statesByEnvironment).
+     * Fetches the states and trends of the given environments that this
+     * instance has not seen yet, in one query each (see
+     * $statesByEnvironment). The two caches are filled together, so an
+     * environment missing from one is missing from the other.
      *
      * @param  iterable<Environment>  $environments
      */
@@ -627,6 +643,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
         if ($missing !== []) {
             $this->statesByEnvironment += $this->readings->latestFor($missing);
+            $this->trendsByEnvironment += $this->readings->pendingTrends($missing);
         }
     }
 
@@ -693,6 +710,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         // Callers load the states of their whole list first: a miss here
         // would be one query per row.
         $state = $this->statesByEnvironment[$environment->id] ?? null;
+        $trend = $this->trendsByEnvironment[$environment->id] ?? null;
 
         return new EnvironmentData(
             id: $environment->slug,
@@ -704,8 +722,13 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             // Never read is reported as not answering: nothing says it does.
             status: $state->status ?? EnvironmentStatus::Unreachable,
             pending: $this->snapshotNumber($state, 'pending'),
+            trend: $trend['points'] ?? array_fill(0, StoredReadings::TREND_POINTS, 0),
+            trendPercent: $trend['percent'] ?? null,
             maxWaitSeconds: $this->snapshotNumber($state, 'max_wait_seconds'),
             failedLast24Hours: $this->snapshotNumber($state, 'failed_last_24_hours'),
+            // Without a snapshot there is no count to qualify: Horizon's
+            // historical day, as the column default.
+            failedWindowMinutes: $this->snapshotNumber($state, 'failed_window_minutes') ?: 1440,
             workers: $this->snapshotNumber($state, 'workers'),
             jobsPerMinute: $this->snapshotNumber($state, 'jobs_per_minute'),
             nodeCount: $this->snapshotNumber($state, 'node_count'),

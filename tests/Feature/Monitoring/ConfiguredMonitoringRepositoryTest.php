@@ -231,6 +231,7 @@ test('an environment reads its latest stored reading', function () {
         'pending' => 2400,
         'max_wait_seconds' => 33,
         'failed_last_24_hours' => 12,
+        'failed_window_minutes' => 10080,
         'workers' => 9,
         'jobs_per_minute' => 180,
         'node_count' => 2,
@@ -242,6 +243,7 @@ test('an environment reads its latest stored reading', function () {
         ->and($data->pending)->toBe(2400)
         ->and($data->maxWaitSeconds)->toBe(33)
         ->and($data->failedLast24Hours)->toBe(12)
+        ->and($data->failedWindowMinutes)->toBe(10080)
         ->and($data->workers)->toBe(9)
         ->and($data->jobsPerMinute)->toBe(180)
         ->and($data->nodeCount)->toBe(2)
@@ -261,6 +263,9 @@ test('an environment never read does not answer, counts nothing and is stale', f
     expect($data->status)->toBe(EnvironmentStatus::Unreachable)
         ->and([$data->pending, $data->maxWaitSeconds, $data->failedLast24Hours, $data->workers, $data->jobsPerMinute, $data->nodeCount])
         ->toBe([0, 0, 0, 0, 0, 0])
+        ->and($data->failedWindowMinutes)->toBe(1440)
+        ->and($data->trend)->toBe(array_fill(0, 12, 0))
+        ->and($data->trendPercent)->toBeNull()
         ->and($data->latencyMs)->toBeNull()
         ->and($data->lastReadingAt)->toBeNull()
         ->and($data->stale)->toBeTrue()
@@ -341,8 +346,8 @@ test('nodes and queues come from the stored detail', function () {
     $queues = $this->repository->queues($this->team, $environment->slug);
 
     expect(array_map(fn ($node) => $node->toArray(), $nodes))->toBe([
-        ['hostname' => 'queue-1.example.com', 'status' => 'active', 'workers' => 8, 'supervisorCount' => 2, 'queueCount' => 3],
-        ['hostname' => 'queue-2.example.com', 'status' => 'paused', 'workers' => 0, 'supervisorCount' => 1, 'queueCount' => 1],
+        ['hostname' => 'queue-1.example.com', 'status' => 'active', 'workers' => 8, 'supervisorCount' => 2, 'queueCount' => 3, 'seenSecondsAgo' => 0],
+        ['hostname' => 'queue-2.example.com', 'status' => 'paused', 'workers' => 0, 'supervisorCount' => 1, 'queueCount' => 1, 'seenSecondsAgo' => 0],
     ]);
 
     expect(array_map(fn ($queue) => [$queue->name, $queue->supervisor, $queue->runtimeSeconds, $queue->status], $queues))->toBe([
@@ -354,6 +359,109 @@ test('nodes and queues come from the stored detail', function () {
         // Above the default pending threshold.
         ['imports', 'supervisor-2', 1.5, EnvironmentStatus::Degraded],
     ]);
+});
+
+test('a node is dated from the last reading that listed it', function () {
+    $application = Application::factory()->for($this->team)->create();
+    $environment = Environment::factory()->for($application)->production()->create();
+    $node = fn (string $hostname, array $extra = []) => ['hostname' => $hostname, 'status' => 'running', 'workers' => 1, 'supervisors' => 1, 'queues' => 1, ...$extra];
+
+    // The latest reading failed 10 seconds ago; the nodes are those of the
+    // reading before it.
+    Readings::record($environment, EnvironmentStatus::Unreachable, snapshot: ['captured_at' => now()->subSeconds(10)], state: [
+        'nodes' => [
+            $node('seen.example.com', ['seenAt' => now()->subSeconds(40)->toIso8601String()]),
+            // Written before nodes carried seenAt: dated from the state.
+            $node('legacy.example.com'),
+            // A worker whose clock runs ahead of this one.
+            $node('ahead.example.com', ['seenAt' => now()->addSeconds(3)->toIso8601String()]),
+        ],
+    ]);
+
+    $nodes = $this->repository->nodes($this->team, $environment->slug);
+
+    expect(array_column(array_map(fn ($item) => $item->toArray(), $nodes), 'seenSecondsAgo', 'hostname'))->toBe([
+        'seen.example.com' => 40,
+        'legacy.example.com' => 10,
+        'ahead.example.com' => 0,
+    ]);
+});
+
+test('an environment carries the pending trend of its last hour', function () {
+    // 1_789_000_020 is 120 seconds into a five-minute bucket.
+    $application = Application::factory()->for($this->team)->create();
+    $environment = Environment::factory()->for($application)->production()->create();
+    $other = Environment::factory()->for($application)->staging()->create();
+
+    foreach ([10, 10, 10, 15, 15, 15] as $index => $pending) {
+        EnvironmentSnapshot::factory()->for($environment)->create([
+            'captured_at' => now()->subMinutes(5 * (5 - $index)),
+            'pending' => $pending,
+        ]);
+    }
+
+    Readings::record($other, snapshot: ['pending' => 900]);
+
+    $data = $this->repository->environment($this->team, $environment->slug);
+    $otherData = $this->repository->environment($this->team, $other->slug);
+
+    expect($data->trend)->toBe([0, 0, 0, 0, 0, 0, 10, 10, 10, 15, 15, 15])
+        ->and($data->trendPercent)->toBe(50)
+        ->and($otherData->trend)->toBe([...array_fill(0, 11, 0), 900])
+        ->and($otherData->trendPercent)->toBeNull();
+});
+
+test('the trend is read once for every environment on the page, whatever their number', function () {
+    $application = Application::factory()->for($this->team)->create();
+    $created = 0;
+    $add = function (int $count) use ($application, &$created) {
+        for ($index = 0; $index < $count; $index++) {
+            Readings::record(Environment::factory()->for($application)->create(['name' => 'worker-'.++$created]));
+        }
+    };
+
+    // A fresh WallQuery (and repository) per request, as the container
+    // hands out.
+    $measure = function () {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $page = app(WallQuery::class)->handle($this->team);
+        DB::disableQueryLog();
+
+        return [$page, collect(DB::getQueryLog())->pluck('query')];
+    };
+
+    $add(2);
+    [$few, $fewQueries] = $measure();
+
+    $add(13);
+    [$many, $manyQueries] = $measure();
+
+    expect($few->environments)->toHaveCount(2)
+        ->and($many->environments)->toHaveCount(15)
+        ->and(collect($many->environments)->every(fn ($environment) => count($environment->trend) === 12))->toBeTrue()
+        ->and($fewQueries->filter(fn (string $query) => str_contains($query, 'avg(pending)')))->toHaveCount(1)
+        ->and($manyQueries->filter(fn (string $query) => str_contains($query, 'avg(pending)')))->toHaveCount(1)
+        ->and($manyQueries)->toHaveCount($fewQueries->count());
+});
+
+test('the trend query only ever asks for what the viewer watches', function () {
+    $application = Application::factory()->for($this->team)->create();
+    $production = Environment::factory()->for($application)->production()->create();
+    $staging = Environment::factory()->for($application)->staging()->create();
+    Readings::record($production);
+    Readings::record($staging);
+
+    $this->user->teamMemberships()->where('team_id', $this->team->id)->first()
+        ->update(['visibility' => MemberVisibility::NonProduction->value]);
+
+    DB::enableQueryLog();
+    app(WallQuery::class)->handle($this->team);
+
+    $trend = collect(DB::getQueryLog())->filter(fn (array $query) => str_contains($query['query'], 'avg(pending)'))->sole();
+
+    expect($trend['bindings'])->toContain($staging->id)
+        ->not->toContain($production->id);
 });
 
 test('failed jobs and long-running jobs are dated from the stored timestamps', function () {
@@ -484,6 +592,7 @@ test('the stored states are read once per view, however many panels ask', functi
     $queries = collect(DB::getQueryLog())->pluck('query');
 
     expect($queries->filter(fn (string $query) => str_contains($query, 'from "environment_states"')))->toHaveCount(1)
+        ->and($queries->filter(fn (string $query) => str_contains($query, 'avg(pending)')))->toHaveCount(1)
         ->and($queries->filter(fn (string $query) => str_contains($query, 'with latest as')))->toHaveCount(1);
 });
 

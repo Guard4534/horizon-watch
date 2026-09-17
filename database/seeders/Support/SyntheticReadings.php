@@ -33,6 +33,9 @@ final class SyntheticReadings
 
     private const CHUNK = 500;
 
+    // The invented failure counts were written for a day.
+    private const FAILED_WINDOW_MINUTES = 1440;
+
     // Fixed incidents, keyed by environment slug (not by name: two
     // applications can each have a "production"), so the wall always tells
     // the same story. Unchanged since phase 1: DatabaseSeeder creates the
@@ -104,6 +107,7 @@ final class SyntheticReadings
                 'max_wait_seconds' => 0,
                 'jobs_per_minute' => 0,
                 'failed_last_24_hours' => 0,
+                'failed_window_minutes' => self::FAILED_WINDOW_MINUTES,
                 'workers' => 0,
                 'node_count' => 0,
                 'latency_ms' => null,
@@ -121,6 +125,7 @@ final class SyntheticReadings
             'max_wait_seconds' => max([0, ...array_column($reading['queues'], 'waitSeconds')]),
             'jobs_per_minute' => $reading['horizon']->stats->jobsPerMinute,
             'failed_last_24_hours' => $reading['horizon']->stats->failedJobs,
+            'failed_window_minutes' => $reading['horizon']->stats->failedJobsPeriodMinutes,
             'workers' => $reading['horizon']->stats->processes,
             'node_count' => count($reading['nodes']),
             'latency_ms' => $reading['horizon']->latencyMs,
@@ -168,7 +173,7 @@ final class SyntheticReadings
      *
      * @return array{
      *     horizon: HorizonReading,
-     *     nodes: list<array{hostname: string, status: string, workers: int, supervisors: int, queues: int}>,
+     *     nodes: list<array{hostname: string, status: string, workers: int, supervisors: int, queues: int, seenAt: string}>,
      *     queues: list<array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}>,
      *     reserved: list<array{job: string, queue: string, elapsed: int}>,
      * }
@@ -199,7 +204,7 @@ final class SyntheticReadings
         $failed = $status->isHealthy() ? (int) round($r2 * 6) : (int) round(14 + $r2 * 90 + $cycle);
 
         $queues = $this->queues($environment, $status, $pending, $wait, $workers);
-        $nodes = $status === EnvironmentStatus::Inactive ? [] : $this->nodes($environment, $status, $workers, count($queues));
+        $nodes = $status === EnvironmentStatus::Inactive ? [] : $this->nodes($environment, $status, $workers, count($queues), $at);
         $reserved = $this->reserved($environment, $status);
 
         $horizon = new HorizonReading(
@@ -214,6 +219,7 @@ final class SyntheticReadings
                 processes: $workers,
                 pausedMasters: $status === EnvironmentStatus::Paused ? count($nodes) : 0,
                 wait: [],
+                failedJobsPeriodMinutes: self::FAILED_WINDOW_MINUTES,
             ),
             masters: array_map(fn (array $node) => new HorizonMaster($node['hostname'], $node['status'], []), $nodes),
             workload: array_map(fn (array $queue) => new HorizonQueueLoad($queue['name'], $queue['pending'], $queue['waitSeconds'], $queue['workers']), $queues),
@@ -257,9 +263,12 @@ final class SyntheticReadings
     }
 
     /**
-     * @return list<array{hostname: string, status: string, workers: int, supervisors: int, queues: int}>
+     * The nodes are listed by the reading at $at, so that is when they were
+     * last seen.
+     *
+     * @return list<array{hostname: string, status: string, workers: int, supervisors: int, queues: int, seenAt: string}>
      */
-    private function nodes(Environment $environment, EnvironmentStatus $status, int $workers, int $queueCount): array
+    private function nodes(Environment $environment, EnvironmentStatus $status, int $workers, int $queueCount, CarbonImmutable $at): array
     {
         $prefixes = match ($environment->name) {
             'production' => ['queue-01', 'queue-02', 'queue-03'],
@@ -277,6 +286,7 @@ final class SyntheticReadings
                 'workers' => max(1, (int) round($workers / $divisor)),
                 'supervisors' => $index === 0 ? 2 : 1,
                 'queues' => min($queueCount, 2 + $index),
+                'seenAt' => $at->toIso8601String(),
             ];
         }
 

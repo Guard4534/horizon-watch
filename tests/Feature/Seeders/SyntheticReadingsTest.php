@@ -202,3 +202,16 @@ test('seeding again replaces the state rather than adding one', function () {
     expect(EnvironmentState::query()->where('environment_id', $environment->id)->count())->toBe(1)
         ->and($environment->state->captured_at->equalTo($this->until))->toBeTrue();
 });
+
+test('synthetic nodes are dated from the reading that listed them, and failed jobs are counted over a day', function () {
+    $healthy = syntheticEnvironment(Team::factory()->create(), 'CRM Bridge', 'production');
+    $unreachable = syntheticEnvironment(Team::factory()->create(), 'Logistics Hub', 'workerBatch');
+
+    $this->readings->seed($healthy, $this->until, hours: 1);
+    $this->readings->seed($unreachable, $this->until, hours: 1);
+
+    expect(array_unique(array_column($healthy->state->nodes, 'seenAt')))->toBe([$this->until->toIso8601String()])
+        // The kept detail is the reading from before the outage, and so are its nodes.
+        ->and(array_unique(array_column($unreachable->state->nodes, 'seenAt')))->toBe([$this->until->subHour()->toIso8601String()])
+        ->and(EnvironmentSnapshot::query()->distinct()->pluck('failed_window_minutes')->all())->toBe([1440]);
+});

@@ -107,6 +107,7 @@ test('a complete reading is mapped field by field', function () {
         ->and($reading->stats->processes)->toBe(7)
         ->and($reading->stats->pausedMasters)->toBe(1)
         ->and($reading->stats->wait)->toBe(['redis:reports' => 120])
+        ->and($reading->stats->failedJobsPeriodMinutes)->toBe(10080)
         ->and($reading->latencyMs)->toBeInt()->toBeGreaterThanOrEqual(0);
 
     expect($reading->masters)->toEqual([
@@ -257,6 +258,30 @@ test('masters and workload of the wrong shape are refused', function (string $pa
     'queue without length' => ['workload', [['name' => 'default', 'wait' => 0, 'processes' => 1]]],
     'workload of strings' => ['workload', ['default']],
 ]);
+
+test('the failed-jobs window falls back to a day when horizon does not state it', function (array $stats) {
+    fakeHorizonApi(['stats' => fn () => Http::response($stats)]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect($reading->stats->failedJobsPeriodMinutes)->toBe(1440)
+        ->and($reading->stats->failedJobs)->toBe(12);
+})->with([
+    'no periods' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1]],
+    'periods without failed jobs' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['recentJobs' => 60]]],
+    'periods not an object' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => 'weekly']],
+    'window not a number' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => 'week']]],
+    'window of zero' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => 0]]],
+    'negative window' => [['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => -60]]],
+]);
+
+test('any positive failed-jobs window horizon states is kept', function () {
+    fakeHorizonApi(['stats' => fn () => Http::response([
+        'status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 12, 'processes' => 1, 'periods' => ['failedJobs' => 1440, 'recentJobs' => 60],
+    ])]);
+
+    expect(app(HorizonReader::class)->read(clientTarget())->stats->failedJobsPeriodMinutes)->toBe(1440);
+});
 
 test('a horizon without masters answers an empty list', function () {
     fakeHorizonApi([

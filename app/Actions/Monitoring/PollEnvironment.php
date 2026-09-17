@@ -74,7 +74,7 @@ class PollEnvironment
             'status' => $evaluated->status,
             'error' => null,
             'latency_ms' => $reading->latencyMs,
-            'nodes' => array_map($this->node(...), $reading->masters),
+            'nodes' => array_map(fn (HorizonMaster $master) => $this->node($master, $capturedAt), $reading->masters),
             'queues' => array_map(fn (HorizonQueueLoad $queue) => $this->queue($queue, $reading), $reading->workload),
             // Reserved jobs are a live measurement: the page shows how long
             // each has been running, measured from now. Kept from an older
@@ -99,6 +99,7 @@ class PollEnvironment
             'max_wait_seconds' => max([0, ...array_map(fn (HorizonQueueLoad $queue) => $queue->wait, $reading->workload)]),
             'jobs_per_minute' => $reading->stats->jobsPerMinute,
             'failed_last_24_hours' => $reading->stats->failedJobs,
+            'failed_window_minutes' => $reading->stats->failedJobsPeriodMinutes,
             'workers' => $reading->stats->processes,
             'node_count' => count($reading->masters),
             'latency_ms' => $reading->latencyMs,
@@ -111,15 +112,16 @@ class PollEnvironment
 
         // Nothing was measured. Nodes, queues and failed jobs are context:
         // the state keeps those of the last reading that worked, so the page
-        // still shows them next to the error. Reserved jobs are a live
-        // measurement (their running time is counted from now), so they
-        // are emptied rather than kept.
+        // still shows them next to the error, each node with the time it was
+        // last listed. Reserved jobs are a live measurement (their running
+        // time is counted from now), so they are emptied rather than kept.
         return $this->store($environment, $capturedAt, $evaluated, [
             'error' => $error,
             'pending' => 0,
             'max_wait_seconds' => 0,
             'jobs_per_minute' => 0,
             'failed_last_24_hours' => 0,
+            'failed_window_minutes' => $this->previousFailedWindow($environment),
             'workers' => 0,
             'node_count' => 0,
             'latency_ms' => null,
@@ -191,6 +193,22 @@ class PollEnvironment
     }
 
     /**
+     * A failed reading measured no failed jobs, so it has no window of its
+     * own. It repeats the one of the reading stored before it (which a
+     * failed reading also carried forward), or the page would label the
+     * failed jobs of a week-long window "24h" for the length of an outage.
+     * One row on the (environment_id, captured_at) index.
+     */
+    private function previousFailedWindow(Environment $environment): int
+    {
+        return (int) (EnvironmentSnapshot::query()
+            ->where('environment_id', $environment->id)
+            ->orderByDesc('captured_at')
+            ->orderByDesc('id')
+            ->value('failed_window_minutes') ?? 1440);
+    }
+
+    /**
      * An upsert rather than updateOrCreate: two readings of the same
      * environment (two workers, or a duplicate job) would otherwise both try
      * the insert and one would fail on the unique index. The update only
@@ -227,9 +245,13 @@ class PollEnvironment
     }
 
     /**
-     * @return array{hostname: string, status: string, workers: int, supervisors: int, queues: int}
+     * seenAt is the reading that listed the master: the state keeps a node
+     * through failed readings, and "seen N s ago" must keep counting from
+     * the last time Horizon actually listed it.
+     *
+     * @return array{hostname: string, status: string, workers: int, supervisors: int, queues: int, seenAt: string}
      */
-    private function node(HorizonMaster $master): array
+    private function node(HorizonMaster $master, CarbonImmutable $capturedAt): array
     {
         $processes = [];
         $queues = [];
@@ -248,6 +270,7 @@ class PollEnvironment
             'workers' => array_sum($processes),
             'supervisors' => count($master->supervisors),
             'queues' => count($queues),
+            'seenAt' => $capturedAt->toIso8601String(),
         ];
     }
 

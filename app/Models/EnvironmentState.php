@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property CarbonImmutable $captured_at
  * @property EnvironmentStatus $status
  * @property ReadingError|null $error
- * @property list<array{hostname: string, status: string, workers: int, supervisors: int, queues: int}> $nodes
+ * @property list<array{hostname: string, status: string, workers: int, supervisors: int, queues: int, seenAt?: string}> $nodes seenAt is absent from states written before it existed
  * @property list<array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}> $queues
  * @property list<array{job: string, queue: string, exception: string, tries: int, failedAt: string}> $failed_jobs
  * @property list<array{job: string, queue: string, reservedAt: string}> $pending_jobs

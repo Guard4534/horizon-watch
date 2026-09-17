@@ -14,7 +14,8 @@ return new class extends Migration
         // One row per environment, replaced by every reading. The JSON
         // shapes are a contract between the poller that writes them and
         // StoredReadings that reads them:
-        //   nodes:        [{hostname, status: running|paused, workers, supervisors, queues}]
+        //   nodes:        [{hostname, status: running|paused, workers, supervisors, queues,
+        //                   seenAt: ISO-8601 of the last successful reading that listed it}]
         //   queues:       [{name, supervisor: string|null, workers, pending, waitSeconds, runtimeSeconds: float|null}]
         //   failed_jobs:  [{job, queue, exception, tries, failedAt: ISO-8601}]
         //   pending_jobs: [{job, queue, reservedAt: ISO-8601}]  (reserved jobs only)

@@ -78,6 +78,7 @@ beforeEach(function () {
             processes: 12,
             pausedMasters: 1,
             wait: ['database:default' => 2, 'database:reports' => 8],
+            failedJobsPeriodMinutes: 10080,
         ),
         'masters' => [
             new HorizonMaster(name: 'worker-1.example.com', status: 'running', supervisors: [
@@ -131,6 +132,7 @@ test('a reading writes a snapshot and the state in the documented shapes', funct
         ->and($snapshot->max_wait_seconds)->toBe(8)
         ->and($snapshot->jobs_per_minute)->toBe(120)
         ->and($snapshot->failed_last_24_hours)->toBe(5)
+        ->and($snapshot->failed_window_minutes)->toBe(10080)
         ->and($snapshot->workers)->toBe(12)
         ->and($snapshot->node_count)->toBe(2)
         ->and($snapshot->latency_ms)->toBe(42);
@@ -143,8 +145,8 @@ test('a reading writes a snapshot and the state in the documented shapes', funct
         ->and($state->error)->toBeNull()
         ->and($state->latency_ms)->toBe(42)
         ->and($state->nodes)->toBe([
-            ['hostname' => 'worker-1.example.com', 'status' => 'running', 'workers' => 6, 'supervisors' => 2, 'queues' => 4],
-            ['hostname' => 'worker-2.example.com', 'status' => 'paused', 'workers' => 6, 'supervisors' => 1, 'queues' => 2],
+            ['hostname' => 'worker-1.example.com', 'status' => 'running', 'workers' => 6, 'supervisors' => 2, 'queues' => 4, 'seenAt' => '2026-09-17T10:00:00+00:00'],
+            ['hostname' => 'worker-2.example.com', 'status' => 'paused', 'workers' => 6, 'supervisors' => 1, 'queues' => 2, 'seenAt' => '2026-09-17T10:00:00+00:00'],
         ])
         ->and($state->queues)->toBe([
             ['name' => 'default', 'supervisor' => 'worker-1:supervisor-1', 'workers' => 7, 'pending' => 12, 'waitSeconds' => 2, 'runtimeSeconds' => 0.4],
@@ -218,6 +220,67 @@ test('a failed reading is stored as unreachable with its reason, keeps the conte
         ->and($after->failed_jobs)->toBe($before->failed_jobs)
         ->and($before->pending_jobs)->not->toBe([])
         ->and($after->pending_jobs)->toBe([]);
+});
+
+test('each node keeps the time of the last reading that listed it, across failed readings', function () {
+    $onlyFirst = fn (array $overrides = []) => ($this->reading)([
+        'masters' => [($this->reading)()->masters[0]],
+        ...$overrides,
+    ]);
+
+    $this->reader->results = [
+        ($this->reading)(),
+        new HorizonReadFailed(ReadingError::Unreachable),
+        // Secondary sections failing do not make the masters any less read.
+        $onlyFirst(['failedJobs' => null, 'pendingJobs' => null]),
+    ];
+
+    ($this->poll)();
+
+    $this->travel(15)->seconds();
+    ($this->poll)();
+    $afterFailure = EnvironmentState::query()->sole();
+
+    expect($afterFailure->captured_at->toDateTimeString())->toBe('2026-09-17 10:00:15')
+        ->and(array_column($afterFailure->nodes, 'seenAt'))->toBe(['2026-09-17T10:00:00+00:00', '2026-09-17T10:00:00+00:00']);
+
+    $this->travel(15)->seconds();
+    ($this->poll)();
+    $afterRecovery = EnvironmentState::query()->sole();
+
+    // The second master was not listed: Horizon drops a master after 15
+    // seconds without a heartbeat, so it is gone rather than kept.
+    expect(array_column($afterRecovery->nodes, 'seenAt', 'hostname'))->toBe([
+        'worker-1.example.com' => '2026-09-17T10:00:30+00:00',
+    ]);
+});
+
+test('the failed-jobs window of a failed reading is the one of the reading before it', function () {
+    $this->reader->results = [
+        new HorizonReadFailed(ReadingError::Unreachable),
+        ($this->reading)(),
+        new HorizonReadFailed(ReadingError::Unreachable),
+        new HorizonReadFailed(ReadingError::Unauthorized),
+    ];
+
+    // Nothing to carry yet: Horizon's own default.
+    expect(($this->poll)()->failed_window_minutes)->toBe(1440);
+
+    $this->travel(15)->seconds();
+    expect(($this->poll)()->failed_window_minutes)->toBe(10080);
+
+    $this->travel(15)->seconds();
+    expect(($this->poll)()->failed_window_minutes)->toBe(10080);
+
+    // Carried along the outage, not only from the last good reading.
+    $this->travel(15)->seconds();
+    expect(($this->poll)()->failed_window_minutes)->toBe(10080);
+
+    // Another environment's window is not borrowed.
+    $other = Environment::factory()->create();
+    $this->reader->results = [new HorizonReadFailed(ReadingError::Unreachable)];
+
+    expect(app(PollEnvironment::class)->handle($other)->failed_window_minutes)->toBe(1440);
 });
 
 test('a first reading that fails creates an empty state', function () {

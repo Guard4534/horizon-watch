@@ -66,8 +66,10 @@ final class StatusEvaluator
         return match ($metric) {
             AlertRuleMetric::QueuePending => array_sum(array_map(fn (HorizonQueueLoad $queue) => $queue->length, $workload)) > $threshold,
             AlertRuleMetric::QueueMaxWait => max([0, ...array_map(fn (HorizonQueueLoad $queue) => $queue->wait, $workload)]) > $threshold,
-            // Horizon counts failed jobs over 1440 minutes.
-            AlertRuleMetric::JobsFailedPerHour => $reading->stats->failedJobs / 24 > $threshold,
+            // Over the window Horizon states, which is often a week rather
+            // than a day. The client never hands out less than a minute;
+            // the floor only keeps a hand-built reading from dividing by 0.
+            AlertRuleMetric::JobsFailedPerHour => $reading->stats->failedJobs / (max(1, $reading->stats->failedJobsPeriodMinutes) / 60) > $threshold,
             AlertRuleMetric::WorkersMissing => count(array_filter(
                 $workload,
                 fn (HorizonQueueLoad $queue) => $queue->processes === 0 && $queue->length > 0,

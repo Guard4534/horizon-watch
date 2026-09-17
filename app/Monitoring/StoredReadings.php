@@ -22,6 +22,13 @@ class StoredReadings
 {
     public const SERIES_POINTS = 48;
 
+    public const TREND_POINTS = 12;
+
+    private const TREND_STEP_SECONDS = 300;
+
+    // The variation compares this many buckets with data to as many before them.
+    private const TREND_SPAN = 3;
+
     // date_bin() bins from this origin and PHP builds the same grid from the
     // Unix epoch: the two must agree, or every point lands one bucket off.
     private const SERIES_ORIGIN = '1970-01-01 00:00:00+00';
@@ -53,7 +60,7 @@ class StoredReadings
         // Correlated on columns, never on a model attribute: see the
         // eager-load trap in the project notes.
         $snapshot = EnvironmentSnapshot::query()
-            ->select(['pending', 'max_wait_seconds', 'jobs_per_minute', 'failed_last_24_hours', 'workers', 'node_count'])
+            ->select(['pending', 'max_wait_seconds', 'jobs_per_minute', 'failed_last_24_hours', 'failed_window_minutes', 'workers', 'node_count'])
             ->whereColumn('environment_snapshots.environment_id', 'environment_states.environment_id')
             ->orderByDesc('captured_at')
             ->orderByDesc('id')
@@ -65,6 +72,7 @@ class StoredReadings
             ->selectRaw('latest.max_wait_seconds as snapshot_max_wait_seconds')
             ->selectRaw('latest.jobs_per_minute as snapshot_jobs_per_minute')
             ->selectRaw('latest.failed_last_24_hours as snapshot_failed_last_24_hours')
+            ->selectRaw('latest.failed_window_minutes as snapshot_failed_window_minutes')
             ->selectRaw('latest.workers as snapshot_workers')
             ->selectRaw('latest.node_count as snapshot_node_count')
             ->leftJoinLateral($snapshot, 'latest')
@@ -156,6 +164,91 @@ class StoredReadings
         );
 
         return $this->fill($rows, $from, $step);
+    }
+
+    /**
+     * The pending trend of each environment over the last hour, in one
+     * query: the average pending of each five-minute bucket, oldest first,
+     * 0 where there is no reading, and the rounded variation between the
+     * average of the last three buckets with data and of the three before
+     * them (null with fewer than six such buckets, or a base of 0).
+     *
+     * Failed readings measured nothing and are left out, as in the series:
+     * an outage must not read as the queue draining.
+     *
+     * @param  iterable<Environment>  $environments
+     * @return array<int, array{points: list<int>, percent: int|null}>
+     */
+    public function pendingTrends(iterable $environments): array
+    {
+        $averages = [];
+
+        foreach ($environments as $environment) {
+            $averages[$environment->id] = [];
+        }
+
+        if ($averages === []) {
+            return [];
+        }
+
+        [$from, $until] = $this->window(self::TREND_STEP_SECONDS, self::TREND_POINTS);
+        $placeholders = implode(', ', array_fill(0, count($averages), '?'));
+
+        $rows = DB::select(
+            <<<SQL
+                select environment_id,
+                       extract(epoch from date_bin(make_interval(secs => ?), captured_at, ?::timestamptz))::bigint as bucket,
+                       avg(pending) as value
+                from environment_snapshots
+                where environment_id in ({$placeholders})
+                  and captured_at >= ?::timestamptz and captured_at < ?::timestamptz
+                  and error is null
+                group by environment_id, bucket
+                SQL,
+            [self::TREND_STEP_SECONDS, self::SERIES_ORIGIN, ...array_keys($averages), $from->toIso8601String(), $until->toIso8601String()],
+        );
+
+        foreach ($rows as $row) {
+            $index = intdiv((int) $row->bucket - $from->getTimestamp(), self::TREND_STEP_SECONDS);
+
+            if ($index >= 0 && $index < self::TREND_POINTS) {
+                $averages[(int) $row->environment_id][$index] = (float) $row->value;
+            }
+        }
+
+        return array_map(function (array $buckets): array {
+            ksort($buckets);
+
+            $points = array_fill(0, self::TREND_POINTS, 0);
+
+            foreach ($buckets as $index => $value) {
+                $points[$index] = (int) round($value);
+            }
+
+            return ['points' => $points, 'percent' => $this->variation(array_values($buckets))];
+        }, $averages);
+    }
+
+    /**
+     * The unrounded averages go in, so the percentage does not depend on
+     * how the points were rounded for the chart.
+     *
+     * @param  list<float>  $buckets  the buckets with data, oldest first
+     */
+    private function variation(array $buckets): ?int
+    {
+        if (count($buckets) < 2 * self::TREND_SPAN) {
+            return null;
+        }
+
+        $recent = array_sum(array_slice($buckets, -self::TREND_SPAN)) / self::TREND_SPAN;
+        $base = array_sum(array_slice($buckets, -2 * self::TREND_SPAN, self::TREND_SPAN)) / self::TREND_SPAN;
+
+        if ($base == 0.0) {
+            return null;
+        }
+
+        return (int) round(($recent - $base) / $base * 100);
     }
 
     /**
@@ -267,10 +360,21 @@ class StoredReadings
             SeriesRange::Week => 7 * 24 * 3600,
         }, self::SERIES_POINTS);
 
-        $last = intdiv(Date::now()->getTimestamp(), $step) * $step;
-        $from = CarbonImmutable::createFromTimestampUTC($last - (self::SERIES_POINTS - 1) * $step);
+        return [...$this->window($step, self::SERIES_POINTS), $step];
+    }
 
-        return [$from, $from->addSeconds(self::SERIES_POINTS * $step), $step];
+    /**
+     * The start and end of $points epoch-aligned buckets of $step seconds,
+     * the last of which holds "now".
+     *
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable}
+     */
+    private function window(int $step, int $points): array
+    {
+        $last = intdiv(Date::now()->getTimestamp(), $step) * $step;
+        $from = CarbonImmutable::createFromTimestampUTC($last - ($points - 1) * $step);
+
+        return [$from, $from->addSeconds($points * $step)];
     }
 
     /**

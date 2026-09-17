@@ -186,7 +186,22 @@ final readonly class HorizonClient implements HorizonReader
             processes: (int) $body['processes'],
             pausedMasters: is_numeric($body['pausedMasters'] ?? null) ? (int) $body['pausedMasters'] : 0,
             wait: $wait,
+            failedJobsPeriodMinutes: $this->failedJobsPeriod($body['periods'] ?? null),
         );
+    }
+
+    /**
+     * A missing or unusable window is read as a day, what this panel assumed
+     * before it read the key. It is not a reason to refuse the answer: the
+     * required stats fields are already checked.
+     */
+    private function failedJobsPeriod(mixed $periods): int
+    {
+        $minutes = is_array($periods) && is_numeric($periods['failedJobs'] ?? null)
+            ? (int) $periods['failedJobs']
+            : 0;
+
+        return $minutes > 0 ? $minutes : 1440;
     }
 
     /**

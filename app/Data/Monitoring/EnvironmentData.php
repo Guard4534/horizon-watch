@@ -18,8 +18,18 @@ class EnvironmentData extends Data
         public string $horizonUrl,
         public EnvironmentStatus $status,
         public int $pending,
+        // Average pending of each five-minute bucket of the last hour,
+        // oldest first, 0 where nothing was read.
+        /** @var array<int, int> */
+        public array $trend,
+        // Last three buckets with data against the three before them, in
+        // percent; null when there are not six or the base is 0.
+        public ?int $trendPercent,
         public int $maxWaitSeconds,
+        // Counted over $failedWindowMinutes, which Horizon states (often a
+        // week): the name predates the window.
         public int $failedLast24Hours,
+        public int $failedWindowMinutes,
         public int $workers,
         public int $jobsPerMinute,
         public int $nodeCount,

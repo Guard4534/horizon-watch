@@ -40,6 +40,7 @@ function evaluatorReading(
     ?array $masters = null,
     ?array $workload = null,
     ?array $pendingJobs = [],
+    int $failedWindowMinutes = 1440,
 ): HorizonReading {
     return new HorizonReading(
         stats: new HorizonStats(
@@ -49,6 +50,7 @@ function evaluatorReading(
             processes: 6,
             pausedMasters: 0,
             wait: ['database:default' => 2],
+            failedJobsPeriodMinutes: $failedWindowMinutes,
         ),
         masters: $masters ?? [evaluatorMaster()],
         workload: $workload ?? [
@@ -155,6 +157,33 @@ test('a reading is evaluated in the order of the spec', function (HorizonReading
     ],
     'failed per hour above the threshold' => fn () => [
         evaluatorReading(failedJobs: 481),
+        EnvironmentStatus::Degraded,
+        [AlertRuleMetric::JobsFailedPerHour],
+    ],
+
+    // 20 an hour: 3,360 over seven days is on the threshold.
+    'the same count over a seven-day window stays under the threshold' => fn () => [
+        evaluatorReading(failedJobs: 481, failedWindowMinutes: 10080),
+        EnvironmentStatus::Active,
+        [],
+    ],
+    'failed per hour at the threshold over seven days' => fn () => [
+        evaluatorReading(failedJobs: 3360, failedWindowMinutes: 10080),
+        EnvironmentStatus::Active,
+        [],
+    ],
+    'failed per hour above the threshold over seven days' => fn () => [
+        evaluatorReading(failedJobs: 3361, failedWindowMinutes: 10080),
+        EnvironmentStatus::Degraded,
+        [AlertRuleMetric::JobsFailedPerHour],
+    ],
+    'a window shorter than an hour scales the count up' => fn () => [
+        evaluatorReading(failedJobs: 11, failedWindowMinutes: 30),
+        EnvironmentStatus::Degraded,
+        [AlertRuleMetric::JobsFailedPerHour],
+    ],
+    'a window of zero minutes does not divide by zero' => fn () => [
+        evaluatorReading(failedJobs: 1, failedWindowMinutes: 0),
         EnvironmentStatus::Degraded,
         [AlertRuleMetric::JobsFailedPerHour],
     ],
