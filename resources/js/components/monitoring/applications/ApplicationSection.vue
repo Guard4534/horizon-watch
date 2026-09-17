@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import {
     PhGearSix,
     PhLockSimple,
@@ -8,9 +8,13 @@ import {
     PhPlus,
 } from '@phosphor-icons/vue';
 import { computed } from 'vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
+import {
+    statusText,
+    statusTone,
+} from '@/components/monitoring/environment/readings';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatCount, statusColor, statusLabel } from '@/lib/monitoring';
+import { formatCount } from '@/lib/monitoring';
 import {
     edit as editApplication,
     show as showApplication,
@@ -28,12 +32,30 @@ defineProps<{
 const slug = useTeamSlug();
 const shared = usePage();
 
-// Reading an application needs membership, configuring it needs the
-// permission: a member or a viewer sees the same table without the three
-// ways into the forms (which would answer 403 anyway).
 const canManageApplications = computed(
     () => shared.props.canManageApplications,
 );
+function environmentHref(environmentId: string): string {
+    return showEnvironment({
+        current_team: slug.value,
+        environment: environmentId,
+    }).url;
+}
+
+function openRow(
+    environment: { id: string; watched: boolean },
+    event: MouseEvent,
+): void {
+    if (!environment.watched) {
+        return;
+    }
+
+    if ((event.target as HTMLElement).closest('a, button, input, select')) {
+        return;
+    }
+
+    router.visit(environmentHref(environment.id));
+}
 </script>
 
 <template>
@@ -127,7 +149,7 @@ const canManageApplications = computed(
                         <th>{{ $t('Collection') }}</th>
                         <th>{{ $t('Nodes') }}</th>
                         <th>{{ $t('Rules') }}</th>
-                        <th style="text-align: right">Pending</th>
+                        <th style="text-align: right">{{ $t('Pending') }}</th>
                         <th>{{ $t('Status') }}</th>
                         <th />
                     </tr>
@@ -136,13 +158,25 @@ const canManageApplications = computed(
                     <tr
                         v-for="environment in group.environments"
                         :key="environment.id"
+                        :class="{ 'row-link': environment.watched }"
+                        @click="openRow(environment, $event)"
                     >
                         <td>
-                            <span class="inline-flex items-center gap-2"
-                                ><EnvSwatch :color="environment.color" />{{
-                                    environment.name
-                                }}</span
+                            <Link
+                                v-if="environment.watched"
+                                :href="environmentHref(environment.id)"
+                                class="row-anchor"
                             >
+                                <EnvPill
+                                    :name="environment.name"
+                                    :color="environment.color"
+                                />
+                            </Link>
+                            <EnvPill
+                                v-else
+                                :name="environment.name"
+                                :color="environment.color"
+                            />
                         </td>
                         <td
                             style="
@@ -151,7 +185,12 @@ const canManageApplications = computed(
                                 letter-spacing: 0.01em;
                             "
                         >
-                            {{ environment.horizonUrl.replace('https://', '') }}
+                            {{
+                                environment.horizonUrl.replace(
+                                    /^https?:\/\//,
+                                    '',
+                                )
+                            }}
                         </td>
                         <td style="font-size: 12px">
                             <span
@@ -179,7 +218,11 @@ const canManageApplications = computed(
                                 color: var(--nc-neutral-400);
                             "
                         >
-                            {{ environment.nodeCount }}
+                            {{
+                                environment.status === null
+                                    ? '—'
+                                    : environment.nodeCount
+                            }}
                         </td>
                         <td>
                             <span class="nc-tag nc-tag-neutral">{{
@@ -189,47 +232,33 @@ const canManageApplications = computed(
                             }}</span>
                         </td>
                         <td class="nc-num" style="text-align: right">
-                            {{ formatCount(environment.pending) }}
+                            {{
+                                environment.status === null
+                                    ? '—'
+                                    : formatCount(environment.pending)
+                            }}
                         </td>
                         <td>
                             <span
                                 class="inline-flex items-center gap-[5px]"
                                 style="font-size: 12px"
-                                :style="{
-                                    color: statusColor(environment.status),
-                                }"
+                                :style="{ color: statusTone(environment) }"
                             >
-                                <span
-                                    class="size-[6px] rounded-full"
-                                    :style="{
-                                        background: statusColor(
-                                            environment.status,
-                                        ),
-                                    }"
-                                />
-                                {{ statusLabel(environment.status) }}
+                                <template v-if="environment.watched">
+                                    <span
+                                        class="size-[6px] rounded-full"
+                                        :style="{
+                                            background: statusTone(environment),
+                                        }"
+                                    />
+                                    {{ statusText(environment) }}
+                                </template>
+                                <template v-else>—</template>
                             </span>
                         </td>
                         <td class="whitespace-nowrap" style="text-align: right">
-                            <!-- An environment the viewer configures but
-                                 does not watch (their permission lists it,
-                                 their visibility hides it) has no detail
-                                 page for them: it answers 404. Say so
-                                 instead of linking there; the pencil stays. -->
-                            <Link
-                                v-if="environment.watched"
-                                :href="
-                                    showEnvironment({
-                                        current_team: slug,
-                                        environment: environment.id,
-                                    })
-                                "
-                                class="nc-btn nc-btn-ghost"
-                                style="font-size: 12px"
-                                >{{ $t('Open') }}</Link
-                            >
                             <span
-                                v-else
+                                v-if="!environment.watched"
                                 class="nc-tag nc-tag-neutral"
                                 :title="
                                     $t(
@@ -272,5 +301,15 @@ const canManageApplications = computed(
 
 .app-name:hover {
     color: var(--nc-accent);
+}
+
+.row-link {
+    cursor: pointer;
+}
+
+.row-anchor {
+    display: inline-flex;
+    border-radius: var(--nc-radius-sm);
+    text-decoration: none;
 }
 </style>

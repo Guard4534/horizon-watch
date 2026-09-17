@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { useLocale } from '@/composables/useLocale';
 
-const { name, padding = '1px 7px' } = defineProps<{
+const {
+    name,
+    padding = '1px 7px',
+    fontSize = '10px',
+    long = false,
+} = defineProps<{
     name: string;
     padding?: string;
+    fontSize?: string;
+    long?: boolean;
 }>();
+
+const names = { it: 'Italiano', en: 'English' } as const;
 
 const { locale, setLocale } = useLocale();
 </script>
@@ -15,7 +24,7 @@ const { locale, setLocale } = useLocale();
             v-for="option in ['it', 'en'] as const"
             :key="option"
             class="nc-seg-opt"
-            :style="{ padding, fontSize: '10px' }"
+            :style="{ padding, fontSize }"
         >
             <input
                 type="radio"
@@ -23,7 +32,7 @@ const { locale, setLocale } = useLocale();
                 :checked="locale === option"
                 @change="setLocale(option)"
             />
-            {{ option.toUpperCase() }}
+            {{ long ? names[option] : option.toUpperCase() }}
         </label>
     </div>
 </template>

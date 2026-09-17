@@ -66,6 +66,7 @@ export default defineConfig({
             'composer.json',
             'resources/js/components/ui/*',
             'resources/views/mail/*',
+            'tests/Fixtures/Horizon/dashboard.html',
             'docs/**',
         ],
         sortTailwindcss: {

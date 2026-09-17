@@ -14,19 +14,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 
-/**
- * The starter kit's own member routes, kept alongside the phase 2 Members
- * view (see MemberController). Both go through the same two actions on
- * purpose: when these methods wrote the membership themselves, the rule
- * that an admin may not demote the last admin besides the owner held on
- * one route and not the other, and removing someone here left their
- * environment_user grants behind.
- */
 class TeamMemberController extends Controller
 {
-    /**
-     * Update the specified team member's role.
-     */
     public function update(
         UpdateTeamMemberRequest $request,
         Team $team,
@@ -47,9 +36,6 @@ class TeamMemberController extends Controller
         return to_route('teams.edit', ['team' => $team->slug]);
     }
 
-    /**
-     * Remove the specified team member.
-     */
     public function destroy(
         Request $request,
         Team $team,
@@ -62,7 +48,6 @@ class TeamMemberController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Member removed.')]);
 
-        // Removing yourself makes this page a 403 on the way back.
         return $request->user()?->is($user)
             ? to_route('home')
             : to_route('teams.edit', ['team' => $team->slug]);

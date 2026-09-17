@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { show } from '@/routes/applications';
+import {
+    show,
+    testConnection as testUnsavedConnection,
+} from '@/routes/applications';
 import { store } from '@/routes/environments';
 
 defineOptions({
@@ -17,9 +21,6 @@ const { page } = defineProps<{
 
 const slug = useTeamSlug();
 
-// One level down so the form component can take it as a writable model
-// (v-model needs an assignable expression); transform() flattens it back
-// into EnvironmentFormData for the request.
 const form = useForm<{
     environment: App.Data.Applications.EnvironmentFormData;
 }>({
@@ -30,8 +31,15 @@ const form = useForm<{
         basicAuthUser: null,
         basicAuthPassword: null,
         pollIntervalSeconds: 15,
+        pollingEnabled: true,
     },
 });
+
+const testPayload = computed<App.Data.Applications.TestConnectionData>(() => ({
+    horizonUrl: form.environment.horizonUrl,
+    basicAuthUser: form.environment.basicAuthUser,
+    basicAuthPassword: form.environment.basicAuthPassword,
+}));
 
 const errors = computed(
     () => form.errors as Record<string, string | undefined>,
@@ -86,7 +94,7 @@ const submit = () => {
                 :has-password="page.hasPassword"
             />
             <div
-                class="mt-[var(--nc-space-4)] flex items-center"
+                class="mt-[var(--nc-space-4)] flex flex-wrap items-center"
                 style="gap: var(--nc-space-3)"
             >
                 <button
@@ -107,6 +115,12 @@ const submit = () => {
                     "
                     >{{ $t('Cancel') }}</Link
                 >
+                <ConnectionTest
+                    class="ml-auto"
+                    :url="testUnsavedConnection(slug)"
+                    :payload="testPayload"
+                    :disabled="form.environment.horizonUrl.trim() === ''"
+                />
             </div>
         </SectionCard>
     </div>

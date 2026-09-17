@@ -8,26 +8,31 @@ import {
     waitColor,
 } from '@/lib/monitoring';
 
-defineProps<{
+const { waitThreshold } = defineProps<{
     queues: App.Data.Monitoring.QueueData[];
+    note?: string | null;
+    waitThreshold: number;
 }>();
 </script>
 
 <template>
     <SectionCard :title="$t('Workload by queue')">
+        <template v-if="note" #actions>
+            <span style="font-size: 11px; color: var(--st-warn)">{{
+                note
+            }}</span>
+        </template>
         <div class="overflow-x-auto">
             <table class="nc-table">
                 <thead>
-                    <!-- Headers stay untranslated in both languages: the mockup
-                         keeps this table's headers as Horizon/English vocabulary. -->
                     <tr>
-                        <th>Queue</th>
-                        <th>Supervisor</th>
-                        <th style="text-align: right">Workers</th>
-                        <th style="text-align: right">Pending</th>
-                        <th style="text-align: right">Wait</th>
-                        <th style="text-align: right">Runtime</th>
-                        <th>Status</th>
+                        <th>{{ $t('Queue') }}</th>
+                        <th>{{ $t('Supervisor') }}</th>
+                        <th style="text-align: right">{{ $t('Workers') }}</th>
+                        <th style="text-align: right">{{ $t('Pending') }}</th>
+                        <th style="text-align: right">{{ $t('Wait') }}</th>
+                        <th style="text-align: right">{{ $t('Runtime') }}</th>
+                        <th>{{ $t('Status') }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -42,7 +47,7 @@ defineProps<{
                                 letter-spacing: 0.01em;
                             "
                         >
-                            {{ queue.supervisor }}
+                            {{ queue.supervisor ?? '—' }}
                         </td>
                         <td class="nc-num" style="text-align: right">
                             {{ queue.workers }}
@@ -53,7 +58,12 @@ defineProps<{
                         <td
                             class="nc-num"
                             style="text-align: right"
-                            :style="{ color: waitColor(queue.waitSeconds) }"
+                            :style="{
+                                color: waitColor(
+                                    queue.waitSeconds,
+                                    waitThreshold,
+                                ),
+                            }"
                         >
                             {{ formatWait(queue.waitSeconds) }}
                         </td>
@@ -64,7 +74,11 @@ defineProps<{
                                 color: var(--nc-neutral-400);
                             "
                         >
-                            {{ queue.runtimeSeconds.toFixed(1) }}s
+                            {{
+                                queue.runtimeSeconds === null
+                                    ? '—'
+                                    : `${queue.runtimeSeconds.toFixed(1)}s`
+                            }}
                         </td>
                         <td>
                             <span

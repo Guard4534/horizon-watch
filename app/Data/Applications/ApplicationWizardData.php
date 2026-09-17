@@ -21,14 +21,6 @@ class ApplicationWizardData extends Data
     {
         return [
             'environments' => ['required', 'array', 'min:1'],
-            // The application does not exist yet, so EnvironmentFormData's
-            // per-application unique rule has nothing to query: within this
-            // payload, "distinct" is what stands in for the environments
-            // table's unique index on application_id + name. Without it two
-            // rows called the same thing pass validation, the wizard shows a
-            // happy summary and the insert answers 500. The message lands on
-            // environments.N.name, which the wizard's step mapping already
-            // routes to step 2.
             'environments.*.name' => ['distinct'],
         ];
     }

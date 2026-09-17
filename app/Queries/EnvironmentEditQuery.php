@@ -3,6 +3,7 @@
 namespace App\Queries;
 
 use App\Data\Applications\ApplicationFormData;
+use App\Data\Applications\EnvironmentFormData;
 use App\Data\Applications\EnvironmentSummaryData;
 use App\Data\Pages\EnvironmentFormPageData;
 use App\Enums\EnvironmentColor;
@@ -16,13 +17,13 @@ class EnvironmentEditQuery
             environment: new EnvironmentSummaryData(
                 name: $environment->name,
                 color: $environment->color,
-                horizonUrl: $environment->horizon_url,
+                horizonUrl: EnvironmentFormData::withoutUserinfo($environment->horizon_url),
                 basicAuthUser: $environment->basic_auth_user,
                 pollIntervalSeconds: $environment->poll_interval_seconds,
+                pollingEnabled: $environment->polling_enabled,
             ),
             application: ApplicationFormData::from($environment->application),
             colors: EnvironmentColor::options(),
-            // Presence check only: never reads the decrypted value.
             hasPassword: $environment->basic_auth_password !== null,
             applicationSlug: $environment->application->slug,
             slug: $environment->slug,

@@ -33,9 +33,6 @@ class Team extends Model
     /** @use HasFactory<TeamFactory> */
     use GeneratesUniqueTeamSlugs, HasFactory, SoftDeletes;
 
-    /**
-     * Bootstrap the model and its traits.
-     */
     protected static function boot(): void
     {
         parent::boot();
@@ -53,9 +50,6 @@ class Team extends Model
         });
     }
 
-    /**
-     * Get the team owner.
-     */
     public function owner(): ?Model
     {
         return $this->members()
@@ -64,8 +58,6 @@ class Team extends Model
     }
 
     /**
-     * Get all members of this team.
-     *
      * @return BelongsToMany<User, $this, Membership, 'pivot'>
      */
     public function members(): BelongsToMany
@@ -77,8 +69,6 @@ class Team extends Model
     }
 
     /**
-     * Get all memberships for this team.
-     *
      * @return HasMany<Membership, $this>
      */
     public function memberships(): HasMany
@@ -87,8 +77,6 @@ class Team extends Model
     }
 
     /**
-     * Get all invitations for this team.
-     *
      * @return HasMany<TeamInvitation, $this>
      */
     public function invitations(): HasMany
@@ -97,8 +85,6 @@ class Team extends Model
     }
 
     /**
-     * Get all applications for this team.
-     *
      * @return HasMany<Application, $this>
      */
     public function applications(): HasMany
@@ -107,8 +93,6 @@ class Team extends Model
     }
 
     /**
-     * Get all environments for this team, across every application.
-     *
      * @return HasManyThrough<Environment, Application, $this>
      */
     public function environments(): HasManyThrough
@@ -117,8 +101,6 @@ class Team extends Model
     }
 
     /**
-     * Get the attributes that should be cast.
-     *
      * @return array<string, string>
      */
     protected function casts(): array
@@ -128,9 +110,6 @@ class Team extends Model
         ];
     }
 
-    /**
-     * Get the route key for the model.
-     */
     public function getRouteKeyName(): string
     {
         return 'slug';

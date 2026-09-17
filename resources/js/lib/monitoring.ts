@@ -23,9 +23,19 @@ export function envColor(color: App.Enums.EnvironmentColor): string {
     return `var(--env-${color})`;
 }
 
-// Horizon's own states stay English in every language; only "unreachable" is ours.
 export function statusLabel(status: App.Enums.EnvironmentStatus): string {
-    return status === 'unreachable' ? trans('unreachable') : status;
+    switch (status) {
+        case 'active':
+            return trans('active');
+        case 'degraded':
+            return trans('degraded');
+        case 'paused':
+            return trans('paused');
+        case 'inactive':
+            return trans('inactive');
+        case 'unreachable':
+            return trans('unreachable');
+    }
 }
 
 export function isDown(status: App.Enums.EnvironmentStatus): boolean {
@@ -56,26 +66,37 @@ export function formatWait(seconds: number): string {
     return seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`;
 }
 
-export function waitColor(seconds: number): string {
-    if (seconds >= 300) {
+export function waitColor(seconds: number, threshold = 60): string {
+    if (seconds > Math.max(300, threshold)) {
         return 'var(--st-down)';
     }
 
-    return seconds >= 60 ? 'var(--st-warn)' : 'var(--nc-neutral-400)';
+    return seconds > threshold ? 'var(--st-warn)' : 'var(--nc-neutral-400)';
 }
 
-export function pendingColor(pending: number): string {
-    if (pending > 2000) {
-        return 'var(--st-down)';
+export function formatElapsed(minutes: number, capped = false): string {
+    if (capped) {
+        return trans('more than 24 h ago');
     }
 
-    return pending > 1000 ? 'var(--st-warn)' : 'var(--nc-text)';
-}
+    if (minutes < 1) {
+        return trans('less than a minute ago');
+    }
 
-export function formatMinutesAgo(minutes: number): string {
-    return trans(':minutes min ago', { minutes: String(minutes) });
+    if (minutes < 60) {
+        return trans(':minutes min ago', { minutes: String(minutes) });
+    }
+
+    return trans(':hours h ago', { hours: String(Math.floor(minutes / 60)) });
 }
 
 export function formatDuration(seconds: number): string {
-    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    }
+
+    return `${minutes}m ${seconds % 60}s`;
 }

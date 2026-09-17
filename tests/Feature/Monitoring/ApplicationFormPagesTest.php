@@ -92,6 +92,7 @@ test('the environment edit page shows the username and whether a password is set
             ->where('page.slug', $this->environment->slug)
             ->where('page.applicationSlug', 'invoicer')
             ->where('page.environment.basicAuthUser', 'monitor')
+            ->where('page.environment.pollingEnabled', true)
             ->where('page.hasPassword', true)
             ->has('page.colors', 7));
 });
@@ -101,6 +102,7 @@ test('an environment without credentials reports no password set', function () {
         'name' => 'staging',
         'basic_auth_user' => null,
         'basic_auth_password' => null,
+        'polling_enabled' => false,
     ]);
 
     $this->actingAs($this->admin)
@@ -110,6 +112,7 @@ test('an environment without credentials reports no password set', function () {
         ]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environment.basicAuthUser', null)
+            ->where('page.environment.pollingEnabled', false)
             ->where('page.hasPassword', false));
 });
 
@@ -134,8 +137,6 @@ test('no form page prop is a password field, and none carries the stored one', f
             fn (string $key) => str_contains(strtolower($key), 'password'),
         ));
 
-        // "hasPassword" is the only thing about the credential a page may
-        // say: a boolean. Any other password-ish prop is a leak.
         expect(array_unique($passwordKeys))->each->toBe('hasPassword');
         expect(json_encode($props, JSON_THROW_ON_ERROR))->not->toContain('ry3-lin3n-pillow');
     }

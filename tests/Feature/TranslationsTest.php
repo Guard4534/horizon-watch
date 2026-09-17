@@ -3,15 +3,6 @@
 use Symfony\Component\Finder\Finder;
 
 /**
- * Matches both quote styles so a literal like __("It's fine") isn't missed just
- * because it uses double quotes. A backreference (\1) ties the closing quote to
- * the opening one instead of duplicating the alternative for each quote style.
- *
- * $excludeDoubleQuotedInterpolation only makes sense for PHP: it only interpolates
- * variables inside double-quoted strings, never in single-quoted PHP or in any JS
- * string, so callers for those must leave it false or a legitimate key such as
- * __('Price: $5 today') or $t('Cost is $10') would be silently skipped.
- *
  * @return array<int, string>
  */
 function literalTranslationKeys(string $directory, string $pattern, array $names, bool $excludeDoubleQuotedInterpolation = false): array
@@ -24,8 +15,6 @@ function literalTranslationKeys(string $directory, string $pattern, array $names
         foreach ($matches as $match) {
             [, $quote, $raw] = $match;
 
-            // An unescaped "$" in a PHP double-quoted string means variable
-            // interpolation, not a static translation key.
             if ($excludeDoubleQuotedInterpolation && $quote === '"' && preg_match('/(?<!\\\\)\$/', $raw) === 1) {
                 continue;
             }
@@ -51,8 +40,6 @@ test('every interface string has an italian translation', function () {
     $keys = [
         ...literalTranslationKeys('resources/js', $javascriptCall, ['*.vue', '*.ts']),
         ...literalTranslationKeys('app', $phpCall, ['*.php'], excludeDoubleQuotedInterpolation: true),
-        // The exception handler in bootstrap/app.php flashes translated toasts
-        // too; without this line its strings were unguarded.
         ...literalTranslationKeys('bootstrap', $phpCall, ['*.php'], excludeDoubleQuotedInterpolation: true),
     ];
 

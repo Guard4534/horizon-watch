@@ -22,21 +22,12 @@ const props = defineProps<{
     page: App.Data.Pages.InvitationPageData;
 }>();
 
-// Only an open invitation carries an organization, a role, a visibility and
-// an email: for every other state InvitationPageData holds nulls on purpose,
-// so those states render their message and one way out.
 const isOpen = computed(() => props.page.state === 'open');
 
-// The three states nobody can do anything about. sign_in_required and
-// wrong_account are excluded on purpose: each has its own action below, and
-// GET /login is guest-gated, so the link would bounce the signed-in visitor
-// of wrong_account straight back into the panel.
 const showLoginFooter = computed(() =>
     ['expired', 'revoked', 'accepted'].includes(props.page.state),
 );
 
-// Drops the cached pages of the account being left behind, like the user
-// menu's own sign-out does.
 const flushOnSignOut = () => router.flushAll();
 </script>
 
@@ -72,8 +63,6 @@ const flushOnSignOut = () => router.flushAll();
         >
             <div class="nc-field">
                 <label for="email">{{ $t('Email address') }}</label>
-                <!-- The address is the one the invitation was sent to: shown
-                     so nobody registers the wrong account, never submitted. -->
                 <input
                     id="email"
                     class="nc-input"
@@ -188,8 +177,6 @@ const flushOnSignOut = () => router.flushAll();
     <template v-else>
         <TeamInvitationAlert :state="page.state" />
 
-        <!-- The address already has an account: signing in is the only way
-             forward, so it is the primary action rather than a footnote. -->
         <Link
             v-if="page.state === 'sign_in_required'"
             :href="login()"
@@ -200,8 +187,6 @@ const flushOnSignOut = () => router.flushAll();
             {{ $t('Sign in') }}
         </Link>
 
-        <!-- Signed in as somebody else: POST to logout, because GET /login
-             is guest-gated and would only bounce back into the panel. -->
         <Link
             v-if="page.state === 'wrong_account'"
             :href="logout()"

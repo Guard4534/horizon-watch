@@ -24,9 +24,6 @@ beforeEach(function () {
 
     $this->application = Application::factory()->for($this->team)->create(['name' => 'Fatturaomatic']);
 
-    // A minimal valid environment payload, local to this file's $this so it
-    // never risks colliding with a same-named global helper from another
-    // lane's test file loaded in the same run.
     $this->environmentPayload = fn (string $name = 'production'): array => [
         'name' => $name,
         'color' => EnvironmentColor::Prod->value,
@@ -60,10 +57,6 @@ test('an admin creates an application with two environments in one request', fun
 });
 
 test('the wizard consults the manage-credentials permission for the environments it creates', function () {
-    // Same policy swap as EnvironmentCrudTest: today's matrix grants
-    // manageCredentials to the same roles as ManageApplications, so forcing
-    // the denial is the only way to prove the wizard consults the second
-    // gate at all instead of relying on the two staying identical.
     Gate::policy(Environment::class, get_class(new class extends EnvironmentPolicy
     {
         public function manageCredentials(User $user, Environment $environment): bool
@@ -72,14 +65,11 @@ test('the wizard consults the manage-credentials permission for the environments
         }
     }));
 
-    // No credentials anywhere in the payload: the gate is never consulted.
     $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
         'application' => ['name' => 'Plain', 'host' => 'plain.example.com'],
         'environments' => [($this->environmentPayload)()],
     ])->assertRedirect();
 
-    // One environment out of two carries a username: the whole request is
-    // refused and nothing is written.
     $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
         'application' => ['name' => 'Guarded', 'host' => 'guarded.example.com'],
         'environments' => [
@@ -159,8 +149,6 @@ test('the wizard is rejected when two rows carry the same environment name', fun
                 ($this->environmentPayload)('production'),
             ],
         ])
-        // On the row, not on "environments": the wizard renders the message
-        // under the offending field, on the step that owns it.
         ->assertInvalid(['environments.1.name']);
 
     expect(Application::where('name', 'Twice')->exists())->toBeFalse();
@@ -188,18 +176,12 @@ test('a wizard row with a password but no username is rejected on that row', fun
                 [...($this->environmentPayload)('production'), 'basicAuthPassword' => 'orphan-secret'],
             ],
         ])
-        // Nested: the rule has to name "environments.0.basicAuthPassword",
-        // not a top-level field that does not exist in this payload.
         ->assertInvalid(['environments.0.basicAuthUser']);
 
     expect(Application::where('name', 'Orphan')->exists())->toBeFalse();
 });
 
 test('a failed wizard does not flash any row password into the session', function () {
-    // Arr::except(), which is what dontFlash() feeds, has no wildcard
-    // support, so "environments.*.basicAuthPassword" would strip nothing:
-    // bootstrap/app.php excludes the whole "environments" array instead.
-    // This is the test that would catch it going back to a wildcard.
     $this->actingAs($this->admin)
         ->post(route('applications.store', ['current_team' => $this->team->slug]), [
             'application' => ['name' => 'Flashed', 'host' => 'flashed.example.com'],
@@ -289,9 +271,6 @@ test('two organizations sharing the same application slug each resolve their own
     $otherTeam = Team::factory()->create();
     $otherAdmin = User::factory()->create();
     $otherTeam->members()->attach($otherAdmin, ['role' => TeamRole::Admin->value]);
-    // Same name as $this->application, in a different organization:
-    // slugs are only unique per team (unique(['team_id', 'slug'])), so
-    // this legitimately produces the same slug in both organizations.
     $otherApplication = Application::factory()->for($otherTeam)->create(['name' => $this->application->name]);
 
     expect($otherApplication->slug)->toBe($this->application->slug);
@@ -305,14 +284,6 @@ test('two organizations sharing the same application slug each resolve their own
         ->assertOk();
 });
 
-/**
- * Deleting the application must clear the manual-visibility grants of every
- * environment it takes with it, or environment_user keeps rows pointing at
- * environments that no longer exist — and the next environment to be given
- * that id would be silently visible to whoever held the stale grant. Only
- * the environment delete path asserted this; this is the application path,
- * where the grants are two cascades deep.
- */
 test('deleting an application clears the manual visibility grants of its environments', function () {
     $environment = Environment::factory()->for($this->application)->create();
 
@@ -330,3 +301,65 @@ test('deleting an application clears the manual visibility grants of its environ
     expect(DB::table('environment_user')->where('environment_id', $environment->id)->exists())->toBeFalse()
         ->and(DB::table('environment_user')->where('user_id', $this->member->id)->exists())->toBeFalse();
 });
+
+test('the wizard stores each row\'s collection switch, on by default', function () {
+    $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
+        'application' => ['name' => 'Switches', 'host' => 'switches.example.com'],
+        'environments' => [
+            ($this->environmentPayload)('production'),
+            [...($this->environmentPayload)('staging'), 'pollingEnabled' => false],
+        ],
+    ])->assertRedirect();
+
+    $application = Application::where('team_id', $this->team->id)->where('name', 'Switches')->firstOrFail();
+
+    expect($application->environments()->orderBy('name')->pluck('polling_enabled', 'name')->all())
+        ->toBe(['production' => true, 'staging' => false]);
+});
+
+test('a wizard row whose URL carries credentials is refused on that row', function () {
+    $this->actingAs($this->admin)
+        ->post(route('applications.store', ['current_team' => $this->team->slug]), [
+            'application' => ['name' => 'Leaky', 'host' => 'leaky.example.com'],
+            'environments' => [
+                ($this->environmentPayload)('production'),
+                [...($this->environmentPayload)('staging'), 'horizonUrl' => 'https://ops:url-secret@staging.leaky.example.com/horizon'],
+            ],
+        ])
+        ->assertInvalid(['environments.1.horizonUrl' => 'basic-auth fields'])
+        ->assertValid(['environments.0.horizonUrl']);
+
+    expect(Application::where('name', 'Leaky')->exists())->toBeFalse()
+        ->and(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('url-secret');
+});
+
+dataset('hosts that are not a bare domain', [
+    'credentials' => ['ops:host-secret@shop.example.com'],
+    'user only' => ['host-secret@shop.example.com'],
+    'a scheme' => ['https://shop.example.com'],
+    'another scheme' => ['FTP://host-secret.example.com'],
+]);
+
+test('an application host with a scheme or credentials is refused in the wizard and on edit, and not flashed back', function (string $host) {
+    $this->actingAs($this->admin)
+        ->post(route('applications.store', ['current_team' => $this->team->slug]), [
+            'application' => ['name' => 'Hosted', 'host' => $host],
+            'environments' => [($this->environmentPayload)('production')],
+        ])
+        ->assertInvalid(['application.host' => 'without a scheme or credentials']);
+
+    expect(Application::where('name', 'Hosted')->exists())->toBeFalse()
+        ->and(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('host-secret');
+
+    $original = $this->application->host;
+
+    $this->actingAs($this->admin)
+        ->patch(route('applications.update', ['current_team' => $this->team->slug, 'application' => $this->application->slug]), [
+            'name' => $this->application->name,
+            'host' => $host,
+        ])
+        ->assertInvalid(['host' => 'without a scheme or credentials']);
+
+    expect($this->application->fresh()->host)->toBe($original)
+        ->and(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('host-secret');
+})->with('hosts that are not a bare domain');

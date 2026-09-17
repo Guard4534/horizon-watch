@@ -11,9 +11,14 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
-        // Feature tests render the Blade root view; without this they would
-        // need a built Vite manifest on every machine and in every lane.
         $this->withoutVite();
+    }
+
+    public function call($method, $uri, $parameters = [], $cookies = [], $files = [], $server = [], $content = null)
+    {
+        $this->app?->forgetScopedInstances();
+
+        return parent::call($method, $uri, $parameters, $cookies, $files, $server, $content);
     }
 
     protected function skipUnlessFortifyHas(string $feature, ?string $message = null): void

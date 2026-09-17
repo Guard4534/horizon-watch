@@ -1,6 +1,3 @@
-/* Nocturne design system, ported with an nc- prefix so it never collides with
-   Tailwind's own theme variables (--color-neutral-*, --color-accent) or with
-   utility names such as .table. */
 :root {
     --nc-bg: #161826;
     --nc-surface: #232532;
@@ -45,7 +42,6 @@
     --nc-shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
     --nc-shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
 
-    /* Status and environment palettes belong to the mockup, not the design system. */
     --st-ok: oklch(0.74 0.09 158);
     --st-warn: oklch(0.81 0.12 85);
     --st-down: oklch(0.68 0.16 25);
@@ -76,6 +72,21 @@
 
 ::selection {
     background: color-mix(in srgb, var(--nc-accent) 30%, transparent);
+}
+
+code,
+kbd,
+pre,
+samp,
+.font-mono,
+.nc-code {
+    font-family: var(--nc-font);
+    letter-spacing: 0.01em;
+    font-feature-settings:
+        'zero' 1,
+        'ss01' 1,
+        'cv05' 1,
+        'cv08' 1;
 }
 
 :focus-visible {
@@ -210,6 +221,20 @@
     opacity: 0.45;
     cursor: not-allowed;
 }
+select.nc-input {
+    appearance: none;
+    color-scheme: dark;
+    padding-right: 28px;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='%23b2b6ca'%3E%3Cpath d='M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+    background-size: 12px 12px;
+}
+select.nc-input option {
+    color: var(--nc-text);
+    background: var(--nc-surface);
+}
 
 .nc-radio {
     display: inline-flex;
@@ -303,8 +328,6 @@
     border: 1px solid var(--nc-accent);
     color: var(--nc-accent);
 }
-/* Small secondary badges (rule origin, auth mode, override counts): same
-   family as .nc-tag, tighter size and radius-sm per the mockup. */
 .nc-tag-sm {
     font-size: 10px;
     padding: 1px 6px;

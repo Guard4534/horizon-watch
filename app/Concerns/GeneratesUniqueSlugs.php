@@ -6,20 +6,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-/**
- * Same suffixing algorithm as GeneratesUniqueTeamSlugs, generalized to an
- * arbitrary already-scoped query instead of hardcoding withTrashed() on the
- * calling model. Used by models whose slug is unique within a scope other
- * than "the whole table" (Application: per team; Environment: per
- * organization, via a join, not a column on its own table).
- */
 trait GeneratesUniqueSlugs
 {
     /**
-     * Generate a slug from $name, unique within $scope, suffixing -1, -2, …
-     * on collision. $scope must already be filtered to the uniqueness
-     * boundary (e.g. ->where('team_id', $teamId)).
-     *
      * @template TModel of Model
      *
      * @param  Builder<TModel>  $scope

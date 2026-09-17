@@ -14,7 +14,6 @@ x-app: &app
         DB_PORT: '5432'
         DB_DATABASE: horizon_watch
         DB_USERNAME: horizon_watch
-        # Operator: set DB_PASSWORD in your environment; the default here is a public value.
         DB_PASSWORD: ${DB_PASSWORD:-horizon_watch}
         SESSION_DRIVER: database
         CACHE_STORE: database
@@ -25,6 +24,8 @@ x-app: &app
         MAIL_USERNAME: ${MAIL_USERNAME:-}
         MAIL_PASSWORD: ${MAIL_PASSWORD:-}
         MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-horizon-watch@example.com}
+        HORIZON_WATCH_RETENTION_DAYS: ${HORIZON_WATCH_RETENTION_DAYS:-30}
+        HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS: ${HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS:-false}
     volumes:
         - app-data:/data
 
@@ -54,6 +55,8 @@ services:
     worker:
         <<: *app
         command: ['worker']
+        deploy:
+            replicas: ${HORIZON_WATCH_WORKERS:-2}
         depends_on:
             web:
                 condition: service_healthy

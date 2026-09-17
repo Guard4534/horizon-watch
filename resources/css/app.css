@@ -50,8 +50,6 @@
     --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* shadcn-vue components read these; they are Nocturne values, and there is
-   only one theme. The shadcn "accent" is a hover tint, never Nocturne's accent. */
 :root {
     --background: var(--nc-bg);
     --foreground: var(--nc-text);

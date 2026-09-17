@@ -3,19 +3,20 @@
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Readings;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
     $this->slug = $this->user->currentTeam->slug;
     (new DatabaseSeeder)->seedMockupOrganization($this->user->currentTeam);
+    Readings::mockup($this->user->currentTeam);
 });
 
-test('the email preview shows a critical alert', function () {
+test('the worst anomaly leads the log', function () {
     $this->actingAs($this->user)
         ->get(route('alerts.index', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.preview.severity', 'critical')
-            ->has('page.alerts.0.channels', 2));
+            ->where('page.alerts.0.severity', 'critical'));
 });
 
 test('a scope with overrides marks them', function () {

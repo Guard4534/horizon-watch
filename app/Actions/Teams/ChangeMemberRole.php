@@ -10,12 +10,6 @@ use Illuminate\Validation\ValidationException;
 
 class ChangeMemberRole
 {
-    /**
-     * Give a member another role. Whether the actor may touch this member
-     * at all is the TeamPolicy's business (updateMember also refuses when
-     * the target is the owner): this action only enforces the one rule
-     * that is about the organization's state rather than about permissions.
-     */
     public function handle(Team $team, User $actor, User $target, TeamRole $role): Membership
     {
         /** @var Membership $membership */
@@ -28,17 +22,6 @@ class ChangeMemberRole
         return $membership;
     }
 
-    /**
-     * An admin may not demote themselves if that would leave the
-     * organization with no admin besides the owner. The owner keeps every
-     * admin permission, so nothing would actually become impossible — but
-     * the organization would be one person away from having nobody to
-     * share the work with, and the person doing it would not notice until
-     * the buttons were gone. Somebody else must be promoted first.
-     *
-     * Only self-demotion is guarded: demoting *another* admin is a
-     * deliberate decision by someone who keeps their own admin rights.
-     */
     private function refuseLeavingNoAdmin(
         Team $team,
         User $actor,

@@ -171,9 +171,6 @@ test('removed member current team is set to personal team', function () {
     expect($member->fresh()->current_team_id)->toEqual($personalTeam->id);
 });
 
-// The settings routes and the phase 2 Members view are two doors onto the
-// same two rules. These tests stand at this door, so the two cannot drift
-// apart again (their twins live in MembersPageTest).
 test('the settings route refuses the sole-admin self-demotion too', function () {
     $owner = User::factory()->create();
     $admin = User::factory()->create();
@@ -251,8 +248,6 @@ test('an admin can remove themselves through the settings route and lands on the
 
     $admin->update(['current_team_id' => $team->id]);
 
-    // Back to teams.edit would be a 403: the page belongs to an
-    // organization they have just left.
     $this->actingAs($admin)
         ->delete(route('teams.members.destroy', [$team, $admin]))
         ->assertRedirect(route('home'));
@@ -268,8 +263,6 @@ test('removing somebody who is not a member of the team is a 404, not a false su
 
     $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
 
-    // A 302 with "Member removed." on it would answer "does user 41 exist?"
-    // for every id in the installation.
     $this->actingAs($owner)
         ->delete(route('teams.members.destroy', [$team, $stranger]))
         ->assertNotFound();

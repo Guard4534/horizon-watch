@@ -13,14 +13,6 @@ class AcceptInvitationData extends Data
     ) {}
 
     /**
-     * The email is never here: it comes from the invitation itself and
-     * can't be changed by the guest filling this form.
-     *
-     * PasswordValidationRules is an instance trait (built for FormRequests
-     * and Actions), and this rules() is static like every other Data class
-     * in the app, so it calls Password::defaults() directly — the same
-     * choice SetupData made for the same reason.
-     *
      * @return array<string, array<int, mixed>>
      */
     public static function rules(): array

@@ -15,6 +15,7 @@ class AlertRulesPageData extends Data
         public string $scope,
         /** @var array<int, AlertRuleData> */
         public array $rules,
-        public NotificationSettingsData $notifications,
+        public NotificationSummaryData $notificationSummary,
+        public ?NotificationSettingsData $notifications,
     ) {}
 }

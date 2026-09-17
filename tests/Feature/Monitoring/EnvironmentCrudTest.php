@@ -1,13 +1,18 @@
 <?php
 
+use App\Actions\Environments\UpdateEnvironment;
+use App\Data\Applications\EnvironmentFormData;
 use App\Enums\EnvironmentColor;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Models\EnvironmentSnapshot;
+use App\Models\EnvironmentState;
 use App\Models\Team;
 use App\Models\User;
 use App\Policies\EnvironmentPolicy;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -71,6 +76,27 @@ test('the basic auth password never appears in an Inertia prop nor in the raw re
     expect($response->getContent())->not->toContain('super-secret-value');
 });
 
+test('the edit page never shows credentials saved inside a legacy url', function (string $saved, string $shown) {
+    $environment = Environment::factory()->for($this->application)->create();
+    DB::table('environments')->where('id', $environment->id)->update(['horizon_url' => $saved]);
+
+    $response = $this->actingAs($this->admin)->get(route('environments.edit', [
+        'current_team' => $this->team->slug,
+        'environment' => $environment->slug,
+    ]));
+
+    $response->assertInertia(fn (Assert $page) => $page
+        ->where('page.environment.horizonUrl', $shown));
+
+    expect($response->getContent())
+        ->not->toContain('legacy-owner')
+        ->not->toContain('legacy-url-secret');
+})->with([
+    'user and password' => ['https://legacy-owner:legacy-url-secret@legacy.example.com/horizon', 'https://legacy.example.com/horizon'],
+    'user only' => ['http://legacy-owner@legacy.example.com:8080/horizon', 'http://legacy.example.com:8080/horizon'],
+    'upper-case scheme' => ['HTTPS://legacy-owner:legacy-url-secret@legacy.example.com/horizon', 'HTTPS://legacy.example.com/horizon'],
+]);
+
 test('updating an environment without a password keeps the existing one, sending one replaces it', function () {
     $environment = Environment::factory()->for($this->application)->create([
         'name' => 'production',
@@ -124,8 +150,6 @@ test('creating an environment with neither half stores no credential', function 
 });
 
 test('a username with no password is rejected on create but allowed on update', function () {
-    // On create there is nothing a blank password could mean except "no
-    // password", and a username alone cannot authenticate.
     $this->actingAs($this->admin)->post(
         route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
         ($this->validPayload)(['basicAuthUser' => 'monitor', 'basicAuthPassword' => '']),
@@ -133,9 +157,6 @@ test('a username with no password is rejected on create but allowed on update', 
 
     expect(Environment::where('application_id', $this->application->id)->count())->toBe(0);
 
-    // On update the same submission means "keep the password on file", so
-    // the rule must not apply there or no credentialed environment could
-    // ever be edited again.
     $environment = Environment::factory()->for($this->application)->create([
         'name' => 'production',
         'basic_auth_user' => 'monitor',
@@ -158,11 +179,7 @@ test('a username of whitespace, or one carrying a colon, is rejected', function 
 
     expect(Environment::where('application_id', $this->application->id)->count())->toBe(0);
 })->with([
-    // Trimmed to "" and then to null by the global middlewares, which turns
-    // it into "a password with no username" instead — either way it never
-    // reaches the column.
     '   ',
-    // Basic auth transmits "user:password", so this one cannot be encoded.
     'mon:itor',
 ]);
 
@@ -173,13 +190,6 @@ test('touching credentials requires the manage-credentials permission in additio
         'basic_auth_password' => 'original-secret',
     ]);
 
-    // Force-deny manageCredentials regardless of role, via a policy swap
-    // rather than Gate::define(): a policy resolved for the model always
-    // wins over a raw Gate::define() of the same name (Gate::resolveAuthCallback()
-    // checks the policy first), so define() alone wouldn't actually override
-    // EnvironmentPolicy here. Today's role matrix grants manageCredentials
-    // to the same roles as ManageApplications, so this swap is the only way
-    // to prove the controller consults it distinctly from "update".
     Gate::policy(Environment::class, get_class(new class extends EnvironmentPolicy
     {
         public function manageCredentials(User $user, Environment $environment): bool
@@ -188,9 +198,6 @@ test('touching credentials requires the manage-credentials permission in additio
         }
     }));
 
-    // An environment with nothing on file, updated without credentials:
-    // there is no credential to set, replace or remove, so manageCredentials
-    // is never consulted and the forced denial above doesn't apply.
     $bare = Environment::factory()->for($this->application)->create([
         'name' => 'develop',
         'basic_auth_user' => null,
@@ -202,8 +209,6 @@ test('touching credentials requires the manage-credentials permission in additio
         ($this->validPayload)(['name' => 'develop', 'basicAuthUser' => null, 'basicAuthPassword' => null]),
     )->assertRedirect();
 
-    // A new username on it touches credentials: denied even though "update"
-    // itself would allow the admin through.
     $this->actingAs($this->admin)->patch(
         route('environments.update', ['current_team' => $this->team->slug, 'environment' => $bare->slug]),
         ($this->validPayload)(['name' => 'develop', 'basicAuthUser' => 'someone-else', 'basicAuthPassword' => null]),
@@ -212,11 +217,6 @@ test('touching credentials requires the manage-credentials permission in additio
     $bare->refresh();
     expect($bare->basic_auth_user)->toBeNull();
 
-    // The case the gate must NOT catch: an environment that has
-    // credentials, edited without changing them. The edit page prefills the
-    // username, so an untouched save resends it — if that counted as
-    // touching the credentials, a role with "manage applications" but not
-    // "manage credentials" could not change a poll interval.
     $this->actingAs($this->admin)->patch(
         route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
         ($this->validPayload)([
@@ -232,8 +232,6 @@ test('touching credentials requires the manage-credentials permission in additio
         ->and($environment->basic_auth_user)->toBe('monitor')
         ->and($environment->basic_auth_password)->toBe('original-secret');
 
-    // Replacing the username of a credential that exists is a change, and
-    // is denied.
     $this->actingAs($this->admin)->patch(
         route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
         ($this->validPayload)(['name' => 'production', 'basicAuthUser' => 'someone-else', 'basicAuthPassword' => null]),
@@ -241,11 +239,6 @@ test('touching credentials requires the manage-credentials permission in additio
 
     expect($environment->refresh()->basic_auth_user)->toBe('monitor');
 
-    // Clearing the credentials of an environment that has them is a
-    // credential change too, and the only one the payload alone cannot
-    // show: the cleared username field arrives as null, exactly like a form
-    // that never had one (see
-    // EnvironmentFormData::changesCredentialsOf()).
     $this->actingAs($this->admin)->patch(
         route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
         ($this->validPayload)(['name' => 'production', 'basicAuthUser' => null, 'basicAuthPassword' => null]),
@@ -255,7 +248,6 @@ test('touching credentials requires the manage-credentials permission in additio
     expect($environment->basic_auth_user)->toBe('monitor')
         ->and($environment->basic_auth_password)->toBe('original-secret');
 
-    // Same on the create path.
     $this->actingAs($this->admin)->post(
         route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
         ($this->validPayload)(['name' => 'staging']),
@@ -278,9 +270,6 @@ test('clearing the username clears the stored password with it', function () {
 
     $environment->refresh();
 
-    // Basic auth needs both halves: a password left behind without a
-    // username could never be used, never be read back out, and would keep
-    // the edit page reporting "password set".
     expect($environment->basic_auth_user)->toBeNull()
         ->and($environment->basic_auth_password)->toBeNull()
         ->and($environment->getRawOriginal('basic_auth_password'))->toBeNull();
@@ -296,10 +285,6 @@ test('a password without a username is rejected instead of stored unusable', fun
 });
 
 test('a failed validation does not flash the basic-auth password into the session', function () {
-    // The flash is what feeds old() after a redirect, and sessions live in
-    // PostgreSQL unencrypted: see bootstrap/app.php's dontFlash(). Nothing
-    // here reads old input back — Inertia forms keep their own state — so
-    // the only thing the flash could do with a password is store it.
     $this->actingAs($this->admin)->post(
         route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
         ($this->validPayload)(['basicAuthPassword' => 'plaintext-must-not-persist', 'pollIntervalSeconds' => 9999]),
@@ -307,8 +292,6 @@ test('a failed validation does not flash the basic-auth password into the sessio
 
     expect(json_encode(session()->all(), JSON_THROW_ON_ERROR))
         ->not->toContain('plaintext-must-not-persist')
-        // The rest of the submission is still there: this is an exclusion,
-        // not the flash being switched off.
         ->toContain('monitor');
 });
 
@@ -324,8 +307,6 @@ test('an environment name is unique per application, and a field error says so',
 
     expect(Environment::where('application_id', $this->application->id)->count())->toBe(1);
 
-    // The same name under another application of the same organization is
-    // fine: the unique index is per application, not per organization.
     $other = Application::factory()->for($this->team)->create(['name' => 'Other']);
 
     $this->actingAs($this->admin)
@@ -355,8 +336,6 @@ test('renaming an environment onto a sibling is rejected, keeping its own name i
 
     expect($staging->refresh()->name)->toBe('staging');
 
-    // Its own name must not collide with itself (the rule ignores the row
-    // being updated), or no other field could ever be edited.
     $this->actingAs($this->admin)
         ->patch(
             route('environments.update', ['current_team' => $this->team->slug, 'environment' => $staging->slug]),
@@ -401,13 +380,8 @@ test('two organizations sharing the same environment slug each resolve their own
     $otherTeam = Team::factory()->create();
     $otherAdmin = User::factory()->create();
     $otherTeam->members()->attach($otherAdmin, ['role' => TeamRole::Admin->value]);
-    // Same application name as $this->application, in a different
-    // organization: application slugs are only unique per team, so this
-    // legitimately produces the same slug in both organizations.
     $otherApplication = Application::factory()->for($otherTeam)->create(['name' => $this->application->name]);
 
-    // basic_auth_* explicitly cleared: the "production" state otherwise
-    // seeds credentials, which is irrelevant to what this test checks.
     $environment = Environment::factory()->for($this->application)->create([
         'name' => 'production',
         'basic_auth_user' => null,
@@ -512,15 +486,6 @@ test('member and viewer cannot create, edit or delete environments', function (s
     expect(Environment::find($environment->id))->not->toBeNull();
 })->with(['member', 'viewer']);
 
-/**
- * Visibility is not a permission (phase 2 spec): the write pages answer to
- * the Policy, so an admin whose own visibility hides an environment still
- * edits it — including its credentials, which is the whole point, since
- * nobody else in the organization may. Untested in either direction until
- * now, and reached from the Applications view, which lists it (see
- * MonitoringPagesTest); the environment's *detail* page still answers 404
- * to the same admin, because that one is the operational view.
- */
 test('an admin edits an environment their own visibility hides', function () {
     $environment = Environment::factory()->for($this->application)->create([
         'name' => 'production',
@@ -528,8 +493,6 @@ test('an admin edits an environment their own visibility hides', function () {
         'basic_auth_password' => 'old-secret-value',
     ]);
 
-    // Manual visibility granting nothing: this admin watches no environment
-    // at all.
     $this->admin->teamMemberships()->where('team_id', $this->team->id)->first()
         ->update(['visibility' => MemberVisibility::Manual->value]);
 
@@ -553,8 +516,392 @@ test('an admin edits an environment their own visibility hides', function () {
 
     expect($environment->fresh()->basic_auth_password)->toBe('new-secret-value');
 
-    // The other half of the split, so the two cannot drift apart silently.
     $this->actingAs($this->admin)
         ->get(route('environments.show', ['current_team' => $this->team->slug, 'environment' => $environment->slug]))
         ->assertNotFound();
+});
+
+test('collection is on unless the form turns it off', function () {
+    $store = route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]);
+
+    $this->actingAs($this->admin)
+        ->post($store, ($this->validPayload)(['name' => 'production']))
+        ->assertRedirect();
+
+    $this->actingAs($this->admin)
+        ->post($store, ($this->validPayload)(['name' => 'staging', 'pollingEnabled' => false]))
+        ->assertRedirect();
+
+    expect(Environment::where('name', 'production')->firstOrFail()->polling_enabled)->toBeTrue()
+        ->and(Environment::where('name', 'staging')->firstOrFail()->polling_enabled)->toBeFalse();
+});
+
+test('pausing and resuming collection is an edit, without the credentials permission', function () {
+    Gate::policy(Environment::class, get_class(new class extends EnvironmentPolicy
+    {
+        public function manageCredentials(User $user, Environment $environment): bool
+        {
+            return false;
+        }
+    }));
+
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'super-secret-value',
+    ]);
+    $update = route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+    $edit = route('environments.edit', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+    $payload = ($this->validPayload)(['basicAuthPassword' => null]);
+
+    $this->actingAs($this->admin)->get($edit)
+        ->assertInertia(fn (Assert $page) => $page->where('page.environment.pollingEnabled', true));
+
+    $this->actingAs($this->admin)->patch($update, [...$payload, 'pollingEnabled' => false])->assertRedirect();
+
+    expect($environment->fresh()->polling_enabled)->toBeFalse()
+        ->and($environment->fresh()->basic_auth_password)->toBe('super-secret-value');
+
+    $this->actingAs($this->admin)->get($edit)
+        ->assertInertia(fn (Assert $page) => $page->where('page.environment.pollingEnabled', false));
+
+    $this->actingAs($this->admin)->patch($update, [...$payload, 'pollingEnabled' => true])->assertRedirect();
+
+    expect($environment->fresh()->polling_enabled)->toBeTrue();
+});
+
+test('collection must be a boolean', function () {
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+            ($this->validPayload)(['pollingEnabled' => 'sometimes']),
+        )
+        ->assertSessionHasErrors('pollingEnabled');
+
+    expect(Environment::where('application_id', $this->application->id)->exists())->toBeFalse();
+});
+
+dataset('urls carrying credentials', [
+    'user and password' => ['https://ops:url-secret@horizon.example.com/horizon'],
+    'user only' => ['https://url-secret@horizon.example.com/horizon'],
+    'bare at sign' => ['https://@horizon.example.com/horizon'],
+    'upper-case scheme' => ['HTTPS://ops:url-secret@horizon.example.com/horizon'],
+    'at sign behind a backslash' => ['https://horizon.example.com\\url-secret@horizon.example.net/horizon'],
+]);
+
+test('a Horizon URL carrying credentials is refused on create and update, and not flashed back', function (string $url) {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'staging',
+        'horizon_url' => 'https://staging.example.com/horizon',
+    ]);
+
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+            ($this->validPayload)(['horizonUrl' => $url]),
+        )
+        ->assertInvalid(['horizonUrl' => 'basic-auth fields']);
+
+    expect(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('url-secret')
+        ->and(Environment::where('name', 'production')->exists())->toBeFalse();
+
+    $this->actingAs($this->admin)
+        ->patch(
+            route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
+            ($this->validPayload)(['name' => 'staging', 'horizonUrl' => $url]),
+        )
+        ->assertInvalid(['horizonUrl' => 'basic-auth fields']);
+
+    expect(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('url-secret')
+        ->and($environment->fresh()->horizon_url)->toBe('https://staging.example.com/horizon');
+})->with('urls carrying credentials');
+
+test('an at sign after the host is not a credential', function () {
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+            ($this->validPayload)(['horizonUrl' => 'https://horizon.example.com/ops@team/horizon']),
+        )
+        ->assertValid();
+
+    expect(Environment::where('name', 'production')->sole()->horizon_url)
+        ->toBe('https://horizon.example.com/ops@team/horizon');
+});
+
+test('an at sign in a query string is refused for the query, not as a credential', function () {
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+            ($this->validPayload)(['name' => 'staging', 'horizonUrl' => 'https://horizon.example.com/ops@team/horizon?by=a@b']),
+        )
+        ->assertInvalid(['horizonUrl' => 'query string']);
+
+    expect(session('errors')->get('horizonUrl'))
+        ->toBe(['Use the address of the Horizon dashboard, without a query string or a fragment.'])
+        ->and(Environment::where('name', 'staging')->exists())->toBeFalse();
+});
+
+dataset('another address', [
+    'another host' => ['https://attacker.example.net/collect'],
+    'another scheme' => ['http://production.example.com/horizon'],
+    'another port' => ['https://production.example.com:8443/horizon'],
+]);
+
+test('moving an environment with a stored password to another address needs the password typed again', function (string $url) {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+    $update = route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+
+    $this->actingAs($this->admin)
+        ->patch($update, ($this->validPayload)(['horizonUrl' => $url, 'basicAuthPassword' => '']))
+        ->assertInvalid(['basicAuthPassword' => 'Type the password again']);
+
+    expect($environment->fresh()->horizon_url)->toBe('https://production.example.com/horizon')
+        ->and($environment->fresh()->basic_auth_password)->toBe('original-secret');
+
+    $this->actingAs($this->admin)
+        ->patch($update, ($this->validPayload)(['horizonUrl' => $url, 'basicAuthPassword' => 'retyped-secret']))
+        ->assertValid()
+        ->assertRedirect();
+
+    expect($environment->fresh()->horizon_url)->toBe($url)
+        ->and($environment->fresh()->basic_auth_password)->toBe('retyped-secret');
+})->with('another address');
+
+test('a path-only move keeps the stored password, and so does a new username on the same address', function () {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+    $update = route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+
+    $this->actingAs($this->admin)
+        ->patch($update, ($this->validPayload)(['horizonUrl' => 'https://PRODUCTION.example.com:443/ops/horizon', 'basicAuthPassword' => null]))
+        ->assertValid();
+
+    expect($environment->fresh()->horizon_url)->toBe('https://PRODUCTION.example.com:443/ops/horizon')
+        ->and($environment->fresh()->basic_auth_password)->toBe('original-secret');
+
+    $this->actingAs($this->admin)
+        ->patch($update, ($this->validPayload)(['horizonUrl' => 'https://production.example.com/ops/horizon', 'basicAuthUser' => 'renamed', 'basicAuthPassword' => null]))
+        ->assertValid();
+
+    expect($environment->fresh()->basic_auth_user)->toBe('renamed')
+        ->and($environment->fresh()->basic_auth_password)->toBe('original-secret');
+});
+
+test('clearing the username while moving the address clears the password without asking for it', function () {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+
+    $this->actingAs($this->admin)
+        ->patch(
+            route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
+            ($this->validPayload)(['horizonUrl' => 'https://elsewhere.example.net/horizon', 'basicAuthUser' => null, 'basicAuthPassword' => null]),
+        )
+        ->assertValid();
+
+    expect($environment->fresh()->horizon_url)->toBe('https://elsewhere.example.net/horizon')
+        ->and($environment->fresh()->basic_auth_password)->toBeNull();
+});
+
+test('an address change is a credentials change only when a password is on file', function () {
+    Gate::policy(Environment::class, get_class(new class extends EnvironmentPolicy
+    {
+        public function manageCredentials(User $user, Environment $environment): bool
+        {
+            return false;
+        }
+    }));
+
+    $credentialed = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+    $bare = Environment::factory()->for($this->application)->create([
+        'name' => 'staging',
+        'horizon_url' => 'https://staging.example.com/horizon',
+        'basic_auth_user' => null,
+        'basic_auth_password' => null,
+    ]);
+    $update = fn (Environment $environment) => route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+
+    $this->actingAs($this->admin)
+        ->patch($update($credentialed), ($this->validPayload)(['horizonUrl' => 'https://attacker.example.net/collect', 'basicAuthPassword' => 'retyped']))
+        ->assertForbidden();
+
+    expect($credentialed->fresh()->horizon_url)->toBe('https://production.example.com/horizon')
+        ->and($credentialed->fresh()->basic_auth_password)->toBe('original-secret');
+
+    $this->actingAs($this->admin)
+        ->patch($update($credentialed), ($this->validPayload)(['horizonUrl' => 'https://production.example.com/ops/horizon', 'basicAuthPassword' => null]))
+        ->assertRedirect();
+
+    expect($credentialed->fresh()->horizon_url)->toBe('https://production.example.com/ops/horizon');
+
+    $this->actingAs($this->admin)
+        ->patch($update($bare), ($this->validPayload)(['name' => 'staging', 'horizonUrl' => 'https://elsewhere.example.net/horizon', 'basicAuthUser' => null, 'basicAuthPassword' => null]))
+        ->assertRedirect();
+
+    expect($bare->fresh()->horizon_url)->toBe('https://elsewhere.example.net/horizon');
+});
+
+test('the update action refuses to carry the stored password to a new address without validation', function () {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+
+    expect(fn () => app(UpdateEnvironment::class)->handle($environment, EnvironmentFormData::from(($this->validPayload)([
+        'horizonUrl' => 'https://attacker.example.net/collect',
+        'basicAuthPassword' => null,
+    ]))))->toThrow(LogicException::class);
+
+    expect($environment->fresh()->horizon_url)->toBe('https://production.example.com/horizon');
+});
+
+test('changesCredentialsOf counts a new address as a credentials change only when a password is on file', function () {
+    $credentialed = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+    $bare = Environment::factory()->for($this->application)->create([
+        'name' => 'staging',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => null,
+    ]);
+    $data = fn (string $url) => EnvironmentFormData::from(($this->validPayload)(['horizonUrl' => $url, 'basicAuthPassword' => null]));
+
+    expect($data('https://attacker.example.net/collect')->changesCredentialsOf($credentialed))->toBeTrue()
+        ->and($data('https://production.example.com/ops/horizon')->changesCredentialsOf($credentialed))->toBeFalse()
+        ->and($data('https://attacker.example.net/collect')->changesCredentialsOf($bare))->toBeFalse();
+});
+
+test('the poll interval goes from the scheduler tick of 15 seconds to 300', function (int $seconds, bool $valid) {
+    $response = $this->actingAs($this->admin)->post(
+        route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+        ($this->validPayload)(['pollIntervalSeconds' => $seconds]),
+    );
+
+    $valid ? $response->assertValid() : $response->assertInvalid(['pollIntervalSeconds']);
+})->with([
+    [5, false],
+    [14, false],
+    [15, true],
+    [300, true],
+    [301, false],
+]);
+
+describe('the next reading after an edit', function () {
+    beforeEach(function () {
+        $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:00.600'));
+
+        $this->edited = fn (array $attributes, ?string $nextPollAt): Environment => tap(
+            Environment::factory()->for($this->application)->create([
+                'name' => 'production',
+                'basic_auth_user' => 'monitor',
+                'basic_auth_password' => 'super-secret-value',
+                'horizon_url' => 'https://production.example.com/horizon',
+                ...$attributes,
+            ]),
+            fn (Environment $environment) => $environment->forceFill(['next_poll_at' => $nextPollAt])->save(),
+        );
+
+        $this->save = fn (Environment $environment, array $overrides) => $this->actingAs($this->admin)->patch(
+            route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
+            ($this->validPayload)([
+                'horizonUrl' => 'https://production.example.com/horizon',
+                'basicAuthPassword' => null,
+                ...$overrides,
+            ]),
+        )->assertRedirect();
+
+        $this->nextPollAt = fn (Environment $environment): ?string => $environment->fresh()->next_poll_at?->toDateTimeString();
+    });
+
+    test('a shorter interval brings it within the new interval', function () {
+        $environment = ($this->edited)(['poll_interval_seconds' => 300], '2026-09-17 10:04:50');
+
+        ($this->save)($environment, ['pollIntervalSeconds' => 15]);
+
+        expect(($this->nextPollAt)($environment))->toBe('2026-09-17 10:00:15');
+    });
+
+    test('a longer or unchanged interval, or an environment never read, keeps it', function () {
+        $longer = ($this->edited)(['poll_interval_seconds' => 15], '2026-09-17 10:00:10');
+        $same = ($this->edited)(['name' => 'staging', 'poll_interval_seconds' => 60], '2026-09-17 10:00:50');
+        $never = ($this->edited)(['name' => 'develop', 'poll_interval_seconds' => 300], null);
+
+        ($this->save)($longer, ['pollIntervalSeconds' => 60]);
+        ($this->save)($same, ['name' => 'staging', 'pollIntervalSeconds' => 60]);
+        ($this->save)($never, ['name' => 'develop', 'pollIntervalSeconds' => 15]);
+
+        expect(($this->nextPollAt)($longer))->toBe('2026-09-17 10:00:10')
+            ->and(($this->nextPollAt)($same))->toBe('2026-09-17 10:00:50')
+            ->and(($this->nextPollAt)($never))->toBeNull();
+    });
+
+    test('resuming collection makes it due at once, pausing leaves it alone', function () {
+        $resumed = ($this->edited)(['polling_enabled' => false, 'poll_interval_seconds' => 300], '2026-09-17 10:03:00');
+        $paused = ($this->edited)(['name' => 'staging', 'poll_interval_seconds' => 300], '2026-09-17 10:03:00');
+
+        ($this->save)($resumed, ['pollIntervalSeconds' => 300, 'pollingEnabled' => true]);
+        ($this->save)($paused, ['name' => 'staging', 'pollIntervalSeconds' => 300, 'pollingEnabled' => false]);
+
+        expect(($this->nextPollAt)($resumed))->toBe('2026-09-17 10:00:00')
+            ->and(($this->nextPollAt)($paused))->toBe('2026-09-17 10:03:00');
+    });
+
+    test('a new Horizon address forgets the shown state and is read at once, keeping the history', function (string $url) {
+        $environment = ($this->edited)(['poll_interval_seconds' => 300], '2026-09-17 10:03:00');
+        $other = ($this->edited)(['name' => 'staging'], '2026-09-17 10:03:00');
+        EnvironmentState::factory()->for($environment)->create();
+        EnvironmentState::factory()->for($other)->create();
+        EnvironmentSnapshot::factory()->for($environment)->create();
+
+        ($this->save)($environment, ['horizonUrl' => $url, 'basicAuthPassword' => 'super-secret-value', 'pollIntervalSeconds' => 300]);
+
+        expect(EnvironmentState::query()->where('environment_id', $environment->id)->exists())->toBeFalse()
+            ->and(EnvironmentState::query()->where('environment_id', $other->id)->exists())->toBeTrue()
+            ->and(EnvironmentSnapshot::query()->where('environment_id', $environment->id)->count())->toBe(1)
+            ->and(($this->nextPollAt)($environment))->toBe('2026-09-17 10:00:00')
+            ->and(($this->nextPollAt)($other))->toBe('2026-09-17 10:03:00');
+    })->with([
+        'host' => 'https://preprod.example.com/horizon',
+        'scheme' => 'http://production.example.com/horizon',
+        'port' => 'https://production.example.com:8443/horizon',
+        'path' => 'https://production.example.com/admin/horizon',
+    ]);
+
+    test('the same address written differently keeps the state', function (string $url) {
+        $environment = ($this->edited)(['poll_interval_seconds' => 300], '2026-09-17 10:03:00');
+        EnvironmentState::factory()->for($environment)->create();
+
+        ($this->save)($environment, ['horizonUrl' => $url, 'pollIntervalSeconds' => 300]);
+
+        expect(EnvironmentState::query()->where('environment_id', $environment->id)->exists())->toBeTrue()
+            ->and(($this->nextPollAt)($environment))->toBe('2026-09-17 10:03:00');
+    })->with([
+        'unchanged' => 'https://production.example.com/horizon',
+        'trailing slash' => 'https://production.example.com/horizon/',
+        'api suffix' => 'https://production.example.com/horizon/api',
+        'host case and default port' => 'HTTPS://Production.Example.com:443/horizon',
+    ]);
 });

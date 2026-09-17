@@ -1,29 +1,37 @@
 <script setup lang="ts">
 import SectionCard from '@/components/nocturne/SectionCard.vue';
-import { formatMinutesAgo } from '@/lib/monitoring';
+import { formatElapsed } from '@/lib/monitoring';
 
 defineProps<{
     jobs: App.Data.Monitoring.FailedJobData[];
+    note?: string | null;
 }>();
 </script>
 
 <template>
     <SectionCard :title="$t('Recent failed jobs')">
         <template #actions>
+            <span v-if="note" style="font-size: 11px; color: var(--st-warn)">{{
+                note
+            }}</span>
             <span style="font-size: 11px; color: var(--nc-neutral-600)">{{
                 $t('retry happens in Horizon — this panel is read-only')
             }}</span>
         </template>
-        <div class="overflow-x-auto">
+        <div
+            v-if="!jobs.length"
+            style="font-size: 12px; color: var(--nc-neutral-500)"
+        >
+            {{ $t('No failed jobs in the latest reading.') }}
+        </div>
+        <div v-else class="overflow-x-auto">
             <table class="nc-table">
                 <thead>
-                    <!-- Job/Queue/Exception/Tries stay untranslated in both
-                         languages: the mockup keeps this table's headers English. -->
                     <tr>
-                        <th>Job</th>
-                        <th>Queue</th>
-                        <th>Exception</th>
-                        <th style="text-align: right">Tries</th>
+                        <th>{{ $t('Job') }}</th>
+                        <th>{{ $t('Queue') }}</th>
+                        <th>{{ $t('Exception') }}</th>
+                        <th style="text-align: right">{{ $t('Tries') }}</th>
                         <th>{{ $t('When') }}</th>
                     </tr>
                 </thead>
@@ -69,7 +77,7 @@ defineProps<{
                                 color: var(--nc-neutral-600);
                             "
                         >
-                            {{ formatMinutesAgo(job.minutesAgo) }}
+                            {{ formatElapsed(job.minutesAgo) }}
                         </td>
                     </tr>
                 </tbody>

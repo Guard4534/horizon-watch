@@ -4,6 +4,8 @@ use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
+use Illuminate\Console\Scheduling\Event;
+use Illuminate\Console\Scheduling\Schedule;
 
 test('expired invitations are deleted by the scheduled cleanup', function () {
     $this->travelTo(now()->startOfDay());
@@ -28,7 +30,13 @@ test('expired invitations are deleted by the scheduled cleanup', function () {
         'invited_by' => $owner->id,
     ]);
 
-    $this->artisan('schedule:run')->assertSuccessful();
+    $cleanup = collect(app(Schedule::class)->events())
+        ->first(fn (Event $event) => $event->description === 'Delete expired team invitations');
+
+    expect($cleanup)->not->toBeNull()
+        ->and($cleanup->expression)->toBe('0 0 * * *');
+
+    $this->artisan('schedule:test', ['--name' => 'Delete expired team invitations'])->assertSuccessful();
 
     $this->assertDatabaseMissing('team_invitations', [
         'id' => $expiredInvitation->id,

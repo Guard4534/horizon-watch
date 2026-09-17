@@ -135,9 +135,6 @@ test('manual visibility invites copy the chosen environments on acceptance', fun
 test('accepting an invitation leaves the manual visibility of other organizations alone', function () {
     Notification::fake();
 
-    // The same person, already a restricted member somewhere else:
-    // environment_user is keyed by user_id, so a careless sync() on
-    // acceptance would drop the grant they hold in the other organization.
     $user = User::factory()->create(['email' => 'invited@example.com']);
 
     $otherTeam = Team::factory()->create();
@@ -392,10 +389,6 @@ test('registering an address that already has an account is refused, and the pag
         'expires_at' => now()->addDays(7),
     ]);
 
-    // The invitation is open, but not to a guest who cannot be this
-    // account: stateFor() answers sign_in_required, which register()'s
-    // abort_unless(state === 'open') turns into a 410 before
-    // RegisterInvitedUser (and its 409 race guard) is ever reached.
     $this->get(route('invitations.show', $invitation->code))
         ->assertInertia(fn (Assert $page) => $page->where('page.state', 'sign_in_required'));
 
@@ -408,7 +401,6 @@ test('registering an address that already has an account is refused, and the pag
     expect(User::where('email', 'invited@example.com')->count())->toBe(1)
         ->and($existing->fresh()->belongsToTeam($this->team))->toBeFalse();
 
-    // Signing in turns the same link into the ordinary accept page.
     $this->actingAs($existing)
         ->get(route('invitations.show', $invitation->code))
         ->assertInertia(fn (Assert $page) => $page
@@ -438,8 +430,6 @@ test('resend regenerates only the expiry, keeps the code, and respects the rate 
     expect($invitation->code)->toBe($originalCode)
         ->and($invitation->expires_at->timestamp)->toBe(now()->addDays(7)->timestamp);
 
-    // throttle:6,1 on this route: one request already sent above, five more
-    // here reach the limit, and the seventh is blocked.
     for ($i = 0; $i < 5; $i++) {
         $this->actingAs($this->owner)
             ->post(route('members.invitations.resend', ['current_team' => $this->team->slug, 'invitation' => $invitation->id]));
@@ -501,11 +491,6 @@ test('registering the same invitation twice does not create two users', function
 
     $registerInvitedUser->handle($invitation, $data, $acceptInvitation);
 
-    // Both calls start from the same (stale, pre-acceptance) invitation
-    // instance, simulating two simultaneous submissions of the same form
-    // that both read "no account yet" before either committed. The second
-    // must abort cleanly (409), not race the email's unique constraint
-    // into a raw QueryException.
     $secondAttemptStatus = null;
 
     try {
@@ -519,12 +504,6 @@ test('registering the same invitation twice does not create two users', function
 });
 
 test('an account written in mixed case is told to sign in, and the address it was given works', function () {
-    // The reported failure, end to end: this account was created with a
-    // capitalized address and a second organization invites the lowercase
-    // spelling. The invitation page used to compare with LOWER(email) and
-    // say "this address already has an account, sign in" — deliberately
-    // without saying which spelling — while Fortify compared exactly and
-    // refused the only spelling the person had been shown.
     $admin = User::factory()->create(['email' => 'Admin@Example.com']);
 
     expect(DB::table('users')->where('id', $admin->id)->value('email'))
@@ -546,7 +525,6 @@ test('an account written in mixed case is told to sign in, and the address it wa
         'password_confirmation' => 'password1234',
     ])->assertStatus(410);
 
-    // The half that used to be a dead end.
     $this->post(route('login.store'), ['email' => 'admin@example.com', 'password' => 'password'])
         ->assertRedirect();
     $this->assertAuthenticatedAs($admin);
@@ -570,15 +548,9 @@ test('an invitation sent in mixed case creates a canonical account that can sign
 
     $invitation = TeamInvitation::sole();
 
-    // Normalized where the address enters the system, so the invitation and
-    // the account it will create cannot disagree: RegisterInvitedUser
-    // copies this column straight into users.email and guards the race with
-    // an exact where().
     expect(DB::table('team_invitations')->where('id', $invitation->id)->value('email'))
         ->toBe('ivy.guest@example.com');
 
-    // The invitee is a guest: actingAs() above persists for the rest of the
-    // test, and invitations.register is behind the "guest" middleware.
     $this->post(route('logout'));
 
     $this->post(route('invitations.register', $invitation->code), [
@@ -592,7 +564,6 @@ test('an invitation sent in mixed case creates a canonical account that can sign
     $this->assertAuthenticatedAs($user);
     $this->post(route('logout'));
 
-    // And the spelling the email actually showed them still signs in.
     $this->post(route('login.store'), ['email' => 'Ivy.Guest@Example.com', 'password' => 'password1234'])
         ->assertRedirect();
     $this->assertAuthenticatedAs($user);
@@ -611,10 +582,6 @@ test('the invitation environment relation drops a row from another organization'
         'expires_at' => now()->addDays(7),
     ]);
 
-    // Straight into the pivot, which is what a write path that forgot to
-    // validate the ids against the team would leave behind. The relation is
-    // scoped like Membership::visibleEnvironments(), so the read refuses it
-    // even then.
     DB::table('environment_team_invitation')->insert([
         ['team_invitation_id' => $invitation->id, 'environment_id' => $mine->id],
         ['team_invitation_id' => $invitation->id, 'environment_id' => $foreign->id],
@@ -628,9 +595,6 @@ test('the invitation environment relation drops a row from another organization'
 });
 
 test('a stale revoke reaches an Inertia visit as a redirect carrying a toast', function () {
-    // abort(409) is not an Inertia response: before the handler in
-    // bootstrap/app.php, clicking Revoke on a row another tab had already
-    // revoked showed Inertia's raw "unexpected response" modal.
     $invitation = TeamInvitation::factory()->revoked()->create([
         'team_id' => $this->team->id,
         'email' => 'invited@example.com',
@@ -640,9 +604,6 @@ test('a stale revoke reaches an Inertia visit as a redirect carrying a toast', f
 
     $url = route('members.invitations.destroy', ['current_team' => $this->team->slug, 'invitation' => $invitation->id]);
 
-    // Without the header the bare status stands: nothing but an Inertia
-    // visit is handed a redirect it did not ask for. Asserted first because
-    // withHeaders() persists for the rest of the test.
     $this->actingAs($this->owner)->delete($url)->assertStatus(409);
 
     $this->actingAs($this->owner)
@@ -667,7 +628,6 @@ test('the invitation throttle reaches an Inertia visit as a redirect carrying a 
 
     $url = route('members.invitations.resend', ['current_team' => $this->team->slug, 'invitation' => $invitation->id]);
 
-    // throttle:6,1: six go through, the seventh is refused.
     for ($i = 0; $i < 6; $i++) {
         $this->actingAs($this->owner)->post($url)->assertRedirect();
     }

@@ -45,9 +45,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci
-# resources/js/generated is gitignored (regenerated on every build); typescript:transform
-# requires the directory to exist beforehand. typescript:transform and Wayfinder both boot
-# the application; neither needs a database.
 RUN mkdir -p resources/js/generated \
     && APP_KEY=base64:$(head -c 32 /dev/urandom | base64) npm run build
 

@@ -82,19 +82,11 @@ test('the administrator address is stored canonically and signs in under either 
 
     $user = User::sole();
 
-    // The column, not the model attribute: this is the string the
-    // users.email unique index holds and the string every exact comparison
-    // in the app — Fortify's lookup, RegisterInvitedUser's race guard,
-    // InvitationController's "already has an account" check — is matched
-    // against.
     expect(DB::table('users')->where('id', $user->id)->value('email'))
         ->toBe('admin@example.com');
 
     $this->post(route('logout'));
 
-    // Both spellings have to reach the same row: the one this person typed
-    // at /setup, and the one an invitation to a second organization would
-    // later address them by.
     foreach (['Admin@Example.com', 'admin@example.com'] as $spelling) {
         $this->post(route('login.store'), [
             'email' => $spelling,

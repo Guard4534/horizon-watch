@@ -87,8 +87,6 @@ test('the team edit page can be rendered', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('teams/Edit')
             ->where('members.0.role', TeamRole::Owner->value)
-            // The one role-tag format: the lowercase enum value, with a
-            // translated sentence for the owner (HasTeams::roleLabel()).
             ->where('members.0.role_label', 'Owner · admin')
             ->where('availableRoles.0', ['value' => 'admin', 'label' => 'admin']),
         );
@@ -432,9 +430,6 @@ test('the team edit page never carries an invitation code, not even for a viewer
         'expires_at' => now()->addDays(7),
     ]);
 
-    // This page has no minimum role, and its props are readable in the page
-    // source. The code is what "POST /invitations/{code}/register" accepts
-    // from a guest, so a viewer reading it could take the invited seat.
     $this->actingAs($viewer)
         ->get(route('teams.edit', $team))
         ->assertOk()
@@ -463,9 +458,6 @@ test('the team edit page counts the pending invitations without naming who they 
         'expires_at' => now()->addDays(7),
     ]);
 
-    // This route is gated by membership with no minimum role, so every prop
-    // is readable in the page source by a viewer. MembersQuery withholds the
-    // same list without canInvite; this page must not be the way round it.
     $this->actingAs($viewer)
         ->get(route('teams.edit', $team))
         ->assertOk()
@@ -487,8 +479,6 @@ test('the pending invitation count on the team edit page matches the members vie
         'expires_at' => now()->addDays(7),
     ]);
 
-    // Revoked rows are still rows: counting with whereNull('accepted_at')
-    // made this page say three while the Members view listed one.
     $invitations[0]->update(['revoked_at' => now()]);
     $invitations[1]->update(['expires_at' => now()->subDay()]);
 
@@ -505,10 +495,6 @@ test('the team edit permission flags come from the policies, not from the role t
     $user = User::factory()->create();
     $personalTeam = $user->personalTeam();
 
-    // The owner of a personal team holds DeleteTeam in TeamRole's table, but
-    // TeamPolicy::delete() refuses a personal team — and teams.destroy
-    // answers 403. The flag has to say the same thing, or the template ends
-    // up re-implementing the policy clause by hand.
     $this->actingAs($user)
         ->get(route('teams.edit', $personalTeam))
         ->assertOk()
@@ -552,11 +538,6 @@ test('deleting an organization deletes its applications, environments and enviro
         ->delete(route('teams.destroy', $team), ['name' => $team->name])
         ->assertRedirect();
 
-    // Team uses SoftDeletes, so $team->delete() is an UPDATE and the
-    // cascadeOnDelete() on applications.team_id never fires on its own: the
-    // rows below — including a basic-auth password that still decrypts —
-    // used to survive in the database, unreferenced by any live team and
-    // unreachable through the interface. The spec asks for a cascade.
     $this->assertDatabaseMissing('applications', ['id' => $application->id]);
     $this->assertDatabaseMissing('environments', ['id' => $environment->id]);
     $this->assertDatabaseMissing('environment_user', [

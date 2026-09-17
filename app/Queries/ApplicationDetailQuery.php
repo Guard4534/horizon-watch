@@ -3,11 +3,10 @@
 namespace App\Queries;
 
 use App\Data\Monitoring\AlertData;
+use App\Data\Monitoring\AlertRuleData;
 use App\Data\Monitoring\EnvironmentData;
 use App\Data\Pages\ApplicationDetailPageData;
-use App\Data\Pages\EnvironmentCardData;
 use App\Enums\AlertState;
-use App\Enums\SeriesRange;
 use App\Models\Team;
 use App\Monitoring\MonitoringRepository;
 
@@ -17,9 +16,6 @@ class ApplicationDetailQuery
 
     public function handle(Team $team, string $applicationId): ApplicationDetailPageData
     {
-        // The configuration view, like the list this page is opened from:
-        // see ApplicationListQuery::handle(). The alerts below stay the
-        // watched ones, so a hidden environment simply brings none.
         $application = $this->monitoring->configurableApplication($team, $applicationId) ?? abort(404);
 
         $environments = array_values(array_filter(
@@ -33,22 +29,31 @@ class ApplicationDetailQuery
             fn (AlertData $alert) => in_array($alert->environmentId, $environmentIds, true),
         );
 
-        $worstEnvironments = $environments;
+        $worstEnvironments = array_values(array_filter(
+            $environments,
+            fn (EnvironmentData $environment) => $environment->watched && $environment->status !== null,
+        ));
         usort($worstEnvironments, EnvironmentData::compareBySeverityThenPending(...));
 
         return new ApplicationDetailPageData(
             application: $application,
-            cards: array_map(fn (EnvironmentData $environment) => new EnvironmentCardData(
-                environment: $environment,
-                // No series for an environment off the viewer's wall: the
-                // repository would refuse it anyway (it is the operational
-                // view), and the card says why instead of drawing nothing.
-                sparkline: $environment->watched
-                    ? array_slice($this->monitoring->throughputSeries($team, $environment->id, SeriesRange::ThreeHours), -24)
-                    : [],
-            ), $environments),
+            environments: $environments,
             recentAlerts: array_slice(array_values($alerts), 0, 3),
             worstStatus: $worstEnvironments[0]->status ?? null,
+            thresholds: $this->thresholds($team),
+        );
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    private function thresholds(Team $team): array
+    {
+        $rules = $this->monitoring->alertRules($team, 'organization');
+
+        return array_combine(
+            array_map(fn (AlertRuleData $rule) => $rule->metric->value, $rules),
+            array_map(fn (AlertRuleData $rule) => $rule->threshold, $rules),
         );
     }
 }

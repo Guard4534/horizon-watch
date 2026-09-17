@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import type { Component } from 'vue';
 
-// The mockup never drew an empty state: this is deliberately the soberest
-// Nocturne card there is — one column, centred, no illustration. Strings
-// arrive already translated, like KpiCard's, so TranslationsTest still sees
-// a literal $t() call site at every caller.
 defineProps<{
     title: string;
     body: string;
@@ -55,9 +51,6 @@ defineProps<{
             {{ body }}
         </p>
 
-        <!-- No wrapper: a caller whose action is itself conditional still
-             passes a slot, and a div around an empty one would leave a gap
-             under the text where no button ever appears. -->
         <slot />
     </section>
 </template>

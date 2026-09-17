@@ -19,7 +19,6 @@ test('a member keeps the language they chose', function () {
         ->assertInertia(fn (Assert $page) => $page->where('locale', 'it'));
 });
 
-// The login page sends everyone to the first-run setup while no account exists.
 beforeEach(fn () => User::factory()->create());
 
 test('a guest keeps the language for the session', function () {

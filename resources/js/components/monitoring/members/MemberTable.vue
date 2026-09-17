@@ -40,23 +40,12 @@ const { members, environments, canManage } = defineProps<{
 
 const slug = useTeamSlug();
 
-// One form for both writes, the phase's single submit idiom: it carries the
-// in-flight flag and the validation messages, so neither is rebuilt by hand
-// here. transform() is set on every submit (the same shape the application
-// forms use) because the removal has no payload of its own and must not
-// carry the update's fields in its DELETE body.
 const form = useForm<App.Data.Teams.UpdateMemberData>({
     role: null,
     visibility: null,
     environmentIds: [],
 });
 
-// Every message the server sent back, not a chosen one: a rejected
-// environment keys as "environmentIds.0" rather than "environmentIds", so
-// naming the fields by hand left the dialog showing nothing and looking
-// stuck. Deduplicated, because two rejected ids carry the same sentence.
-// A 403, a 404 or a throttle's 429 is not a validation response and is
-// handled by the exception handler, not here.
 const errors = computed<string[]>(() => [
     ...new Set(
         Object.values(form.errors as Record<string, string | undefined>).filter(
@@ -74,9 +63,6 @@ const losingTheLastAdmin = computed(() =>
     losesTheLastAdmin(removing.value, removing.value?.isSelf === true, members),
 );
 
-// The owner's row has no menu: TeamPolicy::updateMember and removeMember
-// both refuse when the target is the owner, so offering the actions would
-// only produce a 403.
 const isActionable = (member: App.Data.Teams.MemberData) =>
     canManage && !member.isOwner;
 
@@ -85,9 +71,6 @@ function patch(
     fields: Partial<App.Data.Teams.UpdateMemberData>,
     onSuccess?: () => void,
 ) {
-    // Everything not being changed goes back to its empty value:
-    // UpdateMemberData wants exactly one of role and visibility, and asks
-    // for environmentIds only with "manual".
     form.role = fields.role ?? null;
     form.visibility = fields.visibility ?? null;
     form.environmentIds = fields.environmentIds ?? [];
@@ -112,9 +95,6 @@ function changeVisibility(
 ) {
     if (visibility === 'manual') {
         manualFor.value = member;
-        // Seeded from what the member already has: the payload replaces the
-        // whole list, so opening on an empty set would revoke every grant
-        // the admin did not re-tick.
         manualIds.value = [...member.visibleEnvironmentIds];
         form.clearErrors();
 
@@ -145,11 +125,6 @@ function confirmRemove() {
         return;
     }
 
-    // Closed either way, with any reason left in the banner above the table
-    // rather than inside a dialog that is gone. onError is unreachable
-    // today: nothing in MemberController::destroy raises a
-    // ValidationException. It stays as the landing place for the first rule
-    // that refuses a removal.
     form.transform(() => ({})).delete(
         destroyMember([slug.value, member.id]).url,
         {
@@ -163,9 +138,6 @@ function confirmRemove() {
 
 <template>
     <SectionCard :title="`${$t('Members')} · ${members.length}`">
-        <!-- Hidden while the manual-visibility dialog is open: that dialog
-             shows the same messages next to the checkboxes they belong
-             to. -->
         <div
             v-if="errors.length && manualFor === null"
             class="mb-[var(--nc-space-3)]"
@@ -261,8 +233,6 @@ function confirmRemove() {
                                 color: var(--nc-neutral-600);
                             "
                         >
-                            <!-- Always the em dash today: nothing records a
-                                 last access yet, see MemberController::index. -->
                             {{ member.lastSeenAt ?? '—' }}
                         </td>
                         <td class="text-right">

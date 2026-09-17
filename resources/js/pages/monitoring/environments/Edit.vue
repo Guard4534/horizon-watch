@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { PhPlugsConnected, PhTrashSimple } from '@phosphor-icons/vue';
+import { PhTrashSimple } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import ConfirmByNameDialog from '@/components/monitoring/applications/ConfirmByNameDialog.vue';
+import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { show as showApplication } from '@/routes/applications';
-import { destroy, show, update } from '@/routes/environments';
+import { destroy, show, testConnection, update } from '@/routes/environments';
 
 defineOptions({
     layout: { title: 'Edit environment' },
@@ -19,18 +20,9 @@ const { page } = defineProps<{
 
 const slug = useTeamSlug();
 
-// Always filled here: EnvironmentFormPageData only makes them nullable
-// because the create page reuses it with nothing to edit yet.
 const environment = computed(() => page.slug ?? '');
 const name = computed(() => page.environment?.name ?? '');
 
-// One level down so the form component can take it as a writable model
-// (v-model needs an assignable expression); transform() flattens it back
-// into EnvironmentFormData for the request.
-//
-// basicAuthPassword starts empty on purpose, and no prop ever carries the
-// stored one: an empty field means "keep the password already on file"
-// (EnvironmentFormData::hasNewPassword()).
 const form = useForm<{
     environment: App.Data.Applications.EnvironmentFormData;
 }>({
@@ -42,8 +34,15 @@ const form = useForm<{
         basicAuthUser: page.environment?.basicAuthUser ?? null,
         basicAuthPassword: null,
         pollIntervalSeconds: page.environment?.pollIntervalSeconds ?? 15,
+        pollingEnabled: page.environment?.pollingEnabled ?? true,
     },
 });
+
+const testPayload = computed<App.Data.Applications.TestConnectionData>(() => ({
+    horizonUrl: form.environment.horizonUrl,
+    basicAuthUser: form.environment.basicAuthUser,
+    basicAuthPassword: form.environment.basicAuthPassword,
+}));
 
 const errors = computed(
     () => form.errors as Record<string, string | undefined>,
@@ -135,15 +134,17 @@ const submit = () => {
                     "
                     >{{ $t('Cancel') }}</Link
                 >
-                <button
-                    type="button"
-                    class="nc-btn nc-btn-secondary ml-auto"
-                    style="font-size: 12px"
-                    disabled
-                    :title="$t('Available soon')"
-                >
-                    <PhPlugsConnected :size="13" />{{ $t('Test connection') }}
-                </button>
+                <ConnectionTest
+                    class="ml-auto"
+                    :url="
+                        testConnection({
+                            current_team: slug,
+                            environment: environment,
+                        })
+                    "
+                    :payload="testPayload"
+                    :disabled="form.environment.horizonUrl.trim() === ''"
+                />
             </div>
         </SectionCard>
 

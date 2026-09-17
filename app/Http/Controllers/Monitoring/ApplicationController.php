@@ -90,15 +90,6 @@ class ApplicationController extends Controller
         return to_route('applications.index', ['current_team' => $current_team->slug]);
     }
 
-    /**
-     * The wizard creates the environments together with the application, so
-     * EnvironmentController's credentials gate has no row to check yet: a
-     * transient environment carrying a transient application carrying the
-     * team is all EnvironmentPolicy::manageCredentials() reads. "Manage
-     * applications" and "manage credentials" are granted to the same roles
-     * today, so this changes nothing now — it keeps the wizard from being
-     * the one write path that skips the second gate if they ever diverge.
-     */
     private function authorizeCredentialsIfTouched(ApplicationWizardData $data, Team $team): void
     {
         $environment = (new Environment)->setRelation(
@@ -107,9 +98,6 @@ class ApplicationController extends Controller
         );
 
         $touchesCredentials = collect($data->environments)->contains(
-            // Every row is new, so the transient environment above — with no
-            // credentials of its own — is the right thing to compare each
-            // one against.
             fn (EnvironmentFormData $row): bool => $row->changesCredentialsOf($environment)
         );
 

@@ -2,11 +2,16 @@
 
 namespace App\Monitoring;
 
+use App\Data\Applications\EnvironmentFormData;
 use App\Data\Monitoring\AlertData;
 use App\Data\Monitoring\AlertRuleData;
 use App\Data\Monitoring\ApplicationData;
 use App\Data\Monitoring\EnvironmentData;
+use App\Data\Monitoring\FailedJobData;
+use App\Data\Monitoring\LongRunningJobData;
+use App\Data\Monitoring\NodeData;
 use App\Data\Monitoring\NotificationSettingsData;
+use App\Data\Monitoring\QueueData;
 use App\Data\Monitoring\RuleScopeData;
 use App\Data\Monitoring\SentNotificationData;
 use App\Enums\AlertRuleMetric;
@@ -17,111 +22,67 @@ use App\Enums\RuleOrigin;
 use App\Enums\SentNotificationKind;
 use App\Enums\SeriesRange;
 use App\Enums\TeamPermission;
+use App\Externals\Horizon\Data\HorizonStats;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Models\EnvironmentState;
 use App\Models\Team;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Date;
 
-/**
- * Applications, environments, colors, URLs and basic-auth state come from
- * the database, filtered by VisibleEnvironments; the numbers still come
- * from GeneratedMetrics, deterministic per environment slug and tick.
- *
- * The Applications pages are the one exception to that filter — "la
- * visibilità non è un permesso" — and the note above visibleApplications()
- * is where that split is decided and explained.
- *
- * The interface only takes a Team — the phase 1 Queries were written before
- * per-member visibility existed, and changing every Query's signature was
- * out of scope for this phase. So the viewer is an *implicit* dependency,
- * read from the authenticated Guard instead of a parameter. This is only
- * safe because every route that reaches a Query passes through
- * EnsureTeamMembership first, which guarantees an authenticated member of
- * the requested team. A caller that resolves this repository without an
- * authenticated user (a console command, a queued job) would break.
- */
 class ConfiguredMonitoringRepository implements MonitoringRepository
 {
-    // Invented in phase 1, kept as-is: only apply to a scope when an
-    // environment with that name actually exists in the organization.
     private const OVERRIDES = [
         'production' => ['horizon.master_inactive' => 2, 'queue.pending' => 5000, 'queue.max_wait' => 30],
         'preprod' => ['horizon.master_inactive' => 10],
         'worker-batch' => ['job.runtime' => 900, 'workers.missing' => 2],
     ];
 
-    // The caches below are per instance and are never invalidated: a
-    // repository instance must not span a mutation that changes visibility
-    // or the set of environments/applications, or it will keep serving what
-    // it saw first. That holds today because the binding is transient (a
-    // fresh instance per resolution) and every write in this app ends in a
-    // redirect, which resolves a new instance on the next request — nothing
-    // currently keeps one instance alive across a write. They are keyed by
-    // team but *not* by user, so they also assume the authenticated user
-    // never changes within one instance's life: a second Auth::login() on a
-    // shared instance (impersonation, Octane, a job that logs users in)
-    // would keep serving the first user's visibility.
-
-    // They are also keyed by *view* where the two views differ (see the
-    // note above visibleApplications()): a cache must never hand the
-    // visibility-filtered list to a caller that asked for the whole
-    // organization, or the other way round.
-
     /**
-     * The team's visible environments, with application eager loaded, fetched
-     * from the database at most once per request no matter how many
-     * repository methods ask for them (the environment detail page alone
-     * asks about eight times) — keyed by team id since nothing here assumes
-     * a repository instance only ever serves one team.
-     *
      * @var array<int, EloquentCollection<int, Environment>>
      */
     private array $visibleEnvironmentsByTeam = [];
 
     /**
-     * The same environments as above, indexed by slug for O(1) lookup by
-     * every method that resolves one environment (environment(), nodes(),
-     * queues(), …) instead of scanning the list on every call. Filtered,
-     * like the list it indexes: see findEnvironment().
-     *
      * @var array<int, Collection<string, Environment>>
      */
     private array $visibleEnvironmentsBySlugByTeam = [];
 
     /**
-     * The whole organization's environments, for the Applications pages of
-     * a member who may manage applications — a different list from the one
-     * above, hence a second cache (see the note above visibleApplications()).
-     *
      * @var array<int, EloquentCollection<int, Environment>>
      */
     private array $configurableEnvironmentsByTeam = [];
 
     /**
-     * The whole organization's applications, same branch as above.
-     *
      * @var array<int, EloquentCollection<int, Application>>
      */
     private array $configurableApplicationsByTeam = [];
 
     /**
-     * Applications with zero environments, for members allowed to manage
-     * them (see visibleApplications()). A separate query because these
-     * applications never show up among the visible environments' eager
-     * loaded "application" — there's no environment to carry one.
-     *
      * @var array<int, EloquentCollection<int, Application>>
      */
     private array $emptyApplicationsByTeam = [];
 
     /**
-     * Whether the viewer may manage the team's applications. Memoized
-     * because it now decides which of the two views answers and every list
-     * asks it, at an indexed membership read each time.
-     *
+     * @var array<int, EnvironmentState|null>
+     */
+    private array $statesByEnvironment = [];
+
+    /**
+     * @var array<int, array{points: list<int>, percent: int|null}>
+     */
+    private array $trendsByEnvironment = [];
+
+    /**
+     * @var array<int, array<int, list<array{metric: AlertRuleMetric, since: CarbonImmutable, truncated: bool}>>>
+     */
+    private array $openAnomaliesByTeam = [];
+
+    /**
      * @var array<int, bool>
      */
     private array $managesApplicationsByTeam = [];
@@ -129,7 +90,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     public function __construct(
         private readonly Guard $auth,
         private readonly VisibleEnvironments $visible,
-        private readonly GeneratedMetrics $metrics,
+        private readonly StoredReadings $readings,
     ) {}
 
     public function applications(Team $team): array
@@ -141,7 +102,10 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
     public function environments(Team $team): array
     {
-        return $this->visibleEnvironmentModels($team)
+        $environments = $this->visibleEnvironmentModels($team);
+        $this->loadStates($environments);
+
+        return $environments
             ->map(fn (Environment $environment) => $this->toEnvironmentData($environment, watched: true))
             ->all();
     }
@@ -163,8 +127,10 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     public function configurableEnvironments(Team $team): array
     {
         $watched = $this->watchedEnvironmentsBySlug($team);
+        $environments = $this->configurableEnvironmentModels($team);
+        $this->loadStates($watched);
 
-        return $this->configurableEnvironmentModels($team)
+        return $environments
             ->map(fn (Environment $environment) => $this->toEnvironmentData(
                 $environment,
                 watched: $watched->has($environment->slug),
@@ -176,94 +142,193 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     {
         $environment = $this->findEnvironment($team, $environmentId);
 
-        // Resolved from the watched list, so it is watched by definition.
-        return $environment ? $this->toEnvironmentData($environment, watched: true) : null;
+        if ($environment === null) {
+            return null;
+        }
+
+        $this->stateOf($team, $environment);
+
+        return $this->toEnvironmentData($environment, watched: true);
     }
 
     public function nodes(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
+        $state = $environment ? $this->stateOf($team, $environment) : null;
 
-        return $environment ? $this->metrics->nodes($environment, $this->metrics->metricsFor($environment)) : [];
+        if ($state === null) {
+            return [];
+        }
+
+        $now = $this->now();
+
+        return array_map(fn (array $node) => new NodeData(
+            hostname: $node['hostname'],
+            status: match (true) {
+                $state->status->isDown() => $state->status,
+                $node['status'] === 'paused' => EnvironmentStatus::Paused,
+                default => EnvironmentStatus::Active,
+            },
+            workers: $node['workers'],
+            supervisorCount: $node['supervisors'],
+            queueCount: $node['queues'],
+            seenSecondsAgo: max(0, (int) (isset($node['seenAt']) ? CarbonImmutable::parse($node['seenAt']) : $state->captured_at)->diffInSeconds($now, false)),
+        ), $state->nodes);
     }
 
     public function queues(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
+        $state = $environment ? $this->stateOf($team, $environment) : null;
 
-        return $environment ? $this->metrics->queues($environment, $this->metrics->metricsFor($environment)) : [];
+        if ($state === null) {
+            return [];
+        }
+
+        return array_map(fn (array $queue) => new QueueData(
+            name: $queue['name'],
+            supervisor: $queue['supervisor'],
+            workers: $queue['workers'],
+            pending: $queue['pending'],
+            waitSeconds: $queue['waitSeconds'],
+            runtimeSeconds: $queue['runtimeSeconds'] === null ? null : (float) $queue['runtimeSeconds'],
+            status: $this->queueStatus($state, $queue),
+        ), $state->queues);
     }
 
     public function failedJobs(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
+        $state = $environment ? $this->stateOf($team, $environment) : null;
 
-        return $environment ? $this->metrics->failedJobs($environment) : [];
+        if ($state === null) {
+            return [];
+        }
+
+        $now = $this->now();
+
+        return array_map(fn (array $job) => new FailedJobData(
+            job: $job['job'],
+            queue: $job['queue'],
+            exception: $job['exception'],
+            tries: $job['tries'],
+            minutesAgo: max(0, (int) CarbonImmutable::parse($job['failedAt'])->diffInMinutes($now)),
+        ), $state->failed_jobs);
     }
 
     public function longRunningJobs(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
+        $state = $environment ? $this->stateOf($team, $environment) : null;
 
-        return $environment ? $this->metrics->longRunningJobs($environment, $this->metrics->metricsFor($environment)) : [];
+        if ($state === null) {
+            return [];
+        }
+
+        $now = $this->now();
+        $threshold = AlertRuleMetric::JobRuntime->defaultThreshold();
+        $jobs = [];
+
+        foreach ($state->pending_jobs as $job) {
+            $reservedAt = CarbonImmutable::parse($job['reservedAt']);
+            $elapsed = (int) $reservedAt->diffInSeconds($now);
+
+            if ($elapsed <= $threshold) {
+                continue;
+            }
+
+            $jobs[] = new LongRunningJobData(
+                job: $job['job'],
+                queue: $job['queue'],
+                elapsedSeconds: $elapsed,
+                startedAt: $reservedAt->setTimezone((string) config('app.timezone'))->format('H:i'),
+            );
+        }
+
+        usort($jobs, fn (LongRunningJobData $a, LongRunningJobData $b) => $b->elapsedSeconds <=> $a->elapsedSeconds);
+
+        return $jobs;
     }
 
     public function throughputSeries(Team $team, ?string $environmentId, SeriesRange $range): array
     {
-        if ($environmentId !== null && $this->findEnvironment($team, $environmentId) === null) {
-            return [];
+        if ($environmentId === null) {
+            return $this->readings->throughputSeries(
+                $this->visibleEnvironmentModels($team)->modelKeys(),
+                $range,
+            );
         }
 
-        return $this->metrics->throughputSeries($environmentId, $range);
+        $environment = $this->findEnvironment($team, $environmentId);
+
+        return $environment ? $this->readings->throughputSeries([$environment->id], $range) : [];
     }
 
     public function maxWaitSeries(Team $team, string $environmentId, SeriesRange $range): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
 
-        if ($environment === null) {
-            return [];
-        }
-
-        return $this->metrics->maxWaitSeries($environmentId, $this->metrics->metricsFor($environment)->status->isDown(), $range);
+        return $environment ? $this->readings->maxWaitSeries($environment->id, $range) : [];
     }
 
     public function alerts(Team $team, AlertState $state): array
     {
+        if ($state !== AlertState::Open) {
+            return [];
+        }
+
         $environments = $this->environments($team);
         usort($environments, EnvironmentData::compareBySeverityThenPending(...));
 
-        $unhealthy = array_values(array_filter($environments, fn (EnvironmentData $environment) => ! $environment->status->isHealthy()));
-        $healthy = array_values(array_filter($environments, fn (EnvironmentData $environment) => $environment->status->isHealthy()));
+        $models = $this->watchedEnvironmentsBySlug($team);
+        $anomalies = $this->openAnomaliesByTeam[$team->id]
+            ??= $this->readings->openAnomalies($models->values()->all());
+        $now = $this->now();
+        $cap = StoredReadings::LOOKBACK_HOURS * 60;
+        $alerts = [];
 
-        return match ($state) {
-            AlertState::Open => array_map(
-                fn (EnvironmentData $environment, int $index) => $this->makeAlert($environment, $state, $this->openMetric($environment, $index), 3 + $index * 11),
-                $unhealthy,
-                array_keys($unhealthy),
-            ),
-            // Guarded: fewer healthy environments (a smaller incident table, or a
-            // looser $r > 0.93 rule) must yield fewer sample alerts, not a null passed
-            // to makeAlert().
-            AlertState::Muted => isset($healthy[0])
-                ? [$this->makeAlert($healthy[0], $state, AlertRuleMetric::WorkersMissing, 95)]
-                : [],
-            AlertState::Resolved => array_values(array_filter([
-                isset($healthy[1]) ? $this->makeAlert($healthy[1], $state, AlertRuleMetric::QueuePending, 140) : null,
-                isset($healthy[2]) ? $this->makeAlert($healthy[2], $state, AlertRuleMetric::QueueMaxWait, 310) : null,
-            ])),
-        };
+        foreach ($environments as $environment) {
+            $model = $models->get($environment->id);
+
+            if ($model === null || $environment->status === null) {
+                continue;
+            }
+
+            foreach ($anomalies[$model->id] ?? [] as $anomaly) {
+                $minutes = $anomaly['truncated'] ? $cap : min($cap, max(0, (int) $anomaly['since']->diffInMinutes($now)));
+
+                $alerts[] = $this->makeAlert(
+                    $environment,
+                    $environment->status,
+                    $anomaly['metric'],
+                    $minutes,
+                    $anomaly['truncated'] || $minutes >= $cap,
+                );
+            }
+        }
+
+        return $alerts;
     }
 
     public function sentNotifications(Team $team): array
     {
-        // Unchanged from phase 1: sample data for the notification log,
-        // out of scope until phase 4 wires up real delivery.
+        $environments = $this->environments($team);
+
+        if ($environments === []) {
+            return [];
+        }
+
+        usort($environments, EnvironmentData::compareBySeverityThenPending(...));
+
+        $subject = fn (EnvironmentData $environment) => "{$environment->applicationName} · {$environment->name}";
+        $worst = $environments[0];
+        $best = $environments[count($environments) - 1];
+
         return [
-            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::CriticalAlert, 'Fatturaomatic · production', 4),
+            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::CriticalAlert, $subject($worst), 4),
             new SentNotificationData(NotificationChannel::Webhook, SentNotificationKind::WebhookDelivery, 'hooks.example.com/horizon · 200', 4),
-            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::WarningDigest, '3', 18),
-            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::Resolved, 'Billing Sync · preprod', 52),
+            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::WarningDigest, (string) min(3, count($environments)), 18),
+            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::Resolved, $subject($best), 52),
         ];
     }
 
@@ -320,7 +385,6 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
     public function notificationSettings(Team $team): NotificationSettingsData
     {
-        // Defaults only: phase 4 makes these configurable per organization.
         return new NotificationSettingsData(
             recipients: ['ops@example.com', 'oncall@example.com'],
             webhookUrl: 'https://hooks.example.com/horizon',
@@ -339,52 +403,6 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     }
 
     /**
-     * ── The visibility split, and where the permission wins ──────────────
-     *
-     * Two readings of the same organization live in this class, because the
-     * spec asks for two (phase 2 spec, "Visibilità degli ambienti"):
-     *
-     * - The *watched* view — the wall, the alerts, the alert-rule scopes,
-     *   the environment detail page and every count that says how much of
-     *   the organization this member is watching — is visibility-filtered
-     *   for everybody, permission or not. "Un ambiente non visibile non
-     *   compare da nessuna parte e la sua pagina risponde 404" is about
-     *   this view. It is served by visibleApplications() and
-     *   visibleEnvironmentModels().
-     * - The *configuration* view — the Applications pages — answers to the
-     *   permission instead: "la visibilità non è un permesso: un admin con
-     *   `manual` vede solo i suoi ambienti, ma li configura tutti dalla
-     *   vista Applicativi (dove serve il permesso, non la visibilità). Il
-     *   caso è raro". A member holding TeamPermission::ManageApplications
-     *   therefore gets the whole organization from the configurable*
-     *   methods; everybody else gets exactly what they watch, which is all
-     *   they could act on anyway.
-     *
-     * Without the split, the rare case the spec calls out had no way
-     * through the interface at all: a restricted admin was told a hidden
-     * environment's name by the Members view, got no link to it from the
-     * Applications view, and could only fix its credentials by typing the
-     * edit URL from memory. The write pages themselves never come through
-     * this class — route model binding, then the Policy — which is why they
-     * already answered 200 to that admin.
-     *
-     * Applications with at least one visible environment, in creation order.
-     * Derived from the visible environments (whose application is already
-     * eager loaded, so this costs no extra query) instead of $team->applications()
-     * directly: an application every one of whose environments is hidden
-     * from this member must not appear either (spec: "Un applicativo di cui
-     * non si vede nessun ambiente non compare nell'elenco").
-     *
-     * Exception: an application with *zero* environments (not one whose
-     * environments are merely hidden) still appears to a member who can
-     * manage applications. It survived the split — the configuration view
-     * lists it anyway now — because this list also feeds the wall's
-     * applicationCount, which is how the wall tells "this application has
-     * no environment yet" from "nothing is configured yet" and from
-     * "something is hidden from you" (see EmptyStateTest). A restricted
-     * member still doesn't see it: there's nothing they could do about it
-     * anyway.
-     *
      * @return Collection<int, Application>
      */
     private function visibleApplications(Team $team): Collection
@@ -409,13 +427,6 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     }
 
     /**
-     * The Applications pages' applications: the whole organization for a
-     * member who may manage them, the watched list for everybody else (see
-     * the note above visibleApplications()). Read from $team->applications()
-     * rather than derived from the environments, since an application whose
-     * every environment is hidden — the very case this branch exists for —
-     * carries none of them.
-     *
      * @return Collection<int, Application>
      */
     private function configurableApplicationModels(Team $team): Collection
@@ -428,8 +439,6 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     }
 
     /**
-     * The Applications pages' environments, same rule as above.
-     *
      * @return EloquentCollection<int, Environment>
      */
     private function configurableEnvironmentModels(Team $team): EloquentCollection
@@ -447,25 +456,12 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             ??= $this->currentUser()->hasTeamPermission($team, TeamPermission::ManageApplications);
     }
 
-    /**
-     * Resolves one environment by slug for the pages that read *one*
-     * environment: the detail page and the panels, series and job tables it
-     * is made of. Deliberately the watched list, permission or not — the
-     * detail page is the operational view, and the spec has a hidden
-     * environment's page answering 404 there. A restricted admin configures
-     * that environment from the Applications view instead, whose edit link
-     * goes to a route-bound page that never asks this class.
-     */
     private function findEnvironment(Team $team, string $environmentId): ?Environment
     {
         return $this->watchedEnvironmentsBySlug($team)->get($environmentId);
     }
 
     /**
-     * The watched environments by slug: the map findEnvironment() answers
-     * from, and the one configurableEnvironments() asks whether each of its
-     * rows is on this viewer's wall.
-     *
      * @return Collection<string, Environment>
      */
     private function watchedEnvironmentsBySlug(Team $team): Collection
@@ -475,9 +471,52 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     }
 
     /**
-     * See the class docblock: an authenticated member of the requested team
-     * is guaranteed by EnsureTeamMembership before any Query reaches here.
+     * @param  iterable<Environment>  $environments
      */
+    private function loadStates(iterable $environments): void
+    {
+        $missing = [];
+
+        foreach ($environments as $environment) {
+            if (! array_key_exists($environment->id, $this->statesByEnvironment)) {
+                $missing[] = $environment;
+            }
+        }
+
+        if ($missing !== []) {
+            $this->statesByEnvironment += $this->readings->latestFor($missing);
+            $this->trendsByEnvironment += $this->readings->pendingTrends($missing);
+        }
+    }
+
+    private function stateOf(Team $team, Environment $environment): ?EnvironmentState
+    {
+        if (! array_key_exists($environment->id, $this->statesByEnvironment)) {
+            $this->loadStates($this->visibleEnvironmentModels($team));
+        }
+
+        return $this->statesByEnvironment[$environment->id] ?? null;
+    }
+
+    /**
+     * @param  array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}  $queue
+     */
+    private function queueStatus(EnvironmentState $state, array $queue): EnvironmentStatus
+    {
+        return match (true) {
+            $state->status->isDown(), $state->status === EnvironmentStatus::Paused => $state->status,
+            $queue['waitSeconds'] > AlertRuleMetric::QueueMaxWait->defaultThreshold(),
+            $queue['pending'] > AlertRuleMetric::QueuePending->defaultThreshold(),
+            $queue['workers'] === 0 && $queue['pending'] > 0 => EnvironmentStatus::Degraded,
+            default => EnvironmentStatus::Active,
+        };
+    }
+
+    private function now(): CarbonImmutable
+    {
+        return Date::now()->toImmutable();
+    }
+
     private function currentUser(): User
     {
         /** @var User $user */
@@ -491,14 +530,13 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         return new ApplicationData($application->slug, $application->name, $application->host);
     }
 
-    /**
-     * Never pass this as a first-class callable to map(): the second
-     * argument would arrive as the collection key, which is an int, and
-     * every row would silently report itself unwatched.
-     */
     private function toEnvironmentData(Environment $environment, bool $watched): EnvironmentData
     {
-        $metrics = $this->metrics->metricsFor($environment);
+        $state = $watched ? $this->statesByEnvironment[$environment->id] ?? null : null;
+        $trend = $watched ? $this->trendsByEnvironment[$environment->id] ?? null : null;
+        $stale = $watched
+            && $environment->polling_enabled
+            && $this->readings->isStale($environment, $state, $this->now());
 
         return new EnvironmentData(
             id: $environment->slug,
@@ -506,26 +544,45 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             applicationName: $environment->application->name,
             name: $environment->name,
             color: $environment->color,
-            horizonUrl: $environment->horizon_url,
-            status: $metrics->status,
-            pending: $metrics->pending,
-            maxWaitSeconds: $metrics->maxWaitSeconds,
-            failedLast24Hours: $metrics->failedLast24Hours,
-            workers: $metrics->workers,
-            jobsPerMinute: $metrics->jobsPerMinute,
-            nodeCount: $metrics->nodeCount,
+            horizonUrl: EnvironmentFormData::withoutUserinfo($environment->horizon_url),
+            status: match (true) {
+                ! $watched => null,
+                $state !== null => $state->status,
+                $stale => EnvironmentStatus::Unreachable,
+                default => null,
+            },
+            pending: $this->snapshotNumber($state, 'pending'),
+            trend: $watched ? $trend['points'] ?? array_fill(0, StoredReadings::TREND_POINTS, 0) : [],
+            trendPercent: $trend['percent'] ?? null,
+            maxWaitSeconds: $this->snapshotNumber($state, 'max_wait_seconds'),
+            failedInWindow: $this->snapshotNumber($state, 'failed_in_window'),
+            failedWindowMinutes: $this->snapshotNumber($state, 'failed_window_minutes') ?: HorizonStats::DEFAULT_FAILED_WINDOW_MINUTES,
+            failedLastHour: $this->snapshotNumber($state, 'failed_last_hour'),
+            workers: $this->snapshotNumber($state, 'workers'),
+            jobsPerMinute: $this->snapshotNumber($state, 'jobs_per_minute'),
+            nodeCount: $this->snapshotNumber($state, 'node_count'),
             basicAuthUser: $environment->basic_auth_user,
-            redisMemoryGb: $metrics->redisMemoryGb,
-            latencyMs: $metrics->latencyMs,
+            latencyMs: $state?->latency_ms,
             watched: $watched,
+            lastReadingAt: $state?->captured_at->toIso8601String(),
+            stale: $stale,
+            pollingEnabled: $environment->polling_enabled,
+            pollIntervalSeconds: $environment->poll_interval_seconds,
+            readingError: $state?->error,
+            horizonStatus: $state?->horizon_status,
         );
     }
 
-    private function makeAlert(EnvironmentData $environment, AlertState $state, AlertRuleMetric $metric, int $minutesAgo): AlertData
+    private function snapshotNumber(?EnvironmentState $state, string $column): int
+    {
+        return (int) $state?->getAttribute("snapshot_{$column}");
+    }
+
+    private function makeAlert(EnvironmentData $environment, EnvironmentStatus $status, AlertRuleMetric $metric, int $minutesAgo, bool $sinceTruncated): AlertData
     {
         return new AlertData(
             id: "{$environment->id}:{$metric->value}",
-            state: $state,
+            state: AlertState::Open,
             severity: $metric->defaultSeverity(),
             metric: $metric,
             threshold: $metric->defaultThreshold(),
@@ -534,22 +591,12 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             applicationName: $environment->applicationName,
             environmentName: $environment->name,
             color: $environment->color,
-            environmentStatus: $environment->status,
+            environmentStatus: $status,
             nodeCount: $environment->nodeCount,
             pending: $environment->pending,
             maxWaitSeconds: $environment->maxWaitSeconds,
             minutesAgo: $minutesAgo,
-            channels: [NotificationChannel::Mail, NotificationChannel::Webhook],
+            sinceTruncated: $sinceTruncated,
         );
-    }
-
-    private function openMetric(EnvironmentData $environment, int $index): AlertRuleMetric
-    {
-        return match (true) {
-            $environment->status === EnvironmentStatus::Unreachable => AlertRuleMetric::EndpointUnreachable,
-            $environment->status === EnvironmentStatus::Inactive => AlertRuleMetric::HorizonMasterInactive,
-            $index % 2 === 1 => AlertRuleMetric::QueueMaxWait,
-            default => AlertRuleMetric::QueuePending,
-        };
     }
 }

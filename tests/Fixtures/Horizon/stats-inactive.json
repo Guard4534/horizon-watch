@@ -1,0 +1,15 @@
+{
+    "failedJobs": 3,
+    "jobsPerMinute": 0,
+    "pausedMasters": 0,
+    "periods": {
+        "failedJobs": 10080,
+        "recentJobs": 60
+    },
+    "processes": 0,
+    "queueWithMaxRuntime": null,
+    "queueWithMaxThroughput": null,
+    "recentJobs": 0,
+    "status": "inactive",
+    "wait": []
+}

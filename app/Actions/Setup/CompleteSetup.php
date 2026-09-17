@@ -15,15 +15,11 @@ class CompleteSetup
     public function __construct(private CreateTeam $createTeam) {}
 
     /**
-     * Create the first administrator together with their organization.
-     *
      * @throws SetupAlreadyCompleted
      */
     public function handle(SetupData $data): User
     {
         return DB::transaction(function () use ($data) {
-            // An empty users table has no row SELECT ... FOR UPDATE could lock,
-            // so two concurrent setups are serialised on an advisory lock instead.
             DB::select('select pg_advisory_xact_lock(?)', [self::LOCK_KEY]);
 
             if (User::query()->exists()) {

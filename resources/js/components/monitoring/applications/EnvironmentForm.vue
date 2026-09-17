@@ -12,19 +12,11 @@ const {
     hasPassword = false,
 } = defineProps<{
     colors: App.Data.Pages.EnvironmentFormPageData['colors'];
-    // Inertia's flat error bag. The wizard nests every row under
-    // "environments.N.", the two environment pages use no prefix at all.
     errors: Record<string, string | undefined>;
     prefix?: string;
-    // Whether a basic-auth password is already on file. The password itself
-    // is never sent to the browser (EnvironmentSummaryData has no such
-    // property): this only drives the "set / not set" indicator, and an
-    // empty field on submit means "leave it as it is".
     hasPassword?: boolean;
 }>();
 
-// The prefix carries dots for the wizard's rows; ids and radio group names
-// read better without them.
 const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
 </script>
 
@@ -94,7 +86,7 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                 type="url"
                 autocomplete="off"
                 spellcheck="false"
-                placeholder="https://production.invoicer.example.com/horizon/api"
+                placeholder="https://production.invoicer.example.com/horizon"
             />
             <div
                 v-if="errors[`${prefix}horizonUrl`]"
@@ -179,7 +171,7 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                         class="nc-input"
                         style="max-width: 92px"
                         type="number"
-                        min="5"
+                        min="15"
                         max="300"
                         step="1"
                     />
@@ -194,6 +186,38 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                 >
                     {{ errors[`${prefix}pollIntervalSeconds`] }}
                 </div>
+            </div>
+        </div>
+
+        <div>
+            <label class="nc-radio" style="font-size: 13px">
+                <input
+                    :id="fieldId('pollingEnabled')"
+                    v-model="model.pollingEnabled"
+                    type="checkbox"
+                    role="switch"
+                    :aria-checked="model.pollingEnabled"
+                />
+                <span class="nc-dot" />
+                {{ $t('Collect readings') }}
+            </label>
+            <div
+                v-if="errors[`${prefix}pollingEnabled`]"
+                class="mt-1"
+                style="font-size: 11px; color: var(--st-down)"
+            >
+                {{ errors[`${prefix}pollingEnabled`] }}
+            </div>
+            <div
+                v-else
+                class="mt-1"
+                style="font-size: 11px; color: var(--nc-neutral-600)"
+            >
+                {{
+                    $t(
+                        'Paused environments keep their last reading, and the scheduler does not contact them.',
+                    )
+                }}
             </div>
         </div>
     </div>

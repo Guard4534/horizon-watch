@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppHeaderBar from '@/components/AppHeaderBar.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
+import TabBar from '@/components/mobile/TabBar.vue';
 import { Toaster } from '@/components/ui/sonner';
 
 defineProps<{
@@ -12,14 +13,35 @@ defineProps<{
 
 <template>
     <div
-        class="flex min-h-screen items-stretch"
+        class="shell flex min-h-screen items-stretch"
         style="background: var(--nc-bg); font-size: 15px"
     >
-        <AppSidebar />
-        <main class="flex min-w-0 flex-1 flex-col">
+        <AppSidebar class="shell-sidebar" />
+        <main class="shell-main flex min-w-0 flex-1 flex-col">
             <AppHeaderBar :title="title" :subtitle="subtitle" :live="live" />
             <slot />
         </main>
-        <Toaster />
+        <div class="shell-tabs"><TabBar /></div>
+        <Toaster :container-aria-label="$t('Notifications')" />
     </div>
 </template>
+
+<style scoped>
+.shell-tabs {
+    display: none;
+}
+
+@media (max-width: 639px) {
+    .shell-sidebar {
+        display: none;
+    }
+
+    .shell-tabs {
+        display: block;
+    }
+
+    .shell-main {
+        padding-bottom: calc(64px + env(safe-area-inset-bottom));
+    }
+}
+</style>

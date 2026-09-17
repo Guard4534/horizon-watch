@@ -7,7 +7,6 @@ use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
 use App\Enums\EnvironmentColor;
 use App\Enums\EnvironmentStatus;
-use App\Enums\NotificationChannel;
 use Spatie\LaravelData\Data;
 
 class AlertData extends Data
@@ -28,7 +27,6 @@ class AlertData extends Data
         public int $pending,
         public int $maxWaitSeconds,
         public int $minutesAgo,
-        /** @var array<int, NotificationChannel> */
-        public array $channels,
+        public bool $sinceTruncated,
     ) {}
 }

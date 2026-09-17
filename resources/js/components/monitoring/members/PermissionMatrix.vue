@@ -6,8 +6,6 @@ defineProps<{
     rows: App.Data.Pages.PermissionMatrixRowData[];
 }>();
 
-// The mockup had three columns; the owner earns a fourth one, because
-// deleting the organization is the single thing only they may do.
 const COLUMNS = ['owner', 'admin', 'member', 'viewer'] as const;
 </script>
 

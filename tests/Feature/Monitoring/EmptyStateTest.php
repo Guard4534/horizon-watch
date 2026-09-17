@@ -14,10 +14,6 @@ beforeEach(function () {
 });
 
 /**
- * An organization where nothing is visible yet: the environments exist but
- * this member's manual visibility covers none of them, which is the other
- * way to reach the same empty state.
- *
  * @return array{User, string}
  */
 function memberWhoSeesNothing(): array
@@ -75,10 +71,8 @@ test('each page carries the count its empty state keys off', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environmentCount', 0)
             ->where('page.alerts', [])
-            ->where('page.preview', null));
+            ->missing('page.preview'));
 
-    // The organization scope is the only one left, and it counts nothing:
-    // that is what the alert settings page keys off.
     $this->get(route('alert-rules.index', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->has('page.scopes', 1)
@@ -107,13 +101,8 @@ test('a member who sees no environment gets empty counts, and the flags that say
     $this->get(route('wall', ['current_team' => $slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environments', [])
-            // The pair that makes the wall say "hidden from you" rather
-            // than "nothing configured": the organization does hold
-            // environments, this member just sees none of them.
             ->where('visibilityRestricted', true)
             ->where('organizationHasEnvironments', true)
-            // Not even the application behind the hidden environments: a
-            // member with no permission to manage them sees no orphan.
             ->where('page.applicationCount', 0));
 
     $this->get(route('applications.index', ['current_team' => $slug]))
@@ -147,11 +136,6 @@ test('the shared permission follows the role, not the empty organization', funct
     'viewer' => ['viewer', false],
 ]);
 
-/**
- * Role and visibility are independent: an admin may hold "manual" and a
- * viewer "all". The empty states pick their wording from both flags, so
- * neither may be inferred from the other.
- */
 test('the two shared flags follow their own axis', function (string $role, MemberVisibility $visibility, bool $canManage, bool $restricted) {
     $user = User::factory()->create();
     $team = Team::factory()->create();
@@ -170,12 +154,8 @@ test('the two shared flags follow their own axis', function (string $role, Membe
             ->where('canManageApplications', $canManage)
             ->where('visibilityRestricted', $restricted));
 })->with([
-    // The restricted admin: keeps the action, and is told about the
-    // environments they cannot see whenever there are any.
     'admin · manual' => ['admin', MemberVisibility::Manual, true, true],
     'owner · non_production' => ['owner', MemberVisibility::NonProduction, true, true],
-    // The unrestricted viewer: must never be offered a wider visibility,
-    // because theirs is already as wide as it gets.
     'viewer · all' => ['viewer', MemberVisibility::All, false, false],
     'member · all' => ['member', MemberVisibility::All, false, false],
 ]);
@@ -198,8 +178,6 @@ test('a restricted admin of an organization that has environments is not told to
         ->get(route('wall', ['current_team' => $team->slug]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            // Nothing visible, yet the organization is configured: only
-            // visibilityRestricted can tell the wall which wording to use.
             ->where('page.environments', [])
             ->where('canManageApplications', true)
             ->where('visibilityRestricted', true)
@@ -214,13 +192,9 @@ test('the wall tells an application with no environment apart from no applicatio
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environments', [])
-            // An application kept alive by DeleteEnvironment: the wall must
-            // point at adding an environment, not another application.
             ->where('page.applicationCount', 1)
             ->where('visibilityRestricted', false)
             ->where('canManageApplications', true)
-            // The organization holds no environment, so nothing is hidden
-            // from anyone: what is missing is an environment, not access.
             ->where('organizationHasEnvironments', false));
 });
 
@@ -239,9 +213,6 @@ test('the shared flags describe the requested organization, not the stale curren
         'visibility' => MemberVisibility::All->value,
     ]);
 
-    // Both flags would come out the other way round if they read the team
-    // the user happens to be on instead of the one EnsureTeamMembership
-    // switched them to.
     $user->switchTeam($member);
 
     $this->actingAs($user)
@@ -279,9 +250,6 @@ test('a restricted viewer of an empty organization is not told something is hidd
         ->get(route('wall', ['current_team' => $team->slug]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            // Restricted, yet nothing at all is hidden: the organization is
-            // empty. Only the second flag keeps the wall from claiming
-            // there are environments this viewer cannot see.
             ->where('visibilityRestricted', true)
             ->where('organizationHasEnvironments', false)
             ->where('canManageApplications', false)
@@ -305,9 +273,6 @@ test('a restricted admin whose only application has no environment hears about t
         ->get(route('wall', ['current_team' => $team->slug]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            // Restricted and empty-handed, but nothing is being kept from
-            // them: the application they can see simply has no environment
-            // yet, which is what the wall must say.
             ->where('visibilityRestricted', true)
             ->where('organizationHasEnvironments', false)
             ->where('canManageApplications', true)

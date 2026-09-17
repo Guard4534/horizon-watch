@@ -16,9 +16,6 @@ use Inertia\Inertia;
 
 class TeamInvitationController extends Controller
 {
-    /**
-     * Store a newly created invitation.
-     */
     public function store(Request $request, Team $current_team, InviteMemberData $data, InviteMember $inviteMember): RedirectResponse
     {
         Gate::authorize('inviteMember', $current_team);
@@ -30,9 +27,6 @@ class TeamInvitationController extends Controller
         return back();
     }
 
-    /**
-     * Resend the specified invitation: same code, new expiry.
-     */
     public function resend(Team $current_team, TeamInvitation $invitation, ResendInvitation $resendInvitation): RedirectResponse
     {
         $this->ensureBelongsToTeam($invitation, $current_team);
@@ -45,9 +39,6 @@ class TeamInvitationController extends Controller
         return back();
     }
 
-    /**
-     * Revoke the specified invitation.
-     */
     public function destroy(Team $current_team, TeamInvitation $invitation, RevokeInvitation $revokeInvitation): RedirectResponse
     {
         $this->ensureBelongsToTeam($invitation, $current_team);
@@ -60,11 +51,6 @@ class TeamInvitationController extends Controller
         return back();
     }
 
-    /**
-     * An invitation resolved by id alone doesn't know which organization it
-     * belongs to: without this check, an admin of one team could act on
-     * another team's invitation just by counting up.
-     */
     private function ensureBelongsToTeam(TeamInvitation $invitation, Team $team): void
     {
         abort_unless($invitation->team_id === $team->id, 404);

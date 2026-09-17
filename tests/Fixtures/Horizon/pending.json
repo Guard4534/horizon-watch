@@ -1,0 +1,35 @@
+{
+    "jobs": [
+        {
+            "id": "8a2e3d4c-0000-4000-8000-000000000011",
+            "connection": "redis",
+            "queue": "reports",
+            "name": "App\\Jobs\\BuildQuarterlyReport",
+            "status": "reserved",
+            "payload": {
+                "uuid": "8a2e3d4c-0000-4000-8000-000000000011",
+                "attempts": 1,
+                "data": {
+                    "commandName": "App\\Jobs\\BuildQuarterlyReport",
+                    "command": "payload-secret-value"
+                }
+            },
+            "reserved_at": "1789645200.75",
+            "index": 0
+        },
+        {
+            "id": "8a2e3d4c-0000-4000-8000-000000000012",
+            "connection": "redis",
+            "queue": "default",
+            "name": "App\\Jobs\\SyncInventory",
+            "status": "pending",
+            "payload": {
+                "uuid": "8a2e3d4c-0000-4000-8000-000000000012",
+                "attempts": 0
+            },
+            "reserved_at": null,
+            "index": 1
+        }
+    ],
+    "total": 2
+}

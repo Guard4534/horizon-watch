@@ -11,8 +11,6 @@ const { throughput, maxWait, range } = defineProps<{
     range: App.Enums.SeriesRange;
 }>();
 
-// router.reload's ReloadOptions drops preserveScroll/preserveState, so a
-// query-string change goes through router.get instead.
 const selected = computed({
     get: () => range,
     set: (next: App.Enums.SeriesRange) =>
@@ -39,7 +37,7 @@ const selected = computed({
                 <span
                     class="h-[2px] w-[14px]"
                     style="background: var(--nc-accent)"
-                />jobs/min
+                />{{ $t('jobs/min') }}
             </span>
             <span
                 class="inline-flex items-center gap-[5px]"
@@ -56,7 +54,7 @@ const selected = computed({
                 :options="[
                     { value: '3h', label: '3h' },
                     { value: '24h', label: '24h' },
-                    { value: '7d', label: '7d' },
+                    { value: '7d', label: $t(':days d', { days: '7' }) },
                 ]"
             />
         </template>

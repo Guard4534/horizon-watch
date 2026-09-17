@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { PhCheckCircle, PhWarning } from '@phosphor-icons/vue';
+import { PhCheckCircle } from '@phosphor-icons/vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatMinutesAgo, statusColor } from '@/lib/monitoring';
+import { ruleIcon, ruleLabel } from '@/lib/alertRules';
+import { formatElapsed, statusColor } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 
 defineProps<{
@@ -21,6 +22,15 @@ const slug = useTeamSlug();
             }}</Link>
         </template>
         <div
+            v-if="!alerts.length"
+            class="flex items-center gap-[9px]"
+            style="font-size: 12px; color: var(--nc-neutral-500)"
+        >
+            <PhCheckCircle :size="14" style="color: var(--st-ok)" />
+            {{ $t('No open anomaly on the environments you watch.') }}
+        </div>
+        <div
+            v-else
             class="flex flex-col"
             style="gap: var(--nc-space-3); font-size: 12px"
         >
@@ -35,7 +45,11 @@ const slug = useTeamSlug();
                 "
             >
                 <component
-                    :is="alert.state === 'resolved' ? PhCheckCircle : PhWarning"
+                    :is="
+                        alert.state === 'resolved'
+                            ? PhCheckCircle
+                            : ruleIcon(alert.metric)
+                    "
                     :size="14"
                     class="mt-[2px] flex-none"
                     :style="{
@@ -52,17 +66,21 @@ const slug = useTeamSlug();
                                 ? $t('Back within threshold · :environment', {
                                       environment: alert.environmentName,
                                   })
-                                : $t('Anomaly on :environment', {
-                                      environment: alert.environmentName,
-                                  })
+                                : `${ruleLabel(alert.metric)} · ${alert.environmentName}`
                         }}
                     </div>
                     <div
-                        class="mt-[2px]"
+                        class="nc-num mt-[2px]"
                         style="font-size: 11px; color: var(--nc-neutral-600)"
                     >
-                        email + webhook ·
-                        {{ formatMinutesAgo(alert.minutesAgo) }}
+                        {{
+                            $t('opened :elapsed', {
+                                elapsed: formatElapsed(
+                                    alert.minutesAgo,
+                                    alert.sinceTruncated,
+                                ),
+                            })
+                        }}
                     </div>
                 </div>
             </div>

@@ -14,11 +14,6 @@ use Illuminate\Support\Str;
 class EnvironmentFactory extends Factory
 {
     /**
-     * Define the model's default state.
-     *
-     * Slug is left out on purpose: the model generates it from the
-     * application's slug and the name, unique per organization.
-     *
      * @return array<string, mixed>
      */
     public function definition(): array
@@ -30,9 +25,6 @@ class EnvironmentFactory extends Factory
     }
 
     /**
-     * Attributes for a typical environment name/color pair. Only production
-     * and preprod carry basic auth credentials, as in the phase 1 data.
-     *
      * @return array<string, mixed>
      */
     private function typical(string $name, EnvironmentColor $color): array
@@ -42,7 +34,7 @@ class EnvironmentFactory extends Factory
         return [
             'name' => $name,
             'color' => $color,
-            'horizon_url' => 'https://'.Str::slug($name).'.example.com/horizon/api',
+            'horizon_url' => 'https://'.Str::slug($name).'.example.com/horizon',
             'basic_auth_user' => $hasBasicAuth ? 'monitor' : null,
             'basic_auth_password' => $hasBasicAuth ? fake()->password() : null,
             'poll_interval_seconds' => 15,

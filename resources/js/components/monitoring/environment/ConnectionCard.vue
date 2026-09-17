@@ -1,62 +1,41 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
+import { formatInterval } from '@/components/monitoring/environment/readings';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
-import { isDown, statusColor } from '@/lib/monitoring';
 
 const { environment } = defineProps<{
     environment: App.Data.Monitoring.EnvironmentData;
 }>();
 
-const rows = computed(() => [
-    {
-        key: 'Endpoint',
-        value: '/horizon/api',
-        color: 'var(--nc-text)',
-        translate: false,
-    },
-    {
-        key: 'Authentication',
-        value: environment.basicAuthUser
-            ? `Basic · ${environment.basicAuthUser}`
-            : 'none',
-        color: 'var(--nc-text)',
-        translate: !environment.basicAuthUser,
-    },
-    {
-        key: 'Poll interval',
-        value: '15s',
-        color: 'var(--nc-text)',
-        translate: false,
-    },
-    {
-        key: 'Last response',
-        value: `${environment.latencyMs} ms`,
-        color: 'var(--nc-text)',
-        translate: false,
-    },
-    {
-        key: 'Last contact',
-        value: isDown(environment.status) ? '14 min ago' : '2 s ago',
-        color: statusColor(environment.status),
-        translate: true,
-    },
-    {
-        key: 'Network',
-        value: 'internal, no outside access',
-        color: 'var(--nc-neutral-300)',
-        translate: true,
-    },
-]);
+const path = computed(() => {
+    try {
+        return new URL(environment.horizonUrl).pathname.replace(/\/+$/, '');
+    } catch {
+        return '';
+    }
+});
 
-const snippet = computed(() =>
+const endpoint = computed(() => `${path.value}/api`);
+const interval = computed(() =>
+    formatInterval(environment.pollIntervalSeconds),
+);
+
+const envSnippet = computed(() =>
     [
-        '# .env of the monitored application',
-        'HORIZON_PATH=horizon',
-        `HORIZON_BASIC_AUTH_USER=${environment.basicAuthUser ?? 'horizon-bot'}`,
-        'HORIZON_BASIC_AUTH_PASSWORD=••••',
-        '',
-        '# allow the self-hosted panel',
-        'HORIZON_ALLOWED_IPS=10.20.0.14',
+        '# .env',
+        `HORIZON_PATH=${path.value.replace(/^\/+/, '') || 'horizon'}`,
+    ].join('\n'),
+);
+
+const gateSnippet = computed(() =>
+    [
+        '// app/Providers/HorizonServiceProvider.php',
+        "Gate::define('viewHorizon', fn ($user = null) =>",
+        environment.basicAuthUser
+            ? `    request()->getUser() === '${environment.basicAuthUser.replace(/['\\]/g, '\\$&')}'`
+            : "    request()->ip() === '<panel-ip>'",
+        ');',
     ].join('\n'),
 );
 </script>
@@ -79,24 +58,88 @@ const snippet = computed(() =>
                 }}
             </span>
         </div>
-        <div
-            class="flex flex-col"
+        <dl
+            class="m-0 flex flex-col"
             style="
                 gap: var(--nc-space-2);
                 font-size: 12px;
                 color: var(--nc-neutral-500);
             "
         >
-            <div v-for="row in rows" :key="row.key" class="flex gap-2">
-                <span>{{ $t(row.key) }}</span>
-                <span
-                    class="ml-auto"
-                    style="letter-spacing: 0.01em"
-                    :style="{ color: row.color }"
-                    >{{ row.translate ? $t(row.value) : row.value }}</span
+            <div class="flex gap-2">
+                <dt>Endpoint</dt>
+                <dd
+                    class="m-0 ml-auto min-w-0 truncate text-right"
+                    style="letter-spacing: 0.01em; color: var(--nc-text)"
+                    :title="endpoint"
                 >
+                    {{ endpoint }}
+                </dd>
             </div>
-        </div>
+            <div class="flex gap-2">
+                <dt>{{ $t('Authentication') }}</dt>
+                <dd
+                    class="m-0 ml-auto min-w-0 truncate text-right"
+                    style="letter-spacing: 0.01em; color: var(--nc-text)"
+                >
+                    {{
+                        environment.basicAuthUser
+                            ? `Basic · ${environment.basicAuthUser}`
+                            : $t('none')
+                    }}
+                </dd>
+            </div>
+            <div class="flex gap-2">
+                <dt>{{ $t('Poll interval') }}</dt>
+                <dd
+                    class="nc-num m-0 ml-auto text-right"
+                    :style="{
+                        color: environment.pollingEnabled
+                            ? 'var(--nc-text)'
+                            : 'var(--nc-neutral-400)',
+                    }"
+                >
+                    {{
+                        environment.pollingEnabled
+                            ? interval
+                            : $t('Collection paused')
+                    }}
+                </dd>
+            </div>
+            <div class="flex gap-2">
+                <dt>{{ $t('Last response') }}</dt>
+                <dd
+                    class="nc-num m-0 ml-auto text-right"
+                    style="color: var(--nc-text)"
+                >
+                    {{
+                        environment.latencyMs === null
+                            ? '—'
+                            : `${environment.latencyMs} ms`
+                    }}
+                </dd>
+            </div>
+            <div class="flex gap-2">
+                <dt class="flex-none">{{ $t('Last contact') }}</dt>
+                <dd class="m-0 ml-auto min-w-0 text-right">
+                    <ReadingFreshness
+                        :last-reading-at="environment.lastReadingAt"
+                        :stale="environment.stale"
+                        :polling-enabled="environment.pollingEnabled"
+                        :reading-error="environment.readingError"
+                    />
+                </dd>
+            </div>
+            <div class="flex gap-2">
+                <dt>{{ $t('Network') }}</dt>
+                <dd
+                    class="m-0 ml-auto text-right"
+                    style="color: var(--nc-neutral-300)"
+                >
+                    {{ $t('internal, no outside access') }}
+                </dd>
+            </div>
+        </dl>
         <div
             class="nc-label"
             style="
@@ -106,28 +149,57 @@ const snippet = computed(() =>
         >
             {{ $t('Configuration on the monitored app') }}
         </div>
-        <pre
-            class="m-0 break-words whitespace-pre-wrap"
+        <pre class="snippet m-0 break-words whitespace-pre-wrap">{{
+            envSnippet
+        }}</pre>
+        <div
             style="
-                padding: var(--nc-space-3);
-                border-radius: var(--nc-radius-sm);
-                background: var(--nc-bg);
-                border: 1px solid var(--nc-divider);
-                font-family: var(--nc-font);
                 font-size: 11px;
-                line-height: 1.6;
-                color: var(--nc-neutral-300);
+                color: var(--nc-neutral-500);
+                margin: var(--nc-space-2) 0;
             "
-            >{{ snippet }}</pre>
+        >
+            {{
+                environment.basicAuthUser
+                    ? $t(
+                          'Outside the local environment Horizon admits only who passes the viewHorizon gate: with the dashboard behind basic auth middleware, let the panel’s user through in the app’s HorizonServiceProvider.',
+                      )
+                    : $t(
+                          'Outside the local environment Horizon admits only who passes the viewHorizon gate: let the panel through by its IP address in the app’s HorizonServiceProvider.',
+                      )
+            }}
+        </div>
+        <pre class="snippet m-0 break-words whitespace-pre-wrap">{{
+            gateSnippet
+        }}</pre>
         <div
             class="mt-[var(--nc-space-2)]"
             style="font-size: 11px; color: var(--nc-neutral-600)"
         >
             {{
-                $t(
-                    'The panel runs inside your network and calls /horizon/api every 15 seconds. Credentials never leave: no outside service needs to reach the applications.',
-                )
+                environment.pollingEnabled
+                    ? $t(
+                          'The panel runs inside your network and reads :endpoint every :interval. Credentials never leave: no outside service needs to reach the applications.',
+                          { endpoint, interval },
+                      )
+                    : $t(
+                          'Collection is paused: the panel does not contact this environment until it is switched back on in its settings.',
+                      )
             }}
         </div>
     </SectionCard>
 </template>
+
+<style scoped>
+.snippet {
+    padding: var(--nc-space-3);
+    border-radius: var(--nc-radius-sm);
+    background: var(--nc-bg);
+    border: 1px solid var(--nc-divider);
+    font-family: var(--nc-font);
+    letter-spacing: 0.01em;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--nc-neutral-300);
+}
+</style>

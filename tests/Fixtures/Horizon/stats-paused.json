@@ -1,0 +1,17 @@
+{
+    "failedJobs": 0,
+    "jobsPerMinute": 0,
+    "pausedMasters": 1,
+    "periods": {
+        "failedJobs": 10080,
+        "recentJobs": 60
+    },
+    "processes": 2,
+    "queueWithMaxRuntime": null,
+    "queueWithMaxThroughput": null,
+    "recentJobs": 0,
+    "status": "paused",
+    "wait": {
+        "redis:default": 0
+    }
+}

@@ -2,7 +2,8 @@
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 
 defineProps<{
-    settings: App.Data.Monitoring.NotificationSettingsData;
+    summary: App.Data.Pages.NotificationSummaryData;
+    settings: App.Data.Monitoring.NotificationSettingsData | null;
 }>();
 </script>
 
@@ -19,7 +20,14 @@ defineProps<{
                 <label>{{ $t('Email recipients') }}</label>
                 <input
                     class="nc-input"
-                    :value="settings.recipients.join(', ')"
+                    :value="
+                        settings
+                            ? settings.recipients.join(', ')
+                            : $tChoice(
+                                  ':count recipient|:count recipients',
+                                  summary.recipientCount,
+                              )
+                    "
                     disabled
                     :title="$t('Available soon')"
                 />
@@ -34,7 +42,13 @@ defineProps<{
                 <label>{{ $t('Webhook') }}</label>
                 <input
                     class="nc-input"
-                    :value="settings.webhookUrl ?? ''"
+                    :value="
+                        settings
+                            ? (settings.webhookUrl ?? '')
+                            : summary.webhookConfigured
+                              ? $t('Webhook configured')
+                              : $t('No webhook')
+                    "
                     disabled
                     :title="$t('Available soon')"
                 />
@@ -51,7 +65,7 @@ defineProps<{
                     <input
                         class="nc-input"
                         style="width: 78px"
-                        :value="settings.quietFrom ?? ''"
+                        :value="summary.quietFrom ?? ''"
                         disabled
                         :title="$t('Available soon')"
                     />
@@ -61,7 +75,7 @@ defineProps<{
                     <input
                         class="nc-input"
                         style="width: 78px"
-                        :value="settings.quietTo ?? ''"
+                        :value="summary.quietTo ?? ''"
                         disabled
                         :title="$t('Available soon')"
                     />
@@ -77,7 +91,7 @@ defineProps<{
                 <label>{{ $t('Alert repeat') }}</label>
                 <select
                     class="nc-input"
-                    :value="settings.repeatMinutes ?? 0"
+                    :value="summary.repeatMinutes ?? 0"
                     disabled
                     :title="$t('Available soon')"
                 >

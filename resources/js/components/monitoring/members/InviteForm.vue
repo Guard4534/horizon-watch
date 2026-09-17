@@ -15,13 +15,9 @@ const { environments } = defineProps<{
 
 const slug = useTeamSlug();
 
-// "member" rather than the mockup's "admin": the least surprising default
-// for an invitation is the middle role, not the one that can reconfigure
-// everything.
 const role = ref<App.Enums.TeamRole>('member');
 const visibility = ref<App.Enums.MemberVisibility>('all');
 const environmentIds = ref<number[]>([]);
-// Bumped on success to clear the uncontrolled email field.
 const formKey = ref(0);
 
 function reset() {

@@ -6,21 +6,20 @@ enum AlertRuleMetric: string
 {
     case HorizonMasterInactive = 'horizon.master_inactive';
     case EndpointUnreachable = 'endpoint.unreachable';
+    case HorizonPaused = 'horizon.paused';
     case QueuePending = 'queue.pending';
     case QueueMaxWait = 'queue.max_wait';
     case JobRuntime = 'job.runtime';
     case JobsFailedPerHour = 'jobs.failed_per_hour';
     case WorkersMissing = 'workers.missing';
-    case RedisMemory = 'redis.memory';
 
     public function unit(): string
     {
         return match ($this) {
-            self::HorizonMasterInactive, self::EndpointUnreachable => 'min',
+            self::HorizonMasterInactive, self::EndpointUnreachable, self::HorizonPaused => 'min',
             self::QueuePending, self::JobsFailedPerHour => 'job',
             self::QueueMaxWait, self::JobRuntime => 's',
             self::WorkersMissing => '',
-            self::RedisMemory => 'GB',
         };
     }
 
@@ -29,11 +28,12 @@ enum AlertRuleMetric: string
         return match ($this) {
             self::HorizonMasterInactive => 5,
             self::EndpointUnreachable => 2,
+            self::HorizonPaused => 15,
             self::QueuePending => 2000,
             self::QueueMaxWait => 60,
             self::JobRuntime => 120,
             self::JobsFailedPerHour => 20,
-            self::WorkersMissing, self::RedisMemory => 4,
+            self::WorkersMissing => 4,
         };
     }
 
@@ -47,6 +47,6 @@ enum AlertRuleMetric: string
 
     public function notifiesByEmailByDefault(): bool
     {
-        return ! in_array($this, [self::JobRuntime, self::WorkersMissing, self::RedisMemory], true);
+        return ! in_array($this, [self::JobRuntime, self::WorkersMissing, self::HorizonPaused], true);
     }
 }

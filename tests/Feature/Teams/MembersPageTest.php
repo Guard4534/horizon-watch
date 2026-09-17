@@ -10,10 +10,6 @@ use App\Models\TeamInvitation;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
-/**
- * Switch a membership to manual visibility and grant it one environment,
- * through the team-scoped relation the application itself reads.
- */
 function grantManually(Team $team, User $user, Environment $environment): void
 {
     $team->memberships()
@@ -27,10 +23,6 @@ function grantManually(Team $team, User $user, Environment $environment): void
         ->attach($environment);
 }
 
-/**
- * A second organization where the same person holds a manual grant, so a
- * write scoped to the wrong column shows up as a deleted row here.
- */
 function otherOrganizationGrant(User $user): Environment
 {
     $team = Team::factory()->create();
@@ -128,8 +120,6 @@ test('pending invitations and the environment picker stay out of the props witho
             ->has('page.invitations', 1)
             ->has('page.environments', 2));
 
-    // An invitation carries its join code, which is a bearer token: a member
-    // who cannot invite never receives one.
     $this->actingAs($this->member)
         ->get(route('members.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
@@ -302,9 +292,6 @@ test('a stranger to the organization is a 404, not a 403', function () {
 });
 
 test('changing visibility leaves the manual grants of other organizations alone', function () {
-    // assertDatabaseMissing('environment_user', ['user_id' => …]) passes just
-    // as happily for an unscoped delete, so the scoping only becomes a fact
-    // once a second organization is in the table.
     $elsewhere = otherOrganizationGrant($this->member);
 
     grantManually($this->team, $this->member, $this->staging);
@@ -361,8 +348,6 @@ test('the members props carry the granted environment ids, so the dialog can reo
                     && $member['visibleEnvironmentNames'] === ['Billing / staging'];
             }));
 
-    // Gated exactly like the names: a member who cannot manage members is
-    // told nothing about which environments exist.
     $this->actingAs($this->member)
         ->get(route('members.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
@@ -372,8 +357,6 @@ test('the members props carry the granted environment ids, so the dialog can reo
 });
 
 test('the invite form still gets the environments without the member-management permission', function () {
-    // canInvite and canManageMembers are the same permission set today, so
-    // this only pins the gate's shape: the picker follows either one.
     $this->actingAs($this->owner)
         ->get(route('members.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
@@ -395,8 +378,6 @@ test('no invitation prop carries the join code', function () {
 
     $code = TeamInvitation::where('team_id', $this->team->id)->firstOrFail()->code;
 
-    // The code is the invitee's credential: it belongs in the emailed link
-    // and nowhere else, props included.
     $response->assertDontSee($code, escape: false);
 });
 
@@ -420,10 +401,6 @@ test('removing a stranger from the members view is a 404, not a false success', 
 });
 
 test('a role tag reads the same on the members view and on the team settings page', function () {
-    // One format, one function (HasTeams::roleLabel): the lowercase enum
-    // value, as the mockup writes its tags, plus the owner's sentence. These
-    // two pages used to disagree — "member" here, "Member" there — under the
-    // same prop name.
     $this->actingAs($this->admin)
         ->get(route('members.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page

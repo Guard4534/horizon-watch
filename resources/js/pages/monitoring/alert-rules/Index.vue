@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
-import { PhSlidersHorizontal } from '@phosphor-icons/vue';
+import { PhInfo, PhSlidersHorizontal } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import EmptyState from '@/components/monitoring/EmptyState.vue';
 import NotificationSettings from '@/components/monitoring/rules/NotificationSettings.vue';
@@ -19,18 +19,18 @@ const organization = computed(() => page.scope === 'organization');
 
 const shared = usePage();
 
-// The organization scope counts every visible environment (see
-// MonitoringRepository::ruleScopes): zero means there are no thresholds
-// worth showing, since there is nothing they could apply to.
+const showsOverrides = computed(
+    () =>
+        !organization.value ||
+        page.scopes.some((scope) => scope.overrideCount > 0),
+);
+
 const nothingVisible = computed(
     () =>
         page.scopes.find((scope) => scope.id === 'organization')
             ?.environmentCount === 0,
 );
 
-// Restricted only means something is being kept from this member if the
-// organization holds anything at all: a viewer limited to non-production
-// in an empty organization has nothing hidden from them.
 const somethingIsHidden = computed(
     () =>
         shared.props.visibilityRestricted &&
@@ -62,18 +62,29 @@ const somethingIsHidden = computed(
         />
     </div>
 
-    <div
-        v-else
-        class="grid items-start"
-        style="
-            padding: var(--nc-space-6);
-            gap: var(--nc-space-6);
-            grid-template-columns: 224px minmax(0, 1fr);
-        "
-    >
+    <div v-else class="rules-grid">
         <ScopeList :scopes="page.scopes" :current="page.scope" />
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
+            <div class="read-only-note" role="note">
+                <PhInfo :size="15" class="mt-px flex-none" />
+                <div class="flex flex-col" style="gap: 4px">
+                    <span>{{
+                        $t(
+                            'Thresholds are read-only for now: the defaults below already drive the anomalies.',
+                        )
+                    }}</span>
+                    <span
+                        v-if="showsOverrides"
+                        style="color: var(--nc-neutral-500)"
+                        >{{
+                            $t(
+                                'The overrides shown here are examples: every environment is measured against the organization defaults until the next release.',
+                            )
+                        }}</span
+                    >
+                </div>
+            </div>
             <section class="nc-card">
                 <div
                     class="flex flex-wrap items-start"
@@ -133,7 +144,40 @@ const somethingIsHidden = computed(
                 </div>
             </section>
 
-            <NotificationSettings :settings="page.notifications" />
+            <NotificationSettings
+                :summary="page.notificationSummary"
+                :settings="page.notifications"
+            />
         </div>
     </div>
 </template>
+
+<style scoped>
+.rules-grid {
+    display: grid;
+    align-items: start;
+    padding: var(--nc-space-6);
+    gap: var(--nc-space-6);
+    grid-template-columns: 224px minmax(0, 1fr);
+}
+
+@media (max-width: 767px) {
+    .rules-grid {
+        grid-template-columns: minmax(0, 1fr);
+        padding: var(--nc-space-4);
+        gap: var(--nc-space-4);
+    }
+}
+
+.read-only-note {
+    display: flex;
+    gap: var(--nc-space-2);
+    align-items: flex-start;
+    padding: var(--nc-space-3);
+    border-radius: var(--nc-radius-md);
+    background: color-mix(in srgb, var(--nc-accent) 12%, transparent);
+    font-size: 12px;
+    color: var(--nc-neutral-300);
+    line-height: 1.45;
+}
+</style>

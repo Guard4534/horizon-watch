@@ -5,10 +5,8 @@ import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatThreshold, ruleIcon, ruleLabel } from '@/lib/alertRules';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 
-const { rules, overrideCount, scope } = defineProps<{
+defineProps<{
     rules: App.Data.Monitoring.AlertRuleData[];
-    overrideCount: number;
-    scope: string;
 }>();
 
 const slug = useTeamSlug();
@@ -18,9 +16,9 @@ const slug = useTeamSlug();
     <SectionCard :title="$t('Effective alert rules')">
         <template #actions>
             <Link
-                :href="alertRulesIndex({ current_team: slug, scope })"
+                :href="alertRulesIndex({ current_team: slug })"
                 style="font-size: 11px"
-                >{{ $t('Edit') }}</Link
+                >{{ $t('Alert settings') }}</Link
             >
         </template>
         <div
@@ -28,9 +26,8 @@ const slug = useTeamSlug();
             style="font-size: 11px; color: var(--nc-neutral-500)"
         >
             {{
-                $tChoice(
-                    'Organization defaults with :count override on this environment|Organization defaults with :count overrides on this environment',
-                    overrideCount,
+                $t(
+                    'Organization defaults: the thresholds the anomalies use today.',
                 )
             }}
         </div>
@@ -39,7 +36,7 @@ const slug = useTeamSlug();
             style="gap: var(--nc-space-2); font-size: 12px"
         >
             <div
-                v-for="rule in rules.slice(0, 5)"
+                v-for="rule in rules"
                 :key="rule.metric"
                 class="flex items-center gap-2"
             >
@@ -55,15 +52,13 @@ const slug = useTeamSlug();
                     }"
                 />
                 <span class="min-w-0 truncate">{{
-                    $t(ruleLabel(rule.metric))
+                    ruleLabel(rule.metric)
                 }}</span>
                 <span
                     class="ml-auto flex-none"
                     style="letter-spacing: 0.01em; color: var(--nc-neutral-300)"
                     >{{ formatThreshold(rule.threshold, rule.unit) }}</span
                 >
-                <!-- "override" / "org" stay English in both languages: the mockup
-                     keeps rule-origin badges untranslated on purpose. -->
                 <span
                     class="nc-tag nc-tag-sm flex-none"
                     :class="
@@ -71,7 +66,9 @@ const slug = useTeamSlug();
                             ? 'nc-tag-accent'
                             : 'nc-tag-neutral'
                     "
-                    >{{ rule.origin === 'override' ? 'override' : 'org' }}</span
+                    >{{
+                        rule.origin === 'override' ? $t('override') : $t('org')
+                    }}</span
                 >
             </div>
         </div>

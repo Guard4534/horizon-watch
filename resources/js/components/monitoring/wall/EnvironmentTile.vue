@@ -1,27 +1,89 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
+import { PhMinus, PhTrendDown, PhTrendUp } from '@phosphor-icons/vue';
 import { computed } from 'vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
+import TrendLine from '@/components/nocturne/TrendLine.vue';
+import { pendingTone } from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { DEFAULT_PENDING_THRESHOLD } from '@/lib/alertRules';
+import { failedWindowNote } from '@/lib/failedWindow';
 import {
     envColor,
     formatCount,
     formatWait,
-    pendingColor,
     statusColor,
     waitColor,
 } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
-const { environment } = defineProps<{
+const { environment, failedPerHourThreshold } = defineProps<{
     environment: App.Data.Monitoring.EnvironmentData;
+    failedPerHourThreshold: number;
 }>();
 
 const slug = useTeamSlug();
-const unhealthy = computed(() => environment.status !== 'active');
-const load = computed(
-    () => `${Math.min(100, Math.round(environment.pending / 40))}%`,
+
+const troubled = computed(
+    () => environment.status !== null && environment.status !== 'active',
 );
+const tint = computed(() =>
+    environment.status === null
+        ? 'var(--nc-neutral-600)'
+        : statusColor(environment.status),
+);
+
+const tileStyle = computed(() =>
+    troubled.value
+        ? {
+              background: `color-mix(in srgb, ${tint.value} 15%, var(--nc-surface))`,
+              boxShadow: `var(--nc-shadow-sm), 0 0 0 4px color-mix(in srgb, ${tint.value} 18%, transparent)`,
+          }
+        : {
+              background: 'var(--nc-surface)',
+              boxShadow: 'var(--nc-shadow-sm)',
+              opacity: 0.82,
+          },
+);
+
+const trend = computed(() => {
+    const percent = environment.trendPercent;
+
+    if (percent === null || percent === 0) {
+        return {
+            icon: PhMinus,
+            color: 'var(--nc-neutral-600)',
+            label: percent === 0 ? '0%' : '',
+        };
+    }
+
+    return percent > 0
+        ? {
+              icon: PhTrendUp,
+              color: troubled.value ? tint.value : 'var(--st-warn)',
+              label: `+${percent}%`,
+          }
+        : { icon: PhTrendDown, color: 'var(--st-ok)', label: `${percent}%` };
+});
+
+const failedColor = computed(() =>
+    environment.failedLastHour > failedPerHourThreshold
+        ? 'var(--st-warn)'
+        : 'var(--nc-neutral-600)',
+);
+
+const silence = computed<string | null>(() => {
+    if (!environment.pollingEnabled) {
+        return 'paused';
+    }
+
+    if (environment.stale) {
+        return 'stale';
+    }
+
+    return environment.lastReadingAt === null ? 'waiting' : null;
+});
 </script>
 
 <template>
@@ -30,33 +92,27 @@ const load = computed(
             showEnvironment({ current_team: slug, environment: environment.id })
         "
         class="tile"
-        :style="{
-            boxShadow: unhealthy
-                ? `0 0 0 1px ${statusColor(environment.status)}`
-                : 'var(--nc-shadow-sm)',
-        }"
+        :style="tileStyle"
     >
         <span
-            class="absolute top-0 bottom-0 left-0 w-[3px]"
+            class="absolute top-0 bottom-0 left-0 w-[4px]"
             :style="{ background: envColor(environment.color) }"
         />
-        <span class="flex items-start gap-[7px]">
+        <span class="flex items-center gap-[7px]">
             <span class="min-w-0 flex-1">
-                <span class="block truncate" style="font-size: 13px">{{
-                    environment.name
-                }}</span>
-                <span
-                    class="block truncate"
-                    style="font-size: 11px; color: var(--nc-neutral-500)"
-                    >{{ environment.applicationName }}</span
-                >
+                <EnvPill :name="environment.name" :color="environment.color" />
             </span>
-            <StatusLamp :status="environment.status" />
+            <StatusLamp :status="environment.status" glow />
         </span>
         <span class="nc-num mt-[11px] flex items-baseline gap-[5px]">
             <span
                 style="font-size: 19px; line-height: 1"
-                :style="{ color: pendingColor(environment.pending) }"
+                :style="{
+                    color: pendingTone(
+                        environment.pending,
+                        DEFAULT_PENDING_THRESHOLD,
+                    ),
+                }"
                 >{{ formatCount(environment.pending) }}</span
             >
             <span
@@ -76,37 +132,63 @@ const load = computed(
             >
         </span>
         <span
-            class="mt-2 block h-[2px] overflow-hidden rounded-[2px]"
-            style="background: var(--nc-neutral-900)"
+            v-if="environment.trend.length > 1"
+            class="mt-[6px] block"
+            style="opacity: 0.85"
         >
-            <span
-                class="block h-[2px]"
-                :style="{
-                    width: load,
-                    background: statusColor(environment.status),
-                }"
+            <TrendLine
+                :values="environment.trend"
+                :width="150"
+                :height="18"
+                :color="tint"
             />
         </span>
         <span
-            class="mt-[7px] flex gap-2"
+            class="nc-num mt-[5px] flex items-center gap-2"
             style="font-size: 10px; color: var(--nc-neutral-600)"
         >
             <span
-                >{{
-                    $tChoice(':count node|:count nodes', environment.nodeCount)
-                }}
-                · {{ environment.workers }} workers</span
+                class="inline-flex flex-none items-center gap-[3px]"
+                :style="{ color: trend.color }"
+                :title="$t('Pending trend over the last hour')"
             >
+                <component :is="trend.icon" :size="12" />{{ trend.label }}
+            </span>
+            <span class="min-w-0 truncate">
+                <template v-if="silence === 'paused'">{{
+                    $t('Collection paused')
+                }}</template>
+                <template v-else-if="silence === 'stale'">{{
+                    $t('Not updated')
+                }}</template>
+                <template v-else-if="silence === 'waiting'">{{
+                    $t('No reading yet')
+                }}</template>
+                <template v-else>
+                    {{
+                        $tChoice(
+                            ':count node|:count nodes',
+                            environment.nodeCount,
+                        )
+                    }}
+                    ·
+                    {{
+                        $t(':count workers', {
+                            count: String(environment.workers),
+                        })
+                    }}
+                </template>
+            </span>
             <span
-                class="ml-auto"
-                :style="{
-                    color:
-                        environment.failedLast24Hours > 20
-                            ? 'var(--st-warn)'
-                            : 'var(--nc-neutral-600)',
-                }"
+                class="ml-auto flex-none"
+                :style="{ color: failedColor }"
+                :title="failedWindowNote(environment.failedWindowMinutes)"
             >
-                {{ environment.failedLast24Hours }} failed
+                {{
+                    $t(':count failed', {
+                        count: String(environment.failedInWindow),
+                    })
+                }}
             </span>
         </span>
     </Link>
@@ -121,7 +203,6 @@ const load = computed(
     padding: var(--nc-space-3) var(--nc-space-3) var(--nc-space-3)
         var(--nc-space-4);
     border-radius: var(--nc-radius-md);
-    background: var(--nc-surface);
     color: inherit;
     text-decoration: none;
     overflow: hidden;

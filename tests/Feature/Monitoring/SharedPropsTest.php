@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\AlertRuleMetric;
+use App\Enums\EnvironmentStatus;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Models\Application;
@@ -7,6 +9,7 @@ use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Readings;
 
 test('pages share what the sidebar needs', function () {
     $user = User::factory()->create();
@@ -27,23 +30,13 @@ test('settings pages still render inside the new shell', function () {
     $this->actingAs($user)->get('/settings/profile')->assertOk();
 });
 
-/**
- * The sidebar badge is the one monitoring number that is not a page prop:
- * it is shared, so it renders on every page and four pages re-poll it, and
- * it comes from a *second* repository instance resolved inside
- * HandleInertiaRequests. That instance reads the viewer from the guard on
- * its own, so nothing but this test says the badge is filtered like the
- * pages it sits next to. Until now it was only asserted to be an integer.
- *
- * "fatturaomatic-production" is one of GeneratedMetrics' fixed incidents,
- * so it always carries an open alert; "fatturaomatic-staging" is
- * deterministically healthy.
- */
 test('the sidebar badge does not count an incident the viewer cannot see', function () {
     $team = Team::factory()->create();
     $application = Application::factory()->for($team)->create(['name' => 'Fatturaomatic']);
-    Environment::factory()->for($application)->production()->create();
-    Environment::factory()->for($application)->staging()->create();
+    $production = Environment::factory()->for($application)->production()->create();
+    $staging = Environment::factory()->for($application)->staging()->create();
+    Readings::record($production, EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
+    Readings::record($staging);
 
     $watcher = User::factory()->create();
     $team->members()->attach($watcher, [

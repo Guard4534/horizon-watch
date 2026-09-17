@@ -3,13 +3,12 @@
 use App\Models\User;
 use App\Queries\WallQuery;
 use Database\Seeders\DatabaseSeeder;
+use Tests\Support\Readings;
 
 test('the wall lists the most severe environments first, then the busiest', function () {
     $user = User::factory()->create();
     (new DatabaseSeeder)->seedMockupOrganization($user->currentTeam);
-    // ConfiguredMonitoringRepository resolves the viewer from the
-    // authenticated guard, unlike phase 1's fake data: this Query can no
-    // longer run without an authenticated member of the team.
+    Readings::mockup($user->currentTeam);
     $this->actingAs($user);
 
     $environments = app(WallQuery::class)->handle($user->currentTeam)->environments;

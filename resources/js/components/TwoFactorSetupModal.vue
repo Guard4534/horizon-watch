@@ -40,7 +40,6 @@ const code = ref<string>('');
 
 const pinInputContainerRef = useTemplateRef('pinInputContainerRef');
 
-// Values below are English source keys: the template runs them through $t().
 const modalConfig = computed<TwoFactorConfigContent>(() => {
     if (props.twoFactorEnabled) {
         return {

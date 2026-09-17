@@ -1,0 +1,55 @@
+{
+    "worker-1-a1b2": {
+        "name": "worker-1-a1b2",
+        "environment": "production",
+        "pid": "4242",
+        "status": "running",
+        "supervisors": [
+            {
+                "name": "worker-1-a1b2:supervisor-1",
+                "master": "worker-1-a1b2",
+                "pid": "4243",
+                "status": "running",
+                "processes": {
+                    "redis:default": 3,
+                    "redis:emails": 2
+                },
+                "options": {
+                    "queue": "default,emails",
+                    "balance": "auto"
+                }
+            }
+        ]
+    },
+    "worker-2-c3d4": {
+        "name": "worker-2-c3d4",
+        "environment": "production",
+        "pid": "5151",
+        "status": "paused",
+        "supervisors": [
+            {
+                "name": "worker-2-c3d4:supervisor-reports",
+                "master": "worker-2-c3d4",
+                "pid": "5152",
+                "status": "paused",
+                "processes": {
+                    "redis:reports": 2
+                },
+                "options": {
+                    "queue": "reports",
+                    "balance": "simple"
+                }
+            },
+            {
+                "name": "worker-2-c3d4:supervisor-spare",
+                "master": "worker-2-c3d4",
+                "status": "inactive",
+                "processes": [],
+                "options": {
+                    "queue": "reports",
+                    "balance": null
+                }
+            }
+        ]
+    }
+}

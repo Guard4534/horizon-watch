@@ -44,8 +44,6 @@ beforeEach(function () {
     $this->userManual->teamMemberships()->where('team_id', $this->team->id)->first()
         ->visibleEnvironments()->attach([$this->alphaProduction->id, $this->charlieTesting->id]);
 
-    // Another organization, with an environment of the same name, to prove
-    // it never leaks in regardless of visibility.
     $otherTeam = Team::factory()->create();
     $otherApplication = Application::factory()->for($otherTeam)->create();
     $this->foreignEnvironment = Environment::factory()->for($otherApplication)->production()->create();
@@ -98,14 +96,6 @@ test('the query eager loads the application', function () {
     expect($environment->relationLoaded('application'))->toBeTrue();
 });
 
-/**
- * The three tests below used to go through a VisibleEnvironments::allows()
- * helper, deleted with the memoized slug map that replaced it: one
- * exists() per environment invites a caller to ask per row. They now ask
- * query() the same questions — in particular the one the per-visibility
- * tests above do not: that another organization's environment never
- * arrives, whatever the visibility.
- */
 test('the query decides one environment the same way for all', function () {
     $ids = $this->filter->query($this->team, $this->userAll)->pluck('id')->all();
 
@@ -133,11 +123,6 @@ test('the query decides one environment the same way for manual', function () {
         ->and($ids)->not->toContain($this->foreignEnvironment->id);
 });
 
-/**
- * The unfiltered escape hatch of the Applications view (see
- * VisibleEnvironments::ofTeam()): no visibility filter, and still no way
- * into another organization.
- */
 test('ofTeam returns the whole organization, and nothing outside it', function () {
     $ids = $this->filter->ofTeam($this->team)->pluck('id')->all();
 

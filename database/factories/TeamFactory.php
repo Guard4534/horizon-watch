@@ -12,13 +12,10 @@ use Illuminate\Support\Str;
 class TeamFactory extends Factory
 {
     /**
-     * Define the model's default state.
-     *
      * @return array<string, mixed>
      */
     public function definition(): array
     {
-        // Never a real company name (the project notes): a numbered placeholder.
         $name = 'Organization '.fake()->unique()->numerify('####');
 
         return [
@@ -28,9 +25,6 @@ class TeamFactory extends Factory
         ];
     }
 
-    /**
-     * Indicate that the team is a personal team.
-     */
     public function personal(): static
     {
         return $this->state(fn (array $attributes) => [
@@ -38,9 +32,6 @@ class TeamFactory extends Factory
         ]);
     }
 
-    /**
-     * Indicate that the team has been deleted.
-     */
     public function trashed(): static
     {
         return $this->state(fn (array $attributes) => [

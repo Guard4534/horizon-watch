@@ -20,11 +20,6 @@ class InviteMemberData extends Data
     ) {}
 
     /**
-     * The organization is never in the payload: it comes from the
-     * "{current_team}" route segment, already resolved to a model by route
-     * model binding by the time this runs (see EnsureTeamMembership, which
-     * sits ahead of the controller in the middleware stack).
-     *
      * @return array<string, array<int, mixed>>
      */
     public static function rules(): array

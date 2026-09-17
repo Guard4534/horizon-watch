@@ -8,16 +8,7 @@ const { rule, organizationScope } = defineProps<{
 </script>
 
 <template>
-    <div
-        class="grid items-center"
-        style="
-            grid-template-columns: minmax(0, 1fr) 128px 122px 96px;
-            gap: var(--nc-space-3);
-            padding-bottom: var(--nc-space-3);
-            border-bottom: 1px solid
-                color-mix(in srgb, var(--nc-text) 7%, transparent);
-        "
-    >
+    <div class="rule-row">
         <div class="min-w-0">
             <div class="flex items-center gap-2" style="font-size: 13px">
                 <component
@@ -26,13 +17,11 @@ const { rule, organizationScope } = defineProps<{
                     class="flex-none"
                     style="color: var(--nc-neutral-400)"
                 />
-                {{ $t(ruleLabel(rule.metric)) }}
-                <!-- "override" stays English in both languages: the mockup keeps
-                     rule-origin badges untranslated on purpose. -->
+                {{ ruleLabel(rule.metric) }}
                 <span
                     v-if="rule.origin === 'override'"
                     class="nc-tag nc-tag-sm nc-tag-accent flex-none"
-                    >override</span
+                    >{{ $t('override') }}</span
                 >
                 <span
                     v-else-if="!organizationScope"
@@ -44,7 +33,7 @@ const { rule, organizationScope } = defineProps<{
                 class="mt-[2px]"
                 style="font-size: 11px; color: var(--nc-neutral-600)"
             >
-                {{ $t(ruleHint(rule.metric)) }}
+                {{ ruleHint(rule.metric) }}
             </div>
         </div>
         <div class="flex items-center gap-[6px]">
@@ -83,3 +72,24 @@ const { rule, organizationScope } = defineProps<{
         </label>
     </div>
 </template>
+
+<style scoped>
+.rule-row {
+    display: grid;
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) 128px 122px 96px;
+    gap: var(--nc-space-3);
+    padding-bottom: var(--nc-space-3);
+    border-bottom: 1px solid color-mix(in srgb, var(--nc-text) 7%, transparent);
+}
+
+@media (max-width: 639px) {
+    .rule-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .rule-row > :first-child {
+        grid-column: 1 / -1;
+    }
+}
+</style>

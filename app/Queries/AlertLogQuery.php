@@ -2,25 +2,26 @@
 
 namespace App\Queries;
 
-use App\Data\Monitoring\AlertData;
 use App\Data\Pages\AlertCountsData;
 use App\Data\Pages\AlertLogPageData;
-use App\Enums\AlertSeverity;
+use App\Data\Pages\NotificationSummaryData;
 use App\Enums\AlertState;
 use App\Models\Team;
+use App\Models\User;
 use App\Monitoring\MonitoringRepository;
+use Illuminate\Support\Facades\Gate;
 
 class AlertLogQuery
 {
     public function __construct(private MonitoringRepository $monitoring) {}
 
-    public function handle(Team $team, AlertState $state): AlertLogPageData
+    public function handle(Team $team, User $viewer, AlertState $state): AlertLogPageData
     {
+        $settings = $this->monitoring->notificationSettings($team);
+
         $open = $this->monitoring->alerts($team, AlertState::Open);
         $muted = $this->monitoring->alerts($team, AlertState::Muted);
         $resolved = $this->monitoring->alerts($team, AlertState::Resolved);
-
-        $critical = array_values(array_filter($open, fn (AlertData $alert) => $alert->severity === AlertSeverity::Critical));
 
         return new AlertLogPageData(
             state: $state,
@@ -30,7 +31,8 @@ class AlertLogQuery
                 AlertState::Muted => $muted,
                 AlertState::Resolved => $resolved,
             },
-            preview: $critical[0] ?? $open[0] ?? null,
+            notificationSummary: NotificationSummaryData::of($settings),
+            notifications: Gate::forUser($viewer)->allows('manageAlertRules', $team) ? $settings : null,
             environmentCount: count($this->monitoring->environments($team)),
         );
     }

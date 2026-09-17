@@ -2,16 +2,10 @@
 import { computed } from 'vue';
 import { getInitials } from '@/composables/useInitials';
 
-// The organization chip of the mockup (lines 821-828): who invited you, with
-// what role, over how many environments. Only rendered for an open
-// invitation — every other state carries no organization at all.
 const props = defineProps<{
     organizationName: string;
     roleLabel: string;
     visibilityLabel: string;
-    // Named environments, only for a "manual" visibility: the label alone
-    // ("Manual selection") tells the invitee nothing about what they will
-    // see. Empty for the other two, where the label says it all.
     visibleEnvironmentNames: string[];
 }>();
 
@@ -57,11 +51,6 @@ const initials = computed(() => getInitials(props.organizationName));
                     })
                 }}
             </div>
-            <!--
-                Labelled, not a bare comma-separated line: on its own the
-                list is three unrelated fragments to a screen reader, with
-                nothing to say what they are.
-            -->
             <div
                 v-if="visibleEnvironmentNames.length > 0"
                 style="
