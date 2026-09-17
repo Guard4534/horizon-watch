@@ -31,6 +31,7 @@ next to `compose.prod.yaml`):
 | Variable                                                                                       | Default                 | Purpose                                    |
 | ---------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------ |
 | `HORIZON_WATCH_PORT`                                                                           | `8080`                  | Port published on the host                 |
+| `HORIZON_WATCH_WORKERS`                                                                        | `2`                     | Parallel queue workers (readings, email)   |
 | `APP_URL`                                                                                      | `http://localhost:8080` | Public URL, used in links and emails       |
 | `APP_LOCALE`                                                                                   | `en`                    | Default language (`en` or `it`)            |
 | `DB_PASSWORD`                                                                                  | `horizon_watch`         | PostgreSQL password; change it             |

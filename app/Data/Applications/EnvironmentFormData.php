@@ -168,6 +168,11 @@ class EnvironmentFormData extends Data
         return $firstOrigin !== null && $firstOrigin === $origin($second);
     }
 
+    public static function withoutUserinfo(string $url): string
+    {
+        return (string) preg_replace('#^([a-z][a-z0-9+.-]*://)[^/?\#]*@#i', '$1', $url);
+    }
+
     /**
      * The per-application uniqueness of the name, which the database also
      * enforces (environments' unique index on application_id + name):

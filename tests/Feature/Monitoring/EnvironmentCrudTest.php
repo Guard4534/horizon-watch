@@ -73,6 +73,27 @@ test('the basic auth password never appears in an Inertia prop nor in the raw re
     expect($response->getContent())->not->toContain('super-secret-value');
 });
 
+test('the edit page never shows credentials saved inside a legacy url', function (string $saved, string $shown) {
+    $environment = Environment::factory()->for($this->application)->create();
+    DB::table('environments')->where('id', $environment->id)->update(['horizon_url' => $saved]);
+
+    $response = $this->actingAs($this->admin)->get(route('environments.edit', [
+        'current_team' => $this->team->slug,
+        'environment' => $environment->slug,
+    ]));
+
+    $response->assertInertia(fn (Assert $page) => $page
+        ->where('page.environment.horizonUrl', $shown));
+
+    expect($response->getContent())
+        ->not->toContain('legacy-owner')
+        ->not->toContain('legacy-url-secret');
+})->with([
+    'user and password' => ['https://legacy-owner:legacy-url-secret@legacy.example.com/horizon', 'https://legacy.example.com/horizon'],
+    'user only' => ['http://legacy-owner@legacy.example.com:8080/horizon', 'http://legacy.example.com:8080/horizon'],
+    'upper-case scheme' => ['HTTPS://legacy-owner:legacy-url-secret@legacy.example.com/horizon', 'HTTPS://legacy.example.com/horizon'],
+]);
+
 test('updating an environment without a password keeps the existing one, sending one replaces it', function () {
     $environment = Environment::factory()->for($this->application)->create([
         'name' => 'production',

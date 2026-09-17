@@ -39,6 +39,9 @@ curl -fsS "$base/up" >/dev/null || fail "/up is not healthy"
 running="$("${compose[@]}" ps --status running --services | sort | tr '\n' ' ')"
 [[ "$running" == "postgres scheduler web worker " ]] || fail "unexpected running services: $running"
 
+workers="$("${compose[@]}" ps --status running -q worker | wc -l)"
+[[ "$workers" -eq "${HORIZON_WATCH_WORKERS:-2}" ]] || fail "expected ${HORIZON_WATCH_WORKERS:-2} running workers, found $workers"
+
 "${compose[@]}" exec -T web test -s /data/app-key || fail "the app key was not persisted"
 
 echo "smoke: ok"

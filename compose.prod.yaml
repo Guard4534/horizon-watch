@@ -54,6 +54,8 @@ services:
     worker:
         <<: *app
         command: ['worker']
+        deploy:
+            replicas: ${HORIZON_WATCH_WORKERS:-2}
         depends_on:
             web:
                 condition: service_healthy
