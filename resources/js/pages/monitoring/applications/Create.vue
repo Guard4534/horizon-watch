@@ -1,14 +1,30 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { PhPlus, PhTrashSimple } from '@phosphor-icons/vue';
-import { computed, ref } from 'vue';
+import {
+    PhArrowClockwise,
+    PhCheckCircle,
+    PhCircleNotch,
+    PhMinusCircle,
+    PhPlus,
+    PhTrashSimple,
+    PhWarning,
+} from '@phosphor-icons/vue';
+import type { Component } from 'vue';
+import { computed, ref, useTemplateRef, watch, watchEffect } from 'vue';
 import ApplicationForm from '@/components/monitoring/applications/ApplicationForm.vue';
-import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
+import ColorPicker from '@/components/monitoring/applications/ColorPicker.vue';
+import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
+import type { ConnectionOutcome } from '@/components/monitoring/applications/ConnectionTest.vue';
 import WizardSteps from '@/components/monitoring/applications/WizardSteps.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { index as applicationsIndex, store } from '@/routes/applications';
+import { envColor } from '@/lib/monitoring';
+import {
+    index as applicationsIndex,
+    store,
+    testConnection,
+} from '@/routes/applications';
 
 defineOptions({
     layout: { title: 'Add application' },
@@ -25,17 +41,65 @@ const slug = useTeamSlug();
 // (AddApplication), so there is nothing to persist in between.
 const step = ref(1);
 
+// Only here to suggest each environment's URL: it is not a field of the
+// application and is never sent.
+const horizonPath = ref('horizon');
+
+// The usual names, each with the palette color of the same name, offered in
+// this order as rows are added.
+const SUGGESTED_NAMES: Array<[string, string]> = [
+    ['production', 'prod'],
+    ['staging', 'staging'],
+    ['preprod', 'preprod'],
+    ['develop', 'develop'],
+    ['demo', 'demo'],
+    ['testing', 'testing'],
+];
+
+type Row = {
+    key: number;
+    // Whether the basic-auth fields are shown. Turning it off clears them,
+    // so a hidden credential is never sent.
+    auth: boolean;
+    // Once the URL is typed by hand, the domain and path stop rewriting it.
+    urlEdited: boolean;
+    outcome: ConnectionOutcome;
+    // What the outcome above was measured on; a different row by the time
+    // step 3 opens again means the outcome no longer applies.
+    testedSignature: string;
+};
+
+let nextKey = 0;
+
 const blankEnvironment = (
     index: number,
-): App.Data.Applications.EnvironmentFormData => ({
-    name: '',
-    // Walk the palette so two rows never start out the same color.
-    color: page.colors[index % page.colors.length]
-        .value as App.Enums.EnvironmentColor,
-    horizonUrl: '',
-    basicAuthUser: null,
-    basicAuthPassword: null,
-    pollIntervalSeconds: 15,
+    taken: string[],
+): App.Data.Applications.EnvironmentFormData => {
+    const available = page.colors.map((color) => color.value);
+    const suggestion = SUGGESTED_NAMES.find(
+        ([name, color]) => !taken.includes(name) && available.includes(color),
+    );
+
+    return {
+        name: suggestion?.[0] ?? '',
+        // Otherwise walk the palette so two rows never start out the same.
+        color: (suggestion?.[1] ??
+            page.colors[index % page.colors.length]
+                .value) as App.Enums.EnvironmentColor,
+        horizonUrl: '',
+        basicAuthUser: null,
+        basicAuthPassword: null,
+        pollIntervalSeconds: 15,
+        pollingEnabled: true,
+    };
+};
+
+const blankRow = (): Row => ({
+    key: nextKey++,
+    auth: false,
+    urlEdited: false,
+    outcome: { state: 'idle' },
+    testedSignature: '',
 });
 
 const form = useForm<{
@@ -43,14 +107,59 @@ const form = useForm<{
     environments: App.Data.Applications.EnvironmentFormData[];
 }>({
     application: { name: '', host: '' },
-    environments: [blankEnvironment(0)],
+    environments: [blankEnvironment(0, [])],
 });
+
+const rows = ref<Row[]>([blankRow()]);
 
 // Inertia's error bag is flat and dotted ("application.host",
 // "environments.1.horizonUrl"); the field components look keys up by name.
 const errors = computed(
     () => form.errors as Record<string, string | undefined>,
 );
+
+const suggestedUrl = (name: string): string => {
+    const domain = form.application.host
+        .trim()
+        .replace(/^https?:\/\//i, '')
+        .replace(/\/+$/, '');
+    const path = horizonPath.value.trim().replace(/^\/+|\/+$/g, '');
+    const environment = name.trim();
+
+    if (domain === '' || environment === '') {
+        return '';
+    }
+
+    const host =
+        environment === 'production' ? domain : `${environment}.${domain}`;
+
+    return `https://${host}${path === '' ? '' : `/${path}`}`;
+};
+
+watchEffect(() => {
+    form.environments.forEach((environment, index) => {
+        if (!rows.value[index]?.urlEdited) {
+            environment.horizonUrl = suggestedUrl(environment.name);
+        }
+    });
+});
+
+const onUrlInput = (index: number) => {
+    const environment = form.environments[index];
+
+    rows.value[index].urlEdited =
+        environment.horizonUrl !== suggestedUrl(environment.name);
+};
+
+const toggleAuth = (index: number) => {
+    const row = rows.value[index];
+    row.auth = !row.auth;
+
+    if (!row.auth) {
+        form.environments[index].basicAuthUser = null;
+        form.environments[index].basicAuthPassword = null;
+    }
+};
 
 const applicationFilled = computed(
     () =>
@@ -69,14 +178,94 @@ const environmentsFilled = computed(
 );
 
 const addEnvironment = () => {
-    form.environments.push(blankEnvironment(form.environments.length));
+    form.environments.push(
+        blankEnvironment(
+            form.environments.length,
+            form.environments.map((environment) => environment.name.trim()),
+        ),
+    );
+    rows.value.push(blankRow());
 };
 
 const removeEnvironment = (index: number) => {
     form.environments.splice(index, 1);
+    rows.value.splice(index, 1);
     // Every error key after the removed row now points at the wrong row.
     form.clearErrors();
 };
+
+const testPayload = (
+    environment: App.Data.Applications.EnvironmentFormData,
+): App.Data.Applications.TestConnectionData => ({
+    horizonUrl: environment.horizonUrl,
+    basicAuthUser: environment.basicAuthUser,
+    basicAuthPassword: environment.basicAuthPassword,
+});
+
+const signatureOf = (environment: App.Data.Applications.EnvironmentFormData) =>
+    JSON.stringify(testPayload(environment));
+
+// Before step 3 renders, forget the outcomes of rows changed since their
+// test, and of tests cut short by leaving the step (ConnectionTest drops an
+// answer that arrives after it unmounts): those rows test again as soon as
+// the step mounts.
+watch(step, (current) => {
+    if (current !== 3) {
+        return;
+    }
+
+    form.environments.forEach((environment, index) => {
+        const row = rows.value[index];
+        const signature = signatureOf(environment);
+
+        if (
+            row.testedSignature !== signature ||
+            row.outcome.state === 'testing'
+        ) {
+            row.outcome = { state: 'idle' };
+            row.testedSignature = signature;
+        }
+    });
+});
+
+const tests =
+    useTemplateRef<Array<InstanceType<typeof ConnectionTest>>>('tests');
+
+const testAgain = () => {
+    tests.value?.forEach((test) => void test.run());
+};
+
+const testing = computed(() =>
+    rows.value.some((row) => row.outcome.state === 'testing'),
+);
+
+const checkIcon = (outcome: ConnectionOutcome): Component => {
+    if (outcome.state === 'testing') {
+        return PhCircleNotch;
+    }
+
+    if (outcome.state !== 'done') {
+        return PhMinusCircle;
+    }
+
+    return outcome.result.reachable ? PhCheckCircle : PhWarning;
+};
+
+const checkColor = (outcome: ConnectionOutcome): string => {
+    if (outcome.state !== 'done') {
+        return 'var(--nc-neutral-500)';
+    }
+
+    return outcome.result.reachable ? 'var(--st-ok)' : 'var(--st-warn)';
+};
+
+const refusedCredentials = (outcome: ConnectionOutcome): boolean =>
+    outcome.state === 'done' && outcome.result.error === 'unauthorized';
+
+const pillStyle = (color: App.Enums.EnvironmentColor) => ({
+    color: envColor(color),
+    background: `color-mix(in srgb, ${envColor(color)} 20%, transparent)`,
+});
 
 // Server-side validation has to land the user back on the step that owns the
 // offending field, or the message would be invisible. Anything that belongs
@@ -107,7 +296,21 @@ const unplacedErrors = computed(() =>
 const submit = () => {
     form.post(store(slug.value).url, {
         onError: (bag) => {
-            step.value = stepOf(Object.keys(bag));
+            const keys = Object.keys(bag);
+
+            // A credential error on a row whose fields are folded away would
+            // be invisible.
+            rows.value.forEach((row, index) => {
+                if (
+                    keys.some((key) =>
+                        key.startsWith(`environments.${index}.basicAuth`),
+                    )
+                ) {
+                    row.auth = true;
+                }
+            });
+
+            step.value = stepOf(keys);
         },
     });
 };
@@ -121,7 +324,7 @@ const submit = () => {
         style="
             padding: var(--nc-space-6);
             gap: var(--nc-space-6);
-            max-width: 940px;
+            max-width: 720px;
         "
     >
         <div>
@@ -143,181 +346,417 @@ const submit = () => {
         </div>
 
         <WizardSteps
-            :labels="[
-                $t('Application'),
-                $t('Environments'),
-                $t('Confirmation'),
-            ]"
+            :labels="[$t('Application'), $t('Environments'), $t('Verify')]"
             :current="step"
             @select="step = $event"
         />
 
-        <SectionCard v-if="step === 1" :title="$t('Application')">
+        <SectionCard v-if="step === 1">
             <ApplicationForm
                 v-model="form.application"
                 :errors="errors"
                 prefix="application."
-            />
+                wizard
+            >
+                <div class="nc-field">
+                    <label for="wizard-horizon-path">{{
+                        $t('Horizon path')
+                    }}</label>
+                    <input
+                        id="wizard-horizon-path"
+                        v-model="horizonPath"
+                        class="nc-input"
+                        type="text"
+                        autocomplete="off"
+                        spellcheck="false"
+                        placeholder="horizon"
+                    />
+                    <div
+                        class="mt-1"
+                        style="font-size: 11px; color: var(--nc-neutral-600)"
+                    >
+                        {{ $t('If you changed HORIZON_PATH, set it here.') }}
+                    </div>
+                </div>
+            </ApplicationForm>
         </SectionCard>
 
-        <template v-else-if="step === 2">
+        <div
+            v-else-if="step === 2"
+            class="flex flex-col"
+            style="gap: var(--nc-space-3)"
+        >
             <div
                 v-if="errors.environments"
                 style="font-size: 12px; color: var(--st-down)"
             >
                 {{ errors.environments }}
             </div>
-            <SectionCard
+
+            <div
                 v-for="(environment, index) in form.environments"
-                :key="index"
-                :title="
-                    environment.name.trim() === ''
-                        ? $t('Environment')
-                        : environment.name
-                "
+                :key="rows[index].key"
+                class="row"
             >
-                <template #actions>
-                    <button
-                        type="button"
-                        class="nc-btn nc-btn-ghost"
-                        style="font-size: 12px; color: var(--nc-neutral-400)"
-                        :disabled="form.environments.length === 1"
-                        :title="$t('Remove environment')"
-                        @click="removeEnvironment(index)"
+                <EnvSwatch :color="environment.color" shape="edge" :size="4" />
+
+                <div
+                    class="grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto]"
+                    style="gap: var(--nc-space-3)"
+                >
+                    <div class="nc-field">
+                        <label :for="`environments-${index}-name`">{{
+                            $t('Environment name')
+                        }}</label>
+                        <input
+                            :id="`environments-${index}-name`"
+                            v-model="environment.name"
+                            class="nc-input"
+                            type="text"
+                            autocomplete="off"
+                            spellcheck="false"
+                            placeholder="production"
+                        />
+                        <div
+                            v-if="errors[`environments.${index}.name`]"
+                            class="mt-1"
+                            style="font-size: 11px; color: var(--st-down)"
+                        >
+                            {{ errors[`environments.${index}.name`] }}
+                        </div>
+                    </div>
+
+                    <div class="nc-field">
+                        <label :for="`environments-${index}-horizonUrl`">{{
+                            $t('Horizon URL')
+                        }}</label>
+                        <input
+                            :id="`environments-${index}-horizonUrl`"
+                            v-model="environment.horizonUrl"
+                            class="nc-input"
+                            style="letter-spacing: 0.01em"
+                            type="url"
+                            autocomplete="off"
+                            spellcheck="false"
+                            placeholder="https://invoicer.example.com/horizon"
+                            @input="onUrlInput(index)"
+                        />
+                        <div
+                            v-if="errors[`environments.${index}.horizonUrl`]"
+                            class="mt-1"
+                            style="font-size: 11px; color: var(--st-down)"
+                        >
+                            {{ errors[`environments.${index}.horizonUrl`] }}
+                        </div>
+                    </div>
+
+                    <div class="flex items-start sm:pt-[22px]">
+                        <button
+                            type="button"
+                            class="nc-btn nc-btn-ghost"
+                            style="
+                                font-size: 12px;
+                                color: var(--nc-neutral-400);
+                            "
+                            :disabled="form.environments.length === 1"
+                            :title="$t('Remove environment')"
+                            :aria-label="$t('Remove environment')"
+                            @click="removeEnvironment(index)"
+                        >
+                            <PhTrashSimple :size="13" />
+                        </button>
+                    </div>
+                </div>
+
+                <div class="nc-field mt-[var(--nc-space-3)]">
+                    <label>{{ $t('Color') }}</label>
+                    <ColorPicker
+                        v-model="environment.color"
+                        :colors="page.colors"
+                        :name="`environments-${index}-color`"
+                    />
+                    <div
+                        v-if="errors[`environments.${index}.color`]"
+                        class="mt-1"
+                        style="font-size: 11px; color: var(--st-down)"
                     >
-                        <PhTrashSimple :size="13" />
-                    </button>
-                </template>
-                <EnvironmentForm
-                    v-model="form.environments[index]"
-                    :colors="page.colors"
-                    :errors="errors"
-                    :prefix="`environments.${index}.`"
-                />
-            </SectionCard>
+                        {{ errors[`environments.${index}.color`] }}
+                    </div>
+                </div>
+
+                <div
+                    class="mt-[var(--nc-space-3)] flex flex-wrap items-center"
+                    style="gap: var(--nc-space-3)"
+                >
+                    <label class="nc-radio" style="font-size: 12px">
+                        <input
+                            type="checkbox"
+                            :checked="rows[index].auth"
+                            @change="toggleAuth(index)"
+                        />
+                        <span class="nc-dot" />
+                        {{ $t('Basic auth') }}
+                    </label>
+                    <div
+                        v-if="rows[index].auth"
+                        class="flex flex-1 flex-wrap"
+                        style="gap: var(--nc-space-2); min-width: 220px"
+                    >
+                        <input
+                            v-model="environment.basicAuthUser"
+                            class="nc-input min-w-0 flex-1"
+                            type="text"
+                            autocomplete="off"
+                            spellcheck="false"
+                            :placeholder="$t('Basic-auth username')"
+                            :aria-label="$t('Basic-auth username')"
+                        />
+                        <input
+                            v-model="environment.basicAuthPassword"
+                            class="nc-input min-w-0 flex-1"
+                            type="password"
+                            autocomplete="new-password"
+                            :placeholder="$t('Basic-auth password')"
+                            :aria-label="$t('Basic-auth password')"
+                        />
+                    </div>
+                </div>
+                <div
+                    v-for="field in ['basicAuthUser', 'basicAuthPassword']"
+                    :key="field"
+                >
+                    <div
+                        v-if="errors[`environments.${index}.${field}`]"
+                        class="mt-1"
+                        style="font-size: 11px; color: var(--st-down)"
+                    >
+                        {{ errors[`environments.${index}.${field}`] }}
+                    </div>
+                </div>
+
+                <div
+                    class="mt-[var(--nc-space-3)] flex flex-wrap items-center"
+                    style="gap: var(--nc-space-4)"
+                >
+                    <label
+                        class="flex items-center"
+                        style="
+                            gap: var(--nc-space-2);
+                            font-size: 12px;
+                            color: var(--nc-neutral-400);
+                        "
+                    >
+                        {{ $t('Poll interval') }}
+                        <input
+                            v-model.number="environment.pollIntervalSeconds"
+                            class="nc-input"
+                            style="max-width: 80px; min-height: 30px"
+                            type="number"
+                            min="5"
+                            max="300"
+                            step="1"
+                        />
+                        {{ $t('seconds') }}
+                    </label>
+                    <label class="nc-radio" style="font-size: 12px">
+                        <input
+                            v-model="environment.pollingEnabled"
+                            type="checkbox"
+                            role="switch"
+                            :aria-checked="environment.pollingEnabled"
+                        />
+                        <span class="nc-dot" />
+                        {{ $t('Collect readings') }}
+                    </label>
+                </div>
+                <div
+                    v-for="field in ['pollIntervalSeconds', 'pollingEnabled']"
+                    :key="field"
+                >
+                    <div
+                        v-if="errors[`environments.${index}.${field}`]"
+                        class="mt-1"
+                        style="font-size: 11px; color: var(--st-down)"
+                    >
+                        {{ errors[`environments.${index}.${field}`] }}
+                    </div>
+                </div>
+            </div>
+
             <div>
                 <button
                     type="button"
                     class="nc-btn nc-btn-secondary"
+                    style="font-size: 12px"
                     @click="addEnvironment"
                 >
                     <PhPlus :size="13" />{{ $t('Add environment') }}
                 </button>
             </div>
-        </template>
+        </div>
 
-        <SectionCard v-else :title="$t('Confirmation')">
+        <div v-else class="flex flex-col" style="gap: var(--nc-space-3)">
             <div
                 v-for="(message, index) in unplacedErrors"
                 :key="index"
-                class="mb-[var(--nc-space-3)]"
                 style="font-size: 12px; color: var(--st-down)"
             >
                 {{ message }}
             </div>
+
             <div
-                class="grid"
-                style="
-                    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-                    gap: var(--nc-space-4);
-                "
+                class="flex flex-wrap items-baseline"
+                style="gap: var(--nc-space-2)"
             >
-                <div>
-                    <div class="nc-label">{{ $t('Name') }}</div>
-                    <div style="font-size: 15px">
-                        {{ form.application.name }}
+                <span style="font-size: 15px">{{ form.application.name }}</span>
+                <span
+                    style="
+                        font-size: 12px;
+                        color: var(--nc-neutral-500);
+                        letter-spacing: 0.01em;
+                    "
+                    >{{ form.application.host }}</span
+                >
+                <button
+                    type="button"
+                    class="nc-btn nc-btn-ghost ml-auto"
+                    style="font-size: 12px"
+                    :disabled="testing"
+                    @click="testAgain"
+                >
+                    <PhArrowClockwise :size="13" />{{ $t('Test again') }}
+                </button>
+            </div>
+
+            <div
+                v-for="(environment, index) in form.environments"
+                :key="rows[index].key"
+                class="check"
+            >
+                <component
+                    :is="checkIcon(rows[index].outcome)"
+                    :size="16"
+                    class="mt-[2px] flex-none"
+                    :class="{
+                        'animate-spin': rows[index].outcome.state === 'testing',
+                    }"
+                    :style="{ color: checkColor(rows[index].outcome) }"
+                />
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center" style="gap: 8px">
+                        <span
+                            class="pill"
+                            :style="pillStyle(environment.color)"
+                            >{{ environment.name }}</span
+                        >
+                        <span
+                            class="ml-auto flex-none"
+                            :style="{
+                                fontSize: '11px',
+                                color: checkColor(rows[index].outcome),
+                            }"
+                        >
+                            <template
+                                v-if="rows[index].outcome.state === 'testing'"
+                                >{{ $t('Testing…') }}</template
+                            >
+                            <template
+                                v-else-if="
+                                    rows[index].outcome.state === 'done' &&
+                                    rows[index].outcome.result.reachable
+                                "
+                                >{{ $t('Connected') }}</template
+                            >
+                            <template
+                                v-else-if="rows[index].outcome.state === 'done'"
+                                >{{ $t('Not connected') }}</template
+                            >
+                            <template v-else>{{ $t('Not tested') }}</template>
+                        </span>
                     </div>
-                </div>
-                <div>
-                    <div class="nc-label">{{ $t('Host') }}</div>
+                    <div class="url">{{ environment.horizonUrl }}</div>
                     <div
+                        class="nc-num"
                         style="
-                            font-size: 13px;
-                            color: var(--nc-neutral-300);
-                            letter-spacing: 0.01em;
+                            margin-top: 2px;
+                            font-size: 11px;
+                            color: var(--nc-neutral-600);
                         "
                     >
-                        {{ form.application.host }}
+                        {{
+                            environment.basicAuthUser
+                                ? `${$t('basic auth')} · ${environment.basicAuthUser}`
+                                : $t('no auth')
+                        }}
+                        · {{ environment.pollIntervalSeconds }}
+                        {{ $t('seconds') }}
+                        <template v-if="!environment.pollingEnabled">
+                            · {{ $t('Collection paused') }}</template
+                        >
+                    </div>
+                    <ConnectionTest
+                        ref="tests"
+                        v-model:outcome="rows[index].outcome"
+                        class="mt-[6px]"
+                        :url="testConnection(slug)"
+                        :payload="testPayload(environment)"
+                        :show-button="false"
+                        auto
+                    />
+                    <div
+                        v-if="refusedCredentials(rows[index].outcome)"
+                        style="
+                            margin-top: 2px;
+                            font-size: 11px;
+                            color: var(--nc-neutral-500);
+                        "
+                    >
+                        {{
+                            $t(
+                                'The endpoint asks for credentials: go back and fill them in.',
+                            )
+                        }}
                     </div>
                 </div>
             </div>
 
-            <div class="nc-hr" />
-
-            <div class="overflow-x-auto">
-                <table class="nc-table">
-                    <thead>
-                        <tr>
-                            <th>{{ $t('Environment') }}</th>
-                            <th>{{ $t('Horizon URL') }}</th>
-                            <th>{{ $t('Collection') }}</th>
-                            <th>{{ $t('Poll interval') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="(environment, index) in form.environments"
-                            :key="index"
-                        >
-                            <td>
-                                <span class="inline-flex items-center gap-2"
-                                    ><EnvSwatch :color="environment.color" />{{
-                                        environment.name
-                                    }}</span
-                                >
-                            </td>
-                            <td
-                                style="
-                                    font-size: 12px;
-                                    color: var(--nc-neutral-400);
-                                    letter-spacing: 0.01em;
-                                "
-                            >
-                                {{ environment.horizonUrl }}
-                            </td>
-                            <td
-                                style="
-                                    font-size: 12px;
-                                    color: var(--nc-neutral-400);
-                                "
-                            >
-                                {{
-                                    environment.basicAuthUser
-                                        ? `${$t('basic auth')} · ${environment.basicAuthUser}`
-                                        : $t('no auth')
-                                }}
-                            </td>
-                            <td
-                                class="nc-num"
-                                style="
-                                    font-size: 12px;
-                                    color: var(--nc-neutral-400);
-                                "
-                            >
-                                {{ environment.pollIntervalSeconds }}
-                                {{ $t('seconds') }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="nc-field mt-[var(--nc-space-2)]">
+                <label for="wizard-rules">{{
+                    $t('Alert rules to apply')
+                }}</label>
+                <select
+                    id="wizard-rules"
+                    class="nc-input"
+                    disabled
+                    :title="$t('Available soon')"
+                >
+                    <option>{{ $t('Organization default') }}</option>
+                </select>
+                <div
+                    class="mt-1"
+                    style="font-size: 11px; color: var(--nc-neutral-600)"
+                >
+                    {{
+                        $t(
+                            'The organization defaults apply from the first reading; rules per environment arrive with the next release.',
+                        )
+                    }}
+                </div>
             </div>
 
-            <div
-                class="mt-[var(--nc-space-3)]"
-                style="font-size: 12px; color: var(--nc-neutral-400)"
-            >
+            <div style="font-size: 12px; color: var(--nc-neutral-400)">
                 {{
                     $t(
-                        'Nothing is contacted yet: checking that Horizon answers at these URLs arrives with the next release.',
+                        'A failed test does not stop you: the environment reads unreachable until Horizon answers.',
                     )
                 }}
             </div>
-        </SectionCard>
+        </div>
 
         <div class="flex items-center" style="gap: var(--nc-space-3)">
             <Link
                 v-if="step === 1"
-                class="nc-btn nc-btn-secondary"
+                class="nc-btn nc-btn-ghost"
                 :href="applicationsIndex(slug)"
                 >{{ $t('Cancel') }}</Link
             >
@@ -348,8 +787,47 @@ const submit = () => {
                 :disabled="form.processing"
                 @click="submit"
             >
-                {{ $t('Create application') }}
+                {{ $t('Add application') }}
             </button>
         </div>
     </div>
 </template>
+
+<style scoped>
+.row {
+    position: relative;
+    overflow: hidden;
+    padding: var(--nc-space-3) var(--nc-space-3) var(--nc-space-3)
+        var(--nc-space-4);
+    border-radius: var(--nc-radius-md);
+    background: var(--nc-surface);
+    box-shadow: var(--nc-shadow-sm);
+}
+
+.check {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: var(--nc-space-3);
+    border-radius: var(--nc-radius-md);
+    background: var(--nc-surface);
+    box-shadow: var(--nc-shadow-sm);
+}
+
+.pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--nc-radius-sm);
+    font-size: 12px;
+}
+
+.url {
+    margin-top: 4px;
+    overflow: hidden;
+    font-size: 11px;
+    letter-spacing: 0.01em;
+    color: var(--nc-neutral-500);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+</style>

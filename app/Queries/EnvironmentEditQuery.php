@@ -19,6 +19,7 @@ class EnvironmentEditQuery
                 horizonUrl: $environment->horizon_url,
                 basicAuthUser: $environment->basic_auth_user,
                 pollIntervalSeconds: $environment->poll_interval_seconds,
+                pollingEnabled: $environment->polling_enabled,
             ),
             application: ApplicationFormData::from($environment->application),
             colors: EnvironmentColor::options(),

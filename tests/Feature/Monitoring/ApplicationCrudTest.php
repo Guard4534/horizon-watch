@@ -330,3 +330,34 @@ test('deleting an application clears the manual visibility grants of its environ
     expect(DB::table('environment_user')->where('environment_id', $environment->id)->exists())->toBeFalse()
         ->and(DB::table('environment_user')->where('user_id', $this->member->id)->exists())->toBeFalse();
 });
+
+test('the wizard stores each row\'s collection switch, on by default', function () {
+    $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
+        'application' => ['name' => 'Switches', 'host' => 'switches.example.com'],
+        'environments' => [
+            ($this->environmentPayload)('production'),
+            [...($this->environmentPayload)('staging'), 'pollingEnabled' => false],
+        ],
+    ])->assertRedirect();
+
+    $application = Application::where('team_id', $this->team->id)->where('name', 'Switches')->firstOrFail();
+
+    expect($application->environments()->orderBy('name')->pluck('polling_enabled', 'name')->all())
+        ->toBe(['production' => true, 'staging' => false]);
+});
+
+test('a wizard row whose URL carries credentials is refused on that row', function () {
+    $this->actingAs($this->admin)
+        ->post(route('applications.store', ['current_team' => $this->team->slug]), [
+            'application' => ['name' => 'Leaky', 'host' => 'leaky.example.com'],
+            'environments' => [
+                ($this->environmentPayload)('production'),
+                [...($this->environmentPayload)('staging'), 'horizonUrl' => 'https://ops:url-secret@staging.leaky.example.com/horizon'],
+            ],
+        ])
+        ->assertInvalid(['environments.1.horizonUrl' => 'basic-auth fields'])
+        ->assertValid(['environments.0.horizonUrl']);
+
+    expect(Application::where('name', 'Leaky')->exists())->toBeFalse()
+        ->and(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('url-secret');
+});

@@ -94,7 +94,7 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                 type="url"
                 autocomplete="off"
                 spellcheck="false"
-                placeholder="https://production.invoicer.example.com/horizon/api"
+                placeholder="https://production.invoicer.example.com/horizon"
             />
             <div
                 v-if="errors[`${prefix}horizonUrl`]"
@@ -194,6 +194,38 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                 >
                     {{ errors[`${prefix}pollIntervalSeconds`] }}
                 </div>
+            </div>
+        </div>
+
+        <div>
+            <label class="nc-radio" style="font-size: 13px">
+                <input
+                    :id="fieldId('pollingEnabled')"
+                    v-model="model.pollingEnabled"
+                    type="checkbox"
+                    role="switch"
+                    :aria-checked="model.pollingEnabled"
+                />
+                <span class="nc-dot" />
+                {{ $t('Collect readings') }}
+            </label>
+            <div
+                v-if="errors[`${prefix}pollingEnabled`]"
+                class="mt-1"
+                style="font-size: 11px; color: var(--st-down)"
+            >
+                {{ errors[`${prefix}pollingEnabled`] }}
+            </div>
+            <div
+                v-else
+                class="mt-1"
+                style="font-size: 11px; color: var(--nc-neutral-600)"
+            >
+                {{
+                    $t(
+                        'Paused environments keep their last reading and are not contacted.',
+                    )
+                }}
             </div>
         </div>
     </div>

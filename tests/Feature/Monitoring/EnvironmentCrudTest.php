@@ -558,3 +558,110 @@ test('an admin edits an environment their own visibility hides', function () {
         ->get(route('environments.show', ['current_team' => $this->team->slug, 'environment' => $environment->slug]))
         ->assertNotFound();
 });
+
+test('collection is on unless the form turns it off', function () {
+    $store = route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]);
+
+    $this->actingAs($this->admin)
+        ->post($store, ($this->validPayload)(['name' => 'production']))
+        ->assertRedirect();
+
+    $this->actingAs($this->admin)
+        ->post($store, ($this->validPayload)(['name' => 'staging', 'pollingEnabled' => false]))
+        ->assertRedirect();
+
+    expect(Environment::where('name', 'production')->firstOrFail()->polling_enabled)->toBeTrue()
+        ->and(Environment::where('name', 'staging')->firstOrFail()->polling_enabled)->toBeFalse();
+});
+
+test('pausing and resuming collection is an edit, without the credentials permission', function () {
+    Gate::policy(Environment::class, get_class(new class extends EnvironmentPolicy
+    {
+        public function manageCredentials(User $user, Environment $environment): bool
+        {
+            return false;
+        }
+    }));
+
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'super-secret-value',
+    ]);
+    $update = route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+    $edit = route('environments.edit', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+    $payload = ($this->validPayload)(['basicAuthPassword' => null]);
+
+    $this->actingAs($this->admin)->get($edit)
+        ->assertInertia(fn (Assert $page) => $page->where('page.environment.pollingEnabled', true));
+
+    $this->actingAs($this->admin)->patch($update, [...$payload, 'pollingEnabled' => false])->assertRedirect();
+
+    expect($environment->fresh()->polling_enabled)->toBeFalse()
+        ->and($environment->fresh()->basic_auth_password)->toBe('super-secret-value');
+
+    $this->actingAs($this->admin)->get($edit)
+        ->assertInertia(fn (Assert $page) => $page->where('page.environment.pollingEnabled', false));
+
+    $this->actingAs($this->admin)->patch($update, [...$payload, 'pollingEnabled' => true])->assertRedirect();
+
+    expect($environment->fresh()->polling_enabled)->toBeTrue();
+});
+
+test('collection must be a boolean', function () {
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+            ($this->validPayload)(['pollingEnabled' => 'sometimes']),
+        )
+        ->assertSessionHasErrors('pollingEnabled');
+
+    expect(Environment::where('application_id', $this->application->id)->exists())->toBeFalse();
+});
+
+dataset('urls carrying credentials', [
+    'user and password' => ['https://ops:url-secret@horizon.example.com/horizon'],
+    'user only' => ['https://url-secret@horizon.example.com/horizon'],
+    'bare at sign' => ['https://@horizon.example.com/horizon'],
+    'upper-case scheme' => ['HTTPS://ops:url-secret@horizon.example.com/horizon'],
+    'at sign behind a backslash' => ['https://horizon.example.com\\url-secret@horizon.example.net/horizon'],
+]);
+
+test('a Horizon URL carrying credentials is refused on create and update, and not flashed back', function (string $url) {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'staging',
+        'horizon_url' => 'https://staging.example.com/horizon',
+    ]);
+
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+            ($this->validPayload)(['horizonUrl' => $url]),
+        )
+        ->assertInvalid(['horizonUrl' => 'basic-auth fields']);
+
+    expect(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('url-secret')
+        ->and(Environment::where('name', 'production')->exists())->toBeFalse();
+
+    $this->actingAs($this->admin)
+        ->patch(
+            route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
+            ($this->validPayload)(['name' => 'staging', 'horizonUrl' => $url]),
+        )
+        ->assertInvalid(['horizonUrl' => 'basic-auth fields']);
+
+    expect(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('url-secret')
+        ->and($environment->fresh()->horizon_url)->toBe('https://staging.example.com/horizon');
+})->with('urls carrying credentials');
+
+test('an at sign after the host is not a credential', function () {
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+            ($this->validPayload)(['horizonUrl' => 'https://horizon.example.com/ops@team/horizon?by=a@b']),
+        )
+        ->assertValid();
+
+    expect(Environment::where('name', 'production')->sole()->horizon_url)
+        ->toBe('https://horizon.example.com/ops@team/horizon?by=a@b');
+});

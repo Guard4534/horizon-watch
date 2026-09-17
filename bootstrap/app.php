@@ -40,9 +40,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // framework). Nothing is lost by dropping the whole array — every
         // form here is an Inertia form that keeps its state client-side and
         // never reads old input back.
+        //
+        // "horizonUrl" goes too: a URL is refused when it carries
+        // "user:password@" (UrlWithoutCredentials), and flashing it back
+        // would store exactly that credential.
         $exceptions->dontFlash([
             'basicAuthPassword',
             'environments',
+            'horizonUrl',
         ]);
 
         $exceptions->shouldRenderJsonWhen(

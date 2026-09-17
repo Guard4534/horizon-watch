@@ -5,6 +5,7 @@ namespace App\Data\Applications;
 use App\Enums\EnvironmentColor;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Rules\UrlWithoutCredentials;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Unique;
 use Spatie\LaravelData\Data;
@@ -23,6 +24,10 @@ class EnvironmentFormData extends Data
         // and it has no such property at all — see its docblock.
         public ?string $basicAuthPassword = null,
         public int $pollIntervalSeconds = 15,
+        // Off means the scheduler leaves the environment alone: its last
+        // reading stays on the pages, nothing contacts it. A configuration
+        // change like any other, so it needs only "manage applications".
+        public bool $pollingEnabled = true,
     ) {}
 
     /**
@@ -33,35 +38,58 @@ class EnvironmentFormData extends Data
         return [
             'name' => ['required', 'string', 'max:60', 'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/', ...self::uniqueNameRules()],
             'color' => ['required', Rule::enum(EnvironmentColor::class)],
-            'horizonUrl' => ['required', 'url:http,https', 'max:255'],
-            // Basic auth needs both halves: a password on its own cannot
-            // authenticate anything, and since it is never read back out it
-            // could not be paired with a username later either. Rejecting it
-            // here is what lets AddEnvironment and UpdateEnvironment treat
-            // "no username" as "no credential at all".
-            //
-            // required_with names an absolute key, so nested use has to
-            // qualify it: the wizard validates this Data at
-            // "environments.N", where a bare "basicAuthPassword" would look
-            // for a top-level field that never exists and the rule would
-            // quietly never fire.
-            //
-            // The shape rule is what keeps a username of three spaces out of
-            // the column: TrimStrings plus ConvertEmptyStringsToNull already
-            // turn that into null over HTTP, but this does not want to
-            // depend on two global middlewares staying in the stack. A colon
-            // is out for a harder reason — basic auth transmits
-            // "user:password", so a username containing one cannot be
-            // encoded at all (RFC 7617).
-            'basicAuthUser' => [
-                'nullable',
-                'string',
-                'max:255',
-                'regex:/^[^\s:]+$/',
-                'required_with:'.self::key($context, 'basicAuthPassword'),
-            ],
+            'horizonUrl' => self::horizonUrlRules(),
+            'basicAuthUser' => self::basicAuthUserRules(self::key($context, 'basicAuthPassword')),
             'basicAuthPassword' => ['nullable', 'string', ...self::passwordRequiredWithUsernameRules($context)],
             'pollIntervalSeconds' => ['integer', 'between:5,300'],
+            'pollingEnabled' => ['boolean'],
+        ];
+    }
+
+    /**
+     * Shared with TestConnectionData, so a URL the form would refuse is
+     * never probed either. A URL carrying a user or a password is refused
+     * (UrlWithoutCredentials): the URL is shown to every watcher, the
+     * basic-auth fields are not.
+     *
+     * @return array<int, string|UrlWithoutCredentials>
+     */
+    public static function horizonUrlRules(): array
+    {
+        return ['required', 'url:http,https', 'max:255', new UrlWithoutCredentials];
+    }
+
+    /**
+     * Basic auth needs both halves: a password on its own cannot
+     * authenticate anything, and since it is never read back out it could
+     * not be paired with a username later either. Rejecting it here is what
+     * lets AddEnvironment and UpdateEnvironment treat "no username" as "no
+     * credential at all".
+     *
+     * required_with names an absolute key, so nested use has to qualify it:
+     * the wizard validates this Data at "environments.N", where a bare
+     * "basicAuthPassword" would look for a top-level field that never exists
+     * and the rule would quietly never fire. Callers pass the absolute key.
+     *
+     * The shape rule is what keeps a username of three spaces out of the
+     * column: TrimStrings plus ConvertEmptyStringsToNull already turn that
+     * into null over HTTP, but this does not want to depend on two global
+     * middlewares staying in the stack. A colon is out for a harder reason —
+     * basic auth transmits "user:password", so a username containing one
+     * cannot be encoded at all (RFC 7617).
+     *
+     * Shared with TestConnectionData.
+     *
+     * @return array<int, string>
+     */
+    public static function basicAuthUserRules(string $passwordKey): array
+    {
+        return [
+            'nullable',
+            'string',
+            'max:255',
+            'regex:/^[^\s:]+$/',
+            'required_with:'.$passwordKey,
         ];
     }
 

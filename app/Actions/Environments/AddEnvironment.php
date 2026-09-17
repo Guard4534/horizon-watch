@@ -19,6 +19,7 @@ class AddEnvironment
             // password", not a literal empty-string credential.
             'basic_auth_password' => $data->hasNewPassword() ? $data->basicAuthPassword : null,
             'poll_interval_seconds' => $data->pollIntervalSeconds,
+            'polling_enabled' => $data->pollingEnabled,
         ]);
     }
 }

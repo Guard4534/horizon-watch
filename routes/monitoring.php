@@ -3,6 +3,7 @@
 use App\Http\Controllers\Monitoring\AlertController;
 use App\Http\Controllers\Monitoring\AlertRuleController;
 use App\Http\Controllers\Monitoring\ApplicationController;
+use App\Http\Controllers\Monitoring\ConnectionTestController;
 use App\Http\Controllers\Monitoring\EnvironmentController;
 use App\Http\Controllers\Monitoring\MemberController;
 use App\Http\Controllers\Monitoring\WallController;
@@ -22,6 +23,12 @@ Route::get('applications/create', [ApplicationController::class, 'create'])
 Route::post('applications', [ApplicationController::class, 'store'])
     ->middleware(EnsureTeamMembership::class.':admin')
     ->name('applications.store');
+
+// Tests an address that is not saved yet (the wizard, the add-environment
+// form); the controller asks for the permission that creates applications.
+Route::post('applications/test-connection', [ConnectionTestController::class, 'application'])
+    ->middleware('throttle:test-connection')
+    ->name('applications.test-connection');
 
 Route::get('applications/{application}', [ApplicationController::class, 'show'])->name('applications.show');
 
@@ -57,6 +64,14 @@ Route::post('applications/{application}/environments', [EnvironmentController::c
     ->name('environments.store');
 
 Route::get('environments/{environment}', [EnvironmentController::class, 'show'])->name('environments.show');
+
+// No admin middleware: without a body this is the member's "test
+// connection" on a watched environment, with one it is the edit form's
+// test and the controller asks for the update permission instead.
+Route::post('environments/{environment}/test-connection', [ConnectionTestController::class, 'environment'])
+    ->middleware('throttle:test-connection')
+    ->scopeBindings()
+    ->name('environments.test-connection');
 
 Route::get('environments/{environment}/edit', [EnvironmentController::class, 'edit'])
     ->middleware(EnsureTeamMembership::class.':admin')

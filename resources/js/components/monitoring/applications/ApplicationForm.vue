@@ -3,11 +3,18 @@ const model = defineModel<App.Data.Applications.ApplicationFormData>({
     required: true,
 });
 
-const { errors, prefix = '' } = defineProps<{
+const {
+    errors,
+    prefix = '',
+    wizard = false,
+} = defineProps<{
     // Inertia's flat error bag. The wizard nests this form under
     // "application", so the keys are prefixed; the edit page does not.
     errors: Record<string, string | undefined>;
     prefix?: string;
+    // The wizard names the host "primary domain", because there it also
+    // suggests each environment's Horizon URL. It is the same saved field.
+    wizard?: boolean;
 }>();
 </script>
 
@@ -20,7 +27,9 @@ const { errors, prefix = '' } = defineProps<{
         "
     >
         <div class="nc-field">
-            <label :for="`${prefix}name`">{{ $t('Name') }}</label>
+            <label :for="`${prefix}name`">{{
+                wizard ? $t('Application name') : $t('Name')
+            }}</label>
             <input
                 :id="`${prefix}name`"
                 v-model="model.name"
@@ -39,7 +48,9 @@ const { errors, prefix = '' } = defineProps<{
         </div>
 
         <div class="nc-field">
-            <label :for="`${prefix}host`">{{ $t('Host') }}</label>
+            <label :for="`${prefix}host`">{{
+                wizard ? $t('Primary domain') : $t('Host')
+            }}</label>
             <input
                 :id="`${prefix}host`"
                 v-model="model.host"
@@ -57,6 +68,17 @@ const { errors, prefix = '' } = defineProps<{
                 {{ errors[`${prefix}host`] }}
             </div>
             <div
+                v-else-if="wizard"
+                class="mt-1"
+                style="font-size: 11px; color: var(--nc-neutral-600)"
+            >
+                {{
+                    $t(
+                        'No scheme. It also suggests the URL of each environment.',
+                    )
+                }}
+            </div>
+            <div
                 v-else
                 class="mt-1"
                 style="font-size: 11px; color: var(--nc-neutral-600)"
@@ -68,5 +90,7 @@ const { errors, prefix = '' } = defineProps<{
                 }}
             </div>
         </div>
+
+        <slot />
     </div>
 </template>

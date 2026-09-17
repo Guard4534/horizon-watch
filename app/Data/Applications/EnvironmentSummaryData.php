@@ -21,5 +21,6 @@ class EnvironmentSummaryData extends Data
         public string $horizonUrl,
         public ?string $basicAuthUser,
         public int $pollIntervalSeconds,
+        public bool $pollingEnabled,
     ) {}
 }
