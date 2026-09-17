@@ -1,0 +1,23 @@
+[
+    {
+        "name": "default",
+        "length": 15,
+        "wait": 4,
+        "processes": 3,
+        "split_queues": null
+    },
+    {
+        "name": "emails",
+        "length": 0,
+        "wait": 0,
+        "processes": 2,
+        "split_queues": null
+    },
+    {
+        "name": "reports",
+        "length": 3,
+        "wait": 120,
+        "processes": 2,
+        "split_queues": null
+    }
+]

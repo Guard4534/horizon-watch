@@ -1,0 +1,50 @@
+{
+    "jobs": [
+        {
+            "id": "7f1d2c3b-0000-4000-8000-000000000001",
+            "connection": "redis",
+            "queue": "emails",
+            "name": "App\\Jobs\\SendWelcomeEmail",
+            "status": "failed",
+            "payload": {
+                "uuid": "7f1d2c3b-0000-4000-8000-000000000001",
+                "displayName": "App\\Jobs\\SendWelcomeEmail",
+                "attempts": 3,
+                "data": {
+                    "commandName": "App\\Jobs\\SendWelcomeEmail",
+                    "command": "O:25:\"App\\Jobs\\SendWelcomeEmail\":1:{s:5:\"token\";s:20:\"payload-secret-value\";}"
+                },
+                "tags": []
+            },
+            "exception": "Symfony\\Component\\Mailer\\Exception\\TransportException: Connection to smtp.example.com:587 timed out\n#0 /var/www/vendor/symfony/mailer/Transport.php(42): connect()\n#1 {main}",
+            "context": null,
+            "failed_at": "1789646100.4821",
+            "completed_at": null,
+            "retried_by": [],
+            "reserved_at": "1789646099.1",
+            "index": 0
+        },
+        {
+            "id": "7f1d2c3b-0000-4000-8000-000000000002",
+            "connection": "redis",
+            "queue": "reports",
+            "name": "App\\Jobs\\BuildQuarterlyReport",
+            "status": "failed",
+            "payload": {
+                "uuid": "7f1d2c3b-0000-4000-8000-000000000002",
+                "displayName": "App\\Jobs\\BuildQuarterlyReport",
+                "data": {
+                    "commandName": "App\\Jobs\\BuildQuarterlyReport"
+                }
+            },
+            "exception": "App\\Exceptions\\ReportFailed: The quarterly report for the invented customer could not be rendered The quarterly report for the invented customer could not be rendered The quarterly report for the invented customer could not be rendered The quarterly report for the invented customer could not be rendered The quarterly report for the invented customer could not be rendered \n#0 /var/www/app/Jobs/BuildQuarterlyReport.php(18): render()",
+            "context": null,
+            "failed_at": "1789645200",
+            "completed_at": null,
+            "retried_by": [],
+            "reserved_at": null,
+            "index": 1
+        }
+    ],
+    "total": 2
+}
