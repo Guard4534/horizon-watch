@@ -69,7 +69,7 @@ const slug = useTeamSlug();
                                 ? $t('Back within threshold · :environment', {
                                       environment: alert.environmentName,
                                   })
-                                : `${$t(ruleLabel(alert.metric))} · ${alert.environmentName}`
+                                : `${ruleLabel(alert.metric)} · ${alert.environmentName}`
                         }}
                     </div>
                     <div

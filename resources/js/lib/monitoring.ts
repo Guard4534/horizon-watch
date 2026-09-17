@@ -76,6 +76,27 @@ export function formatMinutesAgo(minutes: number): string {
     return trans(':minutes min ago', { minutes: String(minutes) });
 }
 
+/**
+ * How long ago something began, for readers: under a minute, minutes under
+ * an hour, then whole hours. `capped` means the real start lies beyond the
+ * 24-hour look-back (AlertData.sinceTruncated), so the minutes are a floor.
+ */
+export function formatElapsed(minutes: number, capped = false): string {
+    if (capped) {
+        return trans('more than 24 h ago');
+    }
+
+    if (minutes < 1) {
+        return trans('less than a minute ago');
+    }
+
+    if (minutes < 60) {
+        return trans(':minutes min ago', { minutes: String(minutes) });
+    }
+
+    return trans(':hours h ago', { hours: String(Math.floor(minutes / 60)) });
+}
+
 export function formatDuration(seconds: number): string {
     return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }

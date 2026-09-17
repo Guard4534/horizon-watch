@@ -19,6 +19,14 @@ const organization = computed(() => page.scope === 'organization');
 
 const shared = usePage();
 
+// Any scope with an override badge needs the note: the organization scope
+// lists those badges too.
+const showsOverrides = computed(
+    () =>
+        !organization.value ||
+        page.scopes.some((scope) => scope.overrideCount > 0),
+);
+
 // The organization scope counts every visible environment (see
 // MonitoringRepository::ruleScopes): zero means there are no thresholds
 // worth showing, since there is nothing they could apply to.
@@ -80,7 +88,7 @@ const somethingIsHidden = computed(
                         )
                     }}</span>
                     <span
-                        v-if="!organization"
+                        v-if="showsOverrides"
                         style="color: var(--nc-neutral-500)"
                         >{{
                             $t(
@@ -149,7 +157,10 @@ const somethingIsHidden = computed(
                 </div>
             </section>
 
-            <NotificationSettings :settings="page.notifications" />
+            <NotificationSettings
+                :summary="page.notificationSummary"
+                :settings="page.notifications"
+            />
         </div>
     </div>
 </template>

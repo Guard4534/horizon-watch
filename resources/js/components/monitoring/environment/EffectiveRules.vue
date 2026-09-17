@@ -55,7 +55,7 @@ const slug = useTeamSlug();
                     }"
                 />
                 <span class="min-w-0 truncate">{{
-                    $t(ruleLabel(rule.metric))
+                    ruleLabel(rule.metric)
                 }}</span>
                 <span
                     class="ml-auto flex-none"

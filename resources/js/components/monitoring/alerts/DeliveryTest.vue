@@ -2,8 +2,11 @@
 import { PhEnvelopeSimple, PhWebhooksLogo } from '@phosphor-icons/vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 
+// The addresses and the webhook URL reach only who may manage alert rules
+// (settings is null for everyone else): the others see counts.
 defineProps<{
-    settings: App.Data.Monitoring.NotificationSettingsData;
+    summary: App.Data.Pages.NotificationSummaryData;
+    settings: App.Data.Monitoring.NotificationSettingsData | null;
 }>();
 </script>
 
@@ -35,9 +38,12 @@ defineProps<{
             <div class="flex items-center gap-2">
                 <PhEnvelopeSimple :size="14" class="flex-none" />
                 <span class="min-w-0 truncate" style="color: var(--nc-text)">{{
-                    settings.recipients.length
-                        ? settings.recipients.join(', ')
-                        : '—'
+                    settings
+                        ? settings.recipients.join(', ') || '—'
+                        : $tChoice(
+                              ':count recipient|:count recipients',
+                              summary.recipientCount,
+                          )
                 }}</span>
             </div>
             <div class="flex items-center gap-2">
@@ -45,7 +51,13 @@ defineProps<{
                 <span
                     class="min-w-0 truncate"
                     style="color: var(--nc-text); letter-spacing: 0.01em"
-                    >{{ settings.webhookUrl ?? '—' }}</span
+                    >{{
+                        settings
+                            ? settings.webhookUrl || '—'
+                            : summary.webhookConfigured
+                              ? $t('Webhook configured')
+                              : $t('No webhook')
+                    }}</span
                 >
             </div>
         </div>

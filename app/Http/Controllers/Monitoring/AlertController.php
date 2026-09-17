@@ -15,7 +15,7 @@ class AlertController extends Controller
     public function index(Request $request, Team $current_team, AlertLogQuery $query): Response
     {
         return Inertia::render('monitoring/alerts/Index', [
-            'page' => $query->handle($current_team, $request->enum('state', AlertState::class) ?? AlertState::Open),
+            'page' => $query->handle($current_team, $request->user(), $request->enum('state', AlertState::class) ?? AlertState::Open),
         ]);
     }
 }

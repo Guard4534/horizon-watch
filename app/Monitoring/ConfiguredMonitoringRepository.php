@@ -398,12 +398,17 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             }
 
             foreach ($anomalies[$model->id] ?? [] as $anomaly) {
+                // The look-back is measured from the latest snapshot, the cap
+                // from now: an environment whose readings stopped reaches the
+                // cap without the query's flag, and must say so too.
+                $minutes = $anomaly['truncated'] ? $cap : min($cap, max(0, (int) $anomaly['since']->diffInMinutes($now)));
+
                 $alerts[] = $this->makeAlert(
                     $environment,
                     $environment->status,
                     $anomaly['metric'],
-                    $anomaly['truncated'] ? $cap : min($cap, max(0, (int) $anomaly['since']->diffInMinutes($now))),
-                    $anomaly['truncated'],
+                    $minutes,
+                    $anomaly['truncated'] || $minutes >= $cap,
                 );
             }
         }

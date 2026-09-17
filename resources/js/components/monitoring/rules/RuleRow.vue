@@ -17,7 +17,7 @@ const { rule, organizationScope } = defineProps<{
                     class="flex-none"
                     style="color: var(--nc-neutral-400)"
                 />
-                {{ $t(ruleLabel(rule.metric)) }}
+                {{ ruleLabel(rule.metric) }}
                 <!-- "override" stays English in both languages: the mockup keeps
                      rule-origin badges untranslated on purpose. -->
                 <span
@@ -35,7 +35,7 @@ const { rule, organizationScope } = defineProps<{
                 class="mt-[2px]"
                 style="font-size: 11px; color: var(--nc-neutral-600)"
             >
-                {{ $t(ruleHint(rule.metric)) }}
+                {{ ruleHint(rule.metric) }}
             </div>
         </div>
         <div class="flex items-center gap-[6px]">

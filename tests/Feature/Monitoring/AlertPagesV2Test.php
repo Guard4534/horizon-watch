@@ -88,6 +88,31 @@ test('an anomaly older than the look-back reaches the page as "more than 24 h"',
         ->and($alerts[0]['minutesAgo'])->toBe(1440);
 });
 
+test('an anomaly whose readings stopped past the cap is flagged, not shown as 1440 minutes', function () {
+    // The query's look-back starts at the latest snapshot, 30 hours old:
+    // the run began inside it, so only the cap against now can tell.
+    EnvironmentSnapshot::factory()->for($this->production)->create(['captured_at' => now()->subHours(31)]);
+    Readings::record($this->production, EnvironmentStatus::Unreachable, snapshot: ['captured_at' => now()->subHours(30)]);
+
+    $this->actingAs($this->admin);
+    $alerts = alertsOn($this->team->slug);
+
+    expect($alerts)->toHaveCount(1)
+        ->and($alerts[0]['minutesAgo'])->toBe(1440)
+        ->and($alerts[0]['sinceTruncated'])->toBeTrue();
+});
+
+test('a stale run still under the cap keeps its minutes and no flag', function () {
+    EnvironmentSnapshot::factory()->for($this->production)->create(['captured_at' => now()->subHours(4)]);
+    Readings::record($this->production, EnvironmentStatus::Unreachable, snapshot: ['captured_at' => now()->subHours(3)]);
+
+    $this->actingAs($this->admin);
+    $alerts = alertsOn($this->team->slug);
+
+    expect($alerts[0]['minutesAgo'])->toBe(180)
+        ->and($alerts[0]['sinceTruncated'])->toBeFalse();
+});
+
 test('a paused horizon is an open warning on the page', function () {
     Readings::record($this->production, EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused]);
 
@@ -114,16 +139,44 @@ test('muted and resolved stay empty while anomalies are open', function (AlertSt
             ->where('page.counts.resolved', 0));
 })->with([AlertState::Muted, AlertState::Resolved]);
 
-test('the delivery-test box gets the notification targets, and the email preview is gone', function () {
+test('an admin gets the notification targets on both pages, and the email preview is gone', function (string $route) {
     Readings::record($this->production, EnvironmentStatus::Unreachable);
 
     $this->actingAs($this->admin)
-        ->get(route('alerts.index', ['current_team' => $this->team->slug]))
+        ->get(route($route, ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.notifications.recipients', ['ops@example.com', 'oncall@example.com'])
             ->where('page.notifications.webhookUrl', 'https://hooks.example.com/horizon')
+            ->where('page.notificationSummary.recipientCount', 2)
+            ->where('page.notificationSummary.webhookConfigured', true)
             ->missing('page.preview'));
-});
+})->with(['alerts.index', 'alert-rules.index']);
+
+test('without ManageAlertRules a member only learns how many targets there are', function (TeamRole $role, string $route) {
+    Readings::record($this->production, EnvironmentStatus::Unreachable);
+
+    $user = User::factory()->create();
+    $this->team->members()->attach($user, [
+        'role' => $role->value,
+        'visibility' => MemberVisibility::All->value,
+    ]);
+    $user->switchTeam($this->team);
+
+    $response = $this->actingAs($user)
+        ->get(route($route, ['current_team' => $this->team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.notifications', null)
+            ->where('page.notificationSummary.recipientCount', 2)
+            ->where('page.notificationSummary.webhookConfigured', true)
+            ->where('page.notificationSummary.repeatMinutes', 30));
+
+    // Nowhere in the page, not just not under that key.
+    expect($response->getContent())
+        ->not->toContain('hooks.example.com')
+        ->not->toContain('ops@example.com')
+        ->not->toContain('oncall@example.com');
+})->with([TeamRole::Member, TeamRole::Viewer])->with(['alerts.index', 'alert-rules.index']);
 
 test('a member limited to non-production gets no anomaly of a production environment', function () {
     Readings::record($this->production, EnvironmentStatus::Unreachable);

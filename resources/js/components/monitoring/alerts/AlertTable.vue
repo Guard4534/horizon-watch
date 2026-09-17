@@ -111,15 +111,9 @@ const slug = useTeamSlug();
                         class="whitespace-nowrap"
                         style="font-size: 12px; color: var(--nc-neutral-500)"
                     >
-                        {{
-                            alert.channels
-                                .map((channel) =>
-                                    channel === 'mail'
-                                        ? $t('email')
-                                        : $t('webhook'),
-                                )
-                                .join(' · ')
-                        }}
+                        <!-- Nothing is delivered before the next release:
+                             naming channels would suggest otherwise. -->
+                        {{ $t('not sent yet') }}
                     </td>
                     <td class="whitespace-nowrap" style="text-align: right">
                         <!-- Muting and marking as handled arrive with the

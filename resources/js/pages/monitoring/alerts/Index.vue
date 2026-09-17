@@ -40,12 +40,26 @@ const somethingIsHidden = computed(
         shared.props.organizationHasEnvironments,
 );
 
+// A poll reloads window.location.href, and Inertia only compares paths when
+// a response lands: a poll started before a tab click and answered after it
+// would put the old tab back. So in-flight async reloads are cancelled (that
+// fires their finish, and the poll goes on) and the URL moves first, so any
+// poll fired while the tab loads already asks for the new tab.
+function switchState(next: App.Enums.AlertState): void {
+    router.cancelAll({ sync: false, prefetch: false });
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('state', next);
+    window.history.replaceState(window.history.state, '', url);
+
+    // ReloadOptions omits preserveScroll/preserveState from Inertia 3's Visit
+    // type: reload() already preserves both.
+    router.reload({ data: { state: next }, only: ['page'] });
+}
+
 const state = computed({
     get: () => page.state,
-    set: (next: App.Enums.AlertState) =>
-        // ReloadOptions omits preserveScroll/preserveState from Inertia 3's Visit type: reload() already
-        // preserves both, so the flag from the brief is redundant and does not type-check here.
-        router.reload({ data: { state: next }, only: ['page'] }),
+    set: switchState,
 });
 
 // Muted and resolved stay empty until muting and resolving exist.
@@ -62,7 +76,7 @@ const alerts = computed(() => {
                   alert.applicationName,
                   alert.environmentName,
                   alert.metric,
-                  trans(ruleLabel(alert.metric)),
+                  ruleLabel(alert.metric),
               ]
                   .join(' ')
                   .toLowerCase()
@@ -104,30 +118,18 @@ const empty = computed(() =>
         />
     </div>
 
+    <!-- The mobile shell already titles the page: no second header here. -->
     <div v-else-if="isMobile" class="flex flex-col">
-        <div
-            class="flex items-center gap-2"
-            style="
-                padding: var(--nc-space-3) var(--nc-space-4);
-                border-bottom: 1px solid var(--nc-divider);
-            "
-        >
-            <span style="font-size: 14px">{{ $t('Alerts') }}</span>
-            <span
-                class="ml-auto"
-                style="font-size: 10px; color: var(--nc-neutral-500)"
-                >{{
-                    $t(':count open', { count: String(page.counts.open) })
-                }}</span
-            >
-        </div>
         <div style="padding: var(--nc-space-3) var(--nc-space-4) 0">
             <SegmentedControl
                 v-model="state"
                 name="alert-state-mobile"
                 class="mobile-seg"
                 :options="[
-                    { value: 'open', label: $t('Open') },
+                    {
+                        value: 'open',
+                        label: `${$t('Open')} ${page.counts.open}`,
+                    },
                     { value: 'muted', label: $t('Muted') },
                     { value: 'resolved', label: $t('Resolved') },
                 ]"
@@ -195,9 +197,19 @@ const empty = computed(() =>
         </section>
 
         <div class="flex flex-col" style="gap: var(--nc-space-4)">
-            <DeliveryTest :settings="page.notifications" />
+            <DeliveryTest
+                :summary="page.notificationSummary"
+                :settings="page.notifications"
+            />
             <SectionCard :title="$t('Delivery policy')">
                 <div style="font-size: 12px; color: var(--nc-neutral-400)">
+                    <p style="margin: 0 0 var(--nc-space-2)">
+                        {{
+                            $t(
+                                'Nothing is sent yet: this is the policy that applies from the next release.',
+                            )
+                        }}
+                    </p>
                     {{
                         $t(
                             'A critical alert repeats every 30 minutes until it clears or gets muted. Warnings are grouped into a digest every 15 minutes. During quiet hours only criticals get through.',

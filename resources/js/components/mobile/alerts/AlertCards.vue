@@ -68,7 +68,7 @@ const slug = useTeamSlug();
                             color: inherit;
                             text-decoration: none;
                         "
-                        >{{ $t(ruleLabel(alert.metric)) }}</Link
+                        >{{ ruleLabel(alert.metric) }}</Link
                     >
                     <div
                         class="mt-[4px] flex items-center gap-[6px]"

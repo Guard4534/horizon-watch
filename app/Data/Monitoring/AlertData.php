@@ -27,10 +27,11 @@ class AlertData extends Data
         public int $nodeCount,
         public int $pending,
         public int $maxWaitSeconds,
-        // Capped at the look-back (1440) when $sinceTruncated.
+        // Minutes since the run began, capped at the look-back (1440).
         public int $minutesAgo,
-        // The anomaly has lasted longer than the look-back: show "more than
-        // 24 h", not the capped minutes.
+        // True whenever the cap applies: the run began before the look-back,
+        // or its readings stopped long enough ago that now is past the cap.
+        // Show "more than 24 h", not the capped minutes.
         public bool $sinceTruncated,
         /** @var array<int, NotificationChannel> */
         public array $channels,

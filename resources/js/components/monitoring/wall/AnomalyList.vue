@@ -53,7 +53,7 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                                 })
                             "
                             class="title block"
-                            >{{ $t(ruleLabel(alert.metric)) }}</Link
+                            >{{ ruleLabel(alert.metric) }}</Link
                         >
                         <div
                             class="mt-[3px] flex items-center gap-[6px]"

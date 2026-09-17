@@ -8,6 +8,7 @@ import {
     PhUsers,
     PhXCircle,
 } from '@phosphor-icons/vue';
+import { trans } from 'laravel-vue-i18n';
 import type { Component } from 'vue';
 
 const ICONS: Record<App.Enums.AlertRuleMetric, Component> = {
@@ -21,44 +22,52 @@ const ICONS: Record<App.Enums.AlertRuleMetric, Component> = {
     'workers.missing': PhUsers,
 };
 
-// English source strings: pages pass them through $t(). TranslationsTest
-// cannot see keys kept in a table, so lang/it.json is checked by hand.
+// Each entry calls trans() with a literal, so TranslationsTest sees every
+// key. The thunks run when a component renders, which is what keeps them
+// reactive to a language switch (trans() reads laravel-vue-i18n's reactive
+// messages, exactly like $t): never call them at module load.
 const LABELS: Record<
     App.Enums.AlertRuleMetric,
-    { label: string; hint: string }
+    { label: () => string; hint: () => string }
 > = {
     'horizon.master_inactive': {
-        label: 'Horizon inactive',
-        hint: 'no active master supervisor for',
+        label: () => trans('Horizon inactive'),
+        hint: () => trans('no active master supervisor for'),
     },
     'endpoint.unreachable': {
-        label: 'Endpoint unreachable',
-        hint: 'timeout or HTTP error for',
+        label: () => trans('Endpoint unreachable'),
+        hint: () => trans('timeout or HTTP error for'),
     },
     'horizon.paused': {
-        label: 'Horizon paused',
-        hint: 'Horizon or every master supervisor paused for',
+        label: () => trans('Horizon paused'),
+        hint: () => trans('Horizon or every master supervisor paused for'),
     },
     'queue.pending': {
-        label: 'Pending jobs',
-        hint: 'total across all queues above',
+        label: () => trans('Pending jobs'),
+        hint: () => trans('total across all queues above'),
     },
     'queue.max_wait': {
-        label: 'Max wait',
-        hint: 'oldest job waiting longer than',
+        label: () => trans('Max wait'),
+        hint: () => trans('oldest job waiting longer than'),
     },
-    'job.runtime': { label: 'Job runtime', hint: 'job running for more than' },
+    'job.runtime': {
+        label: () => trans('Job runtime'),
+        hint: () => trans('job running for more than'),
+    },
     // StatusEvaluator divides Horizon's failed count by the window Horizon
     // counts it over (often a week), not by the last hour.
     'jobs.failed_per_hour': {
-        label: 'Failed jobs / hour',
-        hint: 'hourly average over the window Horizon counts failures in, above',
+        label: () => trans('Failed jobs / hour'),
+        hint: () =>
+            trans(
+                'hourly average over the window Horizon counts failures in, above',
+            ),
     },
     // StatusEvaluator counts queues with jobs waiting and no process, and
     // fires at the threshold itself (>=), not below it.
     'workers.missing': {
-        label: 'Missing workers',
-        hint: 'queues with waiting jobs and no worker, at least',
+        label: () => trans('Missing workers'),
+        hint: () => trans('queues with waiting jobs and no worker, at least'),
     },
 };
 
@@ -74,12 +83,14 @@ export function ruleIcon(metric: App.Enums.AlertRuleMetric): Component {
     return ICONS[metric];
 }
 
+/** Translated: callers must not wrap it in $t(). */
 export function ruleLabel(metric: App.Enums.AlertRuleMetric): string {
-    return LABELS[metric].label;
+    return LABELS[metric].label();
 }
 
+/** Translated: callers must not wrap it in $t(). */
 export function ruleHint(metric: App.Enums.AlertRuleMetric): string {
-    return LABELS[metric].hint;
+    return LABELS[metric].hint();
 }
 
 export function isStateMetric(metric: App.Enums.AlertRuleMetric): boolean {
