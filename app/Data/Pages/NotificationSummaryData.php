@@ -12,6 +12,7 @@ class NotificationSummaryData extends Data
         public bool $webhookConfigured,
         public ?string $quietFrom,
         public ?string $quietTo,
+        public string $timezone,
         public ?int $repeatMinutes,
     ) {}
 
@@ -22,6 +23,7 @@ class NotificationSummaryData extends Data
             webhookConfigured: $settings->webhookUrl !== null && $settings->webhookUrl !== '',
             quietFrom: $settings->quietFrom,
             quietTo: $settings->quietTo,
+            timezone: $settings->timezone,
             repeatMinutes: $settings->repeatMinutes,
         );
     }

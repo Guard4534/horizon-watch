@@ -33,6 +33,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'horizonUrl',
             'application',
             'host',
+            'webhookUrl',
+            'webhookSecret',
+            'recipients',
         ]);
 
         $exceptions->shouldRenderJsonWhen(

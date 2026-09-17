@@ -2,6 +2,7 @@
 
 namespace App\Actions\Monitoring;
 
+use App\Alerts\AlertEngine;
 use App\Alerts\EffectiveRules;
 use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
@@ -34,6 +35,7 @@ class PollEnvironment
         private readonly HorizonReader $reader,
         private readonly StatusEvaluator $evaluator,
         private readonly EffectiveRules $rules,
+        private readonly AlertEngine $alerts,
     ) {}
 
     public function handle(Environment $environment): ?EnvironmentSnapshot
@@ -163,10 +165,14 @@ class PollEnvironment
                 ...$snapshot,
             ]);
 
-            $this->upsertState($environment, [
+            $current = $this->upsertState($environment, [
                 'captured_at' => $capturedAt,
                 ...$state,
             ], $insertOnly);
+
+            if ($current !== null) {
+                $this->alerts->afterReading($environment, $stored, $current);
+            }
 
             $moved = Environment::query()
                 ->whereKey($environment->id)
@@ -220,7 +226,7 @@ class PollEnvironment
      * @param  array<string, mixed>  $state
      * @param  array<string, mixed>  $insertOnly
      */
-    private function upsertState(Environment $environment, array $state, array $insertOnly): void
+    private function upsertState(Environment $environment, array $state, array $insertOnly): ?EnvironmentState
     {
         $model = new EnvironmentState;
         $timestamp = $model->freshTimestamp();
@@ -239,13 +245,16 @@ class PollEnvironment
         $grammar = $query->getGrammar();
 
         $statusSince = new Expression(
-            'case when "environment_states"."status" = excluded."status" then "environment_states"."status_since" else excluded."status_since" end',
+            'case when "environment_states"."status" = excluded."status" then coalesce("environment_states"."status_since", excluded."status_since") else excluded."status_since" end',
         );
 
         $sql = $grammar->compileUpsert($query, [$row], ['environment_id'], [...array_keys($state), 'status_since' => $statusSince, 'updated_at'])
-            .' where '.$grammar->wrap($model->getTable().'.captured_at').' <= '.$grammar->wrap('excluded.captured_at');
+            .' where '.$grammar->wrap($model->getTable().'.captured_at').' <= '.$grammar->wrap('excluded.captured_at')
+            .' returning *';
 
-        DB::affectingStatement($sql, array_values($row));
+        $written = DB::selectOne($sql, array_values($row));
+
+        return $written === null ? null : $model->newFromBuilder((array) $written);
     }
 
     /**

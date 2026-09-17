@@ -5,9 +5,11 @@ use App\Enums\AlertState;
 use App\Enums\EnvironmentStatus;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
+use App\Models\Alert;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
+use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -45,15 +47,13 @@ function alertsOn(string $slug, AlertState $state = AlertState::Open): array
     return $alerts;
 }
 
-test('open anomalies come from the stored readings, each with the start of its run', function () {
-    EnvironmentSnapshot::factory()->for($this->production)->create(['captured_at' => now()->subMinutes(45)]);
-    EnvironmentSnapshot::factory()->for($this->production)->failed()->create(['captured_at' => now()->subMinutes(30)]);
-    EnvironmentSnapshot::factory()->for($this->production)->failed()->create(['captured_at' => now()->subMinutes(15)]);
+test('open alerts reach the page with the minutes since they opened', function () {
     Readings::record($this->production, EnvironmentStatus::Unreachable);
-
-    EnvironmentSnapshot::factory()->for($this->staging)->create(['captured_at' => now()->subMinutes(20)]);
-    EnvironmentSnapshot::factory()->for($this->staging)->degraded()->create(['captured_at' => now()->subMinutes(7)]);
-    Readings::record($this->staging, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending], snapshot: ['pending' => 4_200]);
+    Alert::query()->update(['opened_at' => now()->subMinutes(30)]);
+    Readings::record($this->staging, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending], snapshot: [
+        'captured_at' => now()->subMinutes(7),
+        'pending' => 4_200,
+    ]);
 
     $this->actingAs($this->admin);
     $alerts = alertsOn($this->team->slug);
@@ -72,31 +72,7 @@ test('open anomalies come from the stored readings, each with the start of its r
         ->and($alerts[1]['applicationName'])->toBe('Billing');
 });
 
-test('an anomaly older than the look-back reaches the page as "more than 24 h"', function () {
-    foreach ([30, 20, 10] as $hoursAgo) {
-        EnvironmentSnapshot::factory()->for($this->production)->failed()->create(['captured_at' => now()->subHours($hoursAgo)]);
-    }
-    Readings::record($this->production, EnvironmentStatus::Unreachable);
-
-    $this->actingAs($this->admin);
-    $alerts = alertsOn($this->team->slug);
-
-    expect($alerts)->toHaveCount(1)
-        ->and($alerts[0]['minutesAgo'])->toBe(1440);
-});
-
-test('an anomaly whose readings stopped past the cap is flagged, not shown as 1440 minutes', function () {
-    EnvironmentSnapshot::factory()->for($this->production)->create(['captured_at' => now()->subHours(31)]);
-    Readings::record($this->production, EnvironmentStatus::Unreachable, snapshot: ['captured_at' => now()->subHours(30)]);
-
-    $this->actingAs($this->admin);
-    $alerts = alertsOn($this->team->slug);
-
-    expect($alerts)->toHaveCount(1)
-        ->and($alerts[0]['minutesAgo'])->toBe(1440);
-});
-
-test('a stale run still under the cap keeps its minutes and no flag', function () {
+test('an alert of an environment that went stale keeps the minutes since it opened', function () {
     EnvironmentSnapshot::factory()->for($this->production)->create(['captured_at' => now()->subHours(4)]);
     Readings::record($this->production, EnvironmentStatus::Unreachable, snapshot: ['captured_at' => now()->subHours(3)]);
 
@@ -134,6 +110,7 @@ test('muted and resolved stay empty while anomalies are open', function (AlertSt
 
 test('an admin gets the notification targets on both pages, and the email preview is gone', function (string $route) {
     Readings::record($this->production, EnvironmentStatus::Unreachable);
+    NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com', 'oncall@example.com']]);
 
     $this->actingAs($this->admin)
         ->get(route($route, ['current_team' => $this->team->slug]))
@@ -147,6 +124,7 @@ test('an admin gets the notification targets on both pages, and the email previe
 
 test('without ManageAlertRules a member only learns how many targets there are', function (TeamRole $role, string $route) {
     Readings::record($this->production, EnvironmentStatus::Unreachable);
+    $settings = NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com', 'oncall@example.com']]);
 
     $user = User::factory()->create();
     $this->team->members()->attach($user, [
@@ -167,7 +145,10 @@ test('without ManageAlertRules a member only learns how many targets there are',
     expect($response->getContent())
         ->not->toContain('hooks.example.com')
         ->not->toContain('ops@example.com')
-        ->not->toContain('oncall@example.com');
+        ->not->toContain('oncall@example.com')
+        ->not->toContain($settings->webhook_secret)
+        ->not->toContain('webhookSecretSet')
+        ->not->toContain('timezones');
 })->with([TeamRole::Member, TeamRole::Viewer])->with(['alerts.index', 'alert-rules.index']);
 
 test('a member limited to non-production gets no anomaly of a production environment', function () {

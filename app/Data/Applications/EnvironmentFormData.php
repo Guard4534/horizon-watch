@@ -3,11 +3,14 @@
 namespace App\Data\Applications;
 
 use App\Enums\EnvironmentColor;
+use App\Models\AlertRule;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Rules\StoredPasswordStaysWithItsAddress;
 use App\Rules\UrlWithoutCredentials;
 use App\Rules\UrlWithoutQueryOrFragment;
+use Closure;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Unique;
 use Spatie\LaravelData\Data;
@@ -31,7 +34,7 @@ class EnvironmentFormData extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'name' => ['required', 'string', 'max:60', 'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/', ...self::uniqueNameRules()],
+            'name' => ['required', 'string', 'max:60', 'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/', self::reservedNameRule(), ...self::uniqueNameRules()],
             'color' => ['required', Rule::enum(EnvironmentColor::class)],
             'horizonUrl' => self::horizonUrlRules(),
             'basicAuthUser' => self::basicAuthUserRules(self::key($context, 'basicAuthPassword')),
@@ -39,6 +42,20 @@ class EnvironmentFormData extends Data
             'pollIntervalSeconds' => ['integer', 'between:15,300'],
             'pollingEnabled' => ['boolean'],
         ];
+    }
+
+    private static function reservedNameRule(): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail): void {
+            if (is_string($value) && Str::lower($value) === AlertRule::ORGANIZATION) {
+                $fail(self::reservedNameMessage());
+            }
+        };
+    }
+
+    private static function reservedNameMessage(): string
+    {
+        return __('This name is reserved for the organization-wide alert rules.');
     }
 
     /**

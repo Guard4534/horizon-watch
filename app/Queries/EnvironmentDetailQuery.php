@@ -5,13 +5,13 @@ namespace App\Queries;
 use App\Data\Monitoring\AlertData;
 use App\Data\Monitoring\AlertRuleData;
 use App\Data\Pages\EnvironmentDetailPageData;
-use App\Enums\AlertState;
 use App\Enums\SeriesRange;
 use App\Enums\TeamPermission;
 use App\Models\Team;
 use App\Models\User;
 use App\Monitoring\MonitoringRepository;
 use Illuminate\Contracts\Auth\Guard;
+use Illuminate\Support\Str;
 
 class EnvironmentDetailQuery
 {
@@ -24,10 +24,10 @@ class EnvironmentDetailQuery
     {
         $environment = $this->monitoring->environment($team, $environmentId) ?? abort(404);
 
-        $rules = $this->monitoring->alertRules($team, 'organization');
+        $rules = $this->monitoring->alertRules($team, Str::lower($environment->name));
 
         $openAlerts = array_filter(
-            $this->monitoring->alerts($team, AlertState::Open),
+            $this->monitoring->openAlerts($team),
             fn (AlertData $alert) => $alert->environmentId === $environment->id,
         );
 

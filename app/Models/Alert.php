@@ -163,7 +163,7 @@ class Alert extends Model
     {
         return $query->where(fn (Builder $query) => $query
             ->where($this->qualifyColumn('muted_indefinitely'), true)
-            ->orWhere($this->qualifyColumn('muted_until'), '>', $now));
+            ->orWhere($this->qualifyColumn('muted_until'), '>', $now->utc()));
     }
 
     /**
@@ -176,7 +176,7 @@ class Alert extends Model
             ->where($this->qualifyColumn('muted_indefinitely'), false)
             ->where(fn (Builder $query) => $query
                 ->whereNull($this->qualifyColumn('muted_until'))
-                ->orWhere($this->qualifyColumn('muted_until'), '<=', $now));
+                ->orWhere($this->qualifyColumn('muted_until'), '<=', $now->utc()));
     }
 
     /**

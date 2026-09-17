@@ -10,8 +10,12 @@ class NotificationSettingsData extends Data
         /** @var array<int, string> */
         public array $recipients,
         public ?string $webhookUrl,
+        public bool $webhookSecretSet,
         public ?string $quietFrom,
         public ?string $quietTo,
+        public string $timezone,
         public ?int $repeatMinutes,
+        /** @var array<int, string> */
+        public array $timezones,
     ) {}
 }

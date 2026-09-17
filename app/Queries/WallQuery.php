@@ -6,7 +6,6 @@ use App\Data\Monitoring\EnvironmentData;
 use App\Data\Pages\WallKpisData;
 use App\Data\Pages\WallPageData;
 use App\Enums\AlertRuleMetric;
-use App\Enums\AlertState;
 use App\Enums\EnvironmentStatus;
 use App\Enums\SeriesRange;
 use App\Models\Team;
@@ -21,7 +20,7 @@ class WallQuery
         $environments = $this->monitoring->environments($team);
         usort($environments, EnvironmentData::compareBySeverityThenPending(...));
 
-        $anomalies = $this->monitoring->alerts($team, AlertState::Open);
+        $anomalies = $this->monitoring->openAlerts($team);
         $sum = fn (callable $value) => array_sum(array_map($value, $environments));
         $threshold = AlertRuleMetric::JobsFailedPerHour->defaultThreshold();
 

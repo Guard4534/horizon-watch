@@ -3,7 +3,6 @@
 namespace App\Http\Middleware;
 
 use App\Data\Auth\AuthUserData;
-use App\Enums\AlertState;
 use App\Enums\MemberVisibility;
 use App\Models\Application;
 use App\Monitoring\MonitoringRepository;
@@ -39,7 +38,7 @@ class HandleInertiaRequests extends Middleware
             'currentTeam' => fn () => $user?->currentTeam ? $user->toUserTeam($user->currentTeam) : null,
             'teams' => fn () => $user?->toUserTeams(includeCurrent: true) ?? [],
             'openAlertCount' => fn () => $user?->currentTeam
-                ? count(app(MonitoringRepository::class)->alerts($user->currentTeam, AlertState::Open))
+                ? count(app(MonitoringRepository::class)->openAlerts($user->currentTeam))
                 : null,
             'canManageApplications' => fn () => $user?->currentTeam
                 ? $user->can('create', [Application::class, $user->currentTeam])

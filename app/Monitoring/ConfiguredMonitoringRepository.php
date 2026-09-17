@@ -2,8 +2,11 @@
 
 namespace App\Monitoring;
 
+use App\Alerts\EffectiveRules;
 use App\Data\Applications\EnvironmentFormData;
+use App\Data\Monitoring\AlertActorData;
 use App\Data\Monitoring\AlertData;
+use App\Data\Monitoring\AlertPageData;
 use App\Data\Monitoring\AlertRuleData;
 use App\Data\Monitoring\ApplicationData;
 use App\Data\Monitoring\EnvironmentData;
@@ -14,33 +17,39 @@ use App\Data\Monitoring\NotificationSettingsData;
 use App\Data\Monitoring\QueueData;
 use App\Data\Monitoring\RuleScopeData;
 use App\Data\Monitoring\SentNotificationData;
+use App\Data\Pages\AlertCountsData;
 use App\Enums\AlertRuleMetric;
+use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
+use App\Enums\DeliveryStatus;
 use App\Enums\EnvironmentStatus;
+use App\Enums\MemberVisibility;
 use App\Enums\NotificationChannel;
-use App\Enums\RuleOrigin;
 use App\Enums\SentNotificationKind;
 use App\Enums\SeriesRange;
 use App\Enums\TeamPermission;
 use App\Externals\Horizon\Data\HorizonStats;
+use App\Models\Alert;
+use App\Models\AlertNotification;
+use App\Models\AlertRule;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\EnvironmentState;
+use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use DateTimeZone;
 use Illuminate\Contracts\Auth\Guard;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Str;
 
 class ConfiguredMonitoringRepository implements MonitoringRepository
 {
-    private const OVERRIDES = [
-        'production' => ['horizon.master_inactive' => 2, 'queue.pending' => 5000, 'queue.max_wait' => 30],
-        'preprod' => ['horizon.master_inactive' => 10],
-        'worker-batch' => ['job.runtime' => 900, 'workers.missing' => 2],
-    ];
+    private const int ALERTS_PER_PAGE = 50;
 
     /**
      * @var array<int, EloquentCollection<int, Environment>>
@@ -78,19 +87,30 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     private array $trendsByEnvironment = [];
 
     /**
-     * @var array<int, array<int, list<array{metric: AlertRuleMetric, since: CarbonImmutable, truncated: bool}>>>
+     * @var array<int, array<int, AlertData>>
      */
-    private array $openAnomaliesByTeam = [];
+    private array $openAlertsByTeam = [];
+
+    /**
+     * @var array<int, array{mute: bool, handle: bool, all: bool}>
+     */
+    private array $alertAbilitiesByTeam = [];
 
     /**
      * @var array<int, bool>
      */
     private array $managesApplicationsByTeam = [];
 
+    /**
+     * @var array<int, NotificationSetting|false>
+     */
+    private array $notificationSettingsByTeam = [];
+
     public function __construct(
         private readonly Guard $auth,
         private readonly VisibleEnvironments $visible,
         private readonly StoredReadings $readings,
+        private readonly EffectiveRules $effectiveRules,
     ) {}
 
     public function applications(Team $team): array
@@ -271,72 +291,85 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         return $environment ? $this->readings->maxWaitSeries($environment->id, $range) : [];
     }
 
-    public function alerts(Team $team, AlertState $state): array
+    public function alerts(Team $team, AlertState $state, ?string $application = null, int $page = 1): AlertPageData
     {
-        if ($state !== AlertState::Open) {
-            return [];
-        }
+        $page = max(1, $page);
+        $query = $this->alertsIn($team, $state, $application);
+        $total = (clone $query)->count();
 
-        $environments = $this->environments($team);
-        usort($environments, EnvironmentData::compareBySeverityThenPending(...));
+        return new AlertPageData(
+            alerts: $total === 0 ? [] : $this->toAlertData($team, $query->forPage($page, self::ALERTS_PER_PAGE)->get()),
+            total: $total,
+            perPage: self::ALERTS_PER_PAGE,
+            page: $page,
+        );
+    }
 
-        $models = $this->watchedEnvironmentsBySlug($team);
-        $anomalies = $this->openAnomaliesByTeam[$team->id]
-            ??= $this->readings->openAnomalies($models->values()->all());
-        $now = $this->now();
-        $cap = StoredReadings::LOOKBACK_HOURS * 60;
-        $alerts = [];
+    public function openAlerts(Team $team): array
+    {
+        return $this->openAlertsByTeam[$team->id]
+            ??= $this->toAlertData($team, $this->alertsIn($team, AlertState::Open)->get());
+    }
 
-        foreach ($environments as $environment) {
-            $model = $models->get($environment->id);
+    public function alertCounts(Team $team): AlertCountsData
+    {
+        $now = $this->now()->utc();
+        $muted = '(alerts.muted_indefinitely or coalesce(alerts.muted_until > ?, false))';
 
-            if ($model === null || $environment->status === null) {
-                continue;
-            }
+        $counts = $this->visibleAlerts($team, null, withDeleted: true)
+            ->toBase()
+            ->selectRaw(
+                "count(*) filter (where alerts.resolved_at is null and alerts.environment_id is not null and not {$muted}) as open, "
+                ."count(*) filter (where alerts.resolved_at is null and alerts.environment_id is not null and {$muted}) as muted, "
+                .'count(*) filter (where alerts.resolved_at >= ?) as resolved',
+                [$now, $now, $this->alertRetentionCutoff()],
+            )
+            ->first();
 
-            foreach ($anomalies[$model->id] ?? [] as $anomaly) {
-                $minutes = $anomaly['truncated'] ? $cap : min($cap, max(0, (int) $anomaly['since']->diffInMinutes($now)));
-
-                $alerts[] = $this->makeAlert(
-                    $environment,
-                    $environment->status,
-                    $anomaly['metric'],
-                    $minutes,
-                );
-            }
-        }
-
-        return $alerts;
+        return new AlertCountsData((int) $counts?->open, (int) $counts?->muted, (int) $counts?->resolved);
     }
 
     public function sentNotifications(Team $team): array
     {
-        $environments = $this->environments($team);
+        $user = $this->currentUser();
+        $query = AlertNotification::query()
+            ->where('team_id', $team->id)
+            ->with('alert:id,application_name,environment_name')
+            ->orderByDesc('sent_at')
+            ->orderByDesc('id')
+            ->limit(6);
 
-        if ($environments === []) {
-            return [];
+        if ($user->teamVisibility($team) !== MemberVisibility::All) {
+            $query->whereHas('alert', fn (Builder $alerts) => $alerts
+                ->whereIn('environment_id', $this->visibleEnvironmentModels($team)->modelKeys()));
         }
 
-        usort($environments, EnvironmentData::compareBySeverityThenPending(...));
+        $showsTarget = $user->hasTeamPermission($team, TeamPermission::ManageAlertRules);
+        $now = $this->now();
 
-        $subject = fn (EnvironmentData $environment) => "{$environment->applicationName} · {$environment->name}";
-        $worst = $environments[0];
-        $best = $environments[count($environments) - 1];
-
-        return [
-            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::CriticalAlert, $subject($worst), 4),
-            new SentNotificationData(NotificationChannel::Webhook, SentNotificationKind::WebhookDelivery, 'hooks.example.com/horizon · 200', 4),
-            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::WarningDigest, (string) min(3, count($environments)), 18),
-            new SentNotificationData(NotificationChannel::Mail, SentNotificationKind::Resolved, $subject($best), 52),
-        ];
+        return $query->get()
+            ->map(fn (AlertNotification $notification) => new SentNotificationData(
+                channel: $notification->channel,
+                kind: $notification->kind,
+                status: $notification->status,
+                subject: match (true) {
+                    $notification->alert !== null => $notification->alert->application_name.' · '.$notification->alert->environment_name,
+                    $notification->kind === SentNotificationKind::WarningDigest => (string) ($notification->environment_count ?? 0),
+                    default => '',
+                },
+                target: $showsTarget ? $notification->target : null,
+                minutesAgo: max(0, (int) $notification->sent_at->diffInMinutes($now)),
+            ))
+            ->all();
     }
 
     public function ruleScopes(Team $team): array
     {
         $environments = $this->environments($team);
+        $overrideCounts = $this->effectiveRules->overrideCounts($team);
 
         $scopes = [new RuleScopeData(
-            id: 'organization',
+            id: AlertRule::ORGANIZATION,
             color: null,
             environmentCount: count($environments),
             overrideCount: 0,
@@ -345,17 +378,19 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         $names = [];
 
         foreach ($environments as $environment) {
-            if (isset($names[$environment->name])) {
+            $scope = Str::lower($environment->name);
+
+            if (isset($names[$scope]) || $scope === AlertRule::ORGANIZATION) {
                 continue;
             }
 
-            $names[$environment->name] = true;
+            $names[$scope] = true;
 
             $scopes[] = new RuleScopeData(
-                id: $environment->name,
+                id: $scope,
                 color: $environment->color,
-                environmentCount: count(array_filter($environments, fn (EnvironmentData $item) => $item->name === $environment->name)),
-                overrideCount: count(self::OVERRIDES[$environment->name] ?? []),
+                environmentCount: count(array_filter($environments, fn (EnvironmentData $item) => Str::lower($item->name) === $scope)),
+                overrideCount: $overrideCounts[$scope] ?? 0,
             );
         }
 
@@ -370,27 +405,44 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             return [];
         }
 
-        $overrides = self::OVERRIDES[$scope] ?? [];
-
-        return array_map(fn (AlertRuleMetric $metric) => new AlertRuleData(
-            metric: $metric,
-            threshold: (float) ($overrides[$metric->value] ?? $metric->defaultThreshold()),
-            unit: $metric->unit(),
-            severity: $metric->defaultSeverity(),
-            notifyByEmail: $metric->notifiesByEmailByDefault(),
-            origin: isset($overrides[$metric->value]) ? RuleOrigin::Override : RuleOrigin::Organization,
-        ), AlertRuleMetric::cases());
+        return array_map(
+            fn (AlertRuleMetric $metric) => AlertRuleData::fromEffective($this->effectiveRules->forScope($team, $scope)->for($metric)),
+            AlertRuleMetric::cases(),
+        );
     }
 
     public function notificationSettings(Team $team): NotificationSettingsData
     {
+        $settings = $this->notificationSettingsByTeam[$team->id] ??= $team->notificationSetting()->first() ?? false;
+
+        if ($settings === false) {
+            return new NotificationSettingsData(
+                recipients: [],
+                webhookUrl: null,
+                webhookSecretSet: false,
+                quietFrom: null,
+                quietTo: null,
+                timezone: NotificationSetting::DEFAULT_TIMEZONE,
+                repeatMinutes: NotificationSetting::DEFAULT_REPEAT_MINUTES,
+                timezones: DateTimeZone::listIdentifiers(),
+            );
+        }
+
         return new NotificationSettingsData(
-            recipients: ['ops@example.com', 'oncall@example.com'],
-            webhookUrl: 'https://hooks.example.com/horizon',
-            quietFrom: '23:00',
-            quietTo: '07:00',
-            repeatMinutes: 30,
+            recipients: $settings->recipients,
+            webhookUrl: $settings->webhook_url,
+            webhookSecretSet: $settings->getRawOriginal('webhook_secret') !== null,
+            quietFrom: $this->clockTime($settings->quiet_from),
+            quietTo: $this->clockTime($settings->quiet_to),
+            timezone: $settings->timezone,
+            repeatMinutes: $settings->repeat_minutes,
+            timezones: DateTimeZone::listIdentifiers(),
         );
+    }
+
+    private function clockTime(?string $time): ?string
+    {
+        return $time === null ? null : substr($time, 0, 5);
     }
 
     /**
@@ -577,34 +629,153 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         return (int) $state?->getAttribute("snapshot_{$column}");
     }
 
-    private function makeAlert(EnvironmentData $environment, EnvironmentStatus $status, AlertRuleMetric $metric, int $minutesAgo): AlertData
+    /**
+     * @return Builder<Alert>
+     */
+    private function alertsIn(Team $team, AlertState $state, ?string $application = null): Builder
     {
+        $now = $this->now();
+        $query = $this->visibleAlerts($team, $application, withDeleted: $state === AlertState::Resolved)
+            ->with(['mutedBy:id,name', 'handledBy:id,name']);
+
+        return match ($state) {
+            AlertState::Open => $this->bySeverity($query->open()->unmutedAt($now)),
+            AlertState::Muted => $this->bySeverity($query->open()->mutedAt($now)),
+            AlertState::Resolved => $query
+                ->where('alerts.resolved_at', '>=', $this->alertRetentionCutoff())
+                ->orderByDesc('alerts.resolved_at')
+                ->orderBy('alerts.id'),
+        };
+    }
+
+    /**
+     * @param  Builder<Alert>  $query
+     * @return Builder<Alert>
+     */
+    private function bySeverity(Builder $query): Builder
+    {
+        return $query
+            ->orderByRaw('case when alerts.severity = ? then 0 else 1 end', [AlertSeverity::Critical->value])
+            ->orderByDesc('alerts.opened_at')
+            ->orderByRaw('array_position(?::text[], alerts.metric::text)', [
+                '{'.implode(',', array_map(fn (AlertRuleMetric $metric) => $metric->value, AlertRuleMetric::cases())).'}',
+            ])
+            ->orderBy('alerts.id');
+    }
+
+    /**
+     * @return Builder<Alert>
+     */
+    private function visibleAlerts(Team $team, ?string $application, bool $withDeleted): Builder
+    {
+        $environments = $this->visibleEnvironmentModels($team);
+
+        if ($application !== null) {
+            $environments = $environments->filter(fn (Environment $environment) => $environment->application->slug === $application);
+        }
+
+        $withDeleted = $withDeleted && $application === null && $this->alertAbilities($team)['all'];
+
+        return Alert::query()
+            ->where('alerts.team_id', $team->id)
+            ->where(function (Builder $query) use ($environments, $withDeleted) {
+                $query->whereIn('alerts.environment_id', $environments->modelKeys());
+
+                if ($withDeleted) {
+                    $query->orWhereNull('alerts.environment_id');
+                }
+            });
+    }
+
+    private function alertRetentionCutoff(): CarbonImmutable
+    {
+        return $this->now()->utc()->subDays((int) config('horizon-watch.alert_retention_days'));
+    }
+
+    /**
+     * @return array{mute: bool, handle: bool, all: bool}
+     */
+    private function alertAbilities(Team $team): array
+    {
+        $user = $this->currentUser();
+
+        return $this->alertAbilitiesByTeam[$team->id] ??= [
+            'mute' => $user->can('muteAlert', $team),
+            'handle' => $user->can('handleAnomaly', $team),
+            'all' => $user->teamVisibility($team) === MemberVisibility::All,
+        ];
+    }
+
+    /**
+     * @param  EloquentCollection<int, Alert>  $alerts
+     * @return array<int, AlertData>
+     */
+    private function toAlertData(Team $team, EloquentCollection $alerts): array
+    {
+        if ($alerts->isEmpty()) {
+            return [];
+        }
+
+        $channels = AlertNotification::query()
+            ->whereIn('alert_id', $alerts->modelKeys())
+            ->where('status', DeliveryStatus::Sent)
+            ->distinct()
+            ->get(['alert_id', 'channel'])
+            ->groupBy('alert_id');
+
+        $slugs = $this->visibleEnvironmentModels($team)->pluck('slug', 'id');
+        $environments = collect($this->environments($team))->keyBy('id');
+        $abilities = $this->alertAbilities($team);
+        $now = $this->now();
+
+        return $alerts->map(fn (Alert $alert) => $this->makeAlert(
+            $alert,
+            $environments->get($slugs->get($alert->environment_id ?? 0) ?? ''),
+            $now,
+            array_values(array_filter(
+                NotificationChannel::cases(),
+                fn (NotificationChannel $channel) => $channels->get($alert->id)?->contains('channel', $channel) ?? false,
+            )),
+            $abilities,
+        ))->all();
+    }
+
+    /**
+     * @param  array<int, NotificationChannel>  $channels
+     * @param  array{mute: bool, handle: bool, all: bool}  $abilities
+     */
+    private function makeAlert(Alert $alert, ?EnvironmentData $environment, CarbonImmutable $now, array $channels, array $abilities): AlertData
+    {
+        $open = $alert->resolved_at === null;
+        $muted = $alert->muted_indefinitely || $alert->muted_until?->gt($now) === true;
+        $minutes = fn (?CarbonImmutable $at) => $at === null ? null : max(0, (int) $at->diffInMinutes($now));
+
         return new AlertData(
-            id: "{$environment->id}:{$metric->value}",
-            state: AlertState::Open,
-            severity: $metric->defaultSeverity(),
-            metric: $metric,
-            threshold: $metric->defaultThreshold(),
-            unit: $metric->unit(),
-            value: null,
-            environmentId: $environment->id,
-            applicationName: $environment->applicationName,
-            environmentName: $environment->name,
-            color: $environment->color,
-            environmentStatus: $status,
-            nodeCount: $environment->nodeCount,
-            pending: $environment->pending,
-            maxWaitSeconds: $environment->maxWaitSeconds,
-            minutesAgo: $minutesAgo,
-            resolvedMinutesAgo: null,
-            mutedUntil: null,
-            mutedUntilResolved: false,
-            mutedBy: null,
-            handledBy: null,
-            handledMinutesAgo: null,
-            channels: [],
-            canMute: false,
-            canHandle: false,
+            id: $alert->id,
+            state: $alert->state($now),
+            severity: $alert->severity,
+            metric: $alert->metric,
+            threshold: $alert->threshold,
+            unit: $alert->unit,
+            value: $alert->value,
+            environmentId: $environment?->id,
+            applicationName: $alert->application_name,
+            environmentName: $alert->environment_name,
+            color: $alert->environment_color,
+            environmentStatus: $environment?->status,
+            nodeCount: $environment->nodeCount ?? 0,
+            pending: $environment->pending ?? 0,
+            maxWaitSeconds: $environment->maxWaitSeconds ?? 0,
+            minutesAgo: $minutes($alert->opened_at) ?? 0,
+            resolvedMinutesAgo: $minutes($alert->resolved_at),
+            mutedUntil: $muted && ! $alert->muted_indefinitely ? $alert->muted_until?->toIso8601String() : null,
+            mutedUntilResolved: $alert->muted_indefinitely,
+            mutedBy: $muted && $alert->mutedBy !== null ? new AlertActorData($alert->mutedBy->name) : null,
+            handledBy: $alert->handledBy !== null ? new AlertActorData($alert->handledBy->name) : null,
+            handledMinutesAgo: $minutes($alert->handled_at),
+            channels: $channels,
+            canMute: $open && $abilities['mute'],
+            canHandle: $open && $abilities['handle'],
         );
     }
 }

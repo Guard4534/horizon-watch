@@ -5,6 +5,7 @@ use App\Enums\EnvironmentStatus;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\Alert;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
@@ -207,19 +208,15 @@ test('a last hour exactly at the threshold does not warn, as the evaluator decid
         ->assertInertia(fn (Assert $page) => $page->where('page.kpis.environmentsOverFailedRate', 1));
 });
 
-test('an anomaly older than the look-back is marked as such', function () {
-    EnvironmentSnapshot::factory()->for($this->production)->create([
-        'status' => EnvironmentStatus::Paused,
-        'breaches' => [AlertRuleMetric::HorizonPaused],
-        'captured_at' => now()->subHours(30),
-    ]);
+test('an anomaly open for more than a day shows its full age', function () {
     Readings::record($this->production, EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused]);
+    Alert::query()->update(['opened_at' => now()->subHours(30)]);
 
     wallPage($this->admin, $this->team)
         ->assertInertia(fn (Assert $page) => $page
             ->has('page.anomalies', 1)
             ->where('page.anomalies.0.metric', 'horizon.paused')
-            ->where('page.anomalies.0.minutesAgo', 1440));
+            ->where('page.anomalies.0.minutesAgo', 1800));
 });
 
 test('the poll reload answers with only the props it asks for, and with the new reading', function () {

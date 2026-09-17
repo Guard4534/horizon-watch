@@ -12,6 +12,8 @@ use App\Monitoring\MonitoringRepository;
 
 class ApplicationDetailQuery
 {
+    private const int RESOLVED_ALERTS = 5;
+
     public function __construct(private MonitoringRepository $monitoring) {}
 
     public function handle(Team $team, string $applicationId): ApplicationDetailPageData
@@ -24,10 +26,11 @@ class ApplicationDetailQuery
         ));
         $environmentIds = array_map(fn (EnvironmentData $environment) => $environment->id, $environments);
 
-        $alerts = array_filter(
-            [...$this->monitoring->alerts($team, AlertState::Open), ...$this->monitoring->alerts($team, AlertState::Resolved)],
+        $open = array_filter(
+            $this->monitoring->openAlerts($team),
             fn (AlertData $alert) => in_array($alert->environmentId, $environmentIds, true),
         );
+        $resolved = array_slice($this->monitoring->alerts($team, AlertState::Resolved, $application->id)->alerts, 0, self::RESOLVED_ALERTS);
 
         $worstEnvironments = array_values(array_filter(
             $environments,
@@ -38,7 +41,7 @@ class ApplicationDetailQuery
         return new ApplicationDetailPageData(
             application: $application,
             environments: $environments,
-            recentAlerts: array_slice(array_values($alerts), 0, 3),
+            recentAlerts: [...array_values($open), ...$resolved],
             worstStatus: $worstEnvironments[0]->status ?? null,
             thresholds: $this->thresholds($team),
         );

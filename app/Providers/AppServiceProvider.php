@@ -26,6 +26,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('test-connection', fn (Request $request): Limit => Limit::perMinute(
             (int) config('horizon-watch.test_connection_per_minute'),
         )->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
+
+        RateLimiter::for('test-notification', fn (Request $request): Limit => Limit::perMinute(
+            (int) config('horizon-watch.test_notification_per_minute'),
+        )->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
     }
 
     protected function configureDefaults(): void

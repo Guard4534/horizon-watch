@@ -19,7 +19,7 @@ test('every role opens the profile page, with the organization member count', fu
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('monitoring/Me')
-            ->where('page', ['memberCount' => $expected]));
+            ->where('page', ['memberCount' => $expected, 'alertEmails' => false]));
 })->with([
     'owner' => TeamRole::Owner,
     'admin' => TeamRole::Admin,

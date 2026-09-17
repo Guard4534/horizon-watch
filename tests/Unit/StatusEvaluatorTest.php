@@ -398,7 +398,10 @@ test('a reading is evaluated against the rules it is given', function (HorizonRe
     ],
 ]);
 
-test('a failed reading always carries the endpoint breach, whatever the rules', function () {
-    expect(RuleSet::defaults()->for(AlertRuleMetric::EndpointUnreachable)->enabled)->toBeTrue()
-        ->and((new StatusEvaluator)->failed()->breaches)->toBe([AlertRuleMetric::EndpointUnreachable]);
+test('a failed reading is unreachable with the endpoint breach and nothing else', function () {
+    $failed = (new StatusEvaluator)->failed();
+
+    expect($failed->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($failed->breaches)->toBe([AlertRuleMetric::EndpointUnreachable])
+        ->and($failed->failedLastHour)->toBe(0);
 });

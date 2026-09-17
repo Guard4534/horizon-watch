@@ -215,6 +215,39 @@ test('the alert scopes split open, resolved, muted and unmuted alerts', function
         ->and($ids(Alert::query()->open()->unmutedAt($now)))->toBe($sorted($open, $muteEnded));
 });
 
+test('the mute scopes agree with the state of an alert for a time given in another zone', function () {
+    $mutedForAWhile = Alert::factory()->create(['muted_until' => CarbonImmutable::parse('2026-09-18 10:30:00', 'UTC')]);
+    $muteEnded = Alert::factory()->create(['muted_until' => CarbonImmutable::parse('2026-09-18 09:30:00', 'UTC')]);
+    $now = CarbonImmutable::parse('2026-09-18 12:00:00', 'Europe/Rome');
+
+    $ids = fn ($query) => $query->pluck('id')->all();
+
+    expect($mutedForAWhile->fresh()->state($now))->toBe(AlertState::Muted)
+        ->and($muteEnded->fresh()->state($now))->toBe(AlertState::Open)
+        ->and($ids(Alert::query()->mutedAt($now)))->toBe([$mutedForAWhile->id])
+        ->and($ids(Alert::query()->unmutedAt($now)))->toBe([$muteEnded->id])
+        ->and($now->getTimezone()->getName())->toBe('Europe/Rome');
+});
+
+test('an alert of a deleted environment can be made without one', function () {
+    $team = Team::factory()->create();
+
+    $alert = Alert::factory()->withoutEnvironment()->create([
+        'team_id' => $team->id,
+        'application_name' => 'Billing',
+        'environment_name' => 'production',
+        'environment_color' => EnvironmentColor::Prod,
+    ])->fresh();
+
+    expect($alert->environment_id)->toBeNull()
+        ->and($alert->team_id)->toBe($team->id)
+        ->and($alert->application_name)->toBe('Billing')
+        ->and($alert->environment_name)->toBe('production')
+        ->and($alert->environment_color)->toBe(EnvironmentColor::Prod)
+        ->and($alert->threshold)->toBe(AlertRuleMetric::QueuePending->defaultThreshold())
+        ->and(Environment::query()->count())->toBe(0);
+});
+
 test('a notification log row belongs to its alert and goes with it', function () {
     $alert = Alert::factory()->create();
 

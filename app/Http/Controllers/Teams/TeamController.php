@@ -131,6 +131,11 @@ class TeamController extends Controller
             $team->invitations()->delete();
             $team->memberships()->delete();
 
+            $team->alertNotifications()->delete();
+            $team->alerts()->delete();
+            $team->alertRules()->delete();
+            $team->notificationSetting()->delete();
+
             $team->applications()->delete();
 
             $team->delete();

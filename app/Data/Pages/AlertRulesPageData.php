@@ -17,5 +17,7 @@ class AlertRulesPageData extends Data
         public array $rules,
         public NotificationSummaryData $notificationSummary,
         public ?NotificationSettingsData $notifications,
+        public bool $canManage,
+        public ?string $newWebhookSecret,
     ) {}
 }

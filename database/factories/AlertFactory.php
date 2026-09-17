@@ -51,6 +51,17 @@ class AlertFactory extends Factory
         return $this->state(fn () => ['resolved_at' => now()->subMinute()]);
     }
 
+    public function withoutEnvironment(): static
+    {
+        return $this->state(fn () => [
+            'environment_id' => null,
+            'team_id' => null,
+            'application_name' => null,
+            'environment_name' => null,
+            'environment_color' => null,
+        ]);
+    }
+
     public function critical(): static
     {
         return $this->state(fn () => ['severity' => AlertSeverity::Critical]);

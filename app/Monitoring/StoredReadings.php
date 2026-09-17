@@ -2,8 +2,6 @@
 
 namespace App\Monitoring;
 
-use App\Enums\AlertRuleMetric;
-use App\Enums\AlertSeverity;
 use App\Enums\SeriesRange;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
@@ -22,17 +20,9 @@ class StoredReadings
 
     private const TREND_SPAN = 3;
 
-    public const LOOKBACK_HOURS = 24;
-
     private const POLL_TICK_SECONDS = 15;
 
     private const POLL_SLACK_SECONDS = 15;
-
-    private const STATUS_METRICS = [
-        'unreachable' => AlertRuleMetric::EndpointUnreachable,
-        'inactive' => AlertRuleMetric::HorizonMasterInactive,
-        'paused' => AlertRuleMetric::HorizonPaused,
-    ];
 
     private const SERIES_ORIGIN = '1970-01-01 00:00:00+00';
 
@@ -243,149 +233,6 @@ class StoredReadings
         }
 
         return (int) round(($recent - $base) / $base * 100);
-    }
-
-    /**
-     * @param  array<int, Environment>  $environments
-     * @return array<int, list<array{metric: AlertRuleMetric, since: CarbonImmutable, truncated: bool}>>
-     */
-    public function openAnomalies(array $environments): array
-    {
-        $ids = array_values(array_unique(array_map(fn (Environment $environment) => $environment->id, $environments)));
-
-        if ($ids === []) {
-            return [];
-        }
-
-        $carries = fn (string $row) => $this->carries($row);
-        $fromStatus = $this->metricOfStatus('latest.status');
-        $statuses = $this->quotedList(array_keys(self::STATUS_METRICS));
-        $lookback = self::LOOKBACK_HOURS;
-
-        $rows = DB::select(
-            <<<SQL
-                with latest as (
-                    select s.environment_id, s.id, s.captured_at, s.status, s.breaches
-                    from unnest(?::bigint[]) as e(id)
-                    cross join lateral (
-                        select environment_id, id, captured_at, status, breaches
-                        from environment_snapshots
-                        where environment_id = e.id
-                          and (environment_id, captured_at) <= (e.id, 'infinity'::timestamptz)
-                        order by environment_id desc, captured_at desc, id desc
-                        limit 1
-                    ) s
-                ), anomaly as (
-                    select latest.environment_id, latest.id, latest.captured_at, breach.metric
-                    from latest, jsonb_array_elements_text(latest.breaches::jsonb) as breach(metric)
-                    union
-                    select latest.environment_id, latest.id, latest.captured_at, {$fromStatus}
-                    from latest
-                    where latest.status in ({$statuses})
-                )
-                select anomaly.environment_id,
-                       anomaly.metric,
-                       coalesce(run.captured_at, anomaly.captured_at) as since,
-                       (gap.id is null and coalesce(older.carries, false)) as truncated
-                from anomaly
-                left join lateral (
-                    select gap.id, gap.captured_at
-                    from environment_snapshots gap
-                    where gap.environment_id = anomaly.environment_id
-                      and (gap.environment_id, gap.captured_at) <= (anomaly.environment_id, anomaly.captured_at)
-                      and gap.captured_at >= anomaly.captured_at - interval '{$lookback} hours'
-                      and (gap.captured_at < anomaly.captured_at or gap.id < anomaly.id)
-                      and not {$carries('gap')}
-                    order by gap.environment_id desc, gap.captured_at desc, gap.id desc
-                    limit 1
-                ) gap on true
-                left join lateral (
-                    select run.captured_at
-                    from environment_snapshots run
-                    where run.environment_id = anomaly.environment_id
-                      and run.captured_at >= coalesce(gap.captured_at, anomaly.captured_at - interval '{$lookback} hours')
-                      and (gap.id is null or run.captured_at > gap.captured_at or run.id > gap.id)
-                    order by run.environment_id, run.captured_at, run.id
-                    limit 1
-                ) run on true
-                left join lateral (
-                    select {$carries('older')} as carries
-                    from environment_snapshots older
-                    where older.environment_id = anomaly.environment_id
-                      and (older.environment_id, older.captured_at)
-                          < (anomaly.environment_id, anomaly.captured_at - interval '{$lookback} hours')
-                    order by older.environment_id desc, older.captured_at desc, older.id desc
-                    limit 1
-                ) older on gap.id is null
-                SQL,
-            ['{'.implode(',', $ids).'}'],
-        );
-
-        $anomalies = [];
-        $now = Date::now()->getTimestamp();
-
-        foreach ($rows as $row) {
-            $metric = AlertRuleMetric::tryFrom($row->metric);
-
-            if ($metric === null) {
-                continue;
-            }
-
-            $since = Date::parse($row->since)->toImmutable();
-            $truncated = (bool) $row->truncated;
-
-            if (! $truncated
-                && in_array($metric, self::STATUS_METRICS, true)
-                && $now - $since->getTimestamp() < $metric->defaultThreshold() * 60) {
-                continue;
-            }
-
-            $anomalies[(int) $row->environment_id][] = [
-                'metric' => $metric,
-                'since' => $since,
-                'truncated' => $truncated,
-            ];
-        }
-
-        $order = array_flip(array_map(fn (AlertRuleMetric $metric) => $metric->value, AlertRuleMetric::cases()));
-
-        $rank = fn (AlertRuleMetric $metric) => [$metric->defaultSeverity() === AlertSeverity::Critical ? 0 : 1, $order[$metric->value]];
-
-        return array_map(function (array $list) use ($rank) {
-            usort($list, fn (array $a, array $b) => $rank($a['metric']) <=> $rank($b['metric']));
-
-            return $list;
-        }, $anomalies);
-    }
-
-    private function carries(string $row): string
-    {
-        $arms = '';
-
-        foreach (self::STATUS_METRICS as $status => $metric) {
-            $arms .= " when '{$metric->value}' then {$row}.status = '{$status}'";
-        }
-
-        return "(case anomaly.metric{$arms} else strpos({$row}.breaches::text, '\"' || anomaly.metric || '\"') > 0 end)";
-    }
-
-    private function metricOfStatus(string $column): string
-    {
-        $arms = '';
-
-        foreach (self::STATUS_METRICS as $status => $metric) {
-            $arms .= " when '{$status}' then '{$metric->value}'";
-        }
-
-        return "(case {$column}{$arms} end)";
-    }
-
-    /**
-     * @param  list<string>  $values
-     */
-    private function quotedList(array $values): string
-    {
-        return implode(', ', array_map(fn (string $value) => "'{$value}'", $values));
     }
 
     /**

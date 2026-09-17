@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\AlertEmailsController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Teams\TeamController;
@@ -14,6 +15,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::patch('settings/alert-emails', AlertEmailsController::class)->name('alert-emails.update');
 });
 
 Route::middleware(['auth'])->group(function () {

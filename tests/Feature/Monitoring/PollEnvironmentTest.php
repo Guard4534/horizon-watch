@@ -711,6 +711,19 @@ test('the state remembers since when its status holds, across readings of the sa
         ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00');
 });
 
+test('a state that never knew its start gets one from the next reading of the same status', function () {
+    EnvironmentState::factory()->for($this->environment)->create([
+        'captured_at' => '2026-09-17 09:59:45',
+        'status' => EnvironmentStatus::Active,
+    ]);
+    DB::table('environment_states')->update(['status_since' => null]);
+    $this->reader->results = [($this->reading)()];
+
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00');
+});
+
 test('a change of status moves the start of the run to the new reading', function () {
     $this->reader->results = [
         ($this->reading)(),

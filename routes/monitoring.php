@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\Monitoring\AlertActionController;
 use App\Http\Controllers\Monitoring\AlertController;
 use App\Http\Controllers\Monitoring\AlertRuleController;
+use App\Http\Controllers\Monitoring\AlertSettingsController;
 use App\Http\Controllers\Monitoring\ApplicationController;
 use App\Http\Controllers\Monitoring\ConnectionTestController;
 use App\Http\Controllers\Monitoring\EnvironmentController;
@@ -82,3 +84,19 @@ Route::delete('members/{user}', [MemberController::class, 'destroy'])
 
 Route::get('alerts', [AlertController::class, 'index'])->name('alerts.index');
 Route::get('alert-rules/{scope?}', [AlertRuleController::class, 'index'])->name('alert-rules.index');
+
+Route::middleware('can:manageAlertRules,current_team')->group(function () {
+    Route::put('alert-rules/{scope}', [AlertRuleController::class, 'update'])->name('alert-rules.update');
+    Route::delete('alert-rules/{scope}', [AlertRuleController::class, 'reset'])->name('alert-rules.reset');
+
+    Route::put('alert-settings', [AlertSettingsController::class, 'update'])->name('alert-settings.update');
+    Route::post('alert-settings/webhook-secret', [AlertSettingsController::class, 'regenerateSecret'])
+        ->name('alert-settings.regenerate-secret');
+    Route::post('alert-settings/test', [AlertSettingsController::class, 'test'])
+        ->middleware('throttle:test-notification')
+        ->name('alert-settings.test');
+});
+
+Route::post('alerts/{alert}/mute', [AlertActionController::class, 'mute'])->name('alerts.mute');
+Route::delete('alerts/{alert}/mute', [AlertActionController::class, 'unmute'])->name('alerts.unmute');
+Route::post('alerts/{alert}/handle', [AlertActionController::class, 'handle'])->name('alerts.handle');

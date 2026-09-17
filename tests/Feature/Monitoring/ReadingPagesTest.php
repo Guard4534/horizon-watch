@@ -6,6 +6,7 @@ use App\Enums\HorizonStatus;
 use App\Enums\MemberVisibility;
 use App\Enums\ReadingError;
 use App\Enums\TeamRole;
+use App\Models\Alert;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\User;
@@ -197,8 +198,9 @@ test('a seven-day failed window is carried to every page that shows the count', 
             ->where('page.groups.0.environments.0.failedWindowMinutes', 10080));
 });
 
-test('the application page carries the recent anomalies with their start', function () {
+test('the application page carries the open alerts with the minutes since they opened', function () {
     Readings::record($this->environment, EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused]);
+    Alert::query()->update(['opened_at' => now()->subMinutes(Readings::STATE_RUN_MINUTES)]);
 
     $this->get(readingApplicationUrl($this->application))
         ->assertInertia(fn (Assert $page) => $page

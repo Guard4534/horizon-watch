@@ -3,6 +3,7 @@
 use App\Data\Monitoring\EnvironmentData;
 use App\Data\Monitoring\NotificationSettingsData;
 use App\Enums\AlertRuleMetric;
+use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
 use App\Enums\EnvironmentStatus;
 use App\Enums\MemberVisibility;
@@ -10,6 +11,8 @@ use App\Enums\ReadingError;
 use App\Enums\RuleOrigin;
 use App\Enums\SeriesRange;
 use App\Enums\TeamRole;
+use App\Models\Alert;
+use App\Models\AlertRule;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
@@ -20,6 +23,7 @@ use App\Monitoring\MonitoringRepository;
 use App\Queries\WallQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\Support\Readings;
 
 function freshMonitoringRepository(): MonitoringRepository
@@ -150,7 +154,7 @@ test('an application whose environments are all hidden still reaches the Applica
 
     expect($repository->applications($this->team))->toBe([])
         ->and($repository->environments($this->team))->toBe([])
-        ->and($repository->alerts($this->team, AlertState::Open))->toBe([])
+        ->and($repository->openAlerts($this->team))->toBe([])
         ->and($repository->environment($this->team, $environment->slug))->toBeNull();
 
     expect($repository->configurableApplications($this->team))->toHaveCount(1)
@@ -187,8 +191,9 @@ test('non_production visibility hides production environments, including from al
     Readings::record($production, EnvironmentStatus::Unreachable);
     Readings::record($staging);
 
-    $openBefore = $this->repository->alerts($this->team, AlertState::Open);
-    expect(collect($openBefore)->pluck('environmentId')->all())->toBe([$production->slug]);
+    $openBefore = $this->repository->openAlerts($this->team);
+    expect(collect($openBefore)->pluck('environmentId')->all())->toBe([$production->slug])
+        ->and($this->repository->alertCounts($this->team)->open)->toBe(1);
 
     $this->user->teamMemberships()->where('team_id', $this->team->id)->first()
         ->update(['visibility' => MemberVisibility::NonProduction->value]);
@@ -198,8 +203,9 @@ test('non_production visibility hides production environments, including from al
     expect(array_map(fn ($environment) => $environment->id, $repository->environments($this->team)))
         ->toBe([$staging->slug]);
 
-    $openAfter = $repository->alerts($this->team, AlertState::Open);
-    expect($openAfter)->toBe([]);
+    expect($repository->openAlerts($this->team))->toBe([])
+        ->and($repository->alerts($this->team, AlertState::Open)->total)->toBe(0)
+        ->and($repository->alertCounts($this->team)->open)->toBe(0);
 });
 
 test('an environment reads its latest stored reading', function () {
@@ -263,7 +269,7 @@ test('an environment never read has nothing to say, then does not answer once th
         ->and($this->repository->queues($this->team, $environment->slug))->toBe([])
         ->and($this->repository->failedJobs($this->team, $environment->slug))->toBe([])
         ->and($this->repository->longRunningJobs($this->team, $environment->slug))->toBe([])
-        ->and($this->repository->alerts($this->team, AlertState::Open))->toBe([]);
+        ->and($this->repository->openAlerts($this->team))->toBe([]);
 });
 
 test('an environment goes stale after three silent intervals and keeps its last reading', function () {
@@ -478,46 +484,51 @@ test('failed jobs and long-running jobs are dated from the stored timestamps', f
     ]);
 });
 
-test('a young outage is down at once and opens its alert only after the rule minutes', function () {
+test('a young outage is down at once and has no alert before the minutes of its rule', function () {
     $application = Application::factory()->for($this->team)->create(['name' => 'Alpha']);
     $production = Environment::factory()->for($application)->production()->create();
 
-    EnvironmentSnapshot::factory()->for($production)->failed()->create(['captured_at' => now()->subSeconds(90)]);
-    Readings::record($production, EnvironmentStatus::Unreachable);
+    Readings::record($production, EnvironmentStatus::Unreachable, state: ['status_since' => now()->subSeconds(90)]);
 
     expect($this->repository->environment($this->team, $production->slug)->status)->toBe(EnvironmentStatus::Unreachable)
-        ->and($this->repository->alerts($this->team, AlertState::Open))->toBe([]);
-
-    $this->travel(30)->seconds();
-
-    expect(array_map(fn ($alert) => $alert->id, app()->build(ConfiguredMonitoringRepository::class)->alerts($this->team, AlertState::Open)))
-        ->toBe(["{$production->slug}:endpoint.unreachable"]);
+        ->and($this->repository->openAlerts($this->team))->toBe([])
+        ->and($this->repository->alertCounts($this->team)->open)->toBe(0);
 });
 
-test('open alerts come from the stored anomalies, worst environment first, and nothing else is listed yet', function () {
+test('open alerts are the unmuted open rows of watched environments, critical first, then the newest', function () {
     $application = Application::factory()->for($this->team)->create(['name' => 'Alpha']);
     $production = Environment::factory()->for($application)->production()->create();
     $staging = Environment::factory()->for($application)->staging()->create();
     $develop = Environment::factory()->for($application)->develop()->create();
 
-    EnvironmentSnapshot::factory()->for($staging)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => now()->subMinutes(30)]);
     Readings::record($staging, EnvironmentStatus::Degraded, [AlertRuleMetric::QueueMaxWait, AlertRuleMetric::QueuePending], snapshot: ['pending' => 2500]);
-    EnvironmentSnapshot::factory()->for($production)->failed()->create(['captured_at' => now()->subMinutes(4)]);
-    Readings::record($production, EnvironmentStatus::Unreachable);
+    Alert::query()->where('metric', AlertRuleMetric::QueuePending)->update(['opened_at' => now()->subMinutes(30)]);
+    Readings::record($production, EnvironmentStatus::Unreachable, snapshot: ['captured_at' => now()->subMinutes(4)]);
     Readings::record($develop);
+    Alert::factory()->for($develop)->create(['metric' => AlertRuleMetric::JobRuntime, 'muted_indefinitely' => true]);
+    Alert::factory()->for($develop)->resolved()->create(['metric' => AlertRuleMetric::JobRuntime]);
 
-    $open = $this->repository->alerts($this->team, AlertState::Open);
+    $open = $this->repository->openAlerts($this->team);
+    $row = fn ($alert) => [$alert->environmentId, $alert->metric, $alert->minutesAgo];
 
-    expect(array_map(fn ($alert) => [$alert->id, $alert->minutesAgo], $open))->toBe([
-        ["{$production->slug}:endpoint.unreachable", 4],
-        ["{$staging->slug}:queue.pending", 30],
-        ["{$staging->slug}:queue.max_wait", 0],
+    expect(array_map($row, $open))->toBe([
+        [$production->slug, AlertRuleMetric::EndpointUnreachable, 4],
+        [$staging->slug, AlertRuleMetric::QueueMaxWait, 0],
+        [$staging->slug, AlertRuleMetric::QueuePending, 30],
     ])
-        ->and($open[1]->environmentStatus)->toBe(EnvironmentStatus::Degraded)
-        ->and($open[1]->pending)->toBe(2500)
-        ->and($open[1]->threshold)->toBe(AlertRuleMetric::QueuePending->defaultThreshold())
-        ->and($this->repository->alerts($this->team, AlertState::Muted))->toBe([])
-        ->and($this->repository->alerts($this->team, AlertState::Resolved))->toBe([]);
+        ->and(Str::isUuid($open[0]->id))->toBeTrue()
+        ->and($open[0]->state)->toBe(AlertState::Open)
+        ->and($open[0]->severity)->toBe(AlertSeverity::Critical)
+        ->and($open[2]->environmentStatus)->toBe(EnvironmentStatus::Degraded)
+        ->and($open[2]->pending)->toBe(2500)
+        ->and($open[2]->value)->toBe(2500.0)
+        ->and($open[2]->threshold)->toBe(AlertRuleMetric::QueuePending->defaultThreshold())
+        ->and($open[2]->applicationName)->toBe('Alpha')
+        ->and($open[2]->environmentName)->toBe('staging')
+        ->and(array_map($row, $this->repository->alerts($this->team, AlertState::Open)->alerts))->toBe(array_map($row, $open))
+        ->and(array_map($row, $this->repository->alerts($this->team, AlertState::Muted)->alerts))->toBe([[$develop->slug, AlertRuleMetric::JobRuntime, 10]])
+        ->and($this->repository->alerts($this->team, AlertState::Resolved)->total)->toBe(1)
+        ->and($this->repository->alertCounts($this->team)->toArray())->toBe(['open' => 3, 'muted' => 1, 'resolved' => 1]);
 });
 
 test('the series only sum what the viewer watches', function () {
@@ -539,28 +550,6 @@ test('the series only sum what the viewer watches', function () {
         ->and(last($repository->maxWaitSeries($this->team, $staging->slug, SeriesRange::ThreeHours)))->toBe(5);
 });
 
-test('sent notifications only name watched environments', function () {
-    $application = Application::factory()->for($this->team)->create(['name' => 'Alpha']);
-    $production = Environment::factory()->for($application)->production()->create();
-    $staging = Environment::factory()->for($application)->staging()->create();
-    Readings::record($production, EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
-    Readings::record($staging);
-
-    $subjects = fn ($repository) => array_map(fn ($notification) => $notification->subject, $repository->sentNotifications($this->team));
-
-    expect($subjects($this->repository))->toContain('Alpha · production', 'Alpha · staging');
-
-    $membership = $this->user->teamMemberships()->where('team_id', $this->team->id)->first();
-    $membership->update(['visibility' => MemberVisibility::NonProduction->value]);
-
-    expect($subjects(freshMonitoringRepository()))->not->toContain('Alpha · production')
-        ->toContain('Alpha · staging');
-
-    $membership->update(['visibility' => MemberVisibility::Manual->value]);
-
-    expect(freshMonitoringRepository()->sentNotifications($this->team))->toBe([]);
-});
-
 test('the stored states are read once per view, however many panels ask', function () {
     $application = Application::factory()->for($this->team)->create();
     $environments = Environment::factory()->for($application)->count(3)->sequence(
@@ -578,15 +567,15 @@ test('the stored states are read once per view, however many panels ask', functi
     $this->repository->queues($this->team, $slug);
     $this->repository->failedJobs($this->team, $slug);
     $this->repository->longRunningJobs($this->team, $slug);
-    $this->repository->alerts($this->team, AlertState::Open);
-    $this->repository->alerts($this->team, AlertState::Open);
+    $this->repository->openAlerts($this->team);
+    $this->repository->openAlerts($this->team);
     $this->repository->configurableEnvironments($this->team);
 
     $queries = collect(DB::getQueryLog())->pluck('query');
 
     expect($queries->filter(fn (string $query) => str_contains($query, 'from "environment_states"')))->toHaveCount(1)
         ->and($queries->filter(fn (string $query) => str_contains($query, 'avg(pending)')))->toHaveCount(1)
-        ->and($queries->filter(fn (string $query) => str_contains($query, 'with latest as')))->toHaveCount(1);
+        ->and($queries->filter(fn (string $query) => str_contains($query, 'from "alerts"')))->toHaveCount(1);
 });
 
 test('with zero applications every method returns an empty result without error', function () {
@@ -600,9 +589,11 @@ test('with zero applications every method returns an empty result without error'
         ->and($this->repository->queues($this->team, 'anything'))->toBe([])
         ->and($this->repository->failedJobs($this->team, 'anything'))->toBe([])
         ->and($this->repository->longRunningJobs($this->team, 'anything'))->toBe([])
-        ->and($this->repository->alerts($this->team, AlertState::Open))->toBe([])
-        ->and($this->repository->alerts($this->team, AlertState::Muted))->toBe([])
-        ->and($this->repository->alerts($this->team, AlertState::Resolved))->toBe([])
+        ->and($this->repository->openAlerts($this->team))->toBe([])
+        ->and($this->repository->alerts($this->team, AlertState::Open)->toArray())->toBe(['alerts' => [], 'total' => 0, 'perPage' => 50, 'page' => 1])
+        ->and($this->repository->alerts($this->team, AlertState::Muted)->alerts)->toBe([])
+        ->and($this->repository->alerts($this->team, AlertState::Resolved)->alerts)->toBe([])
+        ->and($this->repository->alertCounts($this->team)->toArray())->toBe(['open' => 0, 'muted' => 0, 'resolved' => 0])
         ->and($this->repository->alertRules($this->team, 'organization'))->toHaveCount(8)
         ->and($this->repository->notificationSettings($this->team))->toBeInstanceOf(NotificationSettingsData::class);
 
@@ -626,6 +617,11 @@ test('overrides only apply to scopes that define them', function () {
     $application = Application::factory()->for($this->team)->create();
     Environment::factory()->for($application)->production()->create();
     Environment::factory()->for($application)->workerBatch()->create();
+    foreach (['production' => [AlertRuleMetric::HorizonMasterInactive, AlertRuleMetric::QueuePending, AlertRuleMetric::QueueMaxWait], 'worker-batch' => [AlertRuleMetric::JobRuntime, AlertRuleMetric::WorkersMissing]] as $scope => $metrics) {
+        foreach ($metrics as $metric) {
+            AlertRule::factory()->for($this->team)->forScope($scope)->inheriting()->create(['metric' => $metric, 'threshold' => 3]);
+        }
+    }
 
     $overridesOf = fn (string $scope) => count(array_filter(
         $this->repository->alertRules($this->team, $scope),
@@ -705,7 +701,7 @@ test('a row with nothing to say sorts between degraded and active', function () 
         ->toBe([$down->slug, $paused->slug, $degraded->slug, $waiting->slug, $active->slug]);
 });
 
-test('a state whose snapshots were all pruned keeps its status and detail, with no numbers', function () {
+test('a state whose snapshots were all pruned keeps its status, detail and alert, with no numbers', function () {
     $application = Application::factory()->for($this->team)->create();
     $environment = Environment::factory()->for($application)->production()->create(['polling_enabled' => false]);
     Readings::record($environment, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending], snapshot: [
@@ -720,44 +716,30 @@ test('a state whose snapshots were all pruned keeps its status and detail, with 
         ->and($data->pending)->toBe(0)
         ->and($data->lastReadingAt)->toBe(now()->subDays(40)->toIso8601String())
         ->and($this->repository->queues($this->team, $environment->slug))->toHaveCount(3)
-        ->and($this->repository->alerts($this->team, AlertState::Open))->toBe([]);
+        ->and(array_column($this->repository->openAlerts($this->team), 'metric'))->toBe([AlertRuleMetric::QueuePending])
+        ->and($this->repository->openAlerts($this->team)[0]->pending)->toBe(0);
 });
 
-test('an anomaly older than the look-back is reported as truncated, capped at a day', function () {
+test('an alert counts its minutes from its opening, however long ago', function () {
     $application = Application::factory()->for($this->team)->create();
     $environment = Environment::factory()->for($application)->production()->create();
-
-    foreach ([30, 26, 20, 10] as $hoursAgo) {
-        EnvironmentSnapshot::factory()->for($environment)->failed()->create(['captured_at' => now()->subHours($hoursAgo)]);
-    }
     Readings::record($environment, EnvironmentStatus::Unreachable);
+    Alert::query()->update(['opened_at' => now()->subHours(30)]);
 
-    $alert = $this->repository->alerts($this->team, AlertState::Open)[0];
+    $alert = $this->repository->openAlerts($this->team)[0];
 
     expect($alert->metric)->toBe(AlertRuleMetric::EndpointUnreachable)
-        ->and($alert->minutesAgo)->toBe(1440);
+        ->and($alert->minutesAgo)->toBe(1800);
 });
 
-test('a run that starts inside the look-back is not truncated, even with older unrelated readings', function () {
-    $application = Application::factory()->for($this->team)->create();
-    $environment = Environment::factory()->for($application)->production()->create();
-    EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => now()->subHours(30)]);
-    EnvironmentSnapshot::factory()->for($environment)->failed()->create(['captured_at' => now()->subHours(3)]);
-    Readings::record($environment, EnvironmentStatus::Unreachable);
-
-    $alert = $this->repository->alerts($this->team, AlertState::Open)[0];
-
-    expect($alert->minutesAgo)->toBe(180);
-});
-
-test('a paused horizon opens its own anomaly, with the thresholds it still breaks', function () {
+test('a paused horizon opens its own alert, with the thresholds it still breaks', function () {
     $application = Application::factory()->for($this->team)->create();
     $environment = Environment::factory()->for($application)->production()->create();
     Readings::record($environment, EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused, AlertRuleMetric::QueuePending], snapshot: [
         'pending' => 50_000,
     ]);
 
-    $alerts = $this->repository->alerts($this->team, AlertState::Open);
+    $alerts = $this->repository->openAlerts($this->team);
 
     expect(array_map(fn ($alert) => $alert->metric, $alerts))->toBe([AlertRuleMetric::HorizonPaused, AlertRuleMetric::QueuePending])
         ->and($alerts[0]->environmentStatus)->toBe(EnvironmentStatus::Paused)
@@ -765,7 +747,7 @@ test('a paused horizon opens its own anomaly, with the thresholds it still break
         ->and($alerts[0]->severity->value)->toBe('warning');
 });
 
-test('the page and its sidebar badge share one repository, so the anomalies are read once', function () {
+test('the wall and its sidebar badge share one repository, so the open alerts are read once', function () {
     $application = Application::factory()->for($this->team)->create();
     $environment = Environment::factory()->for($application)->production()->create();
     Readings::record($environment, EnvironmentStatus::Unreachable);
@@ -773,11 +755,11 @@ test('the page and its sidebar badge share one repository, so the anomalies are 
 
     DB::enableQueryLog();
 
-    $this->get(route('alerts.index', ['current_team' => $this->team->slug]))
+    $this->get(route('wall', ['current_team' => $this->team->slug]))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('openAlertCount', 1));
+        ->assertInertia(fn ($page) => $page->where('openAlertCount', 1)->has('page.anomalies', 1));
 
-    expect(collect(DB::getQueryLog())->filter(fn (array $query) => str_contains($query['query'], 'with latest as')))->toHaveCount(1);
+    expect(collect(DB::getQueryLog())->filter(fn (array $query) => str_contains($query['query'], 'from "alerts"')))->toHaveCount(1);
 });
 
 test('the scoped repository does not carry one request into the next', function () {

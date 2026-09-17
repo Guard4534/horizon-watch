@@ -1,9 +1,16 @@
 <?php
 
+use App\Alerts\Events\AlertOpened;
+use App\Alerts\Events\AlertResolved;
+use App\Enums\AlertRuleMetric;
+use App\Models\Alert;
+use App\Models\AlertNotification;
 use App\Models\Environment;
 use App\Models\Team;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DatabaseSeeder;
+use Database\Seeders\Support\SyntheticReadings;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
@@ -70,4 +77,44 @@ test('a configured local horizon is added, polled, and left without readings', f
         ->and($local->application->team_id)->toBe(Environment::query()->where('slug', 'fatturaomatic-production')->sole()->team_id)
         ->and($local->state()->exists())->toBeFalse()
         ->and($local->snapshots()->exists())->toBeFalse();
+});
+
+test('the demo organization carries alerts that match its readings, some muted, one handled, and a recent history', function () {
+    config()->set('horizon-watch.demo_horizon_url', null);
+    $dispatched = 0;
+    Event::listen([AlertOpened::class, AlertResolved::class], function () use (&$dispatched) {
+        $dispatched++;
+    });
+
+    $this->seed(DatabaseSeeder::class);
+
+    $admin = User::query()->where('email', 'admin@example.com')->sole();
+    $open = Alert::query()->open()->with('environment.state')->get();
+    $resolved = Alert::query()->resolved()->get();
+    $latestBreaches = fn (Environment $environment) => $environment->snapshots()->orderByDesc('captured_at')->first()->breaches;
+
+    expect($dispatched)->toBe(0)
+        ->and($open->pluck('environment.slug')->unique()->sort()->values()->all())
+        ->toBe(collect(array_keys(SyntheticReadings::INCIDENTS))->sort()->values()->all())
+        ->and($open->every(fn (Alert $alert) => $alert->metric->isStateRule()
+            ? $alert->environment->state->status->value === match ($alert->metric) {
+                AlertRuleMetric::EndpointUnreachable => 'unreachable',
+                AlertRuleMetric::HorizonMasterInactive => 'inactive',
+                default => 'paused',
+            }
+            : $latestBreaches($alert->environment)->contains($alert->metric)))->toBeTrue()
+        ->and($open->every(fn (Alert $alert) => $alert->opened_at->lt(now()) && $alert->last_seen_at->equalTo(now())))->toBeTrue()
+        ->and($open->every(fn (Alert $alert) => $alert->team_id === $admin->current_team_id))->toBeTrue()
+        ->and($open->where('muted_indefinitely', true))->toHaveCount(1)
+        ->and($open->filter(fn (Alert $alert) => $alert->muted_until?->gt(now()) === true))->toHaveCount(1)
+        ->and($open->whereNotNull('muted_until')->first()->muted_until->lte(now()->addHours(4)))->toBeTrue()
+        ->and($open->whereNotNull('muted_by')->pluck('muted_by')->unique()->all())->toBe([$admin->id])
+        ->and($open->whereNotNull('handled_at'))->toHaveCount(1)
+        ->and($open->whereNotNull('handled_at')->first()->handled_by)->toBe($admin->id)
+        ->and($open->whereNotNull('handled_at')->first()->muted_by)->toBeNull()
+        ->and($resolved->count())->toBeGreaterThanOrEqual(10)
+        ->and($resolved->every(fn (Alert $alert) => $alert->resolved_at->gte(now()->subHours(48))
+            && $alert->resolved_at->lte(now())
+            && $alert->opened_at->lt($alert->resolved_at)))->toBeTrue()
+        ->and(AlertNotification::query()->where('target', 'like', '%://%')->exists())->toBeFalse();
 });
