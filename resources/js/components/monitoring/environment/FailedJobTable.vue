@@ -28,10 +28,10 @@ defineProps<{
             <table class="nc-table">
                 <thead>
                     <tr>
-                        <th>Job</th>
-                        <th>Queue</th>
-                        <th>Exception</th>
-                        <th style="text-align: right">Tries</th>
+                        <th>{{ $t('Job') }}</th>
+                        <th>{{ $t('Queue') }}</th>
+                        <th>{{ $t('Exception') }}</th>
+                        <th style="text-align: right">{{ $t('Tries') }}</th>
                         <th>{{ $t('When') }}</th>
                     </tr>
                 </thead>

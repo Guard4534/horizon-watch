@@ -21,19 +21,21 @@ const interval = computed(() =>
     formatInterval(environment.pollIntervalSeconds),
 );
 
-const snippet = computed(() =>
+const envSnippet = computed(() =>
     [
-        '# .env of the monitored application',
+        '# .env',
         `HORIZON_PATH=${path.value.replace(/^\/+/, '') || 'horizon'}`,
-        ...(environment.basicAuthUser
-            ? [
-                  `HORIZON_BASIC_AUTH_USER=${environment.basicAuthUser}`,
-                  'HORIZON_BASIC_AUTH_PASSWORD=••••',
-              ]
-            : []),
-        '',
-        '# allow the self-hosted panel',
-        'HORIZON_ALLOWED_IPS=<panel-ip>',
+    ].join('\n'),
+);
+
+const gateSnippet = computed(() =>
+    [
+        '// app/Providers/HorizonServiceProvider.php',
+        "Gate::define('viewHorizon', fn ($user = null) =>",
+        environment.basicAuthUser
+            ? `    request()->getUser() === '${environment.basicAuthUser.replace(/['\\]/g, '\\$&')}'`
+            : "    request()->ip() === '<panel-ip>'",
+        ');',
     ].join('\n'),
 );
 </script>
@@ -147,20 +149,29 @@ const snippet = computed(() =>
         >
             {{ $t('Configuration on the monitored app') }}
         </div>
-        <pre
-            class="m-0 break-words whitespace-pre-wrap"
+        <pre class="snippet m-0 break-words whitespace-pre-wrap">{{
+            envSnippet
+        }}</pre>
+        <div
             style="
-                padding: var(--nc-space-3);
-                border-radius: var(--nc-radius-sm);
-                background: var(--nc-bg);
-                border: 1px solid var(--nc-divider);
-                font-family: var(--nc-font);
-                letter-spacing: 0.01em;
                 font-size: 11px;
-                line-height: 1.6;
-                color: var(--nc-neutral-300);
+                color: var(--nc-neutral-500);
+                margin: var(--nc-space-2) 0;
             "
-            >{{ snippet }}</pre>
+        >
+            {{
+                environment.basicAuthUser
+                    ? $t(
+                          'Outside the local environment Horizon admits only who passes the viewHorizon gate: with the dashboard behind basic auth middleware, let the panel’s user through in the app’s HorizonServiceProvider.',
+                      )
+                    : $t(
+                          'Outside the local environment Horizon admits only who passes the viewHorizon gate: let the panel through by its IP address in the app’s HorizonServiceProvider.',
+                      )
+            }}
+        </div>
+        <pre class="snippet m-0 break-words whitespace-pre-wrap">{{
+            gateSnippet
+        }}</pre>
         <div
             class="mt-[var(--nc-space-2)]"
             style="font-size: 11px; color: var(--nc-neutral-600)"
@@ -178,3 +189,17 @@ const snippet = computed(() =>
         </div>
     </SectionCard>
 </template>
+
+<style scoped>
+.snippet {
+    padding: var(--nc-space-3);
+    border-radius: var(--nc-radius-sm);
+    background: var(--nc-bg);
+    border: 1px solid var(--nc-divider);
+    font-family: var(--nc-font);
+    letter-spacing: 0.01em;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--nc-neutral-300);
+}
+</style>

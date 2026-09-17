@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { formatAge } from '@/components/monitoring/environment/readings';
@@ -17,9 +18,13 @@ const background = computed(() =>
 );
 
 const figures = computed(() => [
-    { key: 'workers', value: node.workers },
-    { key: 'supervisors', value: node.supervisorCount },
-    { key: 'queues', value: node.queueCount },
+    { key: 'workers', label: trans('workers'), value: node.workers },
+    {
+        key: 'supervisors',
+        label: trans('supervisors'),
+        value: node.supervisorCount,
+    },
+    { key: 'queues', label: trans('queues'), value: node.queueCount },
 ]);
 </script>
 
@@ -62,7 +67,7 @@ const figures = computed(() => [
                         color: var(--nc-neutral-600);
                     "
                 >
-                    {{ figure.key }}
+                    {{ figure.label }}
                 </div>
             </div>
         </div>

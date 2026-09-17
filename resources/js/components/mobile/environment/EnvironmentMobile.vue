@@ -64,7 +64,7 @@ const lastKnownText = computed(() =>
 
 const tiles = computed(() => [
     {
-        label: 'Pending',
+        label: trans('Pending'),
         value: formatCount(environment.value.pending),
         color: pendingTone(
             environment.value.pending,
@@ -72,7 +72,7 @@ const tiles = computed(() => [
         ),
     },
     {
-        label: 'Max wait',
+        label: trans('Max wait'),
         value: formatWait(environment.value.maxWaitSeconds),
         color: waitColor(
             environment.value.maxWaitSeconds,
@@ -80,7 +80,7 @@ const tiles = computed(() => [
         ),
     },
     {
-        label: 'Workers',
+        label: trans('Workers'),
         value: String(environment.value.workers),
         color:
             environment.value.status !== null && !environment.value.workers
@@ -96,12 +96,12 @@ const tiles = computed(() => [
         ),
     },
     {
-        label: 'Jobs/min',
+        label: trans('Jobs/min'),
         value: String(environment.value.jobsPerMinute),
         color: 'var(--nc-text)',
     },
     {
-        label: 'Nodes',
+        label: trans('Nodes'),
         value: String(environment.value.nodeCount),
         color: 'var(--nc-text)',
     },
@@ -221,7 +221,7 @@ const tiles = computed(() => [
 
             <div class="mobile-card">
                 <div class="mb-[var(--nc-space-2)] flex items-baseline gap-2">
-                    <span style="font-size: 13px">Queues</span>
+                    <span style="font-size: 13px">{{ $t('Queues') }}</span>
                     <span
                         v-if="lastKnown"
                         class="ml-auto"
@@ -232,7 +232,7 @@ const tiles = computed(() => [
                         v-else
                         class="ml-auto"
                         style="font-size: 10px; color: var(--nc-neutral-600)"
-                        >pending · wait</span
+                        >{{ $t('pending · wait') }}</span
                     >
                 </div>
                 <div
@@ -305,7 +305,11 @@ const tiles = computed(() => [
                     <span
                         class="nc-num ml-auto flex-none"
                         style="color: var(--nc-neutral-500)"
-                        >{{ node.workers }} workers</span
+                        >{{
+                            $t(':count workers', {
+                                count: String(node.workers),
+                            })
+                        }}</span
                     >
                 </div>
             </div>

@@ -26,13 +26,13 @@ const { waitThreshold } = defineProps<{
             <table class="nc-table">
                 <thead>
                     <tr>
-                        <th>Queue</th>
-                        <th>Supervisor</th>
-                        <th style="text-align: right">Workers</th>
-                        <th style="text-align: right">Pending</th>
-                        <th style="text-align: right">Wait</th>
-                        <th style="text-align: right">Runtime</th>
-                        <th>Status</th>
+                        <th>{{ $t('Queue') }}</th>
+                        <th>{{ $t('Supervisor') }}</th>
+                        <th style="text-align: right">{{ $t('Workers') }}</th>
+                        <th style="text-align: right">{{ $t('Pending') }}</th>
+                        <th style="text-align: right">{{ $t('Wait') }}</th>
+                        <th style="text-align: right">{{ $t('Runtime') }}</th>
+                        <th>{{ $t('Status') }}</th>
                     </tr>
                 </thead>
                 <tbody>

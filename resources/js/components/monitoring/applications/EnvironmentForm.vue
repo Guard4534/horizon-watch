@@ -171,7 +171,7 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                         class="nc-input"
                         style="max-width: 92px"
                         type="number"
-                        min="5"
+                        min="15"
                         max="300"
                         step="1"
                     />

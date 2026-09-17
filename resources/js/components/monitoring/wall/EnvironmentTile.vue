@@ -5,13 +5,14 @@ import { computed } from 'vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
+import { pendingTone } from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { DEFAULT_PENDING_THRESHOLD } from '@/lib/alertRules';
 import { failedWindowNote } from '@/lib/failedWindow';
 import {
     envColor,
     formatCount,
     formatWait,
-    pendingColor,
     statusColor,
     waitColor,
 } from '@/lib/monitoring';
@@ -106,7 +107,12 @@ const silence = computed<string | null>(() => {
         <span class="nc-num mt-[11px] flex items-baseline gap-[5px]">
             <span
                 style="font-size: 19px; line-height: 1"
-                :style="{ color: pendingColor(environment.pending) }"
+                :style="{
+                    color: pendingTone(
+                        environment.pending,
+                        DEFAULT_PENDING_THRESHOLD,
+                    ),
+                }"
                 >{{ formatCount(environment.pending) }}</span
             >
             <span
@@ -165,7 +171,12 @@ const silence = computed<string | null>(() => {
                             environment.nodeCount,
                         )
                     }}
-                    · {{ environment.workers }} workers
+                    ·
+                    {{
+                        $t(':count workers', {
+                            count: String(environment.workers),
+                        })
+                    }}
                 </template>
             </span>
             <span
@@ -173,7 +184,11 @@ const silence = computed<string | null>(() => {
                 :style="{ color: failedColor }"
                 :title="failedWindowNote(environment.failedWindowMinutes)"
             >
-                {{ environment.failedInWindow }} failed
+                {{
+                    $t(':count failed', {
+                        count: String(environment.failedInWindow),
+                    })
+                }}
             </span>
         </span>
     </Link>

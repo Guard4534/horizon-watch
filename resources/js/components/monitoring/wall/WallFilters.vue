@@ -73,11 +73,6 @@ const chips = computed(() => {
                 style="max-width: 250px"
                 :placeholder="$t('Filter by application or environment')"
             />
-            <span
-                class="ml-auto"
-                style="font-size: 11px; color: var(--nc-neutral-600)"
-                >{{ $t('sorted by severity, then by pending jobs') }}</span
-            >
         </div>
         <div class="flex flex-wrap items-center" style="gap: var(--nc-space-2)">
             <span class="nc-label" style="margin-right: var(--nc-space-1)">{{

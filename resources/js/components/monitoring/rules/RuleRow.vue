@@ -21,7 +21,7 @@ const { rule, organizationScope } = defineProps<{
                 <span
                     v-if="rule.origin === 'override'"
                     class="nc-tag nc-tag-sm nc-tag-accent flex-none"
-                    >override</span
+                    >{{ $t('override') }}</span
                 >
                 <span
                     v-else-if="!organizationScope"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import {
     failedColor,
@@ -31,7 +32,7 @@ const windows = computed(
 
 const header = computed(() => {
     if (windows.value.size === 0) {
-        return 'Failed';
+        return trans('Failed');
     }
 
     return windows.value.size === 1
@@ -47,13 +48,13 @@ const header = computed(() => {
                 <thead>
                     <tr>
                         <th>{{ $t('Environment') }}</th>
-                        <th style="text-align: right">Pending</th>
-                        <th style="text-align: right">Max wait</th>
+                        <th style="text-align: right">{{ $t('Pending') }}</th>
+                        <th style="text-align: right">{{ $t('Max wait') }}</th>
                         <th style="text-align: right">
                             {{ header }}
                         </th>
-                        <th style="text-align: right">Workers</th>
-                        <th style="text-align: right">jobs/min</th>
+                        <th style="text-align: right">{{ $t('Workers') }}</th>
+                        <th style="text-align: right">{{ $t('jobs/min') }}</th>
                     </tr>
                 </thead>
                 <tbody class="nc-num">

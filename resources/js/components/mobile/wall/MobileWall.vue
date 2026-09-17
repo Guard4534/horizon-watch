@@ -4,13 +4,14 @@ import { computed } from 'vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
+import { pendingTone } from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { DEFAULT_PENDING_THRESHOLD } from '@/lib/alertRules';
 import { failedWindowNote, failedWindowShort } from '@/lib/failedWindow';
 import {
     envColor,
     formatCount,
     formatWait,
-    pendingColor,
     statusColor,
     statusLabel,
     waitColor,
@@ -92,7 +93,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                 </div>
             </div>
             <div class="kpi">
-                <div class="kpi-label">Pending</div>
+                <div class="kpi-label">{{ $t('Pending') }}</div>
                 <div class="kpi-value">
                     {{ formatCount(kpis.pendingTotal) }}
                 </div>
@@ -161,7 +162,10 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                             class="nc-num block"
                             style="font-size: 16px; line-height: 1.2"
                             :style="{
-                                color: pendingColor(environment.pending),
+                                color: pendingTone(
+                                    environment.pending,
+                                    DEFAULT_PENDING_THRESHOLD,
+                                ),
                             }"
                             >{{ formatCount(environment.pending) }}</span
                         >
@@ -183,7 +187,11 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                         :style="{
                             color: waitColor(environment.maxWaitSeconds),
                         }"
-                        >{{ formatWait(environment.maxWaitSeconds) }} wait</span
+                        >{{
+                            $t(':wait wait', {
+                                wait: formatWait(environment.maxWaitSeconds),
+                            })
+                        }}</span
                     >
                     <span
                         :title="
@@ -196,7 +204,12 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                                     ? 'var(--st-warn)'
                                     : undefined,
                         }"
-                        >{{ environment.failedInWindow }} failed ·
+                        >{{
+                            $t(':count failed', {
+                                count: String(environment.failedInWindow),
+                            })
+                        }}
+                        ·
                         {{
                             failedWindowShort(environment.failedWindowMinutes)
                         }}</span

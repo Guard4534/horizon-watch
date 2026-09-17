@@ -11,6 +11,8 @@ import {
 import { trans } from 'laravel-vue-i18n';
 import type { Component } from 'vue';
 
+export const DEFAULT_PENDING_THRESHOLD = 2000;
+
 const ICONS: Record<App.Enums.AlertRuleMetric, Component> = {
     'horizon.master_inactive': PhPower,
     'endpoint.unreachable': PhPlugs,

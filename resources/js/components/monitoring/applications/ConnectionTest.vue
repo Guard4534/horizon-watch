@@ -18,6 +18,7 @@ import {
     PhWarning,
 } from '@phosphor-icons/vue';
 import { computed, onMounted, onUnmounted, watch } from 'vue';
+import { horizonStatusLabel } from '@/components/monitoring/environment/readings';
 import type { RouteDefinition } from '@/wayfinder';
 
 const {
@@ -178,7 +179,9 @@ const icon = computed(() => {
                     $t(
                         'Connected · Horizon :status · :count masters · :ms ms',
                         {
-                            status: result.horizonStatus ?? '—',
+                            status: result.horizonStatus
+                                ? horizonStatusLabel(result.horizonStatus)
+                                : '—',
                             count: String(result.masterCount ?? 0),
                             ms: String(result.latencyMs ?? 0),
                         },

@@ -540,7 +540,7 @@ const submit = () => {
                             class="nc-input"
                             style="max-width: 80px; min-height: 30px"
                             type="number"
-                            min="5"
+                            min="15"
                             max="300"
                             step="1"
                         />

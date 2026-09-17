@@ -22,7 +22,7 @@ defineProps<{
             <slot />
         </main>
         <div class="shell-tabs"><TabBar /></div>
-        <Toaster />
+        <Toaster :container-aria-label="$t('Notifications')" />
     </div>
 </template>
 

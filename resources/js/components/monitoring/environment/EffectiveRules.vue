@@ -66,7 +66,9 @@ const slug = useTeamSlug();
                             ? 'nc-tag-accent'
                             : 'nc-tag-neutral'
                     "
-                    >{{ rule.origin === 'override' ? 'override' : 'org' }}</span
+                    >{{
+                        rule.origin === 'override' ? $t('override') : $t('org')
+                    }}</span
                 >
             </div>
         </div>

@@ -24,7 +24,18 @@ export function envColor(color: App.Enums.EnvironmentColor): string {
 }
 
 export function statusLabel(status: App.Enums.EnvironmentStatus): string {
-    return status === 'unreachable' ? trans('unreachable') : status;
+    switch (status) {
+        case 'active':
+            return trans('active');
+        case 'degraded':
+            return trans('degraded');
+        case 'paused':
+            return trans('paused');
+        case 'inactive':
+            return trans('inactive');
+        case 'unreachable':
+            return trans('unreachable');
+    }
 }
 
 export function isDown(status: App.Enums.EnvironmentStatus): boolean {
@@ -61,14 +72,6 @@ export function waitColor(seconds: number, threshold = 60): string {
     }
 
     return seconds > threshold ? 'var(--st-warn)' : 'var(--nc-neutral-400)';
-}
-
-export function pendingColor(pending: number): string {
-    if (pending > 2000) {
-        return 'var(--st-down)';
-    }
-
-    return pending > 1000 ? 'var(--st-warn)' : 'var(--nc-text)';
 }
 
 export function formatElapsed(minutes: number, capped = false): string {

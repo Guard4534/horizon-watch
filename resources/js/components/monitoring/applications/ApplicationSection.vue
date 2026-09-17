@@ -149,7 +149,7 @@ function openRow(
                         <th>{{ $t('Collection') }}</th>
                         <th>{{ $t('Nodes') }}</th>
                         <th>{{ $t('Rules') }}</th>
-                        <th style="text-align: right">Pending</th>
+                        <th style="text-align: right">{{ $t('Pending') }}</th>
                         <th>{{ $t('Status') }}</th>
                         <th />
                     </tr>

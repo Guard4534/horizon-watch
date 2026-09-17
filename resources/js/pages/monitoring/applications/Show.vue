@@ -159,7 +159,7 @@ const stats = computed(() => [
                         <template v-else-if="stat.label === 'Worst status'">{{
                             $t('Worst status')
                         }}</template>
-                        <template v-else>Pending</template>
+                        <template v-else>{{ $t('Pending') }}</template>
                     </div>
                     <div
                         class="nc-num"

@@ -84,7 +84,7 @@ type Tile = { label: string; value: string; color: string; note: string };
 
 const tiles = computed<Tile[]>(() => [
     {
-        label: 'Master',
+        label: trans('Master'),
         value:
             environment.value.horizonStatus !== null
                 ? horizonStatusLabel(environment.value.horizonStatus)
@@ -101,7 +101,7 @@ const tiles = computed<Tile[]>(() => [
                   }),
     },
     {
-        label: 'Pending',
+        label: trans('Pending'),
         value: formatCount(environment.value.pending),
         color: pendingTone(
             environment.value.pending,
@@ -110,7 +110,7 @@ const tiles = computed<Tile[]>(() => [
         note: trans(':count queue', { count: String(page.queues.length) }),
     },
     {
-        label: 'Max wait',
+        label: trans('Max wait'),
         value: formatWait(environment.value.maxWaitSeconds),
         color: waitColor(
             environment.value.maxWaitSeconds,
@@ -121,7 +121,7 @@ const tiles = computed<Tile[]>(() => [
         }),
     },
     {
-        label: 'Workers',
+        label: trans('Workers'),
         value: String(environment.value.workers),
         color:
             environment.value.status !== null && !environment.value.workers
@@ -130,10 +130,10 @@ const tiles = computed<Tile[]>(() => [
         note: trans('active processes'),
     },
     {
-        label: 'Throughput',
+        label: trans('Throughput'),
         value: String(environment.value.jobsPerMinute),
         color: 'var(--nc-text)',
-        note: 'jobs/min',
+        note: trans('jobs/min'),
     },
     {
         label: failedLabel(environment.value.failedWindowMinutes),
