@@ -4,12 +4,16 @@ namespace App\Models;
 
 use App\Concerns\GeneratesUniqueSlugs;
 use App\Enums\EnvironmentColor;
+use Carbon\CarbonImmutable;
 use Database\Factories\EnvironmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
@@ -25,9 +29,14 @@ use Illuminate\Support\Str;
  * @property string|null $basic_auth_password
  * @property int $poll_interval_seconds
  * @property Carbon|null $muted_until
+ * @property bool $polling_enabled
+ * @property CarbonImmutable|null $last_polled_at
+ * @property CarbonImmutable|null $next_poll_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Application $application
+ * @property-read Collection<int, EnvironmentSnapshot> $snapshots
+ * @property-read EnvironmentState|null $state
  */
 #[Fillable([
     'name',
@@ -38,12 +47,23 @@ use Illuminate\Support\Str;
     'basic_auth_password',
     'poll_interval_seconds',
     'muted_until',
+    'polling_enabled',
 ])]
 #[Hidden(['basic_auth_password'])]
 class Environment extends Model
 {
     /** @use HasFactory<EnvironmentFactory> */
     use GeneratesUniqueSlugs, HasFactory;
+
+    /**
+     * Mirrors the column default, so a freshly created model already says
+     * whether it is polled without a refresh.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'polling_enabled' => true,
+    ];
 
     /**
      * Bootstrap the model and its traits.
@@ -85,6 +105,27 @@ class Environment extends Model
     }
 
     /**
+     * Get every stored reading of this environment. No order is imposed:
+     * callers pick the one their index serves.
+     *
+     * @return HasMany<EnvironmentSnapshot, $this>
+     */
+    public function snapshots(): HasMany
+    {
+        return $this->hasMany(EnvironmentSnapshot::class);
+    }
+
+    /**
+     * Get the latest reading in detail.
+     *
+     * @return HasOne<EnvironmentState, $this>
+     */
+    public function state(): HasOne
+    {
+        return $this->hasOne(EnvironmentState::class);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -95,6 +136,9 @@ class Environment extends Model
             'color' => EnvironmentColor::class,
             'basic_auth_password' => 'encrypted',
             'muted_until' => 'datetime',
+            'polling_enabled' => 'boolean',
+            'last_polled_at' => 'immutable_datetime',
+            'next_poll_at' => 'immutable_datetime',
         ];
     }
 

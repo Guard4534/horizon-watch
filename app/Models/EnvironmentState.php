@@ -1,0 +1,76 @@
+<?php
+
+namespace App\Models;
+
+use App\Enums\EnvironmentStatus;
+use App\Enums\ReadingError;
+use Carbon\CarbonImmutable;
+use Database\Factories\EnvironmentStateFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+/**
+ * The latest reading of one environment, in detail. The JSON shapes are
+ * documented in the migration and are shared by the poller and
+ * StoredReadings.
+ *
+ * @property int $id
+ * @property int $environment_id
+ * @property CarbonImmutable $captured_at
+ * @property EnvironmentStatus $status
+ * @property ReadingError|null $error
+ * @property list<array{hostname: string, status: string, workers: int, supervisors: int, queues: int}> $nodes
+ * @property list<array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}> $queues
+ * @property list<array{job: string, queue: string, exception: string, tries: int, failedAt: string}> $failed_jobs
+ * @property list<array{job: string, queue: string, reservedAt: string}> $pending_jobs
+ * @property int|null $latency_ms
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
+ * @property-read Environment $environment
+ */
+#[Fillable([
+    'environment_id',
+    'captured_at',
+    'status',
+    'error',
+    'nodes',
+    'queues',
+    'failed_jobs',
+    'pending_jobs',
+    'latency_ms',
+])]
+class EnvironmentState extends Model
+{
+    /** @use HasFactory<EnvironmentStateFactory> */
+    use HasFactory;
+
+    /**
+     * Get the environment this state belongs to.
+     *
+     * @return BelongsTo<Environment, $this>
+     */
+    public function environment(): BelongsTo
+    {
+        return $this->belongsTo(Environment::class);
+    }
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'captured_at' => 'immutable_datetime',
+            'status' => EnvironmentStatus::class,
+            'error' => ReadingError::class,
+            'nodes' => 'array',
+            'queues' => 'array',
+            'failed_jobs' => 'array',
+            'pending_jobs' => 'array',
+        ];
+    }
+}

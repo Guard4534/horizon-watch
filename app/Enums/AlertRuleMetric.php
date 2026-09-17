@@ -11,7 +11,6 @@ enum AlertRuleMetric: string
     case JobRuntime = 'job.runtime';
     case JobsFailedPerHour = 'jobs.failed_per_hour';
     case WorkersMissing = 'workers.missing';
-    case RedisMemory = 'redis.memory';
 
     public function unit(): string
     {
@@ -20,7 +19,6 @@ enum AlertRuleMetric: string
             self::QueuePending, self::JobsFailedPerHour => 'job',
             self::QueueMaxWait, self::JobRuntime => 's',
             self::WorkersMissing => '',
-            self::RedisMemory => 'GB',
         };
     }
 
@@ -33,7 +31,7 @@ enum AlertRuleMetric: string
             self::QueueMaxWait => 60,
             self::JobRuntime => 120,
             self::JobsFailedPerHour => 20,
-            self::WorkersMissing, self::RedisMemory => 4,
+            self::WorkersMissing => 4,
         };
     }
 
@@ -47,6 +45,6 @@ enum AlertRuleMetric: string
 
     public function notifiesByEmailByDefault(): bool
     {
-        return ! in_array($this, [self::JobRuntime, self::WorkersMissing, self::RedisMemory], true);
+        return ! in_array($this, [self::JobRuntime, self::WorkersMissing], true);
     }
 }

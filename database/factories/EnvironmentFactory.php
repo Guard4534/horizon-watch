@@ -42,7 +42,7 @@ class EnvironmentFactory extends Factory
         return [
             'name' => $name,
             'color' => $color,
-            'horizon_url' => 'https://'.Str::slug($name).'.example.com/horizon/api',
+            'horizon_url' => 'https://'.Str::slug($name).'.example.com/horizon',
             'basic_auth_user' => $hasBasicAuth ? 'monitor' : null,
             'basic_auth_password' => $hasBasicAuth ? fake()->password() : null,
             'poll_interval_seconds' => 15,
