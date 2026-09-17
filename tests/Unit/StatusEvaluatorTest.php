@@ -101,17 +101,19 @@ test('a reading is evaluated in the order of the spec', function (HorizonReading
     'horizon reports itself paused' => fn () => [
         evaluatorReading(status: 'paused'),
         EnvironmentStatus::Paused,
-        [],
+        [AlertRuleMetric::HorizonPaused],
     ],
     'every master is paused' => fn () => [
         evaluatorReading(masters: [evaluatorMaster('paused'), evaluatorMaster('paused')]),
         EnvironmentStatus::Paused,
-        [],
+        [AlertRuleMetric::HorizonPaused],
     ],
-    'paused hides the thresholds' => fn () => [
-        evaluatorReading(status: 'paused', failedJobs: 10_000),
+    'paused still measures the thresholds, and stays paused' => fn () => [
+        evaluatorReading(status: 'paused', failedJobs: 10_000, workload: [
+            new HorizonQueueLoad(name: 'default', length: 50_000, wait: 900, processes: 0),
+        ]),
         EnvironmentStatus::Paused,
-        [],
+        [AlertRuleMetric::HorizonPaused, AlertRuleMetric::QueuePending, AlertRuleMetric::QueueMaxWait, AlertRuleMetric::JobsFailedPerHour],
     ],
     'one master of two paused is not paused' => fn () => [
         evaluatorReading(masters: [evaluatorMaster('paused'), evaluatorMaster()]),

@@ -30,7 +30,14 @@ class ApplicationListQuery
             return new ApplicationGroupData(
                 application: $application,
                 environments: $own,
-                triageCount: count(array_filter($own, fn (EnvironmentData $environment) => ! $environment->status->isHealthy())),
+                // Watched rows with a reading only: an unwatched row carries
+                // no status, and "no reading yet" is not a problem to triage.
+                triageCount: count(array_filter(
+                    $own,
+                    fn (EnvironmentData $environment) => $environment->watched
+                        && $environment->status !== null
+                        && ! $environment->status->isHealthy(),
+                )),
             );
         }, $this->monitoring->configurableApplications($team));
 

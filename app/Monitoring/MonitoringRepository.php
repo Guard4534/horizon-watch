@@ -17,8 +17,16 @@ use App\Enums\AlertState;
 use App\Enums\SeriesRange;
 use App\Models\Team;
 use Illuminate\Container\Attributes\Bind;
+use Illuminate\Container\Attributes\Scoped;
 
+/**
+ * Scoped: one instance per request (or per queued job), so the shared
+ * sidebar badge in HandleInertiaRequests reuses the caches the page's Query
+ * already filled instead of reading every anomaly again. Why that is safe
+ * is written above the caches in ConfiguredMonitoringRepository.
+ */
 #[Bind(ConfiguredMonitoringRepository::class)]
+#[Scoped]
 interface MonitoringRepository
 {
     /**

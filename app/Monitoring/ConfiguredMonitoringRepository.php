@@ -63,14 +63,24 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     // The caches below are per instance and are never invalidated: a
     // repository instance must not span a mutation that changes visibility
     // or the set of environments/applications, or it will keep serving what
-    // it saw first. That holds today because the binding is transient (a
-    // fresh instance per resolution) and every write in this app ends in a
-    // redirect, which resolves a new instance on the next request — nothing
-    // currently keeps one instance alive across a write. They are keyed by
-    // team but *not* by user, so they also assume the authenticated user
-    // never changes within one instance's life: a second Auth::login() on a
-    // shared instance (impersonation, Octane, a job that logs users in)
-    // would keep serving the first user's visibility.
+    // it saw first. They are keyed by team but *not* by user, so they also
+    // assume the authenticated user never changes within one instance's
+    // life.
+    //
+    // The binding is scoped (see MonitoringRepository), which keeps both
+    // assumptions: one instance per request, and a request has one
+    // authenticated user and never reads a page after its own write — every
+    // write in this app ends in a redirect, and the page is the next
+    // request, with a new instance. Under php-fpm each request is a new
+    // application anyway; Octane flushes scoped instances between requests;
+    // the queue worker flushes them before every job (Worker's resetScope),
+    // and no job resolves this class (it needs an authenticated member).
+    // The feature tests send several requests through one application, so
+    // their TestCase flushes scoped instances before each request, as a
+    // real server would. What still breaks it: a second Auth::login() or a
+    // write followed by a read inside one request (impersonation, a job
+    // that logs users in) — resolve a fresh ConfiguredMonitoringRepository
+    // there, which is not scoped.
 
     // They are also keyed by *view* where the two views differ (see the
     // note above visibleApplications()): a cache must never hand the
@@ -150,7 +160,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
      * The open anomalies of the watched environments, by environment id.
      * Watched view only: alerts are never read from the configuration view.
      *
-     * @var array<int, array<int, list<array{metric: AlertRuleMetric, since: CarbonImmutable}>>>
+     * @var array<int, array<int, list<array{metric: AlertRuleMetric, since: CarbonImmutable, truncated: bool}>>>
      */
     private array $openAnomaliesByTeam = [];
 
@@ -308,6 +318,8 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         }
 
         $now = $this->now();
+        // The default, not the scope's override (900 s for worker-batch):
+        // overrides are invented until phase 4 makes them real.
         $threshold = AlertRuleMetric::JobRuntime->defaultThreshold();
         $jobs = [];
 
@@ -373,17 +385,25 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         $anomalies = $this->openAnomaliesByTeam[$team->id]
             ??= $this->readings->openAnomalies($models->values()->all());
         $now = $this->now();
+        $cap = StoredReadings::LOOKBACK_HOURS * 60;
         $alerts = [];
 
         foreach ($environments as $environment) {
             $model = $models->get($environment->id);
 
-            foreach ($model ? $anomalies[$model->id] ?? [] : [] as $anomaly) {
+            // A snapshot without a state is never written (the poller
+            // writes both in one transaction): nothing to describe it with.
+            if ($model === null || $environment->status === null) {
+                continue;
+            }
+
+            foreach ($anomalies[$model->id] ?? [] as $anomaly) {
                 $alerts[] = $this->makeAlert(
                     $environment,
-                    $state,
+                    $environment->status,
                     $anomaly['metric'],
-                    max(0, (int) $anomaly['since']->diffInMinutes($now)),
+                    $anomaly['truncated'] ? $cap : min($cap, max(0, (int) $anomaly['since']->diffInMinutes($now))),
+                    $anomaly['truncated'],
                 );
             }
         }
@@ -663,7 +683,9 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     /**
      * A queue follows its environment when the environment is down or
      * paused; otherwise it is degraded when it breaks a default threshold on
-     * its own, or has work and nobody to do it.
+     * its own, or has work and nobody to do it. The pending threshold is the
+     * environment-wide one, reused per queue on purpose: phase 4 brings
+     * per-rule thresholds, not per-queue ones.
      *
      * @param  array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}  $queue
      */
@@ -704,13 +726,20 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
      * Never pass this as a first-class callable to map(): the second
      * argument would arrive as the collection key, which is an int, and
      * every row would silently report itself unwatched.
+     *
+     * An unwatched row (the configuration view of a restricted admin)
+     * carries no reading at all: its configuration is theirs to fix, its
+     * operations are not theirs to watch.
      */
     private function toEnvironmentData(Environment $environment, bool $watched): EnvironmentData
     {
         // Callers load the states of their whole list first: a miss here
         // would be one query per row.
-        $state = $this->statesByEnvironment[$environment->id] ?? null;
-        $trend = $this->trendsByEnvironment[$environment->id] ?? null;
+        $state = $watched ? $this->statesByEnvironment[$environment->id] ?? null : null;
+        $trend = $watched ? $this->trendsByEnvironment[$environment->id] ?? null : null;
+        $stale = $watched
+            && $environment->polling_enabled
+            && $this->readings->isStale($environment, $state, $this->now());
 
         return new EnvironmentData(
             id: $environment->slug,
@@ -718,17 +747,23 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             applicationName: $environment->application->name,
             name: $environment->name,
             color: $environment->color,
-            horizonUrl: $environment->horizon_url,
-            // Never read is reported as not answering: nothing says it does.
-            status: $state->status ?? EnvironmentStatus::Unreachable,
+            horizonUrl: self::withoutUserinfo($environment->horizon_url),
+            status: match (true) {
+                ! $watched => null,
+                $state !== null => $state->status,
+                // Never read: waiting for the first poll until that is
+                // overdue by the stale rule, then reported as not answering.
+                $stale => EnvironmentStatus::Unreachable,
+                default => null,
+            },
             pending: $this->snapshotNumber($state, 'pending'),
-            trend: $trend['points'] ?? array_fill(0, StoredReadings::TREND_POINTS, 0),
+            trend: $watched ? $trend['points'] ?? array_fill(0, StoredReadings::TREND_POINTS, 0) : [],
             trendPercent: $trend['percent'] ?? null,
             maxWaitSeconds: $this->snapshotNumber($state, 'max_wait_seconds'),
             failedLast24Hours: $this->snapshotNumber($state, 'failed_last_24_hours'),
             // Without a snapshot there is no count to qualify: Horizon's
-            // historical day, as the column default.
-            failedWindowMinutes: $this->snapshotNumber($state, 'failed_window_minutes') ?: 1440,
+            // default week, as the column default.
+            failedWindowMinutes: $this->snapshotNumber($state, 'failed_window_minutes') ?: 10080,
             workers: $this->snapshotNumber($state, 'workers'),
             jobsPerMinute: $this->snapshotNumber($state, 'jobs_per_minute'),
             nodeCount: $this->snapshotNumber($state, 'node_count'),
@@ -736,10 +771,19 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             latencyMs: $state?->latency_ms,
             watched: $watched,
             lastReadingAt: $state?->captured_at->toIso8601String(),
-            stale: $environment->polling_enabled && $this->readings->isStale($environment, $state, $this->now()),
+            stale: $stale,
             pollingEnabled: $environment->polling_enabled,
             readingError: $state?->error,
         );
+    }
+
+    /**
+     * Rows saved before the form refused credentials in the URL may still
+     * carry "user:secret@": never hand that to a page.
+     */
+    private static function withoutUserinfo(string $url): string
+    {
+        return (string) preg_replace('#^([a-z][a-z0-9+.-]*://)[^/?\#]*@#i', '$1', $url);
     }
 
     /**
@@ -751,11 +795,11 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         return (int) $state?->getAttribute("snapshot_{$column}");
     }
 
-    private function makeAlert(EnvironmentData $environment, AlertState $state, AlertRuleMetric $metric, int $minutesAgo): AlertData
+    private function makeAlert(EnvironmentData $environment, EnvironmentStatus $status, AlertRuleMetric $metric, int $minutesAgo, bool $sinceTruncated): AlertData
     {
         return new AlertData(
             id: "{$environment->id}:{$metric->value}",
-            state: $state,
+            state: AlertState::Open,
             severity: $metric->defaultSeverity(),
             metric: $metric,
             threshold: $metric->defaultThreshold(),
@@ -764,11 +808,12 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             applicationName: $environment->applicationName,
             environmentName: $environment->name,
             color: $environment->color,
-            environmentStatus: $environment->status,
+            environmentStatus: $status,
             nodeCount: $environment->nodeCount,
             pending: $environment->pending,
             maxWaitSeconds: $environment->maxWaitSeconds,
             minutesAgo: $minutesAgo,
+            sinceTruncated: $sinceTruncated,
             channels: [NotificationChannel::Mail, NotificationChannel::Webhook],
         );
     }

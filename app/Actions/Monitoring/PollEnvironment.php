@@ -24,6 +24,9 @@ use Throwable;
 
 class PollEnvironment
 {
+    // Horizon's failed-jobs window when the application sets none.
+    private const HORIZON_FAILED_WINDOW_MINUTES = 10080;
+
     public function __construct(
         private readonly HorizonReader $reader,
         private readonly StatusEvaluator $evaluator,
@@ -197,15 +200,29 @@ class PollEnvironment
      * own. It repeats the one of the reading stored before it (which a
      * failed reading also carried forward), or the page would label the
      * failed jobs of a week-long window "24h" for the length of an outage.
-     * One row on the (environment_id, captured_at) index.
+     * Without a reading before it, Horizon's own default applies: it trims
+     * failed jobs after a week (horizon.trim.failed, 10080 minutes).
+     *
+     * One row, read backwards on the (environment_id, captured_at) index.
+     * The row comparison is what gets PostgreSQL there: with an equality on
+     * a constant id it walked the captured_at index instead (167 ms for an
+     * environment whose last reading is ten days old, on 5 M rows). Without
+     * the equality the first row found may belong to the environment before
+     * this one in id order, hence the check on the returned id.
      */
     private function previousFailedWindow(Environment $environment): int
     {
-        return (int) (EnvironmentSnapshot::query()
-            ->where('environment_id', $environment->id)
+        $previous = EnvironmentSnapshot::query()
+            ->select(['environment_id', 'failed_window_minutes'])
+            ->whereRaw("(environment_id, captured_at) <= (?, 'infinity'::timestamptz)", [$environment->id])
+            ->orderByDesc('environment_id')
             ->orderByDesc('captured_at')
             ->orderByDesc('id')
-            ->value('failed_window_minutes') ?? 1440);
+            ->first();
+
+        return $previous !== null && $previous->environment_id === $environment->id
+            ? $previous->failed_window_minutes
+            : self::HORIZON_FAILED_WINDOW_MINUTES;
     }
 
     /**

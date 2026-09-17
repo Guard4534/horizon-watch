@@ -90,14 +90,15 @@ test('the scripted incidents are always there, keyed by slug', function (string 
     ['Billing Sync', 'preprod', 'billing-sync-preprod', EnvironmentStatus::Degraded, AlertRuleMetric::JobRuntime],
 ]);
 
-test('the paused incident has no breach', function () {
+test('the paused incident opens the pause anomaly', function () {
     $environment = syntheticEnvironment(Team::factory()->create(), 'Acme Shop', 'staging');
 
     $this->readings->seed($environment, $this->until);
 
     expect($environment->slug)->toBe('acme-shop-staging')
         ->and($environment->snapshots()->get()->every(
-            fn (EnvironmentSnapshot $snapshot) => $snapshot->status === EnvironmentStatus::Paused && $snapshot->breaches->isEmpty(),
+            fn (EnvironmentSnapshot $snapshot) => $snapshot->status === EnvironmentStatus::Paused
+                && $snapshot->breaches->first() === AlertRuleMetric::HorizonPaused,
         ))->toBeTrue()
         ->and(collect($environment->state->nodes)->pluck('status')->unique()->all())->toBe(['paused']);
 });

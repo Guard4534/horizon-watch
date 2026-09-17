@@ -15,8 +15,12 @@ class EnvironmentData extends Data
         public string $applicationName,
         public string $name,
         public EnvironmentColor $color,
+        // Never carries userinfo: stripped when the row is built.
         public string $horizonUrl,
-        public EnvironmentStatus $status,
+        // Null means "nothing to say": no reading yet (and not stale yet),
+        // or a row off the viewer's wall, which carries no operational
+        // data at all (see $watched).
+        public ?EnvironmentStatus $status,
         public int $pending,
         // Average pending of each five-minute bucket of the last hour,
         // oldest first, 0 where nothing was read.
@@ -41,7 +45,8 @@ class EnvironmentData extends Data
         // put it there while their visibility hides it (see the split note
         // in ConfiguredMonitoringRepository): those rows keep every
         // configuration control and lose the ones that would lead to the
-        // operational view, which answers 404 for them. Everywhere else —
+        // operational view, which answers 404 for them. They carry no
+        // reading either: null status, zero numbers, no trend, no error. Everywhere else —
         // wall, alerts, environment detail — a row exists only if it is
         // watched, so it is true.
         public bool $watched,
@@ -64,6 +69,15 @@ class EnvironmentData extends Data
      */
     public static function compareBySeverityThenPending(self $a, self $b): int
     {
-        return [$a->status->severity(), $b->pending] <=> [$b->status->severity(), $a->pending];
+        return [$a->severity(), $b->pending] <=> [$b->severity(), $a->pending];
+    }
+
+    /**
+     * A row with nothing to say sorts with the paused ones: not healthy
+     * enough to sink below the working environments, not known to be down.
+     */
+    public function severity(): int
+    {
+        return ($this->status ?? EnvironmentStatus::Paused)->severity();
     }
 }

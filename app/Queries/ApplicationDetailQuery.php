@@ -33,7 +33,12 @@ class ApplicationDetailQuery
             fn (AlertData $alert) => in_array($alert->environmentId, $environmentIds, true),
         );
 
-        $worstEnvironments = $environments;
+        // Only rows that say something: unwatched rows and environments
+        // without a reading carry no status.
+        $worstEnvironments = array_values(array_filter(
+            $environments,
+            fn (EnvironmentData $environment) => $environment->watched && $environment->status !== null,
+        ));
         usort($worstEnvironments, EnvironmentData::compareBySeverityThenPending(...));
 
         return new ApplicationDetailPageData(

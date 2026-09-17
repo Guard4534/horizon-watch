@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\EnvironmentStatus;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Models\Application;
@@ -83,7 +84,7 @@ test('the environment page follows the requested range', function () {
             ->has('page.nodes', 1)
             ->has('page.queues', 3)
             ->has('page.maxWait', 48)
-            ->has('page.rules', 7)
+            ->has('page.rules', 8)
             ->where('page.overrideCount', 3)
             ->where('page.scope', 'production'));
 });
@@ -120,7 +121,7 @@ test('alert rules default to the organization scope', function () {
             // worker-batch, testing): unlike phase 1's fixed list, this one
             // is computed from what's actually visible.
             ->has('page.scopes', 8)
-            ->has('page.rules', 7)
+            ->has('page.rules', 8)
             ->where('page.notifications.repeatMinutes', 30));
 });
 
@@ -179,6 +180,9 @@ test('a restricted admin watches their own environments and configures every one
     $theirs = Application::factory()->for($team)->create(['name' => 'Bravo']);
     $watched = Environment::factory()->for($mine)->staging()->create();
     $hidden = Environment::factory()->for($theirs)->production()->create();
+    // The hidden one is down: none of that may reach this admin.
+    Readings::record($watched);
+    Readings::record($hidden, EnvironmentStatus::Unreachable);
 
     $admin = User::factory()->create();
     $team->members()->attach($admin, [
@@ -215,7 +219,11 @@ test('a restricted admin watches their own environments and configures every one
             ->where('page.groups.0.environments.0.watched', true)
             ->where('page.groups.1.application.id', $theirs->slug)
             ->where('page.groups.1.environments.0.id', $hidden->slug)
-            ->where('page.groups.1.environments.0.watched', false));
+            ->where('page.groups.1.environments.0.watched', false)
+            ->where('page.groups.1.environments.0.status', null)
+            ->where('page.groups.1.environments.0.readingError', null)
+            // Its outage is not this admin's to triage.
+            ->where('page.groups.1.triageCount', 0));
 
     // Same flag on the card, and no series behind it: the card says the
     // environment is off this admin's wall instead of drawing nothing.
@@ -224,7 +232,9 @@ test('a restricted admin watches their own environments and configures every one
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.cards.0.environment.id', $hidden->slug)
             ->where('page.cards.0.environment.watched', false)
-            ->where('page.cards.0.sparkline', []));
+            ->where('page.cards.0.sparkline', [])
+            ->where('page.worstStatus', null)
+            ->where('page.recentAlerts', []));
 
     $this->get(route('applications.show', ['current_team' => $team->slug, 'application' => $mine->slug]))
         ->assertOk()

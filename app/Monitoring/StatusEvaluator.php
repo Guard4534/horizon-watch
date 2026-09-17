@@ -24,14 +24,17 @@ final class StatusEvaluator
             return new EvaluatedStatus(EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
         }
 
-        if ($reading->stats->status === 'paused' || $this->everyMasterPaused($reading->masters)) {
-            return new EvaluatedStatus(EnvironmentStatus::Paused, []);
-        }
-
         $breaches = array_values(array_filter(
             AlertRuleMetric::cases(),
             fn (AlertRuleMetric $metric) => $this->breached($metric, $reading),
         ));
+
+        // A paused Horizon still queues work: its thresholds are measured
+        // and recorded, so 50,000 jobs piling up behind a pause are an
+        // anomaly too, while the status stays the pause.
+        if ($reading->stats->status === 'paused' || $this->everyMasterPaused($reading->masters)) {
+            return new EvaluatedStatus(EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused, ...$breaches]);
+        }
 
         return new EvaluatedStatus(
             $breaches === [] ? EnvironmentStatus::Active : EnvironmentStatus::Degraded,
@@ -76,7 +79,7 @@ final class StatusEvaluator
             )) >= $threshold,
             AlertRuleMetric::JobRuntime => $this->hasLongReservedJob($reading->pendingJobs ?? [], $threshold),
             // Not thresholds: they come from the status branches above.
-            AlertRuleMetric::HorizonMasterInactive, AlertRuleMetric::EndpointUnreachable => false,
+            AlertRuleMetric::HorizonMasterInactive, AlertRuleMetric::EndpointUnreachable, AlertRuleMetric::HorizonPaused => false,
         };
     }
 

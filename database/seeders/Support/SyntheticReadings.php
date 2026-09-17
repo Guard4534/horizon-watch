@@ -39,8 +39,10 @@ final class SyntheticReadings
     // Fixed incidents, keyed by environment slug (not by name: two
     // applications can each have a "production"), so the wall always tells
     // the same story. Unchanged since phase 1: DatabaseSeeder creates the
-    // same applications with the same slugs on purpose.
-    private const INCIDENTS = [
+    // same applications with the same slugs on purpose. Public because the
+    // page tests write their own readings on the same organization and must
+    // tell the same story (tests/Support/Readings).
+    public const INCIDENTS = [
         'fatturaomatic-production' => EnvironmentStatus::Inactive,
         'mailer-service-worker-batch' => EnvironmentStatus::Degraded,
         'logistics-hub-worker-batch' => EnvironmentStatus::Unreachable,

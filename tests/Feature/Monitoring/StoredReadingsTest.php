@@ -52,7 +52,9 @@ test('an environment is stale past three poll intervals, not before', function (
     expect($this->readings->isStale($environment, $state(90), $this->now))->toBeFalse()
         ->and($this->readings->isStale($environment, $state(91), $this->now))->toBeTrue()
         ->and($this->readings->isStale($environment, $state(5), $this->now))->toBeFalse()
-        ->and($this->readings->isStale($environment, null, $this->now))->toBeTrue();
+        // Never read: measured from the creation instead.
+        ->and($this->readings->isStale($environment, null, $this->now->addSeconds(90)))->toBeFalse()
+        ->and($this->readings->isStale($environment, null, $this->now->addSeconds(91)))->toBeTrue();
 });
 
 test('the throughput series averages each environment per bucket, then sums them', function () {
@@ -157,7 +159,7 @@ test('an anomaly with no gap behind it dates from the oldest reading', function 
     expect($this->readings->openAnomalies([$environment])[$environment->id][0]['since']->equalTo($this->now->subHour()))->toBeTrue();
 });
 
-test('down anomalies follow the status, and a healthy or paused latest reading opens none', function () {
+test('down anomalies and the pause follow the status, and a healthy latest reading opens none', function () {
     $unreachable = Environment::factory()->create();
     $inactive = Environment::factory()->create();
     $recovered = Environment::factory()->create();
@@ -178,11 +180,17 @@ test('down anomalies follow the status, and a healthy or paused latest reading o
     EnvironmentSnapshot::factory()->for($recovered)->failed()->create($at(5));
     EnvironmentSnapshot::factory()->for($recovered)->create($at(1));
 
-    EnvironmentSnapshot::factory()->for($paused)->create([...$at(1), 'status' => EnvironmentStatus::Paused]);
+    // Paused, even on a row whose breach list forgot it.
+    EnvironmentSnapshot::factory()->for($paused)->create([...$at(7), 'status' => EnvironmentStatus::Paused, 'breaches' => []]);
+    EnvironmentSnapshot::factory()->for($paused)->create([...$at(1), 'status' => EnvironmentStatus::Paused, 'breaches' => [AlertRuleMetric::HorizonPaused]]);
 
     $anomalies = $this->readings->openAnomalies([$unreachable, $inactive, $recovered, $paused]);
 
-    expect(array_keys($anomalies))->toEqualCanonicalizing([$unreachable->id, $inactive->id])
+    expect(array_keys($anomalies))->toEqualCanonicalizing([$unreachable->id, $inactive->id, $paused->id])
+        ->and($anomalies[$paused->id])->toHaveCount(1)
+        ->and($anomalies[$paused->id][0]['metric'])->toBe(AlertRuleMetric::HorizonPaused)
+        ->and($anomalies[$paused->id][0]['since']->equalTo($this->now->subMinutes(7)))->toBeTrue()
+        ->and($anomalies[$paused->id][0]['truncated'])->toBeFalse()
         ->and($anomalies[$unreachable->id])->toHaveCount(1)
         ->and($anomalies[$unreachable->id][0]['metric'])->toBe(AlertRuleMetric::EndpointUnreachable)
         ->and($anomalies[$unreachable->id][0]['since']->equalTo($this->now->subMinutes(6)))->toBeTrue()
@@ -190,6 +198,128 @@ test('down anomalies follow the status, and a healthy or paused latest reading o
         ->and($anomalies[$inactive->id][0]['metric'])->toBe(AlertRuleMetric::HorizonMasterInactive)
         ->and($anomalies[$inactive->id][0]['since']->equalTo($this->now->subMinutes(8)))->toBeTrue()
         ->and($this->readings->openAnomalies([]))->toBe([]);
+});
+
+test('the latest reading is found even when it is old, walking the composite index', function () {
+    $environment = Environment::factory()->create(['polling_enabled' => false]);
+    EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $this->now->subDays(20), 'pending' => 3]);
+    EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $this->now->subDays(10), 'pending' => 8]);
+    // Same second, higher id: the later insert wins.
+    EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $this->now->subDays(10), 'pending' => 9]);
+    EnvironmentState::factory()->for($environment)->create(['captured_at' => $this->now->subDays(10)]);
+
+    DB::enableQueryLog();
+    $latest = $this->readings->latestFor([$environment]);
+    $query = DB::getQueryLog()[0]['query'];
+
+    expect($latest[$environment->id]->getAttribute('snapshot_pending'))->toBe(9)
+        // The shape that keeps PostgreSQL on (environment_id, captured_at):
+        // the plain "order by captured_at desc" sorted the whole environment.
+        ->and($query)->toContain('(environment_snapshots.environment_id, environment_snapshots.captured_at) <=')
+        ->and($query)->toContain('order by "environment_snapshots"."environment_id" desc, "environment_snapshots"."captured_at" desc');
+});
+
+test('the anomaly query is one bounded statement on the composite index', function () {
+    $environments = Environment::factory()->count(3)->create();
+    $environments->each(fn (Environment $environment) => EnvironmentSnapshot::factory()->for($environment)->failed()->create());
+
+    DB::enableQueryLog();
+    $anomalies = $this->readings->openAnomalies($environments->all());
+    $log = DB::getQueryLog();
+
+    expect($anomalies)->toHaveCount(3)
+        ->and($log)->toHaveCount(1)
+        // One array binding, whatever the number of environments.
+        ->and($log[0]['bindings'])->toBe(['{'.$environments->modelKeys()[0].','.$environments->modelKeys()[1].','.$environments->modelKeys()[2].'}'])
+        ->and($log[0]['query'])->toContain('unnest(?::bigint[])')
+        ->and($log[0]['query'])->toContain("interval '24 hours'")
+        ->and(substr_count($log[0]['query'], "- interval '24 hours'"))->toBe(3)
+        ->and(substr_count($log[0]['query'], ') <= ('))->toBe(2);
+});
+
+test('a run longer than the look-back is truncated at its edge', function () {
+    $environment = Environment::factory()->create();
+
+    foreach ([48, 25, 12, 0] as $hoursAgo) {
+        EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueueMaxWait])->create(['captured_at' => $this->now->subHours($hoursAgo)]);
+    }
+    // Exactly at the edge, carrying it: part of the run.
+    EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueueMaxWait])->create(['captured_at' => $this->now->subHours(24)]);
+
+    $anomaly = $this->readings->openAnomalies([$environment])[$environment->id][0];
+
+    expect($anomaly['truncated'])->toBeTrue()
+        ->and($anomaly['since']->equalTo($this->now->subHours(24)))->toBeTrue();
+});
+
+test('a gap just past the look-back does not truncate the run', function () {
+    $environment = Environment::factory()->create();
+    EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $this->now->subHours(25)]);
+    EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueueMaxWait])->create(['captured_at' => $this->now->subHours(23)]);
+    EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueueMaxWait])->create(['captured_at' => $this->now]);
+
+    $anomaly = $this->readings->openAnomalies([$environment])[$environment->id][0];
+
+    expect($anomaly['truncated'])->toBeFalse()
+        ->and($anomaly['since']->equalTo($this->now->subHours(23)))->toBeTrue();
+});
+
+test('readings in the same second are ordered by insertion in the gap search', function () {
+    $environment = Environment::factory()->create();
+    $second = $this->now->subMinutes(5);
+
+    EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $this->now->subMinutes(10)]);
+    // Two readings in one second: first without the breach, then with it.
+    // The gap is the first one, so the run starts at the second one.
+    EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $second]);
+    EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $second]);
+    EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $this->now]);
+
+    // And the latest reading itself shares its second with an older insert
+    // without the breach: the older insert is before it, so it is the gap.
+    $tied = Environment::factory()->create();
+    EnvironmentSnapshot::factory()->for($tied)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $this->now->subMinutes(3)]);
+    EnvironmentSnapshot::factory()->for($tied)->create(['captured_at' => $this->now]);
+    EnvironmentSnapshot::factory()->for($tied)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $this->now]);
+
+    $anomalies = $this->readings->openAnomalies([$environment, $tied]);
+
+    expect($anomalies[$environment->id][0]['since']->equalTo($second))->toBeTrue()
+        ->and($anomalies[$tied->id][0]['since']->equalTo($this->now))->toBeTrue();
+});
+
+test('one unreachable reading in a long degradation restarts its "since"', function () {
+    // Accepted: a reading that failed measured nothing, so it does not
+    // carry the breach, and the run breaks there.
+    $environment = Environment::factory()->create();
+    EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $this->now->subHours(5)]);
+    EnvironmentSnapshot::factory()->for($environment)->failed()->create(['captured_at' => $this->now->subMinutes(30)]);
+    EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $this->now->subMinutes(29)]);
+    EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $this->now]);
+
+    expect($this->readings->openAnomalies([$environment])[$environment->id][0]['since']->equalTo($this->now->subMinutes(29)))->toBeTrue();
+});
+
+test('an environment polled less often than a bucket is carried over its empty buckets', function () {
+    $slow = Environment::factory()->create(['poll_interval_seconds' => 300]);
+    $fast = Environment::factory()->create(['poll_interval_seconds' => 15]);
+    $last = $this->lastBucket;
+
+    // Slow: buckets 40, 42 (one empty between), then silent from 43 on
+    // except bucket 47, four buckets later.
+    EnvironmentSnapshot::factory()->for($slow)->create(['captured_at' => $last->subSeconds(7 * 225), 'jobs_per_minute' => 10, 'max_wait_seconds' => 6]);
+    EnvironmentSnapshot::factory()->for($slow)->create(['captured_at' => $last->subSeconds(5 * 225), 'jobs_per_minute' => 20, 'max_wait_seconds' => 8]);
+    EnvironmentSnapshot::factory()->for($slow)->create(['captured_at' => $last, 'jobs_per_minute' => 30, 'max_wait_seconds' => 9]);
+    // Fast: bucket 41 only; its gaps are real.
+    EnvironmentSnapshot::factory()->for($fast)->create(['captured_at' => $last->subSeconds(6 * 225), 'jobs_per_minute' => 1]);
+
+    $throughput = $this->readings->throughputSeries([$slow->id, $fast->id], SeriesRange::ThreeHours);
+    $maxWait = $this->readings->maxWaitSeries($slow->id, SeriesRange::ThreeHours);
+
+    // 40: 10 · 41: 10 carried + 1 · 42: 20 · 43: 20 carried · 44-46: gap
+    // longer than the interval explains, 0 · 47: 30. Before 40: nobody.
+    expect(array_slice($throughput, 38))->toBe([0, 0, 10, 11, 20, 20, 0, 0, 0, 30])
+        ->and(array_slice($maxWait, 38))->toBe([0, 0, 6, 6, 8, 8, 0, 0, 0, 9]);
 });
 
 test('critical anomalies come first', function () {
@@ -237,10 +367,11 @@ test('the trend variation compares the last three buckets with data to the three
     $environment = Environment::factory()->create();
     $first = CarbonImmutable::parse('2026-09-17 09:10:00', 'UTC');
 
-    foreach ($buckets as $index => $pending) {
-        if ($pending !== null) {
+    // A bucket is null (no reading), one reading, or a list of readings.
+    foreach ($buckets as $index => $readings) {
+        foreach ((array) $readings as $offset => $pending) {
             EnvironmentSnapshot::factory()->for($environment)->create([
-                'captured_at' => $first->addMinutes(5 * $index)->addSeconds(60),
+                'captured_at' => $first->addMinutes(5 * $index)->addSeconds(60 + $offset * 15),
                 'pending' => $pending,
             ]);
         }
@@ -280,6 +411,13 @@ test('the trend variation compares the last three buckets with data to the three
         [null, null, null, null, null, null, 3, 3, 3, 5, 5, 5],
         [0, 0, 0, 0, 0, 0, 3, 3, 3, 5, 5, 5],
         67,
+    ],
+    // From the unrounded averages: 10, 10, 10.5 against 11, 11, 11 is
+    // +8 %. The rounded points (10, 10, 11) would give +6 %.
+    'a bucket averaging to a half' => [
+        [null, null, null, null, null, null, 10, 10, [10, 11], 11, 11, 11],
+        [0, 0, 0, 0, 0, 0, 10, 10, 11, 11, 11, 11],
+        8,
     ],
     'flat' => [
         array_fill(0, 12, 5),

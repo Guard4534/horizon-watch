@@ -8,6 +8,7 @@ use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
 use App\Models\Team;
+use Database\Seeders\Support\SyntheticReadings;
 
 /**
  * Stored readings for the page tests, written through the factories: the
@@ -16,25 +17,21 @@ use App\Models\Team;
 final class Readings
 {
     /**
-     * The incidents the phase 1 mockup told, now written as readings on the
-     * seeded organization; every other environment reads healthy. Five
-     * environments open six anomalies: a paused Horizon opens none.
+     * The seeder's scripted incidents, written as readings on the seeded
+     * organization; every other environment reads healthy. One anomaly
+     * each: six in all.
      */
-    public const MOCKUP_INCIDENTS = [
-        'fatturaomatic-production' => [EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]],
-        'logistics-hub-worker-batch' => [EnvironmentStatus::Unreachable, [AlertRuleMetric::EndpointUnreachable]],
-        'mailer-service-worker-batch' => [EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending, AlertRuleMetric::QueueMaxWait]],
-        'media-encoder-production' => [EnvironmentStatus::Degraded, [AlertRuleMetric::WorkersMissing]],
-        'billing-sync-preprod' => [EnvironmentStatus::Degraded, [AlertRuleMetric::JobsFailedPerHour]],
-        'acme-shop-staging' => [EnvironmentStatus::Paused, []],
-    ];
-
     public static function mockup(Team $team): void
     {
         Environment::query()->where('team_id', $team->id)->each(function (Environment $environment) {
-            [$status, $breaches] = self::MOCKUP_INCIDENTS[$environment->slug] ?? [EnvironmentStatus::Active, []];
+            $status = SyntheticReadings::INCIDENTS[$environment->slug] ?? EnvironmentStatus::Active;
 
-            self::record($environment, $status, $breaches);
+            self::record($environment, $status, match ($status) {
+                EnvironmentStatus::Inactive => [AlertRuleMetric::HorizonMasterInactive],
+                EnvironmentStatus::Paused => [AlertRuleMetric::HorizonPaused],
+                EnvironmentStatus::Degraded => [AlertRuleMetric::QueuePending],
+                default => [],
+            });
         });
     }
 

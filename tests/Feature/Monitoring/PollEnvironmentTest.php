@@ -256,31 +256,45 @@ test('each node keeps the time of the last reading that listed it, across failed
 });
 
 test('the failed-jobs window of a failed reading is the one of the reading before it', function () {
+    // A day, so it cannot be mistaken for Horizon's default week.
+    $good = ($this->reading)();
+    $good = ($this->reading)(['stats' => new HorizonStats(
+        status: $good->stats->status,
+        jobsPerMinute: $good->stats->jobsPerMinute,
+        failedJobs: $good->stats->failedJobs,
+        processes: $good->stats->processes,
+        pausedMasters: $good->stats->pausedMasters,
+        wait: $good->stats->wait,
+        failedJobsPeriodMinutes: 1440,
+    )]);
+
     $this->reader->results = [
         new HorizonReadFailed(ReadingError::Unreachable),
-        ($this->reading)(),
+        $good,
         new HorizonReadFailed(ReadingError::Unreachable),
         new HorizonReadFailed(ReadingError::Unauthorized),
     ];
 
-    // Nothing to carry yet: Horizon's own default.
+    // Nothing to carry yet: Horizon's own default, a week.
+    expect(($this->poll)()->failed_window_minutes)->toBe(10080);
+
+    $this->travel(15)->seconds();
     expect(($this->poll)()->failed_window_minutes)->toBe(1440);
 
     $this->travel(15)->seconds();
-    expect(($this->poll)()->failed_window_minutes)->toBe(10080);
-
-    $this->travel(15)->seconds();
-    expect(($this->poll)()->failed_window_minutes)->toBe(10080);
+    expect(($this->poll)()->failed_window_minutes)->toBe(1440);
 
     // Carried along the outage, not only from the last good reading.
     $this->travel(15)->seconds();
-    expect(($this->poll)()->failed_window_minutes)->toBe(10080);
+    expect(($this->poll)()->failed_window_minutes)->toBe(1440);
 
-    // Another environment's window is not borrowed.
+    // Another environment's window is not borrowed, although its row is
+    // the first one the backward scan meets from a higher id.
     $other = Environment::factory()->create();
+    expect($other->id)->toBeGreaterThan($this->environment->id);
     $this->reader->results = [new HorizonReadFailed(ReadingError::Unreachable)];
 
-    expect(app(PollEnvironment::class)->handle($other)->failed_window_minutes)->toBe(1440);
+    expect(app(PollEnvironment::class)->handle($other)->failed_window_minutes)->toBe(10080);
 });
 
 test('a first reading that fails creates an empty state', function () {
