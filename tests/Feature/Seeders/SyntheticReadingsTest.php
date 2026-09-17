@@ -102,19 +102,36 @@ test('the paused incident has no breach', function () {
         ->and(collect($environment->state->nodes)->pluck('status')->unique()->all())->toBe(['paused']);
 });
 
-test('a healthy environment stays active, without breaches or long-running jobs', function () {
+test('a healthy environment stays active, without breaches', function () {
     $environment = syntheticEnvironment(Team::factory()->create(), 'CRM Bridge', 'production');
 
     $this->readings->seed($environment, $this->until);
 
-    $threshold = AlertRuleMetric::JobRuntime->defaultThreshold();
-
     expect($environment->slug)->toBe('crm-bridge-production')
         ->and($environment->snapshots()->get()->every(
             fn (EnvironmentSnapshot $snapshot) => $snapshot->status === EnvironmentStatus::Active && $snapshot->breaches->isEmpty(),
-        ))->toBeTrue()
-        ->and(collect($environment->state->pending_jobs)->every(
-            fn (array $job) => CarbonImmutable::parse($job['reservedAt'])->diffInSeconds($this->until) <= $threshold,
+        ))->toBeTrue();
+});
+
+test('a healthy environment stores no reserved job, so none can age into a long-running one', function () {
+    $environment = syntheticEnvironment(Team::factory()->create(), 'CRM Bridge', 'production');
+
+    $this->readings->seed($environment, $this->until, hours: 1);
+
+    expect($environment->state->status)->toBe(EnvironmentStatus::Active)
+        ->and($environment->state->pending_jobs)->toBe([]);
+});
+
+test('a degraded environment stores reserved jobs already past the runtime threshold', function () {
+    $environment = syntheticEnvironment(Team::factory()->create(), 'Media Encoder', 'production');
+
+    $this->readings->seed($environment, $this->until, hours: 1);
+
+    $threshold = AlertRuleMetric::JobRuntime->defaultThreshold();
+
+    expect($environment->state->pending_jobs)->toHaveCount(3)
+        ->and(collect($environment->state->pending_jobs)->contains(
+            fn (array $job) => CarbonImmutable::parse($job['reservedAt'])->diffInSeconds($this->until) > $threshold,
         ))->toBeTrue();
 });
 
@@ -133,7 +150,15 @@ test('an unreachable environment records nothing measured but keeps a previous d
         ->and($state->error)->toBe(ReadingError::Unreachable)
         ->and($state->latency_ms)->toBeNull()
         ->and($state->nodes)->toHaveCount(2)
-        ->and($state->queues)->toHaveCount(3);
+        ->and($state->queues)->toHaveCount(3)
+        // The kept detail predates the one-hour outage, jobs included.
+        ->and(collect($state->failed_jobs)->every(
+            fn (array $job) => CarbonImmutable::parse($job['failedAt'])->lessThan($this->until->subHour()),
+        ))->toBeTrue()
+        ->and(collect($state->pending_jobs)->every(
+            fn (array $job) => CarbonImmutable::parse($job['reservedAt'])->lessThan($this->until->subHour()),
+        ))->toBeTrue()
+        ->and($state->pending_jobs)->not->toBe([]);
 });
 
 test('an inactive environment lists no node and no worker, but its queues still fill', function () {

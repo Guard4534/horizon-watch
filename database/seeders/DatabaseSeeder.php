@@ -66,8 +66,9 @@ class DatabaseSeeder extends Seeder
         ));
 
         $team = $admin->currentTeam;
-        $this->seedMockupOrganization($team);
-        $this->seedDemoReadings($team);
+        // Created already paused: the development scheduler would otherwise
+        // find them due and poll the example hosts before the seed ends.
+        $this->seedDemoReadings($this->seedMockupOrganization($team, polled: false));
         $this->seedLocalHorizon($team);
     }
 
@@ -77,18 +78,21 @@ class DatabaseSeeder extends Seeder
      * minutes so every bucket of the three-hour chart (225 seconds) holds
      * at least one.
      */
-    private function seedDemoReadings(Team $team): void
+    /**
+     * Only the mockup environments passed in, never the whole team: the
+     * Local Horizon environment must not receive fake readings, whatever
+     * the order of the calls in run().
+     *
+     * @param  list<Environment>  $environments
+     */
+    private function seedDemoReadings(array $environments): void
     {
         $readings = new SyntheticReadings;
         $until = CarbonImmutable::now();
 
-        Environment::query()
-            ->where('team_id', $team->id)
-            ->with('application')
-            ->each(function (Environment $environment) use ($readings, $until) {
-                $environment->update(['polling_enabled' => false]);
-                $readings->seed($environment, $until, stepMinutes: 3);
-            });
+        foreach ($environments as $environment) {
+            $readings->seed($environment, $until, stepMinutes: 3);
+        }
     }
 
     /**
@@ -123,9 +127,13 @@ class DatabaseSeeder extends Seeder
      * phase 1 mockup. Also used by the Monitoring feature tests, so their
      * fixture is exactly the configuration development and CI both see;
      * readings are left to each test (run() adds the demo ones).
+     *
+     * @return list<Environment>
      */
-    public function seedMockupOrganization(Team $team): void
+    public function seedMockupOrganization(Team $team, bool $polled = true): array
     {
+        $environments = [];
+
         foreach (self::APPLICATIONS as $name => [$host, $environmentNames]) {
             $application = Application::factory()->for($team)->create(['name' => $name, 'host' => $host]);
 
@@ -133,15 +141,18 @@ class DatabaseSeeder extends Seeder
                 // Only production and preprod carry basic auth, as in the phase 1 data.
                 $hasBasicAuth = in_array($environmentName, ['production', 'preprod'], true);
 
-                Environment::factory()->for($application)->create([
+                $environments[] = Environment::factory()->for($application)->create([
                     'name' => $environmentName,
                     'color' => self::COLORS[$environmentName],
                     'horizon_url' => 'https://'.($environmentName === 'production' ? '' : "{$environmentName}.").$host.'/horizon',
                     'basic_auth_user' => $hasBasicAuth ? 'horizon-bot' : null,
                     'basic_auth_password' => $hasBasicAuth ? 'change-me' : null,
                     'poll_interval_seconds' => 15,
+                    'polling_enabled' => $polled,
                 ]);
             }
         }
+
+        return $environments;
     }
 }

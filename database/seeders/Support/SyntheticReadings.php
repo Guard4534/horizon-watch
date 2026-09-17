@@ -130,15 +130,16 @@ final class SyntheticReadings
     /**
      * An unreachable environment keeps the detail of its last good reading,
      * as the poller does; here that is a degraded one from just before the
-     * seeded window.
+     * seeded window, and its jobs are dated from then too.
      */
     private function writeState(Environment $environment, CarbonImmutable $until, CarbonImmutable $beforeWindow): void
     {
         $incident = $this->incident($environment);
         $unreachable = $incident === EnvironmentStatus::Unreachable;
+        $detailAt = $unreachable ? $beforeWindow : $until;
         $reading = $unreachable
-            ? $this->reading($environment, $beforeWindow, EnvironmentStatus::Degraded)
-            : $this->reading($environment, $until, $incident);
+            ? $this->reading($environment, $detailAt, EnvironmentStatus::Degraded)
+            : $this->reading($environment, $detailAt, $incident);
         $evaluated = $unreachable
             ? $this->evaluator->failed(ReadingError::Unreachable)
             : $this->evaluator->evaluate($reading['horizon']);
@@ -151,9 +152,9 @@ final class SyntheticReadings
                 'error' => $unreachable ? ReadingError::Unreachable : null,
                 'nodes' => $reading['nodes'],
                 'queues' => $reading['queues'],
-                'failed_jobs' => $this->failedJobs($environment, $until),
+                'failed_jobs' => $this->failedJobs($environment, $detailAt),
                 'pending_jobs' => array_map(
-                    fn (array $job) => ['job' => $job['job'], 'queue' => $job['queue'], 'reservedAt' => $until->subSeconds($job['elapsed'])->toIso8601String()],
+                    fn (array $job) => ['job' => $job['job'], 'queue' => $job['queue'], 'reservedAt' => $detailAt->subSeconds($job['elapsed'])->toIso8601String()],
                     $reading['reserved'],
                 ),
                 'latency_ms' => $unreachable ? null : $reading['horizon']->latencyMs,
@@ -284,14 +285,21 @@ final class SyntheticReadings
 
     /**
      * Reserved jobs and how long they have been running. A healthy
-     * environment's stay under the job.runtime threshold, so it shows no
-     * long-running job and stays active; phase 2 showed the same three
-     * everywhere, over the threshold.
+     * environment has none: demo environments are never polled again, so a
+     * stored job only ages against the pages' clock, and one that starts
+     * under the job.runtime threshold would cross it a minute later on an
+     * environment still active without the breach. The others' jobs are
+     * already past the threshold and only get older, which matches their
+     * breach. Phase 2 showed the same three everywhere.
      *
      * @return list<array{job: string, queue: string, elapsed: int}>
      */
     private function reserved(Environment $environment, EnvironmentStatus $status): array
     {
+        if ($status->isHealthy()) {
+            return [];
+        }
+
         $queueNames = $this->queueNames($environment);
         $jobs = [];
 
@@ -299,11 +307,7 @@ final class SyntheticReadings
             $jobs[] = [
                 'job' => $job,
                 'queue' => $queueNames[$index % count($queueNames)],
-                'elapsed' => match (true) {
-                    $status->isDown() => 780 + $index * 260,
-                    $status->isHealthy() => 20 + $index * 30,
-                    default => 96 + $index * 130,
-                },
+                'elapsed' => $status->isDown() ? 780 + $index * 260 : 96 + $index * 130,
             ];
         }
 
