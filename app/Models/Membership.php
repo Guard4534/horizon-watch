@@ -71,12 +71,19 @@ class Membership extends Pivot
      * directly, so anything that removes rows must scope them itself — see
      * ChangeMemberVisibility.
      *
+     * Never eager-load this relation: Eloquent builds an eager constraint
+     * from a fresh instance, whose team_id is null, so it would match
+     * nothing. And since the pivot is keyed by user_id, eager results for
+     * two memberships of the same person could not be told apart anyway.
+     * TeamInvitation::environments() had the same trap and solved it with
+     * a column comparison, which has no equivalent here.
+     *
      * @return BelongsToMany<Environment, $this>
      */
     public function visibleEnvironments(): BelongsToMany
     {
         return $this->belongsToMany(Environment::class, 'environment_user', 'user_id', 'environment_id', 'user_id')
-            ->whereHas('application', fn ($applications) => $applications->where('team_id', $this->team_id));
+            ->where('environments.team_id', $this->team_id);
     }
 
     /**

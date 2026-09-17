@@ -51,6 +51,9 @@ test('every interface string has an italian translation', function () {
     $keys = [
         ...literalTranslationKeys('resources/js', $javascriptCall, ['*.vue', '*.ts']),
         ...literalTranslationKeys('app', $phpCall, ['*.php'], excludeDoubleQuotedInterpolation: true),
+        // The exception handler in bootstrap/app.php flashes translated toasts
+        // too; without this line its strings were unguarded.
+        ...literalTranslationKeys('bootstrap', $phpCall, ['*.php'], excludeDoubleQuotedInterpolation: true),
     ];
 
     $missing = array_values(array_filter($keys, fn (string $key) => ! array_key_exists($key, $italian)));

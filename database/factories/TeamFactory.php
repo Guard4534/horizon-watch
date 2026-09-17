@@ -18,7 +18,8 @@ class TeamFactory extends Factory
      */
     public function definition(): array
     {
-        $name = fake()->unique()->company();
+        // Never a real company name (the project notes): a numbered placeholder.
+        $name = 'Organization '.fake()->unique()->numerify('####');
 
         return [
             'name' => $name,
