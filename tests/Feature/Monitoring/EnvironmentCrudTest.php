@@ -1,5 +1,7 @@
 <?php
 
+use App\Actions\Environments\UpdateEnvironment;
+use App\Data\Applications\EnvironmentFormData;
 use App\Enums\EnvironmentColor;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
@@ -677,4 +679,165 @@ test('an at sign in a query string is refused for the query, not as a credential
     expect(session('errors')->get('horizonUrl'))
         ->toBe(['Use the address of the Horizon dashboard, without a query string or a fragment.'])
         ->and(Environment::where('name', 'staging')->exists())->toBeFalse();
+});
+
+dataset('another address', [
+    'another host' => ['https://attacker.example.net/collect'],
+    'another scheme' => ['http://production.example.com/horizon'],
+    'another port' => ['https://production.example.com:8443/horizon'],
+]);
+
+test('moving an environment with a stored password to another address needs the password typed again', function (string $url) {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+    $update = route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+
+    $this->actingAs($this->admin)
+        ->patch($update, ($this->validPayload)(['horizonUrl' => $url, 'basicAuthPassword' => '']))
+        ->assertInvalid(['basicAuthPassword' => 'Type the password again']);
+
+    expect($environment->fresh()->horizon_url)->toBe('https://production.example.com/horizon')
+        ->and($environment->fresh()->basic_auth_password)->toBe('original-secret');
+
+    $this->actingAs($this->admin)
+        ->patch($update, ($this->validPayload)(['horizonUrl' => $url, 'basicAuthPassword' => 'retyped-secret']))
+        ->assertValid()
+        ->assertRedirect();
+
+    expect($environment->fresh()->horizon_url)->toBe($url)
+        ->and($environment->fresh()->basic_auth_password)->toBe('retyped-secret');
+})->with('another address');
+
+test('a path-only move keeps the stored password, and so does a new username on the same address', function () {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+    $update = route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+
+    $this->actingAs($this->admin)
+        ->patch($update, ($this->validPayload)(['horizonUrl' => 'https://PRODUCTION.example.com:443/ops/horizon', 'basicAuthPassword' => null]))
+        ->assertValid();
+
+    expect($environment->fresh()->horizon_url)->toBe('https://PRODUCTION.example.com:443/ops/horizon')
+        ->and($environment->fresh()->basic_auth_password)->toBe('original-secret');
+
+    // Phase 2's re-pairing stays: same address, behind manageCredentials.
+    $this->actingAs($this->admin)
+        ->patch($update, ($this->validPayload)(['horizonUrl' => 'https://production.example.com/ops/horizon', 'basicAuthUser' => 'renamed', 'basicAuthPassword' => null]))
+        ->assertValid();
+
+    expect($environment->fresh()->basic_auth_user)->toBe('renamed')
+        ->and($environment->fresh()->basic_auth_password)->toBe('original-secret');
+});
+
+test('clearing the username while moving the address clears the password without asking for it', function () {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+
+    $this->actingAs($this->admin)
+        ->patch(
+            route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
+            ($this->validPayload)(['horizonUrl' => 'https://elsewhere.example.net/horizon', 'basicAuthUser' => null, 'basicAuthPassword' => null]),
+        )
+        ->assertValid();
+
+    expect($environment->fresh()->horizon_url)->toBe('https://elsewhere.example.net/horizon')
+        ->and($environment->fresh()->basic_auth_password)->toBeNull();
+});
+
+test('an address change is a credentials change only when a password is on file', function () {
+    Gate::policy(Environment::class, get_class(new class extends EnvironmentPolicy
+    {
+        public function manageCredentials(User $user, Environment $environment): bool
+        {
+            return false;
+        }
+    }));
+
+    $credentialed = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+    $bare = Environment::factory()->for($this->application)->create([
+        'name' => 'staging',
+        'horizon_url' => 'https://staging.example.com/horizon',
+        'basic_auth_user' => null,
+        'basic_auth_password' => null,
+    ]);
+    $update = fn (Environment $environment) => route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+
+    // Another host with the password retyped (so validation passes and the
+    // gate decides): refused, nothing written.
+    $this->actingAs($this->admin)
+        ->patch($update($credentialed), ($this->validPayload)(['horizonUrl' => 'https://attacker.example.net/collect', 'basicAuthPassword' => 'retyped']))
+        ->assertForbidden();
+
+    expect($credentialed->fresh()->horizon_url)->toBe('https://production.example.com/horizon')
+        ->and($credentialed->fresh()->basic_auth_password)->toBe('original-secret');
+
+    // A path-only change on the same host: allowed.
+    $this->actingAs($this->admin)
+        ->patch($update($credentialed), ($this->validPayload)(['horizonUrl' => 'https://production.example.com/ops/horizon', 'basicAuthPassword' => null]))
+        ->assertRedirect();
+
+    expect($credentialed->fresh()->horizon_url)->toBe('https://production.example.com/ops/horizon');
+
+    // Nothing on file: any address is a plain edit.
+    $this->actingAs($this->admin)
+        ->patch($update($bare), ($this->validPayload)(['name' => 'staging', 'horizonUrl' => 'https://elsewhere.example.net/horizon', 'basicAuthUser' => null, 'basicAuthPassword' => null]))
+        ->assertRedirect();
+
+    expect($bare->fresh()->horizon_url)->toBe('https://elsewhere.example.net/horizon');
+});
+
+test('the update action refuses to carry the stored password to a new address without validation', function () {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+
+    expect(fn () => app(UpdateEnvironment::class)->handle($environment, EnvironmentFormData::from(($this->validPayload)([
+        'horizonUrl' => 'https://attacker.example.net/collect',
+        'basicAuthPassword' => null,
+    ]))))->toThrow(LogicException::class);
+
+    expect($environment->fresh()->horizon_url)->toBe('https://production.example.com/horizon');
+});
+
+test('changesCredentialsOf counts a new address as a credentials change only when a password is on file', function () {
+    // Over HTTP a blank password on a new address is already a 422 and a
+    // typed one is already a change, so this clause is defence in depth: it
+    // is asserted here directly.
+    $credentialed = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+    $bare = Environment::factory()->for($this->application)->create([
+        'name' => 'staging',
+        'horizon_url' => 'https://production.example.com/horizon',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => null,
+    ]);
+    $data = fn (string $url) => EnvironmentFormData::from(($this->validPayload)(['horizonUrl' => $url, 'basicAuthPassword' => null]));
+
+    expect($data('https://attacker.example.net/collect')->changesCredentialsOf($credentialed))->toBeTrue()
+        ->and($data('https://production.example.com/ops/horizon')->changesCredentialsOf($credentialed))->toBeFalse()
+        ->and($data('https://attacker.example.net/collect')->changesCredentialsOf($bare))->toBeFalse();
 });

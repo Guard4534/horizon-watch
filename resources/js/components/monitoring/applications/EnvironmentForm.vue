@@ -223,7 +223,7 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
             >
                 {{
                     $t(
-                        'Paused environments keep their last reading and are not contacted.',
+                        'Paused environments keep their last reading, and the scheduler does not contact them.',
                     )
                 }}
             </div>

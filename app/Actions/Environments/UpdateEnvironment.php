@@ -4,6 +4,8 @@ namespace App\Actions\Environments;
 
 use App\Data\Applications\EnvironmentFormData;
 use App\Models\Environment;
+use App\Rules\StoredPasswordStaysWithItsAddress;
+use LogicException;
 
 class UpdateEnvironment
 {
@@ -23,17 +25,36 @@ class UpdateEnvironment
      * with the new username — the page says "leave blank to keep it", and
      * that is the only reading of a blank field it offers.
      *
-     * "Absent" and "cleared" are the same thing here, because the two forms
-     * that reach this action always send the whole object. A partial PATCH
-     * client that omitted basicAuthUser would destroy the credential
-     * without meaning to; if one is ever added, it has to distinguish the
-     * two before calling this.
+     * The stored password only ever goes to the address it was saved for.
+     * A blank password keeps it only while the scheme, host and port stay
+     * the same (a path-only change is fine); a new address needs the
+     * password typed again, which validation enforces with a 422
+     * (StoredPasswordStaysWithItsAddress), and counts as a credentials
+     * change for the gate (EnvironmentFormData::changesCredentialsOf()).
+     * Otherwise an admin could point the poller at their own host, wait one
+     * poll and point it back. The check below refuses the write for any
+     * caller that skipped that validation.
+     *
+     * "Absent" and "cleared" or "default" are the same thing here, because
+     * the two forms that reach this action always send the whole object. A
+     * partial PATCH client that omitted basicAuthUser would destroy the
+     * credential without meaning to, and one that omitted pollingEnabled
+     * would resume a paused collection (its default is true); if such a
+     * client is ever added, it has to distinguish the two before calling
+     * this.
      *
      * Validation keeps the mirror case (a password with no username) from
      * ever reaching here, see EnvironmentFormData::rules().
      */
     public function handle(Environment $environment, EnvironmentFormData $data): Environment
     {
+        if ($data->basicAuthUser !== null
+            && ! $data->hasNewPassword()
+            && StoredPasswordStaysWithItsAddress::hasStoredPassword($environment)
+            && ! EnvironmentFormData::sameAddress($data->horizonUrl, $environment->horizon_url)) {
+            throw new LogicException('The stored password cannot follow the environment to a new address.');
+        }
+
         $attributes = [
             'name' => $data->name,
             'color' => $data->color,

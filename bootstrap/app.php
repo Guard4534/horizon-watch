@@ -43,11 +43,15 @@ return Application::configure(basePath: dirname(__DIR__))
         //
         // "horizonUrl" goes too: a URL is refused when it carries
         // "user:password@" (UrlWithoutCredentials), and flashing it back
-        // would store exactly that credential.
+        // would store exactly that credential. The same holds for an
+        // application host (HostWithoutSchemeOrCredentials): nested under
+        // "application" in the wizard, at the root on the edit page.
         $exceptions->dontFlash([
             'basicAuthPassword',
             'environments',
             'horizonUrl',
+            'application',
+            'host',
         ]);
 
         $exceptions->shouldRenderJsonWhen(

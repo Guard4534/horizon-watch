@@ -10,7 +10,7 @@ import {
     PhWarning,
 } from '@phosphor-icons/vue';
 import type { Component } from 'vue';
-import { computed, ref, useTemplateRef, watch, watchEffect } from 'vue';
+import { computed, ref, watch, watchEffect } from 'vue';
 import ApplicationForm from '@/components/monitoring/applications/ApplicationForm.vue';
 import ColorPicker from '@/components/monitoring/applications/ColorPicker.vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
@@ -67,6 +67,10 @@ type Row = {
     // What the outcome above was measured on; a different row by the time
     // step 3 opens again means the outcome no longer applies.
     testedSignature: string;
+    // Whether opening step 3 tests the row by itself. Off for a row whose
+    // test was cut short by leaving the step: its values did not change, so
+    // it waits for "Test again" rather than spending the rate limit twice.
+    autoTest: boolean;
 };
 
 let nextKey = 0;
@@ -100,6 +104,7 @@ const blankRow = (): Row => ({
     urlEdited: false,
     outcome: { state: 'idle' },
     testedSignature: '',
+    autoTest: true,
 });
 
 const form = useForm<{
@@ -206,9 +211,9 @@ const signatureOf = (environment: App.Data.Applications.EnvironmentFormData) =>
     JSON.stringify(testPayload(environment));
 
 // Before step 3 renders, forget the outcomes of rows changed since their
-// test, and of tests cut short by leaving the step (ConnectionTest drops an
-// answer that arrives after it unmounts): those rows test again as soon as
-// the step mounts.
+// test (those test again as soon as the step mounts), and of tests cut
+// short by leaving the step: ConnectionTest drops an answer that arrives
+// after it unmounts, so those rows read "not tested" until asked again.
 watch(step, (current) => {
     if (current !== 3) {
         return;
@@ -218,21 +223,41 @@ watch(step, (current) => {
         const row = rows.value[index];
         const signature = signatureOf(environment);
 
-        if (
-            row.testedSignature !== signature ||
-            row.outcome.state === 'testing'
-        ) {
+        if (row.testedSignature !== signature) {
             row.outcome = { state: 'idle' };
             row.testedSignature = signature;
+            row.autoTest = true;
+        } else if (row.outcome.state === 'testing') {
+            row.outcome = { state: 'idle' };
+            row.autoTest = false;
         }
     });
 });
 
-const tests =
-    useTemplateRef<Array<InstanceType<typeof ConnectionTest>>>('tests');
+// Keyed by row: a template-ref array does not promise to follow row order.
+const tests = new Map<number, InstanceType<typeof ConnectionTest>>();
 
-const testAgain = () => {
-    tests.value?.forEach((test) => void test.run());
+const rememberTest = (key: number, instance: unknown) => {
+    if (instance) {
+        tests.set(key, instance as InstanceType<typeof ConnectionTest>);
+    } else {
+        tests.delete(key);
+    }
+};
+
+const reachable = (outcome: ConnectionOutcome): boolean =>
+    outcome.state === 'done' && outcome.result.reachable;
+
+// Only the rows that have not answered yet, one after the other in row
+// order: rows that passed do not spend the rate limit again, and when the
+// limit is hit it is the last rows that wait.
+const testAgain = async () => {
+    // A snapshot: the rows may change while a test is awaited.
+    for (const row of rows.value.slice()) {
+        if (!reachable(row.outcome)) {
+            await tests.get(row.key)?.run();
+        }
+    }
 };
 
 const testing = computed(() =>
@@ -622,7 +647,7 @@ const submit = () => {
                     class="nc-btn nc-btn-ghost ml-auto"
                     style="font-size: 12px"
                     :disabled="testing"
-                    @click="testAgain"
+                    @click="void testAgain()"
                 >
                     <PhArrowClockwise :size="13" />{{ $t('Test again') }}
                 </button>
@@ -695,13 +720,16 @@ const submit = () => {
                         >
                     </div>
                     <ConnectionTest
-                        ref="tests"
+                        :ref="
+                            (instance) =>
+                                rememberTest(rows[index].key, instance)
+                        "
                         v-model:outcome="rows[index].outcome"
                         class="mt-[6px]"
                         :url="testConnection(slug)"
                         :payload="testPayload(environment)"
                         :show-button="false"
-                        auto
+                        :auto="rows[index].autoTest"
                     />
                     <div
                         v-if="refusedCredentials(rows[index].outcome)"

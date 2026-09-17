@@ -5,6 +5,7 @@ namespace App\Data\Applications;
 use App\Enums\EnvironmentColor;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Rules\StoredPasswordStaysWithItsAddress;
 use App\Rules\UrlWithoutCredentials;
 use App\Rules\UrlWithoutQueryOrFragment;
 use Illuminate\Validation\Rule;
@@ -115,13 +116,56 @@ class EnvironmentFormData extends Data
      * on the two create paths there is nothing to keep, and a username
      * saved alone would be a credential that cannot authenticate.
      *
-     * @return array<int, string>
+     * On update the blank field keeps the stored password only on the
+     * address it was saved for (StoredPasswordStaysWithItsAddress): a new
+     * scheme, host or port needs the password typed again.
+     *
+     * @return array<int, string|StoredPasswordStaysWithItsAddress>
      */
     private static function passwordRequiredWithUsernameRules(ValidationContext $context): array
     {
-        return self::environmentBeingUpdated() === null
-            ? ['required_with:'.self::key($context, 'basicAuthUser')]
-            : [];
+        $environment = self::environmentBeingUpdated();
+
+        if ($environment === null) {
+            return ['required_with:'.self::key($context, 'basicAuthUser')];
+        }
+
+        return [new StoredPasswordStaysWithItsAddress(
+            stored: $environment,
+            horizonUrl: $context->payload['horizonUrl'] ?? null,
+            username: $context->payload['basicAuthUser'] ?? null,
+            sameUsernameToo: false,
+        )];
+    }
+
+    /**
+     * Whether two URLs point at the same place for a credential: same
+     * scheme, host and port (the default one when absent). The path does
+     * not count — Horizon may move under the same host. Anything that does
+     * not parse is a different address.
+     */
+    public static function sameAddress(string $first, string $second): bool
+    {
+        $origin = function (string $url): ?string {
+            $parts = parse_url(trim($url));
+
+            if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])) {
+                return null;
+            }
+
+            $scheme = strtolower($parts['scheme']);
+            $port = $parts['port'] ?? match ($scheme) {
+                'http' => 80,
+                'https' => 443,
+                default => null,
+            };
+
+            return $scheme.'://'.strtolower($parts['host']).':'.$port;
+        };
+
+        $firstOrigin = $origin($first);
+
+        return $firstOrigin !== null && $firstOrigin === $origin($second);
     }
 
     /**
@@ -224,6 +268,11 @@ class EnvironmentFormData extends Data
      * turns the cleared username field into null, which is byte-for-byte
      * what "this form never had a username" sends.
      *
+     * A new scheme, host or port for an environment with a stored password
+     * is a credentials change too: the poller would send that password to
+     * the new address, so pointing it elsewhere is as sensitive as reading
+     * it. A path-only change on the same host is not.
+     *
      * Pass a transient Environment when creating one: with no attributes
      * set, any username or password in the payload reads as a change, which
      * is what it is.
@@ -231,6 +280,8 @@ class EnvironmentFormData extends Data
     public function changesCredentialsOf(Environment $environment): bool
     {
         return $this->basicAuthUser !== $environment->basic_auth_user
-            || $this->hasNewPassword();
+            || $this->hasNewPassword()
+            || (StoredPasswordStaysWithItsAddress::hasStoredPassword($environment)
+                && ! self::sameAddress($this->horizonUrl, $environment->horizon_url));
     }
 }

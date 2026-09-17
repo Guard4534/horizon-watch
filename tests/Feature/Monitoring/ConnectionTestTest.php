@@ -1,5 +1,6 @@
 <?php
 
+use App\Data\Applications\TestConnectionData;
 use App\Enums\MemberVisibility;
 use App\Enums\ReadingError;
 use App\Enums\TeamRole;
@@ -14,7 +15,9 @@ use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
 use App\Models\Team;
 use App\Models\User;
+use App\Policies\EnvironmentPolicy;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Gate;
 
 beforeEach(function () {
     // Stands in for the real client: never opens a connection, answers
@@ -148,10 +151,11 @@ test('a viewer cannot test a watched environment, and a hidden one still answers
     expect($this->reader->probed)->toBe([]);
 });
 
-test('an admin testing the edit form with a blank password uses the stored one and never sends it back', function () {
+test('an admin testing the edit form with a blank password uses the stored one on its own address, and never sends it back', function () {
+    // Same scheme, host and port, same username: only the path differs.
     $response = $this->actingAs($this->admin)
         ->postJson(($this->environmentUrl)($this->production), [
-            'horizonUrl' => 'https://new.invoicer.example.com/horizon',
+            'horizonUrl' => 'HTTPS://Invoicer.example.com:443/ops/horizon',
             'basicAuthUser' => 'monitor',
             'basicAuthPassword' => '',
         ])
@@ -159,12 +163,93 @@ test('an admin testing the edit form with a blank password uses the stored one a
         ->assertJsonPath('reachable', true);
 
     expect($this->reader->probed)->toBe([[
-        'url' => 'https://new.invoicer.example.com/horizon',
+        'url' => 'HTTPS://Invoicer.example.com:443/ops/horizon',
         'username' => 'monitor',
         'password' => 'stored-secret-value',
     ]])
         ->and($response->getContent())->not->toContain('stored-secret-value')
         ->and(array_keys($response->json()))->toBe(['reachable', 'horizonStatus', 'masterCount', 'latencyMs', 'error']);
+});
+
+test('a blank password is refused when the test goes to another address or username', function (array $payload) {
+    $this->actingAs($this->admin)
+        ->postJson(($this->environmentUrl)($this->production), [...$payload, 'basicAuthPassword' => ''])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['basicAuthPassword' => 'Type the password again']);
+
+    expect($this->reader->probed)->toBe([]);
+})->with([
+    'another host' => [['horizonUrl' => 'https://attacker.example.net/collect', 'basicAuthUser' => 'monitor']],
+    'another scheme' => [['horizonUrl' => 'http://invoicer.example.com/horizon', 'basicAuthUser' => 'monitor']],
+    'another port' => [['horizonUrl' => 'https://invoicer.example.com:8443/horizon', 'basicAuthUser' => 'monitor']],
+    'a subdomain' => [['horizonUrl' => 'https://evil.invoicer.example.com/horizon', 'basicAuthUser' => 'monitor']],
+    'another username' => [['horizonUrl' => 'https://invoicer.example.com/horizon', 'basicAuthUser' => 'someone-else']],
+]);
+
+test('a typed password may be tested anywhere', function () {
+    $this->actingAs($this->admin)
+        ->postJson(($this->environmentUrl)($this->production), [
+            'horizonUrl' => 'https://elsewhere.example.net/horizon',
+            'basicAuthUser' => 'monitor',
+            'basicAuthPassword' => 'typed-secret',
+        ])
+        ->assertOk();
+
+    expect($this->reader->probed)->toBe([
+        ['url' => 'https://elsewhere.example.net/horizon', 'username' => 'monitor', 'password' => 'typed-secret'],
+    ]);
+});
+
+test('a test that moves the stored credential to another address or username needs the credentials permission', function () {
+    Gate::policy(Environment::class, get_class(new class extends EnvironmentPolicy
+    {
+        public function manageCredentials(User $user, Environment $environment): bool
+        {
+            return false;
+        }
+    }));
+
+    $url = ($this->environmentUrl)($this->production);
+
+    // The saved address with a new path, blank or retyped password: allowed.
+    $this->actingAs($this->admin)
+        ->postJson($url, ['horizonUrl' => 'https://invoicer.example.com/ops/horizon', 'basicAuthUser' => 'monitor'])
+        ->assertOk();
+    $this->actingAs($this->admin)
+        ->postJson($url, ['horizonUrl' => 'https://invoicer.example.com/horizon', 'basicAuthUser' => 'monitor', 'basicAuthPassword' => 'typed'])
+        ->assertOk();
+
+    // Another host, another username, or no username: refused even with a typed password.
+    $this->actingAs($this->admin)
+        ->postJson($url, ['horizonUrl' => 'https://elsewhere.example.net/horizon', 'basicAuthUser' => 'monitor', 'basicAuthPassword' => 'typed'])
+        ->assertForbidden();
+    $this->actingAs($this->admin)
+        ->postJson($url, ['horizonUrl' => 'https://invoicer.example.com/horizon', 'basicAuthUser' => 'other', 'basicAuthPassword' => 'typed'])
+        ->assertForbidden();
+    $this->actingAs($this->admin)
+        ->postJson($url, ['horizonUrl' => 'https://invoicer.example.com/horizon'])
+        ->assertForbidden();
+
+    // An environment with nothing on file has no credential to move.
+    $bare = Environment::factory()->for($this->application)->create([
+        'name' => 'develop',
+        'horizon_url' => 'https://develop.invoicer.example.com/horizon',
+        'basic_auth_user' => null,
+        'basic_auth_password' => null,
+    ]);
+    $this->actingAs($this->admin)
+        ->postJson(($this->environmentUrl)($bare), ['horizonUrl' => 'https://elsewhere.example.net/horizon'])
+        ->assertOk();
+
+    expect($this->reader->probed)->toHaveCount(3);
+});
+
+test('the target never pairs the stored password with another address or username, even unvalidated', function () {
+    $target = fn (array $payload) => TestConnectionData::from(['basicAuthPassword' => null, ...$payload])->target($this->production);
+
+    expect($target(['horizonUrl' => 'https://attacker.example.net/collect', 'basicAuthUser' => 'monitor'])->password())->toBeNull()
+        ->and($target(['horizonUrl' => 'https://invoicer.example.com/horizon', 'basicAuthUser' => 'other'])->password())->toBeNull()
+        ->and($target(['horizonUrl' => 'https://invoicer.example.com/elsewhere', 'basicAuthUser' => 'monitor'])->password())->toBe('stored-secret-value');
 });
 
 test('the edit form test uses a typed password, and no username means no credential at all', function () {
@@ -266,6 +351,15 @@ test('the unsaved-address test needs the permission that creates applications', 
 
     expect($this->reader->probed)->toBe([]);
 })->with(['member', 'viewer']);
+
+test('the unsaved-address test wants both halves of basic auth, as creating would', function () {
+    $this->actingAs($this->admin)
+        ->postJson($this->applicationUrl, ['horizonUrl' => 'https://shop.example.com/horizon', 'basicAuthUser' => 'monitor'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('basicAuthPassword');
+
+    expect($this->reader->probed)->toBe([]);
+});
 
 test('the unsaved-address test requires a body', function () {
     $this->actingAs($this->admin)

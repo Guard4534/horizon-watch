@@ -33,8 +33,11 @@ class ConnectionTestController extends Controller
      * With one (the edit form, before saving), the address is whatever was
      * typed. Letting a member do that would let them aim the server at any
      * URL through an environment they can merely see, so it takes the same
-     * permission as saving the form. A blank password there means the one
-     * on file, which never leaves the server.
+     * permission as saving the form — and, when it would pair the stored
+     * password with another username or address, the credentials
+     * permission too. A blank password there means the one on file, and
+     * only on the address and with the username it was saved for; the
+     * stored password is never sent anywhere else.
      */
     public function environment(
         Request $request,
@@ -51,7 +54,13 @@ class ConnectionTestController extends Controller
         } else {
             Gate::authorize('update', $environment);
 
-            $target = TestConnectionData::from($request)->target($environment);
+            $data = TestConnectionData::from($request);
+
+            if ($data->changesCredentialsOf($environment)) {
+                Gate::authorize('manageCredentials', $environment);
+            }
+
+            $target = $data->target($environment);
         }
 
         return response()->json($testConnection->handle($target)->toArray());

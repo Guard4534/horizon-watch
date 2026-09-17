@@ -2,6 +2,7 @@
 
 namespace App\Data\Applications;
 
+use App\Rules\HostWithoutSchemeOrCredentials;
 use Spatie\LaravelData\Data;
 
 class ApplicationFormData extends Data
@@ -19,8 +20,10 @@ class ApplicationFormData extends Data
         return [
             'name' => ['required', 'string', 'max:255'],
             // No scheme: the panel builds each environment's Horizon URL on
-            // its own, so a bare host keeps the two concerns unambiguous.
-            'host' => ['required', 'string', 'max:255', 'regex:/^(?!https?:\/\/).+$/i'],
+            // its own, so a bare host keeps the two concerns unambiguous. No
+            // credentials either: the host is shown to everyone and the
+            // wizard copies it into the suggested URLs.
+            'host' => ['required', 'string', 'max:255', new HostWithoutSchemeOrCredentials],
         ];
     }
 }

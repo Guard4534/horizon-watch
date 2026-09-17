@@ -361,3 +361,34 @@ test('a wizard row whose URL carries credentials is refused on that row', functi
     expect(Application::where('name', 'Leaky')->exists())->toBeFalse()
         ->and(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('url-secret');
 });
+
+dataset('hosts that are not a bare domain', [
+    'credentials' => ['ops:host-secret@shop.example.com'],
+    'user only' => ['host-secret@shop.example.com'],
+    'a scheme' => ['https://shop.example.com'],
+    'another scheme' => ['FTP://host-secret.example.com'],
+]);
+
+test('an application host with a scheme or credentials is refused in the wizard and on edit, and not flashed back', function (string $host) {
+    $this->actingAs($this->admin)
+        ->post(route('applications.store', ['current_team' => $this->team->slug]), [
+            'application' => ['name' => 'Hosted', 'host' => $host],
+            'environments' => [($this->environmentPayload)('production')],
+        ])
+        ->assertInvalid(['application.host' => 'without a scheme or credentials']);
+
+    expect(Application::where('name', 'Hosted')->exists())->toBeFalse()
+        ->and(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('host-secret');
+
+    $original = $this->application->host;
+
+    $this->actingAs($this->admin)
+        ->patch(route('applications.update', ['current_team' => $this->team->slug, 'application' => $this->application->slug]), [
+            'name' => $this->application->name,
+            'host' => $host,
+        ])
+        ->assertInvalid(['host' => 'without a scheme or credentials']);
+
+    expect($this->application->fresh()->host)->toBe($original)
+        ->and(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('host-secret');
+})->with('hosts that are not a bare domain');
