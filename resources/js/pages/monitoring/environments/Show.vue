@@ -17,6 +17,7 @@ import TrendChart from '@/components/monitoring/environment/TrendChart.vue';
 import {
     failedColor,
     formatAge,
+    horizonStatusLabel,
     horizonStatusTone,
     pendingTone,
     statusText,
@@ -94,10 +95,11 @@ const tiles = computed<Tile[]>(() => [
     {
         label: 'Master',
         value:
-            environment.value.horizonStatus ??
-            (environment.value.status === null
-                ? statusText(environment.value)
-                : trans('unknown')),
+            environment.value.horizonStatus !== null
+                ? horizonStatusLabel(environment.value.horizonStatus)
+                : environment.value.status === null
+                  ? statusText(environment.value)
+                  : trans('unknown'),
         color: horizonStatusTone(environment.value),
         note:
             environment.value.readingError !== null &&

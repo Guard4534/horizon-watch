@@ -108,6 +108,17 @@ export function failedColor(
         : 'var(--nc-text)';
 }
 
+export function horizonStatusLabel(status: App.Enums.HorizonStatus): string {
+    switch (status) {
+        case 'running':
+            return trans('running');
+        case 'paused':
+            return trans('paused');
+        case 'inactive':
+            return trans('inactive');
+    }
+}
+
 export function horizonStatusTone(
     environment: Pick<
         App.Data.Monitoring.EnvironmentData,
