@@ -26,11 +26,7 @@ class AlertData extends Data
         public int $nodeCount,
         public int $pending,
         public int $maxWaitSeconds,
-        // Minutes since the run began, capped at the look-back (1440).
         public int $minutesAgo,
-        // True whenever the cap applies: the run began before the look-back,
-        // or its readings stopped long enough ago that now is past the cap.
-        // Show "more than 24 h", not the capped minutes.
         public bool $sinceTruncated,
     ) {}
 }

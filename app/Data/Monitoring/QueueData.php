@@ -13,7 +13,6 @@ class QueueData extends Data
         public int $workers,
         public int $pending,
         public int $waitSeconds,
-        // Null when Horizon records no metric snapshot for the queue.
         public ?float $runtimeSeconds,
         public EnvironmentStatus $status,
     ) {}

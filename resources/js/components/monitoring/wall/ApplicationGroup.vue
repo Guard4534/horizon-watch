@@ -13,8 +13,6 @@ import {
 } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
-// One application's environments, already in the wall's order (worst
-// first), so the first troubled one is also the worst.
 const { applicationId, applicationName, environments, failedPerHourThreshold } =
     defineProps<{
         applicationId: string;
@@ -23,7 +21,6 @@ const { applicationId, applicationName, environments, failedPerHourThreshold } =
         failedPerHourThreshold: number;
     }>();
 
-// Undefined until the viewer clicks: then the click wins over the default.
 const forced = defineModel<boolean | undefined>('expanded');
 
 const slug = useTeamSlug();
@@ -40,11 +37,8 @@ const worstColor = computed(() => {
     return status ? statusColor(status) : 'var(--nc-neutral-500)';
 });
 
-// Healthy groups fold away by default: on 50+ environments only the ones
-// asking for attention take vertical space.
 const expanded = computed(() => forced.value ?? troubled.value.length > 0);
 
-// Summed on the raw numbers, never on the formatted "4.0k" strings.
 const pending = computed(() =>
     environments.reduce((total, environment) => total + environment.pending, 0),
 );
@@ -73,8 +67,6 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
         style="gap: var(--nc-space-2); margin-top: var(--nc-space-2)"
     >
         <div class="head flex items-center gap-2">
-            <!-- The name opens the application (PROMPT item 1); the chevron
-                 folds the group. -->
             <button
                 type="button"
                 class="toggle"

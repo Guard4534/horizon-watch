@@ -30,8 +30,6 @@ const slug = useTeamSlug();
 const shared = usePage();
 const isMobile = useIsMobile();
 
-// Only measured rows add to the totals: unwatched, never-read and
-// unreachable rows carry zeros, not readings.
 const watched = computed(() => page.environments.filter(hasMeasurement));
 
 const stats = computed(() => [
@@ -73,8 +71,6 @@ const stats = computed(() => [
 <template>
     <Head :title="page.application.name" />
 
-    <!-- The mockup draws no phone version of this page: its grids already
-         reflow at 360 px, and the table scrolls sideways. -->
     <div
         class="flex flex-col"
         :style="{
@@ -105,8 +101,6 @@ const stats = computed(() => [
                         {{ page.application.host }}
                     </div>
                 </div>
-                <!-- The ways into configuration that the removed
-                     "Credentials & collection" box used to hold. -->
                 <div
                     v-if="shared.props.canManageApplications"
                     class="ml-auto flex flex-wrap"
@@ -155,8 +149,6 @@ const stats = computed(() => [
                         box-shadow: var(--nc-shadow-sm);
                     "
                 >
-                    <!-- "Pending" is Horizon vocabulary: English in both
-                         languages. -->
                     <div class="nc-label">
                         <template v-if="stat.label === 'Environments'">{{
                             $t('Environments')

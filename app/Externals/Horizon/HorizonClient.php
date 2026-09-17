@@ -21,55 +21,28 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Throwable;
 
-/**
- * Nothing is logged here, and no failure carries more than a ReadingError:
- * HTTP client exceptions hold the URL and sometimes the body, so they are
- * dropped rather than chained.
- *
- * Nothing Horizon sends may throw anything else out of the client either: a
- * bad value in a main call is NotHorizon, a bad job is skipped, a bad
- * secondary section is null. Every number that leaves is finite and
- * saturated into what an integer column holds, so absurd numbers still make
- * a reading instead of a failed insert on every poll.
- */
 final readonly class HorizonClient implements HorizonReader
 {
     private const array MASTER_STATUSES = ['running', 'paused', 'inactive'];
 
-    /** Horizon's own answers are a few kilobytes; its job pages stay far below this. */
     private const int MAX_BODY_BYTES = 2 * 1024 * 1024;
 
-    /** PostgreSQL's integer. */
     private const int MAX_NUMBER = 2_147_483_647;
 
-    /** A string column's usual width; Horizon names are far shorter. */
     private const int MAX_NAME_LENGTH = 255;
 
-    /**
-     * What one reading keeps. Horizon pages jobs by 50, so the job caps only
-     * bite on something that is not Horizon; a real installation with more
-     * than 200 masters, or supervisors per master, is not one this panel
-     * shows node by node anyway.
-     */
     private const int MAX_MASTERS = 200;
 
     private const int MAX_SUPERVISORS = 200;
 
     private const int MAX_JOBS = 200;
 
-    /**
-     * Runtime is asked for the busiest queues only, and a few at a time: one
-     * request per queue with no bound opened a socket per queue at once.
-     * The other queues simply have no runtime.
-     */
     private const int MAX_METRIC_QUEUES = 100;
 
     private const int METRICS_CONCURRENCY = 10;
 
-    /** Horizon's own default for horizon.trim.failed, in minutes. */
     private const int HORIZON_DEFAULT_FAILED_WINDOW = 10080;
 
-    /** Year 9999: a later instant has no ISO-8601 form the pages can read. */
     private const int MAX_TIMESTAMP = 253_402_300_799;
 
     public function __construct(
@@ -138,8 +111,6 @@ final readonly class HorizonClient implements HorizonReader
                 }
             }, $concurrency);
         } catch (MalformedUriException) {
-            // The guard refuses what it can see; a URL Guzzle still cannot
-            // build is not an address this panel can use either.
             throw new HorizonReadFailed(ReadingError::Blocked);
         }
 
@@ -152,12 +123,6 @@ final readonly class HorizonClient implements HorizonReader
         return $answers;
     }
 
-    /**
-     * CURLOPT_RESOLVE makes cURL connect to the address the guard checked,
-     * so a DNS answer that changes between the check and the request cannot
-     * redirect it. A proxy would resolve the name itself and undo that, so
-     * proxies from the environment are bypassed.
-     */
     private function get(PendingRequest $request, HorizonTarget $target, ResolvedTarget $resolved, string $path, TransferWatch $watch): void
     {
         $request
@@ -172,9 +137,6 @@ final readonly class HorizonClient implements HorizonReader
             ]);
 
         if ($target->hasBasicAuth()) {
-            // Laravel's HTTP client events (RequestSending, ResponseReceived)
-            // carry this Authorization header and the URL: a listener on
-            // them must never log or store the request.
             $request->withBasicAuth((string) $target->username, (string) $target->password());
         }
 
@@ -182,8 +144,6 @@ final readonly class HorizonClient implements HorizonReader
     }
 
     /**
-     * Only the ReadingError survives, whatever the transfer ended in.
-     *
      * @param  array{response: mixed, watch: TransferWatch}  $answer
      * @return array<array-key, mixed>
      *
@@ -211,9 +171,6 @@ final readonly class HorizonClient implements HorizonReader
             throw new HorizonReadFailed(ReadingError::Unauthorized);
         }
 
-        // The size is checked again on the buffered body, before reading
-        // it: a handler that ignores the progress callback must not get an
-        // oversized string into memory either.
         $size = $response->toPsrResponse()->getBody()->getSize();
 
         if ($status !== 200 || $size === null || $size > self::MAX_BODY_BYTES) {
@@ -276,14 +233,6 @@ final readonly class HorizonClient implements HorizonReader
         );
     }
 
-    /**
-     * Horizon states the window it counts failed jobs over as its trim
-     * setting, and states null when the application sets neither trim key;
-     * it then still counts over its default, 10080 minutes (its dashboard
-     * says "Past 7 Days"). A missing or unusable window is read the same
-     * way. Out of range is unusable here rather than saturated: a window is
-     * not a count, and a clamped one would be a made-up length.
-     */
     private function failedJobsPeriod(mixed $periods): int
     {
         $minutes = is_array($periods) ? $this->finite($periods['failedJobs'] ?? null) : null;
@@ -296,9 +245,6 @@ final readonly class HorizonClient implements HorizonReader
     }
 
     /**
-     * Horizon keys masters by name, and answers an empty list, not an empty
-     * object, when there are none.
-     *
      * @param  array{response: mixed, watch: TransferWatch}  $answer
      * @return list<HorizonMaster>
      */
@@ -354,9 +300,6 @@ final readonly class HorizonClient implements HorizonReader
     }
 
     /**
-     * Every queue is kept: the pending total and the longest wait are
-     * measured over all of them, and the body cap already bounds the list.
-     *
      * @param  array{response: mixed, watch: TransferWatch}  $answer
      * @return list<HorizonQueueLoad>
      */
@@ -406,10 +349,6 @@ final readonly class HorizonClient implements HorizonReader
     }
 
     /**
-     * Only the first line of the exception is kept, and nothing of the
-     * payload but the attempt count: both may hold whatever the application
-     * put in them. A job without a usable failure time is skipped.
-     *
      * @param  array{response: mixed, watch: TransferWatch}  $answer
      * @return list<HorizonFailedJob>
      */
@@ -439,9 +378,6 @@ final readonly class HorizonClient implements HorizonReader
     }
 
     /**
-     * A job that is not reserved has no reservation time; one whose time is
-     * present but unusable is skipped.
-     *
      * @param  array{response: mixed, watch: TransferWatch}  $answer
      * @return list<HorizonPendingJob>
      */
@@ -468,9 +404,6 @@ final readonly class HorizonClient implements HorizonReader
     }
 
     /**
-     * Horizon already divides the snapshot runtime by 1000, so the value is
-     * in seconds. The last snapshot is the most recent one.
-     *
      * @param  list<HorizonQueueLoad>  $workload
      * @return array<string, float>
      */
@@ -522,11 +455,6 @@ final readonly class HorizonClient implements HorizonReader
         return $this->number($value) ?? throw new HorizonReadFailed(ReadingError::NotHorizon);
     }
 
-    /**
-     * A finite number, rounded and saturated into [0, 2^31 - 1]; null for
-     * anything else. The clamp happens on the float: PHP 8.5 refuses to
-     * cast an unrepresentable float to int.
-     */
     private function number(mixed $value): ?int
     {
         $number = $this->finite($value);
@@ -566,9 +494,6 @@ final readonly class HorizonClient implements HorizonReader
     }
 
     /**
-     * The transfer time of the stats request when cURL reports it; the
-     * duration of the whole pool otherwise, which is never shorter.
-     *
      * @param  array{response: mixed, watch: TransferWatch}  $answer
      */
     private function latency(array $answer, int|float $elapsedNanoseconds): int

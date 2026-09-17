@@ -3,9 +3,6 @@ import { computed } from 'vue';
 import { trans } from 'laravel-vue-i18n';
 import { statusColor, statusLabel } from '@/lib/monitoring';
 
-// A null status is an environment waiting for its first reading: a quiet
-// neutral lamp, never a pulsing one. `glow` is the v2 wall treatment of an
-// environment in trouble: a larger lamp with a halo of its own colour.
 const {
     status,
     size = 9,
@@ -18,8 +15,6 @@ const {
 
 const troubled = computed(() => status !== null && status !== 'active');
 
-// Horizon's own words stay English in every language (statusLabel);
-// the rest is ours and translated.
 const label = computed(() =>
     status === null ? trans('No reading yet') : statusLabel(status),
 );

@@ -5,11 +5,6 @@ namespace App\Data\Pages;
 use App\Data\Monitoring\NotificationSettingsData;
 use Spatie\LaravelData\Data;
 
-/**
- * What every member may know about where alerts go: how many recipients and
- * whether a webhook exists, never the addresses or the URL (a webhook URL
- * often embeds a token).
- */
 class NotificationSummaryData extends Data
 {
     public function __construct(

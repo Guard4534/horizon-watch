@@ -29,9 +29,6 @@ class Application extends Model
     /** @use HasFactory<ApplicationFactory> */
     use GeneratesUniqueSlugs, HasFactory;
 
-    /**
-     * Bootstrap the model and its traits.
-     */
     protected static function boot(): void
     {
         parent::boot();
@@ -44,17 +41,9 @@ class Application extends Model
                 );
             }
         });
-
-        // No regeneration on rename: environment slugs are built from this
-        // one ("{application-slug}-{name}", see Environment), so changing
-        // it after creation would silently break every environment URL and
-        // the metrics generator's fixed-incident seeds (phase 2 spec,
-        // "Modifica del nome" decision).
     }
 
     /**
-     * Get the team that owns this application.
-     *
      * @return BelongsTo<Team, $this>
      */
     public function team(): BelongsTo
@@ -63,8 +52,6 @@ class Application extends Model
     }
 
     /**
-     * Get the environments that belong to this application.
-     *
      * @return HasMany<Environment, $this>
      */
     public function environments(): HasMany
@@ -72,9 +59,6 @@ class Application extends Model
         return $this->hasMany(Environment::class);
     }
 
-    /**
-     * Get the route key for the model.
-     */
     public function getRouteKeyName(): string
     {
         return 'slug';

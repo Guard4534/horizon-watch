@@ -15,9 +15,6 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 class EnvironmentStateFactory extends Factory
 {
     /**
-     * A healthy latest reading, in the JSON shapes documented in the
-     * environment_states migration.
-     *
      * @return array<string, mixed>
      */
     public function definition(): array
@@ -50,9 +47,6 @@ class EnvironmentStateFactory extends Factory
         ];
     }
 
-    /**
-     * The latest reading failed; the detail of the previous one is kept.
-     */
     public function failed(ReadingError $error = ReadingError::Unreachable): static
     {
         return $this->state(fn () => [
@@ -62,9 +56,6 @@ class EnvironmentStateFactory extends Factory
         ]);
     }
 
-    /**
-     * No detail at all, as for a Horizon without workers or failures.
-     */
     public function empty(): static
     {
         return $this->state(fn () => [

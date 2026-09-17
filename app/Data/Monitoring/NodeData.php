@@ -13,7 +13,6 @@ class NodeData extends Data
         public int $workers,
         public int $supervisorCount,
         public int $queueCount,
-        // Since the last successful reading that listed this node.
         public int $seenSecondsAgo,
     ) {}
 }

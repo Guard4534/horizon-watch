@@ -5,10 +5,6 @@ use App\Models\Team;
 use App\Models\User;
 use Illuminate\Support\Facades\Gate;
 
-// T0 gave the admin every permission except DeleteTeam, which on its own
-// would let an admin demote or remove the owner and leave the organization
-// ownerless. The owner is protected as a *target*, in the policy, not by an
-// ad hoc check in one controller.
 beforeEach(function () {
     $this->team = Team::factory()->create();
 
@@ -28,8 +24,6 @@ test('an admin cannot remove the owner', function () {
 });
 
 test('the owner cannot change their own role', function () {
-    // No transfer-of-ownership flow exists yet, so this is forbidden
-    // outright rather than allowed only when another owner would remain.
     expect(Gate::forUser($this->owner)->allows('updateMember', [$this->team, $this->owner]))->toBeFalse();
 });
 

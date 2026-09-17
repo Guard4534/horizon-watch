@@ -50,10 +50,6 @@ class WallQuery
     }
 
     /**
-     * An environment never read carries the column default, not a window
-     * Horizon stated: it only decides the label when nothing was read at
-     * all, or one new environment would turn every label into "mixed".
-     *
      * @param  array<int, EnvironmentData>  $environments
      */
     private function commonFailedWindow(array $environments): ?int

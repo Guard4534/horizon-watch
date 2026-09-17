@@ -19,26 +19,18 @@ const organization = computed(() => page.scope === 'organization');
 
 const shared = usePage();
 
-// Any scope with an override badge needs the note: the organization scope
-// lists those badges too.
 const showsOverrides = computed(
     () =>
         !organization.value ||
         page.scopes.some((scope) => scope.overrideCount > 0),
 );
 
-// The organization scope counts every visible environment (see
-// MonitoringRepository::ruleScopes): zero means there are no thresholds
-// worth showing, since there is nothing they could apply to.
 const nothingVisible = computed(
     () =>
         page.scopes.find((scope) => scope.id === 'organization')
             ?.environmentCount === 0,
 );
 
-// Restricted only means something is being kept from this member if the
-// organization holds anything at all: a viewer limited to non-production
-// in an empty organization has nothing hidden from them.
 const somethingIsHidden = computed(
     () =>
         shared.props.visibilityRestricted &&

@@ -17,9 +17,6 @@ const secondLine = computed(
     () => subtitle ?? page.props.currentTeam?.name ?? '',
 );
 
-// How often this browser refreshes the open page; how often an environment
-// is read is that environment's own setting. The polling pages pick the
-// change up at once (useLivePoll).
 const { interval, options, set } = useRefreshInterval();
 
 function label(ms: number): string {
@@ -55,8 +52,6 @@ function choose(event: Event): void {
                         animation: nc-pulse 2.4s ease-in-out infinite;
                     "
                 />
-                <!-- The visible words name the select (WCAG 2.5.3); on a
-                     phone they are hidden from sight only. -->
                 <label class="inline-flex items-center gap-[7px]">
                     <span class="phone-hidden-words">{{
                         $t('refresh every')
@@ -124,8 +119,6 @@ function choose(event: Event): void {
     display: none;
 }
 
-/* The phone header of the mockup: one compact line, the brand in front,
-   the refresh menu without its words. */
 @media (max-width: 639px) {
     .bar {
         flex-wrap: nowrap;

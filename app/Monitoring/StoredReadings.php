@@ -12,11 +12,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Reads what the poller stored. Every method receives environments the
- * repository has already filtered: there is no visibility rule here, and
- * there must never be one (VisibleEnvironments is its only home).
- */
 class StoredReadings
 {
     public const SERIES_POINTS = 48;
@@ -25,7 +20,6 @@ class StoredReadings
 
     private const TREND_STEP_SECONDS = 300;
 
-    // The variation compares this many buckets with data to as many before them.
     private const TREND_SPAN = 3;
 
     public const LOOKBACK_HOURS = 24;
@@ -34,29 +28,15 @@ class StoredReadings
 
     private const POLL_SLACK_SECONDS = 15;
 
-    // The anomalies a status stands for. Enum values only: they are
-    // inlined in the anomaly query as literals.
     private const STATUS_METRICS = [
         'unreachable' => AlertRuleMetric::EndpointUnreachable,
         'inactive' => AlertRuleMetric::HorizonMasterInactive,
         'paused' => AlertRuleMetric::HorizonPaused,
     ];
 
-    // date_bin() bins from this origin and PHP builds the same grid from the
-    // Unix epoch: the two must agree, or every point lands one bucket off.
     private const SERIES_ORIGIN = '1970-01-01 00:00:00+00';
 
     /**
-     * The latest state of each environment, with the numbers of its latest
-     * snapshot attached as snapshot_* attributes, in one query.
-     *
-     * The numbers come from the latest snapshot whatever its outcome, so a
-     * failed reading reads as zeros while the state keeps the detail of the
-     * last successful one. Looking back for the last *successful* snapshot
-     * instead would scan the whole outage on every request. A state whose
-     * snapshots were all pruned (a collection paused for longer than the
-     * retention) reads as zeros too.
-     *
      * @param  iterable<Environment>  $environments
      * @return array<int, EnvironmentState|null>
      */
@@ -72,12 +52,6 @@ class StoredReadings
             return [];
         }
 
-        // Correlated on columns, never on a model attribute: see the
-        // eager-load trap in the project notes. The row comparison and the ordering
-        // on (environment_id, captured_at) walk the composite index backwards
-        // from the newest row; a plain "order by captured_at desc, id desc"
-        // made PostgreSQL sort every row of the environment instead (336 ms
-        // per environment whose latest reading is old, on 5 M rows).
         $snapshot = EnvironmentSnapshot::query()
             ->select(['pending', 'max_wait_seconds', 'jobs_per_minute', 'failed_in_window', 'failed_window_minutes', 'failed_last_hour', 'workers', 'node_count'])
             ->whereColumn('environment_snapshots.environment_id', 'environment_states.environment_id')
@@ -108,13 +82,6 @@ class StoredReadings
         return $latest;
     }
 
-    /**
-     * Whether the environment has gone too long without a reading: measured
-     * from the latest reading, or from the environment's creation while it
-     * has none (a new environment is waiting for its first poll, not
-     * failing). Pausing the collection is the caller's business: this only
-     * measures time.
-     */
     public function isStale(Environment $environment, ?EnvironmentState $state, CarbonImmutable $now): bool
     {
         $since = $state !== null ? $state->captured_at : $environment->created_at?->toImmutable();
@@ -129,18 +96,6 @@ class StoredReadings
     }
 
     /**
-     * Jobs per minute, one point per bucket, summed across the given
-     * environments: each environment's average over the bucket, then the
-     * sum. Failed readings measured nothing and are left out.
-     *
-     * An environment polled less often than the bucket is wide (300 s
-     * against the 3h chart's 225 s) leaves some of its buckets empty, and
-     * drawing those as 0 saw-tooths the line. So each environment's last
-     * value is carried into the empty buckets that follow it within the
-     * window, but only as far as its interval explains the gap: a longer
-     * gap (an outage, a pause, the time before its first reading) stays 0,
-     * and a bucket nobody read stays 0.
-     *
      * @param  array<int, int>  $environmentIds
      * @return array<int, int>
      */
@@ -150,9 +105,6 @@ class StoredReadings
     }
 
     /**
-     * The worst wait of each bucket for one environment, with the same
-     * carry-over as the throughput.
-     *
      * @return array<int, int>
      */
     public function maxWaitSeries(int $environmentId, SeriesRange $range): array
@@ -162,7 +114,6 @@ class StoredReadings
 
     /**
      * @param  array<int, int>  $environmentIds
-     * @param  string  $aggregate  a literal aggregate over the alias "s", never input
      * @return array<int, int>
      */
     private function series(array $environmentIds, SeriesRange $range, string $aggregate): array
@@ -222,15 +173,6 @@ class StoredReadings
     }
 
     /**
-     * The pending trend of each environment over the last hour, in one
-     * query: the average pending of each five-minute bucket, oldest first,
-     * 0 where there is no reading, and the rounded variation between the
-     * average of the last three buckets with data and of the three before
-     * them (null with fewer than six such buckets, or a base of 0).
-     *
-     * Failed readings measured nothing and are left out, as in the series:
-     * an outage must not read as the queue draining.
-     *
      * @param  iterable<Environment>  $environments
      * @return array<int, array{points: list<int>, percent: int|null}>
      */
@@ -285,10 +227,7 @@ class StoredReadings
     }
 
     /**
-     * The unrounded averages go in, so the percentage does not depend on
-     * how the points were rounded for the chart.
-     *
-     * @param  list<float>  $buckets  the buckets with data, oldest first
+     * @param  list<float>  $buckets
      */
     private function variation(array $buckets): ?int
     {
@@ -307,30 +246,6 @@ class StoredReadings
     }
 
     /**
-     * The anomalies each environment's latest snapshot carries, worst
-     * first, with the start of the uninterrupted run of snapshots that
-     * carry them, in one statement. "Down" anomalies and the pause follow
-     * the status (a reading that failed, a Horizon without masters, a
-     * paused one); the others follow the breach list.
-     *
-     * Accepted, not accidental:
-     * - one reading without the anomaly breaks the run, so a single
-     *   unreachable blip in a long degradation restarts its "since";
-     * - an environment whose collection is paused keeps the anomalies of
-     *   its last reading (the page says the collection is paused beside
-     *   them, and the demo relies on it).
-     *
-     * The run is looked for over at most LOOKBACK_HOURS before the latest
-     * reading: a run that is longer comes back with "since" at the edge of
-     * the look-back and "truncated" set. Walking an unbounded outage cost a
-     * scan of the whole outage per anomaly per request. Persisted alerts
-     * (phase 4) will carry their own start and make the cap moot.
-     *
-     * Every lookup goes through the composite (environment_id, captured_at)
-     * index with a row comparison: without it PostgreSQL skip-scanned
-     * nothing and picked the single-column captured_at index across every
-     * environment (9 s on 5 M rows).
-     *
      * @param  array<int, Environment>  $environments
      * @return array<int, list<array{metric: AlertRuleMetric, since: CarbonImmutable, truncated: bool}>>
      */
@@ -443,11 +358,6 @@ class StoredReadings
         }, $anomalies);
     }
 
-    /**
-     * Whether the snapshot aliased $row carries the anomaly of the
-     * "anomaly" row: by status for the metrics a status stands for, by
-     * breach list for the others.
-     */
     private function carries(string $row): string
     {
         $arms = '';
@@ -456,10 +366,6 @@ class StoredReadings
             $arms .= " when '{$metric->value}' then {$row}.status = '{$status}'";
         }
 
-        // A text search, not a JSON parse: the gap search reads up to a day
-        // of rows per anomaly, and the column keeps the text the model
-        // wrote. A metric value is a quoted, escape-free token, so its
-        // quoted form only matches that element.
         return "(case anomaly.metric{$arms} else strpos({$row}.breaches::text, '\"' || anomaly.metric || '\"') > 0 end)";
     }
 
@@ -475,7 +381,7 @@ class StoredReadings
     }
 
     /**
-     * @param  list<string>  $values  enum values only, never input
+     * @param  list<string>  $values
      */
     private function quotedList(array $values): string
     {
@@ -483,9 +389,6 @@ class StoredReadings
     }
 
     /**
-     * The bucket grid of a range: 48 buckets ending with the one that holds
-     * "now", as the phase 1 charts drew them.
-     *
      * @return array{0: CarbonImmutable, 1: CarbonImmutable, 2: int}
      */
     private function grid(SeriesRange $range): array
@@ -500,9 +403,6 @@ class StoredReadings
     }
 
     /**
-     * The start and end of $points epoch-aligned buckets of $step seconds,
-     * the last of which holds "now".
-     *
      * @return array{0: CarbonImmutable, 1: CarbonImmutable}
      */
     private function window(int $step, int $points): array

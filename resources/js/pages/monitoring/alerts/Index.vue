@@ -27,24 +27,14 @@ const isMobile = useIsMobile();
 
 const shared = usePage();
 
-// No visible environment at all: the three tabs and the delivery policy have
-// nothing to describe, so the page is just the explanation.
 const nothingVisible = computed(() => page.environmentCount === 0);
 
-// Restricted only means something is being kept from this member if the
-// organization holds anything at all: a viewer limited to non-production
-// in an empty organization has nothing hidden from them.
 const somethingIsHidden = computed(
     () =>
         shared.props.visibilityRestricted &&
         shared.props.organizationHasEnvironments,
 );
 
-// A poll reloads window.location.href, and Inertia only compares paths when
-// a response lands: a poll started before a tab click and answered after it
-// would put the old tab back. So in-flight async reloads are cancelled (that
-// fires their finish, and the poll goes on) and the URL moves first, so any
-// poll fired while the tab loads already asks for the new tab.
 function switchState(next: App.Enums.AlertState): void {
     router.cancelAll({ sync: false, prefetch: false });
 
@@ -52,8 +42,6 @@ function switchState(next: App.Enums.AlertState): void {
     url.searchParams.set('state', next);
     window.history.replaceState(window.history.state, '', url);
 
-    // ReloadOptions omits preserveScroll/preserveState from Inertia 3's Visit
-    // type: reload() already preserves both.
     router.reload({ data: { state: next }, only: ['page'] });
 }
 
@@ -62,7 +50,6 @@ const state = computed({
     set: switchState,
 });
 
-// Muted and resolved stay empty until muting and resolving exist.
 const notYet = computed(() => page.state !== 'open');
 
 const search = ref('');
@@ -118,7 +105,6 @@ const empty = computed(() =>
         />
     </div>
 
-    <!-- The mobile shell already titles the page: no second header here. -->
     <div v-else-if="isMobile" class="flex flex-col">
         <div style="padding: var(--nc-space-3) var(--nc-space-4) 0">
             <SegmentedControl
@@ -233,7 +219,6 @@ const empty = computed(() =>
     grid-template-columns: minmax(0, 1fr) 300px;
 }
 
-/* Between the mobile breakpoint and a laptop, the side column goes below. */
 @media (max-width: 1023px) {
     .alerts-grid {
         grid-template-columns: minmax(0, 1fr);

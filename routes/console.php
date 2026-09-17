@@ -11,16 +11,11 @@ Schedule::call(function () {
         ->delete();
 })->daily()->description('Delete expired team invitations');
 
-// A closure needs its name before withoutOverlapping(). The mutex expires
-// after a minute rather than the default day, so a scheduler killed
-// mid-run does not stop every poll until tomorrow.
 Schedule::call(fn () => app(DispatchDuePolls::class)->handle())
     ->name('dispatch-due-polls')
     ->everyFifteenSeconds()
     ->withoutOverlapping(1);
 
-// In the background, so a long prune (after a shorter retention, say) does
-// not hold up the midnight polls, and guarded like any long job.
 Schedule::command('monitoring:prune')
     ->daily()
     ->withoutOverlapping()

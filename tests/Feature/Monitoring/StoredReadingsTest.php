@@ -11,13 +11,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 beforeEach(function () {
-    // 10:08:00 UTC: 30 seconds into a 3h bucket (225 s wide, epoch-aligned),
-    // so "now" is not on a bucket edge.
     $this->now = CarbonImmutable::parse('2026-09-17 10:08:00', 'UTC');
     $this->travelTo($this->now);
     $this->readings = app(StoredReadings::class);
-    // The 3h grid: the last bucket starts at 10:07:30, the first one 47
-    // buckets before it.
     $this->lastBucket = CarbonImmutable::parse('2026-09-17 10:07:30', 'UTC');
 });
 
@@ -52,7 +48,6 @@ test('an environment is stale past three poll intervals, not before', function (
     expect($this->readings->isStale($environment, $state(90), $this->now))->toBeFalse()
         ->and($this->readings->isStale($environment, $state(91), $this->now))->toBeTrue()
         ->and($this->readings->isStale($environment, $state(5), $this->now))->toBeFalse()
-        // Never read: measured from the creation instead.
         ->and($this->readings->isStale($environment, null, $this->now->addSeconds(90)))->toBeFalse()
         ->and($this->readings->isStale($environment, null, $this->now->addSeconds(91)))->toBeTrue();
 });
@@ -62,17 +57,12 @@ test('the throughput series averages each environment per bucket, then sums them
     $bravo = Environment::factory()->create();
     $last = $this->lastBucket;
 
-    // Last bucket: alpha averages 15, bravo 5.
     EnvironmentSnapshot::factory()->for($alpha)->create(['captured_at' => $last->addSeconds(10), 'jobs_per_minute' => 10]);
     EnvironmentSnapshot::factory()->for($alpha)->create(['captured_at' => $last->addSeconds(200), 'jobs_per_minute' => 20]);
     EnvironmentSnapshot::factory()->for($bravo)->create(['captured_at' => $last, 'jobs_per_minute' => 5]);
-    // A failed reading measured nothing: it does not pull the average down.
     EnvironmentSnapshot::factory()->for($bravo)->failed()->create(['captured_at' => $last->addSeconds(30)]);
-    // Three buckets earlier: alpha alone.
     EnvironmentSnapshot::factory()->for($alpha)->create(['captured_at' => $last->subSeconds(3 * 225), 'jobs_per_minute' => 8]);
-    // The first bucket, on its very edge.
     EnvironmentSnapshot::factory()->for($alpha)->create(['captured_at' => $last->subSeconds(47 * 225), 'jobs_per_minute' => 3]);
-    // Just before the range: ignored.
     EnvironmentSnapshot::factory()->for($alpha)->create(['captured_at' => $last->subSeconds(47 * 225 + 1), 'jobs_per_minute' => 999]);
 
     $series = $this->readings->throughputSeries([$alpha->id, $bravo->id], SeriesRange::ThreeHours);
@@ -130,13 +120,10 @@ test('an open anomaly dates from the start of its uninterrupted run', function (
     $environment = Environment::factory()->create();
     $at = fn (int $minutesAgo) => ['captured_at' => $this->now->subMinutes($minutesAgo)];
 
-    // Pending breached 30 and 25 minutes ago, then cleared, then back from
-    // 10 minutes ago: the run restarts after the gap.
     EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create($at(30));
     EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create($at(25));
     EnvironmentSnapshot::factory()->for($environment)->create($at(20));
     EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create($at(10));
-    // Max wait joins later, on its own run.
     EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending, AlertRuleMetric::QueueMaxWait])->create($at(5));
     EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueueMaxWait, AlertRuleMetric::QueuePending])->create($at(1));
 
@@ -166,21 +153,16 @@ test('down anomalies and the pause follow the status, and a healthy latest readi
     $paused = Environment::factory()->create();
     $at = fn (int $minutesAgo) => ['captured_at' => $this->now->subMinutes($minutesAgo)];
 
-    // Degraded, then unreachable twice: the outage starts with the first
-    // failed reading, whatever the breaches before it.
     EnvironmentSnapshot::factory()->for($unreachable)->degraded([AlertRuleMetric::QueuePending])->create($at(9));
     EnvironmentSnapshot::factory()->for($unreachable)->failed()->create($at(6));
     EnvironmentSnapshot::factory()->for($unreachable)->failed()->create($at(3));
 
-    // A Horizon without masters: the status carries it, even on a row whose
-    // breach list forgot it.
     EnvironmentSnapshot::factory()->for($inactive)->create([...$at(8), 'status' => EnvironmentStatus::Inactive, 'breaches' => []]);
     EnvironmentSnapshot::factory()->for($inactive)->create([...$at(4), 'status' => EnvironmentStatus::Inactive, 'breaches' => [AlertRuleMetric::HorizonMasterInactive]]);
 
     EnvironmentSnapshot::factory()->for($recovered)->failed()->create($at(5));
     EnvironmentSnapshot::factory()->for($recovered)->create($at(1));
 
-    // Paused, even on a row whose breach list forgot it.
     EnvironmentSnapshot::factory()->for($paused)->create([...$at(17), 'status' => EnvironmentStatus::Paused, 'breaches' => []]);
     EnvironmentSnapshot::factory()->for($paused)->create([...$at(1), 'status' => EnvironmentStatus::Paused, 'breaches' => [AlertRuleMetric::HorizonPaused]]);
 
@@ -270,7 +252,6 @@ test('the latest reading is found even when it is old, walking the composite ind
     $environment = Environment::factory()->create(['polling_enabled' => false]);
     EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $this->now->subDays(20), 'pending' => 3]);
     EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $this->now->subDays(10), 'pending' => 8]);
-    // Same second, higher id: the later insert wins.
     EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $this->now->subDays(10), 'pending' => 9]);
     EnvironmentState::factory()->for($environment)->create(['captured_at' => $this->now->subDays(10)]);
 
@@ -279,8 +260,6 @@ test('the latest reading is found even when it is old, walking the composite ind
     $query = DB::getQueryLog()[0]['query'];
 
     expect($latest[$environment->id]->getAttribute('snapshot_pending'))->toBe(9)
-        // The shape that keeps PostgreSQL on (environment_id, captured_at):
-        // the plain "order by captured_at desc" sorted the whole environment.
         ->and($query)->toContain('(environment_snapshots.environment_id, environment_snapshots.captured_at) <=')
         ->and($query)->toContain('order by "environment_snapshots"."environment_id" desc, "environment_snapshots"."captured_at" desc');
 });
@@ -298,7 +277,6 @@ test('the anomaly query is one bounded statement on the composite index', functi
 
     expect($anomalies)->toHaveCount(3)
         ->and($log)->toHaveCount(1)
-        // One array binding, whatever the number of environments.
         ->and($log[0]['bindings'])->toBe(['{'.$environments->modelKeys()[0].','.$environments->modelKeys()[1].','.$environments->modelKeys()[2].'}'])
         ->and($log[0]['query'])->toContain('unnest(?::bigint[])')
         ->and($log[0]['query'])->toContain("interval '24 hours'")
@@ -312,7 +290,6 @@ test('a run longer than the look-back is truncated at its edge', function () {
     foreach ([48, 25, 12, 0] as $hoursAgo) {
         EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueueMaxWait])->create(['captured_at' => $this->now->subHours($hoursAgo)]);
     }
-    // Exactly at the edge, carrying it: part of the run.
     EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueueMaxWait])->create(['captured_at' => $this->now->subHours(24)]);
 
     $anomaly = $this->readings->openAnomalies([$environment])[$environment->id][0];
@@ -338,14 +315,10 @@ test('readings in the same second are ordered by insertion in the gap search', f
     $second = $this->now->subMinutes(5);
 
     EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $this->now->subMinutes(10)]);
-    // Two readings in one second: first without the breach, then with it.
-    // The gap is the first one, so the run starts at the second one.
     EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $second]);
     EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $second]);
     EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $this->now]);
 
-    // And the latest reading itself shares its second with an older insert
-    // without the breach: the older insert is before it, so it is the gap.
     $tied = Environment::factory()->create();
     EnvironmentSnapshot::factory()->for($tied)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $this->now->subMinutes(3)]);
     EnvironmentSnapshot::factory()->for($tied)->create(['captured_at' => $this->now]);
@@ -358,8 +331,6 @@ test('readings in the same second are ordered by insertion in the gap search', f
 });
 
 test('one unreachable reading in a long degradation restarts its "since"', function () {
-    // Accepted: a reading that failed measured nothing, so it does not
-    // carry the breach, and the run breaks there.
     $environment = Environment::factory()->create();
     EnvironmentSnapshot::factory()->for($environment)->degraded([AlertRuleMetric::QueuePending])->create(['captured_at' => $this->now->subHours(5)]);
     EnvironmentSnapshot::factory()->for($environment)->failed()->create(['captured_at' => $this->now->subMinutes(30)]);
@@ -374,19 +345,14 @@ test('an environment polled less often than a bucket is carried over its empty b
     $fast = Environment::factory()->create(['poll_interval_seconds' => 15]);
     $last = $this->lastBucket;
 
-    // Slow: buckets 40, 42 (one empty between), then silent from 43 on
-    // except bucket 47, four buckets later.
     EnvironmentSnapshot::factory()->for($slow)->create(['captured_at' => $last->subSeconds(7 * 225), 'jobs_per_minute' => 10, 'max_wait_seconds' => 6]);
     EnvironmentSnapshot::factory()->for($slow)->create(['captured_at' => $last->subSeconds(5 * 225), 'jobs_per_minute' => 20, 'max_wait_seconds' => 8]);
     EnvironmentSnapshot::factory()->for($slow)->create(['captured_at' => $last, 'jobs_per_minute' => 30, 'max_wait_seconds' => 9]);
-    // Fast: bucket 41 only; its gaps are real.
     EnvironmentSnapshot::factory()->for($fast)->create(['captured_at' => $last->subSeconds(6 * 225), 'jobs_per_minute' => 1]);
 
     $throughput = $this->readings->throughputSeries([$slow->id, $fast->id], SeriesRange::ThreeHours);
     $maxWait = $this->readings->maxWaitSeries($slow->id, SeriesRange::ThreeHours);
 
-    // 40: 10 · 41: 10 carried + 1 · 42: 20 · 43: 20 carried · 44-46: gap
-    // longer than the interval explains, 0 · 47: 30. Before 40: nobody.
     expect(array_slice($throughput, 38))->toBe([0, 0, 10, 11, 20, 20, 0, 0, 0, 30])
         ->and(array_slice($maxWait, 38))->toBe([0, 0, 6, 6, 8, 8, 0, 0, 0, 9]);
 });
@@ -437,8 +403,6 @@ test('critical anomalies come first', function () {
 test('the pending trend averages each five-minute bucket of the last hour', function () {
     $environment = Environment::factory()->create();
     $other = Environment::factory()->create();
-    // The 5-minute grid: now (10:08) is in the bucket of 10:05, the last of
-    // twelve; the first one starts at 09:10.
     $first = CarbonImmutable::parse('2026-09-17 09:10:00', 'UTC');
     $in = fn (int $bucket, int $seconds = 0) => $first->addMinutes(5 * $bucket)->addSeconds($seconds);
 
@@ -446,8 +410,6 @@ test('the pending trend averages each five-minute bucket of the last hour', func
     EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $first->subSecond(), 'pending' => 999]);
     EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $in(5, 10), 'pending' => 10]);
     EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $in(5, 200), 'pending' => 21]);
-    // A failed reading measured nothing: it does not pull the average down,
-    // and a bucket holding only those has no data.
     EnvironmentSnapshot::factory()->for($environment)->failed()->create(['captured_at' => $in(5, 100)]);
     EnvironmentSnapshot::factory()->for($environment)->failed()->create(['captured_at' => $in(7)]);
     EnvironmentSnapshot::factory()->for($environment)->create(['captured_at' => $this->now, 'pending' => 30]);
@@ -458,7 +420,6 @@ test('the pending trend averages each five-minute bucket of the last hour', func
 
     expect(array_keys($trends))->toBe([$environment->id])
         ->and($trends[$environment->id]['points'])->toBe([4, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 30])
-        // Three buckets with data: not enough for a variation.
         ->and($trends[$environment->id]['percent'])->toBeNull();
 });
 
@@ -466,7 +427,6 @@ test('the trend variation compares the last three buckets with data to the three
     $environment = Environment::factory()->create();
     $first = CarbonImmutable::parse('2026-09-17 09:10:00', 'UTC');
 
-    // A bucket is null (no reading), one reading, or a list of readings.
     foreach ($buckets as $index => $readings) {
         foreach ((array) $readings as $offset => $pending) {
             EnvironmentSnapshot::factory()->for($environment)->create([
@@ -511,8 +471,6 @@ test('the trend variation compares the last three buckets with data to the three
         [0, 0, 0, 0, 0, 0, 3, 3, 3, 5, 5, 5],
         67,
     ],
-    // From the unrounded averages: 10, 10, 10.5 against 11, 11, 11 is
-    // +8 %. The rounded points (10, 10, 11) would give +6 %.
     'a bucket averaging to a half' => [
         [null, null, null, null, null, null, 10, 10, [10, 11], 11, 11, 11],
         [0, 0, 0, 0, 0, 0, 10, 10, 11, 11, 11, 11],

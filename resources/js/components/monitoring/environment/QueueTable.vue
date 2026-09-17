@@ -10,10 +10,7 @@ import {
 
 const { waitThreshold } = defineProps<{
     queues: App.Data.Monitoring.QueueData[];
-    // "last known …" when the latest reading failed and these rows are
-    // from an earlier one.
     note?: string | null;
-    // queue.max_wait, which the evaluator applies to each queue too.
     waitThreshold: number;
 }>();
 </script>
@@ -28,8 +25,6 @@ const { waitThreshold } = defineProps<{
         <div class="overflow-x-auto">
             <table class="nc-table">
                 <thead>
-                    <!-- Headers stay untranslated in both languages: the mockup
-                         keeps this table's headers as Horizon/English vocabulary. -->
                     <tr>
                         <th>Queue</th>
                         <th>Supervisor</th>
@@ -79,8 +74,6 @@ const { waitThreshold } = defineProps<{
                                 color: var(--nc-neutral-400);
                             "
                         >
-                            <!-- Null when Horizon records no metric
-                                 snapshot for the queue. -->
                             {{
                                 queue.runtimeSeconds === null
                                     ? '—'

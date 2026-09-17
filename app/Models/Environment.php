@@ -56,18 +56,12 @@ class Environment extends Model
     use GeneratesUniqueSlugs, HasFactory;
 
     /**
-     * Mirrors the column default, so a freshly created model already says
-     * whether it is polled without a refresh.
-     *
      * @var array<string, mixed>
      */
     protected $attributes = [
         'polling_enabled' => true,
     ];
 
-    /**
-     * Bootstrap the model and its traits.
-     */
     protected static function boot(): void
     {
         parent::boot();
@@ -75,10 +69,6 @@ class Environment extends Model
         static::creating(function (Environment $environment) {
             $application = $environment->application ?? Application::findOrFail($environment->application_id);
 
-            // Copied from the application, never mass-assignable: it is the
-            // scope of the unique(['team_id', 'slug']) index, which is the
-            // only thing standing between two concurrent creates and an
-            // environment the wall silently loses. See the migration.
             $environment->team_id = $application->team_id;
 
             if (empty($environment->slug)) {
@@ -95,8 +85,6 @@ class Environment extends Model
     }
 
     /**
-     * Get the application that owns this environment.
-     *
      * @return BelongsTo<Application, $this>
      */
     public function application(): BelongsTo
@@ -105,9 +93,6 @@ class Environment extends Model
     }
 
     /**
-     * Get every stored reading of this environment. No order is imposed:
-     * callers pick the one their index serves.
-     *
      * @return HasMany<EnvironmentSnapshot, $this>
      */
     public function snapshots(): HasMany
@@ -116,8 +101,6 @@ class Environment extends Model
     }
 
     /**
-     * Get the latest reading in detail.
-     *
      * @return HasOne<EnvironmentState, $this>
      */
     public function state(): HasOne
@@ -126,8 +109,6 @@ class Environment extends Model
     }
 
     /**
-     * Get the attributes that should be cast.
-     *
      * @return array<string, string>
      */
     protected function casts(): array
@@ -142,19 +123,11 @@ class Environment extends Model
         ];
     }
 
-    /**
-     * Get the route key for the model.
-     */
     public function getRouteKeyName(): string
     {
         return 'slug';
     }
 
-    /**
-     * Generate "{application-slug}-{name}", unique across the whole
-     * organization (the application's team), not just within one
-     * application — two applications can each have a "production".
-     */
     protected static function generateUniqueSlug(Application $application, string $name, ?int $excludeId = null): string
     {
         $base = $application->slug.'-'.Str::slug($name);

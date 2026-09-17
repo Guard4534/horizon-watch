@@ -24,13 +24,7 @@ services:
         depends_on:
             - pgsql
             - mailpit
-    # The invitation notification is ShouldQueue on the database queue, so
-    # without this service nothing ever reaches Mailpit in development and
-    # the invitation flow looks broken rather than asynchronous.
-    # compose.prod.yaml runs its own worker the same way.
     queue:
-        # A clean exit of the artisan command must not leave the container
-        # up with nothing running in it.
         restart: unless-stopped
         build:
             context: './docker/8.5'
@@ -43,12 +37,6 @@ services:
         environment:
             WWWUSER: '${WWWUSER}'
             LARAVEL_SAIL: 1
-            # Through the image's own supervisord, as the sail user, exactly
-            # like laravel.test — not as a "command:", which start-container
-            # hands to gosu with $WWWUSER and which therefore fails whenever
-            # the stack is started without the sail script exporting it.
-            # queue:listen rather than queue:work: it boots the framework per
-            # job, so an edited notification is picked up without a restart.
             SUPERVISOR_PHP_COMMAND: '/usr/bin/php -d variables_order=EGPCS /var/www/html/artisan queue:listen --tries=1'
         volumes:
             - '.:/var/www/html'
@@ -56,13 +44,7 @@ services:
             - sail
         depends_on:
             - laravel.test
-    # Every fifteen seconds it queues the environments due for a reading
-    # (DispatchDuePolls), and once a day it prunes old readings; without it
-    # the pages never receive a new reading in development.
-    # compose.prod.yaml runs its own scheduler the same way.
     scheduler:
-        # A clean exit of the artisan command must not leave the container
-        # up with nothing running in it.
         restart: unless-stopped
         build:
             context: './docker/8.5'
@@ -75,9 +57,6 @@ services:
         environment:
             WWWUSER: '${WWWUSER}'
             LARAVEL_SAIL: 1
-            # Through supervisord as the sail user, for the same reason as
-            # queue. schedule:work starts a fresh schedule:run every minute,
-            # so an edited schedule or action is picked up without a restart.
             SUPERVISOR_PHP_COMMAND: '/usr/bin/php -d variables_order=EGPCS /var/www/html/artisan schedule:work'
         volumes:
             - '.:/var/www/html'

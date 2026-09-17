@@ -147,8 +147,6 @@ test('creating an environment with neither half stores no credential', function 
 });
 
 test('a username with no password is rejected on create but allowed on update', function () {
-    // On create there is nothing a blank password could mean except "no
-    // password", and a username alone cannot authenticate.
     $this->actingAs($this->admin)->post(
         route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
         ($this->validPayload)(['basicAuthUser' => 'monitor', 'basicAuthPassword' => '']),
@@ -156,9 +154,6 @@ test('a username with no password is rejected on create but allowed on update', 
 
     expect(Environment::where('application_id', $this->application->id)->count())->toBe(0);
 
-    // On update the same submission means "keep the password on file", so
-    // the rule must not apply there or no credentialed environment could
-    // ever be edited again.
     $environment = Environment::factory()->for($this->application)->create([
         'name' => 'production',
         'basic_auth_user' => 'monitor',
@@ -181,11 +176,7 @@ test('a username of whitespace, or one carrying a colon, is rejected', function 
 
     expect(Environment::where('application_id', $this->application->id)->count())->toBe(0);
 })->with([
-    // Trimmed to "" and then to null by the global middlewares, which turns
-    // it into "a password with no username" instead — either way it never
-    // reaches the column.
     '   ',
-    // Basic auth transmits "user:password", so this one cannot be encoded.
     'mon:itor',
 ]);
 
@@ -196,13 +187,6 @@ test('touching credentials requires the manage-credentials permission in additio
         'basic_auth_password' => 'original-secret',
     ]);
 
-    // Force-deny manageCredentials regardless of role, via a policy swap
-    // rather than Gate::define(): a policy resolved for the model always
-    // wins over a raw Gate::define() of the same name (Gate::resolveAuthCallback()
-    // checks the policy first), so define() alone wouldn't actually override
-    // EnvironmentPolicy here. Today's role matrix grants manageCredentials
-    // to the same roles as ManageApplications, so this swap is the only way
-    // to prove the controller consults it distinctly from "update".
     Gate::policy(Environment::class, get_class(new class extends EnvironmentPolicy
     {
         public function manageCredentials(User $user, Environment $environment): bool
@@ -211,9 +195,6 @@ test('touching credentials requires the manage-credentials permission in additio
         }
     }));
 
-    // An environment with nothing on file, updated without credentials:
-    // there is no credential to set, replace or remove, so manageCredentials
-    // is never consulted and the forced denial above doesn't apply.
     $bare = Environment::factory()->for($this->application)->create([
         'name' => 'develop',
         'basic_auth_user' => null,
@@ -225,8 +206,6 @@ test('touching credentials requires the manage-credentials permission in additio
         ($this->validPayload)(['name' => 'develop', 'basicAuthUser' => null, 'basicAuthPassword' => null]),
     )->assertRedirect();
 
-    // A new username on it touches credentials: denied even though "update"
-    // itself would allow the admin through.
     $this->actingAs($this->admin)->patch(
         route('environments.update', ['current_team' => $this->team->slug, 'environment' => $bare->slug]),
         ($this->validPayload)(['name' => 'develop', 'basicAuthUser' => 'someone-else', 'basicAuthPassword' => null]),
@@ -235,11 +214,6 @@ test('touching credentials requires the manage-credentials permission in additio
     $bare->refresh();
     expect($bare->basic_auth_user)->toBeNull();
 
-    // The case the gate must NOT catch: an environment that has
-    // credentials, edited without changing them. The edit page prefills the
-    // username, so an untouched save resends it — if that counted as
-    // touching the credentials, a role with "manage applications" but not
-    // "manage credentials" could not change a poll interval.
     $this->actingAs($this->admin)->patch(
         route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
         ($this->validPayload)([
@@ -255,8 +229,6 @@ test('touching credentials requires the manage-credentials permission in additio
         ->and($environment->basic_auth_user)->toBe('monitor')
         ->and($environment->basic_auth_password)->toBe('original-secret');
 
-    // Replacing the username of a credential that exists is a change, and
-    // is denied.
     $this->actingAs($this->admin)->patch(
         route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
         ($this->validPayload)(['name' => 'production', 'basicAuthUser' => 'someone-else', 'basicAuthPassword' => null]),
@@ -264,11 +236,6 @@ test('touching credentials requires the manage-credentials permission in additio
 
     expect($environment->refresh()->basic_auth_user)->toBe('monitor');
 
-    // Clearing the credentials of an environment that has them is a
-    // credential change too, and the only one the payload alone cannot
-    // show: the cleared username field arrives as null, exactly like a form
-    // that never had one (see
-    // EnvironmentFormData::changesCredentialsOf()).
     $this->actingAs($this->admin)->patch(
         route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]),
         ($this->validPayload)(['name' => 'production', 'basicAuthUser' => null, 'basicAuthPassword' => null]),
@@ -278,7 +245,6 @@ test('touching credentials requires the manage-credentials permission in additio
     expect($environment->basic_auth_user)->toBe('monitor')
         ->and($environment->basic_auth_password)->toBe('original-secret');
 
-    // Same on the create path.
     $this->actingAs($this->admin)->post(
         route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
         ($this->validPayload)(['name' => 'staging']),
@@ -301,9 +267,6 @@ test('clearing the username clears the stored password with it', function () {
 
     $environment->refresh();
 
-    // Basic auth needs both halves: a password left behind without a
-    // username could never be used, never be read back out, and would keep
-    // the edit page reporting "password set".
     expect($environment->basic_auth_user)->toBeNull()
         ->and($environment->basic_auth_password)->toBeNull()
         ->and($environment->getRawOriginal('basic_auth_password'))->toBeNull();
@@ -319,10 +282,6 @@ test('a password without a username is rejected instead of stored unusable', fun
 });
 
 test('a failed validation does not flash the basic-auth password into the session', function () {
-    // The flash is what feeds old() after a redirect, and sessions live in
-    // PostgreSQL unencrypted: see bootstrap/app.php's dontFlash(). Nothing
-    // here reads old input back — Inertia forms keep their own state — so
-    // the only thing the flash could do with a password is store it.
     $this->actingAs($this->admin)->post(
         route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
         ($this->validPayload)(['basicAuthPassword' => 'plaintext-must-not-persist', 'pollIntervalSeconds' => 9999]),
@@ -330,8 +289,6 @@ test('a failed validation does not flash the basic-auth password into the sessio
 
     expect(json_encode(session()->all(), JSON_THROW_ON_ERROR))
         ->not->toContain('plaintext-must-not-persist')
-        // The rest of the submission is still there: this is an exclusion,
-        // not the flash being switched off.
         ->toContain('monitor');
 });
 
@@ -347,8 +304,6 @@ test('an environment name is unique per application, and a field error says so',
 
     expect(Environment::where('application_id', $this->application->id)->count())->toBe(1);
 
-    // The same name under another application of the same organization is
-    // fine: the unique index is per application, not per organization.
     $other = Application::factory()->for($this->team)->create(['name' => 'Other']);
 
     $this->actingAs($this->admin)
@@ -378,8 +333,6 @@ test('renaming an environment onto a sibling is rejected, keeping its own name i
 
     expect($staging->refresh()->name)->toBe('staging');
 
-    // Its own name must not collide with itself (the rule ignores the row
-    // being updated), or no other field could ever be edited.
     $this->actingAs($this->admin)
         ->patch(
             route('environments.update', ['current_team' => $this->team->slug, 'environment' => $staging->slug]),
@@ -424,13 +377,8 @@ test('two organizations sharing the same environment slug each resolve their own
     $otherTeam = Team::factory()->create();
     $otherAdmin = User::factory()->create();
     $otherTeam->members()->attach($otherAdmin, ['role' => TeamRole::Admin->value]);
-    // Same application name as $this->application, in a different
-    // organization: application slugs are only unique per team, so this
-    // legitimately produces the same slug in both organizations.
     $otherApplication = Application::factory()->for($otherTeam)->create(['name' => $this->application->name]);
 
-    // basic_auth_* explicitly cleared: the "production" state otherwise
-    // seeds credentials, which is irrelevant to what this test checks.
     $environment = Environment::factory()->for($this->application)->create([
         'name' => 'production',
         'basic_auth_user' => null,
@@ -535,15 +483,6 @@ test('member and viewer cannot create, edit or delete environments', function (s
     expect(Environment::find($environment->id))->not->toBeNull();
 })->with(['member', 'viewer']);
 
-/**
- * Visibility is not a permission (phase 2 spec): the write pages answer to
- * the Policy, so an admin whose own visibility hides an environment still
- * edits it — including its credentials, which is the whole point, since
- * nobody else in the organization may. Untested in either direction until
- * now, and reached from the Applications view, which lists it (see
- * MonitoringPagesTest); the environment's *detail* page still answers 404
- * to the same admin, because that one is the operational view.
- */
 test('an admin edits an environment their own visibility hides', function () {
     $environment = Environment::factory()->for($this->application)->create([
         'name' => 'production',
@@ -551,8 +490,6 @@ test('an admin edits an environment their own visibility hides', function () {
         'basic_auth_password' => 'old-secret-value',
     ]);
 
-    // Manual visibility granting nothing: this admin watches no environment
-    // at all.
     $this->admin->teamMemberships()->where('team_id', $this->team->id)->first()
         ->update(['visibility' => MemberVisibility::Manual->value]);
 
@@ -576,7 +513,6 @@ test('an admin edits an environment their own visibility hides', function () {
 
     expect($environment->fresh()->basic_auth_password)->toBe('new-secret-value');
 
-    // The other half of the split, so the two cannot drift apart silently.
     $this->actingAs($this->admin)
         ->get(route('environments.show', ['current_team' => $this->team->slug, 'environment' => $environment->slug]))
         ->assertNotFound();
@@ -749,7 +685,6 @@ test('a path-only move keeps the stored password, and so does a new username on 
     expect($environment->fresh()->horizon_url)->toBe('https://PRODUCTION.example.com:443/ops/horizon')
         ->and($environment->fresh()->basic_auth_password)->toBe('original-secret');
 
-    // Phase 2's re-pairing stays: same address, behind manageCredentials.
     $this->actingAs($this->admin)
         ->patch($update, ($this->validPayload)(['horizonUrl' => 'https://production.example.com/ops/horizon', 'basicAuthUser' => 'renamed', 'basicAuthPassword' => null]))
         ->assertValid();
@@ -800,8 +735,6 @@ test('an address change is a credentials change only when a password is on file'
     ]);
     $update = fn (Environment $environment) => route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
 
-    // Another host with the password retyped (so validation passes and the
-    // gate decides): refused, nothing written.
     $this->actingAs($this->admin)
         ->patch($update($credentialed), ($this->validPayload)(['horizonUrl' => 'https://attacker.example.net/collect', 'basicAuthPassword' => 'retyped']))
         ->assertForbidden();
@@ -809,14 +742,12 @@ test('an address change is a credentials change only when a password is on file'
     expect($credentialed->fresh()->horizon_url)->toBe('https://production.example.com/horizon')
         ->and($credentialed->fresh()->basic_auth_password)->toBe('original-secret');
 
-    // A path-only change on the same host: allowed.
     $this->actingAs($this->admin)
         ->patch($update($credentialed), ($this->validPayload)(['horizonUrl' => 'https://production.example.com/ops/horizon', 'basicAuthPassword' => null]))
         ->assertRedirect();
 
     expect($credentialed->fresh()->horizon_url)->toBe('https://production.example.com/ops/horizon');
 
-    // Nothing on file: any address is a plain edit.
     $this->actingAs($this->admin)
         ->patch($update($bare), ($this->validPayload)(['name' => 'staging', 'horizonUrl' => 'https://elsewhere.example.net/horizon', 'basicAuthUser' => null, 'basicAuthPassword' => null]))
         ->assertRedirect();
@@ -841,9 +772,6 @@ test('the update action refuses to carry the stored password to a new address wi
 });
 
 test('changesCredentialsOf counts a new address as a credentials change only when a password is on file', function () {
-    // Over HTTP a blank password on a new address is already a 422 and a
-    // typed one is already a change, so this clause is defence in depth: it
-    // is asserted here directly.
     $credentialed = Environment::factory()->for($this->application)->create([
         'name' => 'production',
         'horizon_url' => 'https://production.example.com/horizon',

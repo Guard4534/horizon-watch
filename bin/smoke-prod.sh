@@ -6,13 +6,6 @@ cd "$(dirname "$0")/.."
 project=horizon-watch-smoke
 export HORIZON_WATCH_PORT="${HORIZON_WATCH_PORT:-18080}"
 
-# --env-file /dev/null: without it compose reads the repository's development
-# .env, which sets APP_KEY. The production entrypoint then correctly treats an
-# operator-supplied key as authoritative and never writes /data/app-key, so the
-# last assertion below failed on every developer machine for a reason that has
-# nothing to do with the image. Every variable compose.prod.yaml interpolates
-# has a default, and shell environment still wins over the (empty) env file, so
-# the exported HORIZON_WATCH_PORT above is unaffected.
 compose=(docker compose --env-file /dev/null -p "$project" -f compose.prod.yaml)
 
 cleanup() {

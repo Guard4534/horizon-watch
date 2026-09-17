@@ -25,7 +25,6 @@ test('the demo environments are not polled and carry a day of readings', functio
         ->and($environments->every(
             fn (Environment $environment) => $environment->snapshots()->where('captured_at', '<=', $dayAgo)->doesntExist(),
         ))->toBeTrue()
-        // The demo tells one story for the whole day: no environment flaps.
         ->and($environments->every(
             fn (Environment $environment) => $environment->snapshots()->distinct()->pluck('status')->all() === [$environment->state->status],
         ))->toBeTrue();

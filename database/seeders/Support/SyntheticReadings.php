@@ -18,32 +18,14 @@ use App\Monitoring\EvaluatedStatus;
 use App\Monitoring\StatusEvaluator;
 use Carbon\CarbonImmutable;
 
-/**
- * Invented readings for the demo organization, so the pages have something
- * to show without a Horizon to poll. Everything is a pure function of the
- * environment's slug and name and of the reading's time: same inputs, same
- * rows. This is the phase 1/2 GeneratedMetrics logic, moved out of the
- * runtime; it must never run against an environment the poller reads.
- *
- * Status and breaches come from the real StatusEvaluator applied to the
- * invented reading, so the stored breaches are exactly the ones the poller
- * would have written for those numbers.
- */
 final class SyntheticReadings
 {
     private const TICK_SECONDS = 15;
 
     private const CHUNK = 500;
 
-    // The invented failure counts were written for a day.
     private const FAILED_WINDOW_MINUTES = 1440;
 
-    // Fixed incidents, keyed by environment slug (not by name: two
-    // applications can each have a "production"), so the wall always tells
-    // the same story. Unchanged since phase 1: DatabaseSeeder creates the
-    // same applications with the same slugs on purpose. Public because the
-    // page tests write their own readings on the same organization and must
-    // tell the same story (tests/Support/Readings).
     public const INCIDENTS = [
         'fatturaomatic-production' => EnvironmentStatus::Inactive,
         'mailer-service-worker-batch' => EnvironmentStatus::Degraded,
@@ -67,14 +49,9 @@ final class SyntheticReadings
         private readonly StatusEvaluator $evaluator = new StatusEvaluator,
     ) {}
 
-    /**
-     * Write one snapshot every $stepMinutes over the $hours up to $until
-     * (the last one exactly at $until), and the state of the last one.
-     */
     public function seed(Environment $environment, CarbonImmutable $until, int $hours = 24, int $stepMinutes = 5): void
     {
         $count = intdiv($hours * 60, $stepMinutes);
-        // A bulk insert skips the casts: format the time the way the model would.
         $model = new EnvironmentSnapshot;
         $rows = [];
 
@@ -138,11 +115,6 @@ final class SyntheticReadings
         ];
     }
 
-    /**
-     * An unreachable environment keeps the detail of its last good reading,
-     * as the poller does; here that is a degraded one from just before the
-     * seeded window, and its jobs are dated from then too.
-     */
     private function writeState(Environment $environment, CarbonImmutable $until, CarbonImmutable $beforeWindow): void
     {
         $incident = $this->incident($environment);
@@ -175,9 +147,6 @@ final class SyntheticReadings
     }
 
     /**
-     * The invented Horizon answer at one moment, both as the evaluator's
-     * input and in the environment_states JSON shapes.
-     *
      * @return array{
      *     horizon: HorizonReading,
      *     nodes: list<array{hostname: string, status: string, workers: int, supervisors: int, queues: int, seenAt: string}>,
@@ -193,7 +162,6 @@ final class SyntheticReadings
         $production = $environment->name === 'production';
         $tick = intdiv($at->getTimestamp(), self::TICK_SECONDS);
         $drift = sin($tick / 4 + $r * 9) * 0.5 + 0.5;
-        // The mockup lets incidents grow for ever; a bounded cycle keeps real clocks sane.
         $cycle = $tick % 40;
         $down = $status->isDown();
 
@@ -231,8 +199,6 @@ final class SyntheticReadings
             masters: array_map(fn (array $node) => new HorizonMaster($node['hostname'], $node['status'], []), $nodes),
             workload: array_map(fn (array $queue) => new HorizonQueueLoad($queue['name'], $queue['pending'], $queue['waitSeconds'], $queue['workers']), $queues),
             failedJobs: array_map(fn (array $job) => new HorizonFailedJob($job['job'], $job['queue'], $job['exception'], $job['tries'], CarbonImmutable::parse($job['failedAt'])), $this->failedJobs($environment, CarbonImmutable::now())),
-            // Relative to the real clock, because that is the one the
-            // evaluator measures against: only the elapsed time matters.
             pendingJobs: array_map(fn (array $job) => new HorizonPendingJob($job['job'], $job['queue'], 'reserved', CarbonImmutable::now()->subSeconds($job['elapsed'])), $reserved),
             queueRuntimes: [],
             latencyMs: (int) round(90 + $r2 * 600),
@@ -258,9 +224,6 @@ final class SyntheticReadings
                 'supervisor' => "{$environment->name}-supervisor-".($index < 2 ? 1 : 2),
                 'workers' => $down ? 0 : max(1, (int) round($workers * $shares[$index])),
                 'pending' => (int) round($pending * $shares[$index]),
-                // Capped at the environment's maximum (phase 2 went up to
-                // 1.5 times it), or a healthy environment would cross the
-                // max-wait threshold on its own and flap to degraded.
                 'waitSeconds' => $down ? $maxWait : (int) round($maxWait * (0.5 + $r / 2)),
                 'runtimeSeconds' => round(0.4 + $r * 6, 1),
             ];
@@ -270,9 +233,6 @@ final class SyntheticReadings
     }
 
     /**
-     * The nodes are listed by the reading at $at, so that is when they were
-     * last seen.
-     *
      * @return list<array{hostname: string, status: string, workers: int, supervisors: int, queues: int, seenAt: string}>
      */
     private function nodes(Environment $environment, EnvironmentStatus $status, int $workers, int $queueCount, CarbonImmutable $at): array
@@ -301,14 +261,6 @@ final class SyntheticReadings
     }
 
     /**
-     * Reserved jobs and how long they have been running. A healthy
-     * environment has none: demo environments are never polled again, so a
-     * stored job only ages against the pages' clock, and one that starts
-     * under the job.runtime threshold would cross it a minute later on an
-     * environment still active without the breach. The others' jobs are
-     * already past the threshold and only get older, which matches their
-     * breach. Phase 2 showed the same three everywhere.
-     *
      * @return list<array{job: string, queue: string, elapsed: int}>
      */
     private function reserved(Environment $environment, EnvironmentStatus $status): array
@@ -373,9 +325,6 @@ final class SyntheticReadings
         return json_encode(array_map(fn ($metric) => $metric->value, $evaluated->breaches), JSON_THROW_ON_ERROR);
     }
 
-    /**
-     * FNV-1a folded into [0, 1): the same seed always gives the same number.
-     */
     private function unit(string $seed): float
     {
         $hash = 2166136261;

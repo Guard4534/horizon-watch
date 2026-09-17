@@ -30,11 +30,6 @@ test('expired invitations are deleted by the scheduled cleanup', function () {
         'invited_by' => $owner->id,
     ]);
 
-    // Not schedule:run: with a sub-minute event in the schedule (the
-    // dispatch of due polls runs every fifteen seconds) schedule:run keeps
-    // repeating until the end of the minute, and with the clock frozen by
-    // travelTo() that minute never ends. Assert the cadence here, then run
-    // only this event.
     $cleanup = collect(app(Schedule::class)->events())
         ->first(fn (Event $event) => $event->description === 'Delete expired team invitations');
 

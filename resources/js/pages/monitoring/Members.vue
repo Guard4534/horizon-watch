@@ -33,8 +33,6 @@ const { page } = defineProps<{
                 :can-manage="page.permissions.canManageMembers"
             />
 
-            <!-- Invitations carry their join code, so the query only sends
-                 them to someone who may already invite anyone. -->
             <PendingInvitations
                 v-if="page.permissions.canInvite"
                 :invitations="page.invitations"

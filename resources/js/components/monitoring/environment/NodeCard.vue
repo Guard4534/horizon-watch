@@ -10,15 +10,12 @@ const { node } = defineProps<{
 
 const color = computed(() => statusColor(node.status));
 
-// Status is a tinted ground, not a coloured border, as on the wall's tiles.
 const background = computed(() =>
     node.status === 'active'
         ? 'var(--nc-bg)'
         : `color-mix(in srgb, ${color.value} 8%, var(--nc-bg))`,
 );
 
-// Workers, supervisors and queues are all the API says about a master:
-// memory and per-node throughput are not shown (no source for them).
 const figures = computed(() => [
     { key: 'workers', value: node.workers },
     { key: 'supervisors', value: node.supervisorCount },
@@ -51,13 +48,10 @@ const figures = computed(() => [
                 >{{ statusLabel(node.status) }}</span
             >
         </div>
-        <!-- Each figure takes its own width: three equal columns were too
-             narrow for "supervisors" and the labels ran into each other. -->
         <div
             class="nc-num mt-[var(--nc-space-3)] flex flex-wrap"
             style="gap: var(--nc-space-2) var(--nc-space-4)"
         >
-            <!-- Horizon vocabulary: English in both languages. -->
             <div v-for="figure in figures" :key="figure.key">
                 <div style="font-size: 15px">{{ figure.value }}</div>
                 <div

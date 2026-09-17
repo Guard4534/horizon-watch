@@ -8,9 +8,6 @@ use Illuminate\Contracts\Session\Session;
 
 class ChangeLocale
 {
-    /**
-     * Remember the language for this browser, and for the account when there is one.
-     */
     public function handle(Session $session, ?User $user, Locale $locale): void
     {
         $session->put('locale', $locale->value);

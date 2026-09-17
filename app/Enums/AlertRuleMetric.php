@@ -28,8 +28,6 @@ enum AlertRuleMetric: string
         return match ($this) {
             self::HorizonMasterInactive => 5,
             self::EndpointUnreachable => 2,
-            // A pause is usually deliberate (a deploy): a longer grace than
-            // an outage before anyone is told.
             self::HorizonPaused => 15,
             self::QueuePending => 2000,
             self::QueueMaxWait => 60,

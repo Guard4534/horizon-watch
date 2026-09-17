@@ -23,7 +23,6 @@ export function envColor(color: App.Enums.EnvironmentColor): string {
     return `var(--env-${color})`;
 }
 
-// Horizon's own states stay English in every language; only "unreachable" is ours.
 export function statusLabel(status: App.Enums.EnvironmentStatus): string {
     return status === 'unreachable' ? trans('unreachable') : status;
 }
@@ -56,11 +55,6 @@ export function formatWait(seconds: number): string {
     return seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`;
 }
 
-/**
- * Amber strictly above the queue.max_wait threshold, as StatusEvaluator
- * fires; red strictly above five minutes (or the threshold, if higher).
- * The default is the rule's default, for pages that carry no thresholds.
- */
 export function waitColor(seconds: number, threshold = 60): string {
     if (seconds > Math.max(300, threshold)) {
         return 'var(--st-down)';
@@ -77,11 +71,6 @@ export function pendingColor(pending: number): string {
     return pending > 1000 ? 'var(--st-warn)' : 'var(--nc-text)';
 }
 
-/**
- * How long ago something began, for readers: under a minute, minutes under
- * an hour, then whole hours. `capped` means the real start lies beyond the
- * 24-hour look-back (AlertData.sinceTruncated), so the minutes are a floor.
- */
 export function formatElapsed(minutes: number, capped = false): string {
     if (capped) {
         return trans('more than 24 h ago');

@@ -12,10 +12,6 @@ use Illuminate\Support\Str;
 #[Description('Delete the readings older than the retention period')]
 class PruneReadings extends Command
 {
-    /**
-     * Deleted in chunks: one statement over millions of rows would hold its
-     * locks and bloat the WAL for as long as it runs.
-     */
     public function handle(): int
     {
         $cutoff = now()->subDays((int) config('horizon-watch.retention_days'));

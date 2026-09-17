@@ -10,16 +10,12 @@ import { useTeamSlug } from '@/composables/useTeamSlug';
 import { envColor } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
-// The phone list: one row per application, a dot per environment in its
-// own colour, ringed in the status colour when it needs attention.
 defineProps<{
     groups: App.Data.Pages.ApplicationGroupData[];
 }>();
 
 const slug = useTeamSlug();
 
-// Tinted with the worst status, as the mockup does; rows without a status
-// (unwatched, never read) do not count.
 const badgeStyle = (group: App.Data.Pages.ApplicationGroupData) => {
     const tone = group.triageCount ? worstTone(group.environments) : null;
 
@@ -83,7 +79,6 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
                     >
                 </span>
             </span>
-            <!-- Triage count, or a check mark when nothing needs a look. -->
             <span
                 class="nc-num flex-none"
                 style="

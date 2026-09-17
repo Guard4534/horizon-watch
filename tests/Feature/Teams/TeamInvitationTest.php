@@ -8,10 +8,6 @@ use App\Models\User;
 use App\Notifications\Teams\TeamInvitation as TeamInvitationNotification;
 use Illuminate\Support\Facades\Notification;
 
-// Accept/decline/expired/revoked/wrong-account scenarios live in
-// InvitationFlowTest.php, together with the guest registration path. This
-// file covers what admins do from inside the panel: sending, validating and
-// revoking invitations, plus the notification content.
 beforeEach(function () {
     $this->team = Team::factory()->create();
     $this->owner = User::factory()->create();
@@ -128,8 +124,6 @@ test('team invitations can be revoked by owners', function () {
 
     expect($invitation->fresh()->isRevoked())->toBeTrue();
 
-    // Revoking is not deleting: the row stays so the invitation page can
-    // still say "revoked" instead of behaving as if the code never existed.
     $this->assertDatabaseHas('team_invitations', ['id' => $invitation->id]);
 });
 

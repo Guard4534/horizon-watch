@@ -35,9 +35,6 @@ function clientJson(string $name): Closure
 }
 
 /**
- * Fakes every Horizon endpoint from the fixtures and records, per API path,
- * the Guzzle options each request was sent with.
- *
  * @param  array<string, Closure>  $overrides  keyed by API path, e.g. "stats" or "metrics/queues/default"
  * @return ArrayObject<string, array<string, mixed>>
  */
@@ -67,18 +64,12 @@ function fakeHorizonApi(array $overrides = []): ArrayObject
     return $sent;
 }
 
-/**
- * A JSON body written by hand: PHP cannot encode the numbers these tests
- * need (1e999 decodes to INF).
- */
 function clientRaw(string $json): Closure
 {
     return fn () => Http::response($json, 200, ['Content-Type' => 'application/json']);
 }
 
 /**
- * The stats fixture with some keys replaced by raw JSON values.
- *
  * @param  array<string, string>  $values
  */
 function clientStats(array $values): Closure
@@ -183,8 +174,6 @@ test('a complete reading is mapped field by field', function () {
         new HorizonPendingJob(name: 'App\Jobs\SyncInventory', queue: 'default', status: 'pending', reservedAt: null),
     ]);
 
-    // Horizon already turns the snapshot runtime into seconds; queues
-    // without snapshots are absent.
     expect($reading->queueRuntimes)->toBe(['default' => 1.25]);
 });
 
@@ -566,8 +555,6 @@ test('names are cut to 255 characters', function () {
 });
 
 test('masters, supervisors and jobs are kept up to 200 each', function () {
-    // One master with 250 supervisors and 249 without: the answer stays
-    // under the body cap.
     $masters = ['m1' => ['name' => 'm1', 'status' => 'running', 'supervisors' => array_map(
         fn (int $i) => ['name' => "s{$i}", 'status' => 'running', 'processes' => []],
         range(1, 250),

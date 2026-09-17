@@ -9,8 +9,6 @@ const {
 } = defineProps<{
     jobs: App.Data.Monitoring.LongRunningJobData[];
     thresholdSeconds: number;
-    // Reserved jobs are a live measurement: a failed, overdue or missing
-    // reading leaves the list unknown, not empty.
     unknown?: boolean;
 }>();
 
@@ -43,7 +41,6 @@ function color(seconds: number): string {
             class="flex flex-col"
             style="gap: var(--nc-space-3); font-size: 12px"
         >
-            <!-- The same job class can run twice at once. -->
             <div v-for="(job, index) in jobs" :key="index">
                 <div class="flex gap-2">
                     <span

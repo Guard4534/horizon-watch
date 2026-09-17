@@ -42,36 +42,21 @@ const isMobile = useIsMobile();
 const slug = useTeamSlug();
 const shared = usePage();
 
-// Nothing visible: the organization may have no environment yet, or this
-// member's visibility may cover none of the ones that exist. Which of the
-// two it is decides the wording, and it is never the role that says so.
 const nothingVisible = computed(() => page.environments.length === 0);
 const canManageApplications = computed(
     () => shared.props.canManageApplications,
 );
-// Restricted only means something is being kept from this member if the
-// organization holds anything at all: a viewer limited to non-production
-// in an empty organization has nothing hidden from them.
 const somethingIsHidden = computed(
     () =>
         shared.props.visibilityRestricted &&
         shared.props.organizationHasEnvironments,
 );
 
-// An application survives losing its last environment (on purpose: nothing
-// else could ever reach it again), so an admin can land here with
-// applications and no environment. Adding another application is not what
-// they need — adding an environment to the one they have is. Checked after
-// somethingIsHidden, so a restricted admin who really is missing a whole
-// environment is not sent to configure a second one.
 const needsEnvironment = computed(
     () => canManageApplications.value && page.applicationCount > 0,
 );
 
 const query = new URLSearchParams(window.location.search);
-// Null until someone picks: the phone then opens on the problems, a wide
-// screen on everything, as the two mockups do. A pick is kept in the URL
-// either way, so narrowing the window does not change what is shown.
 const chosenFilter = ref<'all' | 'problems' | null>(
     query.get('filter') === 'problems' || query.get('filter') === 'all'
         ? (query.get('filter') as 'all' | 'problems')
@@ -97,8 +82,6 @@ watch([chosenFilter, environmentName, search], () => {
     router.replace({ url, preserveState: true, preserveScroll: true });
 });
 
-// A row without a status is waiting for its first reading: not a problem,
-// and it keeps the quiet look of a healthy tile until it has one.
 const problems = computed(() =>
     page.environments.filter(
         (environment) =>
@@ -106,8 +89,6 @@ const problems = computed(() =>
     ),
 );
 
-// The first-run steps are for someone who can act on them, in an
-// organization that holds nothing yet.
 const firstRun = computed(
     () =>
         nothingVisible.value &&
@@ -127,8 +108,6 @@ function clearNarrowing(): void {
     search.value = '';
 }
 
-// The same URL filters on both layouts: a filtered link opened on a phone
-// shows what its URL says.
 const shown = computed(() => {
     const needle = search.value.trim().toLowerCase();
 
@@ -147,10 +126,6 @@ const shown = computed(() => {
         );
 });
 
-// Groups keep the server's order. The list is sorted worst first by
-// EnvironmentData::compareBySeverityThenPending, so the first row met for
-// an application is its worst one, and a group ranks by that row: a
-// group's calm rows never lift it, its troubled row always does.
 const groups = computed(() => {
     const byApplication = new Map<
         string,
@@ -175,17 +150,12 @@ const groups = computed(() => {
     return [...byApplication.values()];
 });
 
-// What the viewer opened or closed by hand, per application; survives the
-// poll because the page component is kept.
 const openGroups = ref<Record<string, boolean | undefined>>({});
 
-// Translated here, like KpiCard's other callers, so every string has a
-// literal call site.
 const kpis = computed(() => [
     {
         label: trans('Environments up'),
         value: `${page.kpis.environmentsUp} / ${page.kpis.environmentsTotal}`,
-        // An environment still waiting for its first reading is not down.
         color:
             page.kpis.environmentsUp + waitingCount.value ===
             page.kpis.environmentsTotal
@@ -206,8 +176,6 @@ const kpis = computed(() => [
         note: trans('sum of every queue'),
     },
     {
-        // Each environment's count over its own window, summed as is; the
-        // warning is a rate, never this total.
         label: failedLabel(page.kpis.failedWindowMinutes),
         value: formatCount(page.kpis.failedTotal),
         color: page.kpis.environmentsOverFailedRate
@@ -366,8 +334,6 @@ const kpis = computed(() => [
     grid-template-columns: minmax(0, 1fr) 322px;
 }
 
-/* Not in the mockup: between the phone and a wide screen the side column
-   drops below the groups instead of squeezing them. */
 @media (max-width: 1023px) {
     .wall-grid {
         grid-template-columns: minmax(0, 1fr);

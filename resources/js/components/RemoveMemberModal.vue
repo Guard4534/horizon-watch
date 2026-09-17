@@ -17,9 +17,6 @@ type Props = {
     team: Team;
     member: TeamMember | null;
     open: boolean;
-    // Whether the target is the person clicking, and whether that person is
-    // the last admin besides the owner. Computed by the page, which is the
-    // only place that has both the member list and the authenticated user.
     isSelf?: boolean;
     losingTheLastAdmin?: boolean;
 };
@@ -29,8 +26,6 @@ const emit = defineEmits<{
     'update:open': [value: boolean];
 }>();
 
-// No payload: the membership to drop is in the URL. useForm is the phase's
-// one submit idiom and it owns the in-flight flag.
 const form = useForm({});
 
 const removeMember = () => {

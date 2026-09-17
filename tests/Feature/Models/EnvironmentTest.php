@@ -66,15 +66,6 @@ test('deleting an environment cascades to environment_user rows', function () {
 });
 
 test('the database refuses a duplicate slug inside one organization', function () {
-    // The generator is a read-then-write with no lock, so two concurrent
-    // creates could both settle on the same slug: applications "acme" with
-    // an environment named "shop prod" and "acme shop" with one named
-    // "prod" both compute "acme-shop-prod". The duplicate then reached the
-    // repository's keyBy('slug'), which silently kept one row and dropped
-    // the other — an environment that exists, is granted, and never appears
-    // on the wall. unique(['team_id', 'slug']) makes that a rejected insert
-    // instead. Written straight to the table because the generator is
-    // precisely what a race bypasses.
     $team = Team::factory()->create();
     $first = Application::factory()->create(['team_id' => $team->id, 'name' => 'Acme']);
     $second = Application::factory()->create(['team_id' => $team->id, 'name' => 'Acme Shop']);
@@ -93,9 +84,6 @@ test('the database refuses a duplicate slug inside one organization', function (
 });
 
 test('the same slug is still free in another organization', function () {
-    // The constraint is per organization, not global: two organizations may
-    // each own an application of the same name, and neither may cost the
-    // other its URLs.
     $first = Application::factory()->create(['name' => 'Acme']);
     $second = Application::factory()->create(['name' => 'Acme']);
 

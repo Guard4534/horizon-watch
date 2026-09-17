@@ -1,19 +1,11 @@
 import { trans } from 'laravel-vue-i18n';
 import { statusColor, statusLabel } from '@/lib/monitoring';
 
-// Presentation rules for stored readings, shared by the application and
-// environment pages (desktop and mobile).
-
 type Environment = Pick<
     App.Data.Monitoring.EnvironmentData,
     'status' | 'watched' | 'pollingEnabled'
 >;
 
-/**
- * A null status says nothing about the environment's health: either the
- * viewer does not watch it (the row carries no reading at all) or no reading
- * has landed yet. Neither is drawn in a status colour.
- */
 export function statusTone(environment: Environment): string {
     return environment.status
         ? statusColor(environment.status)
@@ -29,28 +21,21 @@ export function statusText(environment: Environment): string {
         return trans('Not on your wall');
     }
 
-    // Never read and not collected: no first reading is coming.
     return environment.pollingEnabled
         ? trans('waiting for the first reading')
         : trans('Collection paused');
 }
 
-/**
- * Whether the counters are a measurement: an unwatched row, a never-read
- * environment and a failed or overdue reading all carry zeros that are not.
- */
 export function hasMeasurement(
     environment: Pick<App.Data.Monitoring.EnvironmentData, 'status'>,
 ): boolean {
     return environment.status !== null && environment.status !== 'unreachable';
 }
 
-/** Red strictly above the queue.pending threshold, as the evaluator fires. */
 export function pendingTone(pending: number, threshold: number): string {
     return pending > threshold ? 'var(--st-down)' : 'var(--nc-text)';
 }
 
-// EnvironmentStatus::severity(), lowest first.
 const SEVERITY: Record<App.Enums.EnvironmentStatus, number> = {
     inactive: 0,
     unreachable: 0,
@@ -59,7 +44,6 @@ const SEVERITY: Record<App.Enums.EnvironmentStatus, number> = {
     active: 3,
 };
 
-/** The colour of the worst status among rows that have one, or null. */
 export function worstTone(
     environments: Pick<App.Data.Monitoring.EnvironmentData, 'status'>[],
 ): string | null {
@@ -71,12 +55,10 @@ export function worstTone(
     return statuses[0] ? statusColor(statuses[0]) : null;
 }
 
-/** Down, degraded or paused: the states that tint a card. */
 export function needsAttention(environment: Environment): boolean {
     return environment.status !== null && environment.status !== 'active';
 }
 
-/** "12 s", "4 min", "3 h", "2 d": the age of a reading, never negative. */
 export function formatAge(seconds: number): string {
     const value = Math.max(0, Math.floor(seconds));
 
@@ -141,7 +123,6 @@ export function horizonStatusTone(
     }
 }
 
-/** "15s", "1 min", "5 min": a poll interval as the mockup writes it. */
 export function formatInterval(seconds: number): string {
     return seconds < 60 || seconds % 60 !== 0
         ? `${seconds}s`

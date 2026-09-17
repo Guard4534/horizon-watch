@@ -13,11 +13,6 @@ use Illuminate\Support\Facades\Notification;
 
 class InviteMember
 {
-    /**
-     * Create an invitation and send it. Environments are only recorded for
-     * "manual" visibility: they're copied into environment_user once the
-     * invitation is accepted (see AcceptInvitation).
-     */
     public function handle(Team $team, User $inviter, InviteMemberData $data): TeamInvitation
     {
         return DB::transaction(function () use ($team, $inviter, $data) {

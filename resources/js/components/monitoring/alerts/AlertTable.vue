@@ -27,9 +27,6 @@ function environmentHref(environmentId: string): string {
     }).url;
 }
 
-// The whole row opens the environment, for a pointer. The environment name
-// stays a real link for keyboard and screen-reader users; clicks on a button
-// in the row (the disabled phase-4 actions) never navigate.
 function openRow(
     alert: App.Data.Monitoring.AlertData,
     event: MouseEvent,
@@ -137,14 +134,9 @@ function openRow(
                         class="whitespace-nowrap"
                         style="font-size: 12px; color: var(--nc-neutral-500)"
                     >
-                        <!-- Nothing is delivered before the next release:
-                             naming channels would suggest otherwise. -->
                         {{ $t('not sent yet') }}
                     </td>
                     <td class="whitespace-nowrap" style="text-align: right">
-                        <!-- Muting and marking as handled arrive with the
-                             next release; the row itself opens the
-                             environment. -->
                         <button
                             type="button"
                             class="nc-btn nc-btn-ghost row-action"

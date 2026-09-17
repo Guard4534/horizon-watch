@@ -16,8 +16,6 @@ class AlertRulesPageData extends Data
         /** @var array<int, AlertRuleData> */
         public array $rules,
         public NotificationSummaryData $notificationSummary,
-        // Recipients and webhook URL belong to ManageAlertRules: null for
-        // everyone else.
         public ?NotificationSettingsData $notifications,
     ) {}
 }

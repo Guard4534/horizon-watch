@@ -14,19 +14,12 @@ import {
 
 const open = defineModel<boolean>('open', { required: true });
 
-// The dialog primitive comes from the starter kit (reka-ui: focus trap,
-// escape, aria wiring); only the skin is Nocturne, since the shadcn theme
-// variables already resolve to --nc-* tokens.
 const { resourceName, url } = defineProps<{
-    // Typing this exactly is what arms the confirm button.
     resourceName: string;
-    // Already translated by the caller, like EmptyState's.
     title: string;
     body: string;
-    // What disappears with it, one line each.
     items: string[];
     confirmLabel: string;
-    // The DELETE target; the body is ConfirmByNameData.
     url: string;
 }>();
 
@@ -34,8 +27,6 @@ const form = useForm<App.Data.Applications.ConfirmByNameData>({ name: '' });
 
 const matches = computed(() => form.name === resourceName);
 
-// The dialog is kept mounted by its parent, so the typed name and any
-// server-side mismatch error have to be cleared by hand on every close.
 const onOpenChange = (next: boolean) => {
     open.value = next;
 
@@ -104,9 +95,6 @@ const submit = () => {
             </ul>
 
             <form class="nc-field" @submit.prevent="submit">
-                <!-- One key, not "Type" + the name + "to confirm": the
-                     name's place in the sentence is the translator's to
-                     move. -->
                 <label for="confirm-by-name">
                     {{ $t('Type :name to confirm', { name: resourceName }) }}
                 </label>

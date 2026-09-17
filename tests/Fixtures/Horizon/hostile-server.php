@@ -1,11 +1,5 @@
 <?php
 
-// Router for `php -S`: a Horizon that misbehaves on the wire, for what an
-// Http::fake cannot express (body size, stalls, concurrency). The first
-// path segment names the scenario, which decides how the stats call
-// answers; masters and workload answer validly, the job calls 404, and the
-// metrics calls count how many of them run at once in HOSTILE_COUNTER_FILE.
-
 $path = (string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 [, $scenario, $rest] = array_pad(explode('/', $path, 3), 3, '');
 
@@ -73,8 +67,6 @@ switch ($scenario) {
         break;
 
     case 'announced-too-large':
-        // Promises more than the cap and then trickles, so only the header
-        // can end the call quickly.
         header('Content-Type: application/json');
         header('Content-Length: '.(3 * 1024 * 1024));
         echo $stats;

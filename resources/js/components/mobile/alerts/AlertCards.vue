@@ -70,8 +70,6 @@ function openCard(
                     }"
                 />
                 <div class="min-w-0 flex-1">
-                    <!-- The title opens the environment: the only action
-                         that works before the next release. -->
                     <Link
                         :href="
                             showEnvironment({

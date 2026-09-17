@@ -30,8 +30,6 @@ use Illuminate\Support\Facades\Queue;
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:00'));
 
-    // Stands in for lane A's client: hands out the queued results in order
-    // and remembers the password of every target it was given.
     $this->reader = new class implements HorizonReader
     {
         /** @var list<HorizonReading|Throwable|Closure(): HorizonReading> */
@@ -84,7 +82,6 @@ beforeEach(function () {
         'masters' => [
             new HorizonMaster(name: 'worker-1.example.com', status: 'running', supervisors: [
                 new HorizonSupervisor(name: 'worker-1:supervisor-1', status: 'running', processes: ['database:default' => 3, 'database:emails' => 2]),
-                // Lists archive with no process: not its supervisor.
                 new HorizonSupervisor(name: 'worker-1:supervisor-2', status: 'running', processes: ['database:reports' => 1, 'database:archive' => 0]),
             ]),
             new HorizonMaster(name: 'worker-2.example.com', status: 'paused', supervisors: [
@@ -246,7 +243,6 @@ test('each node keeps the time of the last reading that listed it, across failed
     $this->reader->results = [
         ($this->reading)(),
         new HorizonReadFailed(ReadingError::Unreachable),
-        // Secondary sections failing do not make the masters any less read.
         $onlyFirst(['failedJobs' => null, 'pendingJobs' => null]),
     ];
 
@@ -263,15 +259,12 @@ test('each node keeps the time of the last reading that listed it, across failed
     ($this->poll)();
     $afterRecovery = EnvironmentState::query()->sole();
 
-    // The second master was not listed: Horizon drops a master after 15
-    // seconds without a heartbeat, so it is gone rather than kept.
     expect(array_column($afterRecovery->nodes, 'seenAt', 'hostname'))->toBe([
         'worker-1.example.com' => '2026-09-17T10:00:30+00:00',
     ]);
 });
 
 test('the failed-jobs window of a failed reading is the one of the reading before it', function () {
-    // A day, so it cannot be mistaken for Horizon's default week.
     $good = ($this->reading)();
     $good = ($this->reading)(['stats' => new HorizonStats(
         status: $good->stats->status,
@@ -290,7 +283,6 @@ test('the failed-jobs window of a failed reading is the one of the reading befor
         new HorizonReadFailed(ReadingError::Unauthorized),
     ];
 
-    // Nothing to carry yet: Horizon's own default, a week.
     expect(($this->poll)()->failed_window_minutes)->toBe(10080);
 
     $this->travel(15)->seconds();
@@ -299,12 +291,9 @@ test('the failed-jobs window of a failed reading is the one of the reading befor
     $this->travel(15)->seconds();
     expect(($this->poll)()->failed_window_minutes)->toBe(1440);
 
-    // Carried along the outage, not only from the last good reading.
     $this->travel(15)->seconds();
     expect(($this->poll)()->failed_window_minutes)->toBe(1440);
 
-    // Another environment's window is not borrowed, although its row is
-    // the first one the backward scan meets from a higher id.
     $other = Environment::factory()->create();
     expect($other->id)->toBeGreaterThan($this->environment->id);
     $this->reader->results = [new HorizonReadFailed(ReadingError::Unreachable)];
@@ -444,7 +433,6 @@ test('a reading that finished late does not replace a newer state nor move last_
     $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:15'));
     ($this->poll)();
 
-    // The older reading is stored second.
     $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:00'));
     $late = ($this->poll)();
 
@@ -455,7 +443,6 @@ test('a reading that finished late does not replace a newer state nor move last_
         ->and($state->queues)->toHaveCount(4)
         ->and($this->environment->fresh()->last_polled_at->toDateTimeString())->toBe('2026-09-17 10:00:15')
         ->and($this->environment->last_polled_at->toDateTimeString())->toBe('2026-09-17 10:00:15')
-        // The snapshot is history and is kept.
         ->and($late->captured_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
         ->and(EnvironmentSnapshot::query()->count())->toBe(2);
 });

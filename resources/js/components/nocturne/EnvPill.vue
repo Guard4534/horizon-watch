@@ -2,8 +2,6 @@
 import { computed } from 'vue';
 import { envColor } from '@/lib/monitoring';
 
-// The v2 environment name: text in the environment's colour on a 20% fill
-// of the same colour. The name is the user's, never translated.
 const {
     name,
     color,

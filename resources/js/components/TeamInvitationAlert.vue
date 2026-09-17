@@ -3,15 +3,10 @@ import { PhCheckCircle, PhInfo, PhWarningCircle } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-// The banner of an invitation that cannot be acted on as it stands. It says
-// what happened and nothing more: InvitationPageData sends no organization
-// name and no email for these states, so there is nothing else it could say.
 const props = defineProps<{
     state: string;
 }>();
 
-// The message arms below stay literal $t() calls, one per state, so
-// TranslationsTest can see them; only the tone and the icon are computed.
 const tone = computed(() => {
     switch (props.state) {
         case 'accepted':
@@ -72,9 +67,6 @@ const icon = computed(() => {
                 <template v-else-if="state === 'accepted'">
                     {{ $t('This invitation has already been accepted.') }}
                 </template>
-                <!-- A state this build does not know about: say the one
-                     thing that is true of all of them rather than draw an
-                     empty box. -->
                 <template v-else>
                     {{ $t('This invitation cannot be used.') }}
                 </template>

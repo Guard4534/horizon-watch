@@ -9,11 +9,6 @@ enum ReadingError: string
     case NotHorizon = 'not_horizon';
     case Blocked = 'blocked';
 
-    /**
-     * Get the display label used in the interface. Written as literal __()
-     * arms so TranslationsTest can see the keys. Never on the path of
-     * StatusEvaluator, which must run without the container.
-     */
     public function label(): string
     {
         return match ($this) {

@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::table('environments', function (Blueprint $table) {
@@ -16,14 +13,10 @@ return new class extends Migration
             $table->timestamp('last_polled_at')->nullable();
             $table->timestamp('next_poll_at')->nullable();
 
-            // The scheduler's query every fifteen seconds: enabled and due.
             $table->index(['polling_enabled', 'next_poll_at']);
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::table('environments', function (Blueprint $table) {

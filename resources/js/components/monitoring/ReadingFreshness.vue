@@ -12,8 +12,6 @@ const { lastReadingAt, stale, pollingEnabled, readingError } = defineProps<{
     readingError: App.Enums.ReadingError | null;
 }>();
 
-// The age moves between two polls, so it is counted here rather than
-// taken from the server.
 const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -27,8 +25,6 @@ const age = computed(() =>
     lastReadingAt ? formatAge(secondsSince(lastReadingAt, now.value)) : null,
 );
 
-// The first state that explains the numbers wins; the age follows it when
-// there is one, so "why" and "how old" are read together.
 const tone = computed(() => {
     if (!pollingEnabled) {
         return 'var(--nc-neutral-400)';

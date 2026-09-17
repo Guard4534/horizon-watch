@@ -39,8 +39,6 @@ import type { RoleOption, Team, TeamMember, TeamPermissions } from '@/types';
 type Props = {
     team: Team;
     members: TeamMember[];
-    // A count, not a list: the invited addresses are an admin's business and
-    // this route has no minimum role (see TeamController::edit).
     pendingInvitationCount: number;
     permissions: TeamPermissions;
     availableRoles: RoleOption[];
@@ -75,10 +73,6 @@ const pageTitle = computed(() =>
     }),
 );
 
-// useForm, the phase's one submit idiom: it carries the validation message
-// the role change can come back with (ChangeMemberRole's sole-admin
-// self-demotion guard, and "owner is not assignable") and the in-flight
-// flag, instead of both being read back out of the shared page props.
 const roleForm = useForm<{ role: string }>({ role: '' });
 
 const updateMemberRole = (member: TeamMember, newRole: string) => {
@@ -115,7 +109,6 @@ const removeTargetIsLastAdmin = computed(() =>
     <h1 class="sr-only">{{ pageTitle }}</h1>
 
     <div class="flex flex-col space-y-10">
-        <!-- Team Name Section -->
         <div v-if="permissions.canUpdateTeam" class="space-y-6">
             <Heading
                 variant="small"
@@ -156,7 +149,6 @@ const removeTargetIsLastAdmin = computed(() =>
             <Heading variant="small" :title="team.name" />
         </div>
 
-        <!-- Members Section -->
         <div class="space-y-6">
             <div class="flex items-center justify-between">
                 <Heading
@@ -169,9 +161,6 @@ const removeTargetIsLastAdmin = computed(() =>
                     "
                 />
 
-                <!-- Inviting, resending and revoking happen in the Members
-                     view now (phase 2): this page keeps the organization's
-                     own settings. -->
                 <Button
                     v-if="permissions.canCreateInvitation"
                     as-child
@@ -276,10 +265,6 @@ const removeTargetIsLastAdmin = computed(() =>
             </div>
         </div>
 
-        <!-- Pending Invitations Section. Resending and revoking live in the
-             Members view, which also shows the role, the visibility and the
-             expiry: a second read-only copy here would only be a place for
-             the two to disagree. -->
         <div v-if="pendingInvitationCount > 0" class="space-y-6">
             <Heading
                 variant="small"
@@ -317,7 +302,6 @@ const removeTargetIsLastAdmin = computed(() =>
             </div>
         </div>
 
-        <!-- Danger Zone -->
         <div v-if="permissions.canDeleteTeam" class="space-y-6">
             <Heading
                 variant="small"

@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { formatCount, formatWait } from '@/lib/monitoring';
 
-// One literal $t() per metric, so TranslationsTest sees every sentence. Each
-// says only what the stored reading can back: the alert carries the
-// environment's totals, not the value that crossed the rule.
 defineProps<{
     alert: App.Data.Monitoring.AlertData;
 }>();

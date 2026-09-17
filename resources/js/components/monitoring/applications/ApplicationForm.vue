@@ -8,12 +8,8 @@ const {
     prefix = '',
     wizard = false,
 } = defineProps<{
-    // Inertia's flat error bag. The wizard nests this form under
-    // "application", so the keys are prefixed; the edit page does not.
     errors: Record<string, string | undefined>;
     prefix?: string;
-    // The wizard names the host "primary domain", because there it also
-    // suggests each environment's Horizon URL. It is the same saved field.
     wizard?: boolean;
 }>();
 </script>

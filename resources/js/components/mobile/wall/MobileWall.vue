@@ -17,9 +17,6 @@ import {
 } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
-// A list, not groups: with a handful of rows on screen a group header
-// costs more room than it saves, so the application name sits in the row.
-// The rows arrive filtered and in the server order, troubled ones on top.
 const {
     rows,
     totalCount,
@@ -46,8 +43,6 @@ const filter = defineModel<'all' | 'problems'>('filter', { required: true });
 
 const slug = useTeamSlug();
 
-// The desktop filters travel in the URL: say so, since the phone has no
-// field to show them in.
 const narrowing = computed(() =>
     [environmentName, search.trim() ? `"${search.trim()}"` : '']
         .filter(Boolean)

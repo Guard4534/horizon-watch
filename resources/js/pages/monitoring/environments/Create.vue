@@ -21,9 +21,6 @@ const { page } = defineProps<{
 
 const slug = useTeamSlug();
 
-// One level down so the form component can take it as a writable model
-// (v-model needs an assignable expression); transform() flattens it back
-// into EnvironmentFormData for the request.
 const form = useForm<{
     environment: App.Data.Applications.EnvironmentFormData;
 }>({
@@ -38,7 +35,6 @@ const form = useForm<{
     },
 });
 
-// Nothing is saved yet, so the test goes to the route for unsaved addresses.
 const testPayload = computed<App.Data.Applications.TestConnectionData>(() => ({
     horizonUrl: form.environment.horizonUrl,
     basicAuthUser: form.environment.basicAuthUser,

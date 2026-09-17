@@ -14,16 +14,7 @@ use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    // Deliberately no WithoutModelEvents: Team, Application and Environment
-    // all generate their slug from a "creating" model event, which that
-    // trait would silently suppress, leaving every seeded slug null.
-
     /**
-     * The organization the phase 1 mockup showed: application name => [host,
-     * environment names]. Kept identical to the old FakeMonitoringRepository
-     * fixture so the resulting slugs still match SyntheticReadings' fixed
-     * incidents.
-     *
      * @var array<string, array{0: string, 1: array<int, string>}>
      */
     private const APPLICATIONS = [
@@ -51,11 +42,6 @@ class DatabaseSeeder extends Seeder
         'testing' => EnvironmentColor::Testing,
     ];
 
-    /**
-     * Seed the application's database for development, so the wall isn't
-     * empty. Never runs in production: the production entrypoint never
-     * calls db:seed.
-     */
     public function run(): void
     {
         $admin = app(CompleteSetup::class)->handle(new SetupData(
@@ -66,23 +52,11 @@ class DatabaseSeeder extends Seeder
         ));
 
         $team = $admin->currentTeam;
-        // Created already paused: the development scheduler would otherwise
-        // find them due and poll the example hosts before the seed ends.
         $this->seedDemoReadings($this->seedMockupOrganization($team, polled: false));
         $this->seedLocalHorizon($team);
     }
 
     /**
-     * Nothing answers at the demo URLs, so the demo environments are never
-     * polled: they get a day of invented readings instead, one every three
-     * minutes so every bucket of the three-hour chart (225 seconds) holds
-     * at least one.
-     */
-    /**
-     * Only the mockup environments passed in, never the whole team: the
-     * Local Horizon environment must not receive fake readings, whatever
-     * the order of the calls in run().
-     *
      * @param  list<Environment>  $environments
      */
     private function seedDemoReadings(array $environments): void
@@ -95,12 +69,6 @@ class DatabaseSeeder extends Seeder
         }
     }
 
-    /**
-     * A real Horizon to poll during development, when one is configured.
-     * It gets no synthetic readings: the poller writes them, and nothing it
-     * reads belongs in the repository. Inside Sail the host machine is
-     * host.docker.internal, e.g. http://host.docker.internal:8080/horizon.
-     */
     private function seedLocalHorizon(Team $team): void
     {
         $url = config('horizon-watch.demo_horizon_url');
@@ -123,11 +91,6 @@ class DatabaseSeeder extends Seeder
     }
 
     /**
-     * Populate a team with the 9 applications and 29 environments of the
-     * phase 1 mockup. Also used by the Monitoring feature tests, so their
-     * fixture is exactly the configuration development and CI both see;
-     * readings are left to each test (run() adds the demo ones).
-     *
      * @return list<Environment>
      */
     public function seedMockupOrganization(Team $team, bool $polled = true): array
@@ -138,7 +101,6 @@ class DatabaseSeeder extends Seeder
             $application = Application::factory()->for($team)->create(['name' => $name, 'host' => $host]);
 
             foreach ($environmentNames as $environmentName) {
-                // Only production and preprod carry basic auth, as in the phase 1 data.
                 $hasBasicAuth = in_array($environmentName, ['production', 'preprod'], true);
 
                 $environments[] = Environment::factory()->for($application)->create([

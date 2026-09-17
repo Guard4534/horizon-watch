@@ -42,18 +42,11 @@ Route::middleware(['auth'])->group(function () {
     });
 });
 
-// "{current_team}" rather than the "{team}" used above: this mirrors the
-// monitoring routes' URL shape (see routes/monitoring.php), which the
-// Members view (phase 2, lane E) replaces "settings/teams/{team}" with.
 Route::prefix('{current_team}')
     ->middleware(['auth', EnsureTeamMembership::class.':admin'])
     ->group(function () {
         Route::post('members/invitations', [TeamInvitationController::class, 'store'])->name('members.invitations.store');
 
-        // "{invitation:id}" rather than the model's route key: the code is
-        // the invitee's own credential, and a URL ends up in the web
-        // server's access log. Only "invitations.show" — the link mailed to
-        // the invitee — carries it.
         Route::post('members/invitations/{invitation:id}/resend', [TeamInvitationController::class, 'resend'])
             ->middleware('throttle:6,1')
             ->name('members.invitations.resend');

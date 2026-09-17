@@ -21,8 +21,6 @@ class WallPageData extends Data
         /** @var array<int, SentNotificationData> */
         public array $notifications,
         public int $applicationCount,
-        // The default jobs.failed_per_hour threshold, so a tile colours its
-        // failures by the same rate the evaluator uses, not by a count.
         public float $failedPerHourThreshold,
     ) {}
 }

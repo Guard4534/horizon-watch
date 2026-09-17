@@ -12,17 +12,9 @@ class TeamInvitation extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    /**
-     * Create a new notification instance.
-     */
-    public function __construct(public TeamInvitationModel $invitation)
-    {
-        //
-    }
+    public function __construct(public TeamInvitationModel $invitation) {}
 
     /**
-     * Get the notification's delivery channels.
-     *
      * @return array<int, string>
      */
     public function via(object $notifiable): array
@@ -30,11 +22,6 @@ class TeamInvitation extends Notification implements ShouldQueue
         return ['mail'];
     }
 
-    /**
-     * Get the mail representation of the notification. No sensitive data:
-     * just the organization, the role, and a link — the invitation page
-     * itself decides what the recipient can do with it.
-     */
     public function toMail(object $notifiable): MailMessage
     {
         $team = $this->invitation->team;
@@ -53,8 +40,6 @@ class TeamInvitation extends Notification implements ShouldQueue
     }
 
     /**
-     * Get the array representation of the notification.
-     *
      * @return array<string, mixed>
      */
     public function toArray(object $notifiable): array

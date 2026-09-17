@@ -15,9 +15,6 @@ function stored(): number {
     }
 }
 
-// One ref for the whole app: the header menu sets it and every polling page
-// reads it. How often the page refreshes is this browser's choice; how often
-// an environment is read is the environment's own setting.
 const interval = ref(stored());
 
 export function useRefreshInterval(): {
@@ -34,9 +31,7 @@ export function useRefreshInterval(): {
 
         try {
             window.localStorage.setItem(STORAGE_KEY, String(ms));
-        } catch {
-            // Storage can be full or blocked: the choice still holds until reload.
-        }
+        } catch {}
     }
 
     return { interval, options: [...OPTIONS], set };

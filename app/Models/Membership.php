@@ -25,22 +25,16 @@ use Illuminate\Support\Carbon;
 class Membership extends Pivot
 {
     /**
-     * The table associated with the model.
-     *
      * @var string
      */
     protected $table = 'team_members';
 
     /**
-     * Indicates if the IDs are auto-incrementing.
-     *
      * @var bool
      */
     public $incrementing = true;
 
     /**
-     * Get the team that the membership belongs to.
-     *
      * @return BelongsTo<Team, $this>
      */
     public function team(): BelongsTo
@@ -49,8 +43,6 @@ class Membership extends Pivot
     }
 
     /**
-     * Get the user that belongs to this membership.
-     *
      * @return BelongsTo<User, $this>
      */
     public function user(): BelongsTo
@@ -59,25 +51,6 @@ class Membership extends Pivot
     }
 
     /**
-     * Get the environments explicitly granted to this member. Only
-     * meaningful when visibility is "manual" — other visibilities compute
-     * their environments from the team's applications instead.
-     *
-     * environment_user is keyed by user_id, not by membership id, so the
-     * raw pivot holds the grants of every organization this person belongs
-     * to. The relation therefore narrows reads to this membership's own
-     * team: without that, reading it would report (and a sync() would
-     * delete) another organization's grants. Writes still touch the pivot
-     * directly, so anything that removes rows must scope them itself — see
-     * ChangeMemberVisibility.
-     *
-     * Never eager-load this relation: Eloquent builds an eager constraint
-     * from a fresh instance, whose team_id is null, so it would match
-     * nothing. And since the pivot is keyed by user_id, eager results for
-     * two memberships of the same person could not be told apart anyway.
-     * TeamInvitation::environments() had the same trap and solved it with
-     * a column comparison, which has no equivalent here.
-     *
      * @return BelongsToMany<Environment, $this>
      */
     public function visibleEnvironments(): BelongsToMany
@@ -87,8 +60,6 @@ class Membership extends Pivot
     }
 
     /**
-     * Get the attributes that should be cast.
-     *
      * @return array<string, string>
      */
     protected function casts(): array

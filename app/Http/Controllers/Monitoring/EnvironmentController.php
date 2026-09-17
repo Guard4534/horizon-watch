@@ -85,23 +85,6 @@ class EnvironmentController extends Controller
         return to_route('applications.show', ['current_team' => $current_team->slug, 'application' => $application->slug]);
     }
 
-    /**
-     * "Manage applications" (checked above via create/update) and "manage
-     * credentials" are separate permissions in the spec, granted to the
-     * same roles today but not guaranteed to stay that way (see
-     * EnvironmentPolicy::manageCredentials()). Only consult the second gate
-     * when the submission actually changes the credentials — set, replaced
-     * or removed, all three decided against the stored row by
-     * EnvironmentFormData::changesCredentialsOf() — so editing just the
-     * name, color, URL or poll interval never requires it.
-     *
-     * @param  Application|Environment  $forExisting  The application when
-     *                                                creating (no Environment row exists yet — a transient one
-     *                                                carrying only the application relation is enough, since that's
-     *                                                all the policy method reads, and its empty credentials make
-     *                                                any credential in the payload read as a change) or the
-     *                                                environment when updating.
-     */
     private function authorizeCredentialsIfTouched(EnvironmentFormData $data, Application|Environment $forExisting): void
     {
         $environment = $forExisting instanceof Environment

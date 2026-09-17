@@ -10,8 +10,6 @@ const {
     name: string;
     padding?: string;
     fontSize?: string;
-    // Each language written in itself, not translated: that is how people
-    // recognise their own language in a list.
     long?: boolean;
 }>();
 

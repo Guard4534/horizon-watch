@@ -5,20 +5,12 @@ import { envColor } from '@/lib/monitoring';
 const model = defineModel<App.Enums.EnvironmentColor>({ required: true });
 
 const { colors } = defineProps<{
-    // The seven cases of EnvironmentColor, with their labels, straight from
-    // the page prop: the palette is fixed server-side and never free-form.
     colors: App.Data.Pages.EnvironmentFormPageData['colors'];
-    // Radio inputs are grouped by name, and the wizard renders one picker per
-    // environment row, so every picker needs a name of its own.
     name: string;
 }>();
 
-// The prop carries plain strings (the enum's backing values), which is what
-// envColor() maps to the --env-* token.
 const swatch = (value: string) => envColor(value as App.Enums.EnvironmentColor);
 
-// Swatches alone say nothing to a screen reader or to someone who cannot
-// tell two hues apart, so the chosen name is written next to them.
 const selected = computed(
     () => colors.find((color) => color.value === model.value)?.label ?? '',
 );

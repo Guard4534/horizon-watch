@@ -24,15 +24,9 @@ const { page } = defineProps<{
 
 const slug = useTeamSlug();
 
-// Always filled here: ApplicationFormPageData only makes them nullable
-// because the wizard reuses it with nothing to edit yet.
 const application = computed(() => page.slug ?? '');
 const name = computed(() => page.application?.name ?? '');
 
-// The fields live one level down so the form component can take them as a
-// writable model (v-model needs an assignable expression, and `form` itself
-// is a const); transform() flattens them back into ApplicationFormData for
-// the request.
 const form = useForm<{
     application: App.Data.Applications.ApplicationFormData;
 }>({

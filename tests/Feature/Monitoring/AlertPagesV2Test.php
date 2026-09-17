@@ -46,7 +46,6 @@ function alertsOn(string $slug, AlertState $state = AlertState::Open): array
 }
 
 test('open anomalies come from the stored readings, each with the start of its run', function () {
-    // Healthy 45 minutes ago, unreachable from 30 minutes ago onwards.
     EnvironmentSnapshot::factory()->for($this->production)->create(['captured_at' => now()->subMinutes(45)]);
     EnvironmentSnapshot::factory()->for($this->production)->failed()->create(['captured_at' => now()->subMinutes(30)]);
     EnvironmentSnapshot::factory()->for($this->production)->failed()->create(['captured_at' => now()->subMinutes(15)]);
@@ -89,8 +88,6 @@ test('an anomaly older than the look-back reaches the page as "more than 24 h"',
 });
 
 test('an anomaly whose readings stopped past the cap is flagged, not shown as 1440 minutes', function () {
-    // The query's look-back starts at the latest snapshot, 30 hours old:
-    // the run began inside it, so only the cap against now can tell.
     EnvironmentSnapshot::factory()->for($this->production)->create(['captured_at' => now()->subHours(31)]);
     Readings::record($this->production, EnvironmentStatus::Unreachable, snapshot: ['captured_at' => now()->subHours(30)]);
 
@@ -171,7 +168,6 @@ test('without ManageAlertRules a member only learns how many targets there are',
             ->where('page.notificationSummary.webhookConfigured', true)
             ->where('page.notificationSummary.repeatMinutes', 30));
 
-    // Nowhere in the page, not just not under that key.
     expect($response->getContent())
         ->not->toContain('hooks.example.com')
         ->not->toContain('ops@example.com')
@@ -216,7 +212,6 @@ test('every scope lists the eight measurable rules, horizon.paused included and 
 });
 
 test('the paused rule is a warning that is not emailed by default', function () {
-    // Third in the enum, so third on the page.
     $this->actingAs($this->admin)
         ->get(route('alert-rules.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page

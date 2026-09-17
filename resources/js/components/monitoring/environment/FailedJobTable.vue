@@ -4,7 +4,6 @@ import { formatElapsed } from '@/lib/monitoring';
 
 defineProps<{
     jobs: App.Data.Monitoring.FailedJobData[];
-    // "last known …" when the latest reading failed.
     note?: string | null;
 }>();
 </script>
@@ -28,8 +27,6 @@ defineProps<{
         <div v-else class="overflow-x-auto">
             <table class="nc-table">
                 <thead>
-                    <!-- Job/Queue/Exception/Tries stay untranslated in both
-                         languages: the mockup keeps this table's headers English. -->
                     <tr>
                         <th>Job</th>
                         <th>Queue</th>

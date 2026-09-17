@@ -24,8 +24,6 @@ class EnvironmentDetailQuery
     {
         $environment = $this->monitoring->environment($team, $environmentId) ?? abort(404);
 
-        // Never the environment's own scope: its overrides are invented
-        // until phase 4, and the evaluator ignores them.
         $rules = $this->monitoring->alertRules($team, 'organization');
 
         $openAlerts = array_filter(
@@ -52,13 +50,6 @@ class EnvironmentDetailQuery
         );
     }
 
-    /**
-     * EnvironmentPolicy::testConnection() is a team permission and the
-     * environment was just found in this team, so the answer is the same
-     * without loading the model the repository keeps to itself. Trap: this
-     * mirrors the policy instead of calling it — if the policy ever looks
-     * at the environment, change this too.
-     */
     private function canTestConnection(Team $team): bool
     {
         $user = $this->auth->user();

@@ -20,7 +20,6 @@ test('the application list groups environments under each application', function
             ->where('page.environmentCount', 29)
             ->where('page.groups.0.application.id', 'fatturaomatic')
             ->has('page.groups.0.environments', 4)
-            // Only its production environment reads unhealthy.
             ->where('page.groups.0.triageCount', 1));
 });
 

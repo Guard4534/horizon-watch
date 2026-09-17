@@ -32,9 +32,6 @@ defineProps<{
 const slug = useTeamSlug();
 const shared = usePage();
 
-// Reading an application needs membership, configuring it needs the
-// permission: a member or a viewer sees the same table without the three
-// ways into the forms (which would answer 403 anyway).
 const canManageApplications = computed(
     () => shared.props.canManageApplications,
 );
@@ -45,9 +42,6 @@ function environmentHref(environmentId: string): string {
     }).url;
 }
 
-// The whole row opens the environment, for a pointer. The name stays a real
-// link, so keyboard and screen-reader users get the same destination; clicks
-// that land on a link or a button inside the row keep their own meaning.
 function openRow(
     environment: { id: string; watched: boolean },
     event: MouseEvent,
@@ -250,8 +244,6 @@ function openRow(
                                 style="font-size: 12px"
                                 :style="{ color: statusTone(environment) }"
                             >
-                                <!-- An unwatched row says so in the last
-                                     column; its status is simply unknown. -->
                                 <template v-if="environment.watched">
                                     <span
                                         class="size-[6px] rounded-full"
@@ -265,11 +257,6 @@ function openRow(
                             </span>
                         </td>
                         <td class="whitespace-nowrap" style="text-align: right">
-                            <!-- An environment the viewer configures but
-                                 does not watch (their permission lists it,
-                                 their visibility hides it) has no detail
-                                 page for them: it answers 404. Its row is
-                                 not a link; say so, and the pencil stays. -->
                             <span
                                 v-if="!environment.watched"
                                 class="nc-tag nc-tag-neutral"

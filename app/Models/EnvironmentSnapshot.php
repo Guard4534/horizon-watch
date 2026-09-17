@@ -54,16 +54,11 @@ class EnvironmentSnapshot extends Model
     use HasFactory;
 
     /**
-     * captured_at is the only time that matters, and millions of rows do
-     * not need two more timestamps.
-     *
      * @var bool
      */
     public $timestamps = false;
 
     /**
-     * Get the environment this reading belongs to.
-     *
      * @return BelongsTo<Environment, $this>
      */
     public function environment(): BelongsTo
@@ -72,8 +67,6 @@ class EnvironmentSnapshot extends Model
     }
 
     /**
-     * Get the attributes that should be cast.
-     *
      * @return array<string, string>
      */
     protected function casts(): array

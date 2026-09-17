@@ -28,8 +28,6 @@ import {
 } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
-// The phone view helps to understand, not to diagnose: six numbers, queues
-// and nodes as lists; no charts, failed-job table or rules.
 const { page } = defineProps<{
     page: App.Data.Pages.EnvironmentDetailPageData;
 }>();
@@ -43,11 +41,9 @@ const incident = computed(() => {
     return status !== null && status !== 'active' ? status : null;
 });
 
-// The desktop thresholds, applied the same way (strictly above).
 const threshold = (metric: App.Enums.AlertRuleMetric) =>
     page.thresholds[metric] ?? 0;
 
-// Nodes and queues are the last successful reading's during an outage.
 const lastKnown = computed(() => environment.value.readingError !== null);
 
 const lastKnownAge = computed(() => {
@@ -66,7 +62,6 @@ const lastKnownText = computed(() =>
         : trans('last known'),
 );
 
-// Metric names stay English in both languages, as on the desktop tiles.
 const tiles = computed(() => [
     {
         label: 'Pending',

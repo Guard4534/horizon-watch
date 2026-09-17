@@ -64,8 +64,6 @@ test('an exception trace does not show the password', function () {
         ini_set('zend.exception_ignore_args', (string) $previous);
     }
 
-    // Only the frame that received the target: Pest's own frames further
-    // down hold this file's datasets, which spell the password out.
     $frame = $exception->getTrace()[0];
 
     expect($frame['args'] ?? [])->toBe([$target])

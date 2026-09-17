@@ -12,11 +12,6 @@ use App\Externals\Horizon\Data\HorizonQueueLoad;
 use App\Externals\Horizon\HorizonReading;
 use Carbon\CarbonImmutable;
 
-/**
- * Pure on purpose: no container, no database, no translator, so it runs in
- * tests/Unit. The clock is Carbon's own, which Laravel's travel helpers
- * also move. Thresholds are the defaults until phase 4 makes them editable.
- */
 final class StatusEvaluator
 {
     public const int FAILED_RATE_MINUTES = 60;
@@ -34,9 +29,6 @@ final class StatusEvaluator
             fn (AlertRuleMetric $metric) => $this->breached($metric, $reading, $failedLastHour),
         ));
 
-        // A paused Horizon still queues work: its thresholds are measured
-        // and recorded, so 50,000 jobs piling up behind a pause are an
-        // anomaly too, while the status stays the pause.
         if ($reading->stats->status === 'paused' || $this->everyMasterPaused($reading->masters)) {
             return new EvaluatedStatus(EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused, ...$breaches], $failedLastHour);
         }
@@ -91,7 +83,6 @@ final class StatusEvaluator
                 fn (HorizonQueueLoad $queue) => $queue->processes === 0 && $queue->length > 0,
             )) >= $threshold,
             AlertRuleMetric::JobRuntime => $this->hasLongReservedJob($reading->pendingJobs ?? [], $threshold),
-            // Not thresholds: they come from the status branches above.
             AlertRuleMetric::HorizonMasterInactive, AlertRuleMetric::EndpointUnreachable, AlertRuleMetric::HorizonPaused => false,
         };
     }

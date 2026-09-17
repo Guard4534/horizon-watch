@@ -1,15 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-// Labels arrive already translated, like KpiCard's and EmptyState's, so
-// TranslationsTest still sees a literal $t() call site at the caller.
 const { labels, current } = defineProps<{
     labels: string[];
     current: number;
 }>();
 
-// Only backwards: a later step may not have been filled in yet, and the
-// wizard's own buttons are what validate a step before leaving it.
 const emit = defineEmits<{ select: [step: number] }>();
 
 const currentLabel = computed(() => labels[current - 1] ?? '');

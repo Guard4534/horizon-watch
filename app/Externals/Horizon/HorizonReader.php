@@ -9,16 +9,11 @@ use Illuminate\Container\Attributes\Bind;
 interface HorizonReader
 {
     /**
-     * One complete reading. Throws when stats, masters or workload fail;
-     * a failed secondary call leaves its field null instead.
-     *
      * @throws HorizonReadFailed
      */
     public function read(HorizonTarget $target): HorizonReading;
 
     /**
-     * Only stats and masters, for "Test connection".
-     *
      * @throws HorizonReadFailed
      */
     public function probe(HorizonTarget $target): HorizonProbe;

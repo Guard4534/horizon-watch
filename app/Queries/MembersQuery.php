@@ -31,17 +31,10 @@ class MembersQuery
         $canManageMembers = $gate->allows('updateMember', $team)
             && $gate->allows('removeMember', $team);
 
-        // Feeds both the invite form (canInvite) and the manual-visibility
-        // dialog (canManageMembers); gated because an environment must not
-        // be named to someone it is not visible to (see the spec,
-        // "Visibilità degli ambienti").
         $environments = $canInvite || $canManageMembers ? $this->environments($team) : [];
 
         return new MembersPageData(
             members: $this->members($team, $viewer, $canManageMembers ? $environments : []),
-            // Who has been invited where is an admin's business, and only
-            // an admin has anything to do with the two buttons next to each
-            // row.
             invitations: $canInvite ? $this->invitations($team) : [],
             environments: $environments,
             permissions: new MembersPermissionsData(
@@ -53,13 +46,6 @@ class MembersQuery
     }
 
     /**
-     * The members, owner first, then admins, members, viewers, and by name
-     * inside each role.
-     *
-     * $environments is the organization's environments when the viewer may
-     * manage members, and empty otherwise: it doubles as the permission
-     * flag and as the id/label map the manual grants are rendered from.
-     *
      * @param  array<int, EnvironmentOptionData>  $environments
      * @return array<int, MemberData>
      */
@@ -105,21 +91,6 @@ class MembersQuery
     }
 
     /**
-     * The environments a "manual" member has been granted. Read through
-     * VisibleEnvironments, because the spec puts that filter in exactly one
-     * class; the other visibilities say everything in their label already.
-     *
-     * Two queries per manual member: VisibleEnvironments::query() reads
-     * the membership to pick its branch, then this pluck() runs. The
-     * labels are joined in memory from the map the page already carries.
-     *
-     * Batching them is possible, but not from here — the join belongs
-     * inside VisibleEnvironments (a query() that accepts the membership
-     * the caller already holds, or a grantedEnvironmentIdsFor(Team,
-     * memberships) beside it). Writing it here instead would mean a second
-     * copy of the visibility rule, which is what the spec forbids. Left
-     * alone deliberately: a members list is small and admin-only.
-     *
      * @return array<int, int>
      */
     private function manualEnvironmentIds(Team $team, Membership $membership): array
@@ -158,10 +129,6 @@ class MembersQuery
     }
 
     /**
-     * Every environment of the organization, whatever the viewer's own
-     * visibility: an admin configures all of them even when they only see
-     * some (the spec calls this case rare and asks for it in writing).
-     *
      * @return array<int, EnvironmentOptionData>
      */
     private function environments(Team $team): array
@@ -179,12 +146,6 @@ class MembersQuery
     }
 
     /**
-     * One row per permission, with the four roles' answers taken from
-     * TeamRole::permissions(). The mockup grouped the permissions into
-     * eight prose rows; deriving them instead means the table can never
-     * disagree with the enum, and the rows the phases 3 and 4 permissions
-     * add show up on their own.
-     *
      * @return array<int, PermissionMatrixRowData>
      */
     private function matrix(): array
@@ -199,10 +160,6 @@ class MembersQuery
         ), TeamPermission::cases());
     }
 
-    /**
-     * Kept here rather than on the enum so the strings sit in a literal
-     * __() call site, which is what the translation test can see.
-     */
     private function permissionLabel(TeamPermission $permission): string
     {
         return match ($permission) {
@@ -214,12 +171,6 @@ class MembersQuery
             TeamPermission::CreateInvitation => __('Invite someone'),
             TeamPermission::CancelInvitation => __('Revoke an invitation'),
             TeamPermission::ManageApplications => __('Create and edit applications and environments'),
-            // A separate key from the "Manage credentials" button on the
-            // application page: the mockup writes that one as an order
-            // ("Gestisci credenziali") and this one as a capability
-            // ("Gestire le credenziali"), the same split the rows below
-            // already make between "Test connection" and this table's
-            // "Test the connection".
             TeamPermission::ManageCredentials => __('Manage the credentials'),
             TeamPermission::ManageAlertRules => __('Edit thresholds and recipients'),
             TeamPermission::MuteAlert => __('Mute an alert'),
@@ -233,9 +184,6 @@ class MembersQuery
         return $environment->application->name.' / '.$environment->name;
     }
 
-    /**
-     * First and last initial, like the front end's getInitials().
-     */
     private function initials(string $name): string
     {
         $parts = preg_split('/\s+/u', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: [];

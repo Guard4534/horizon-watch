@@ -152,7 +152,6 @@ test('an unreachable environment records nothing measured but keeps a previous d
         ->and($state->latency_ms)->toBeNull()
         ->and($state->nodes)->toHaveCount(2)
         ->and($state->queues)->toHaveCount(3)
-        // The kept detail predates the one-hour outage, jobs included.
         ->and(collect($state->failed_jobs)->every(
             fn (array $job) => CarbonImmutable::parse($job['failedAt'])->lessThan($this->until->subHour()),
         ))->toBeTrue()
@@ -212,7 +211,6 @@ test('synthetic nodes are dated from the reading that listed them, and failed jo
     $this->readings->seed($unreachable, $this->until, hours: 1);
 
     expect(array_unique(array_column($healthy->state->nodes, 'seenAt')))->toBe([$this->until->toIso8601String()])
-        // The kept detail is the reading from before the outage, and so are its nodes.
         ->and(array_unique(array_column($unreachable->state->nodes, 'seenAt')))->toBe([$this->until->subHour()->toIso8601String()])
         ->and(EnvironmentSnapshot::query()->distinct()->pluck('failed_window_minutes')->all())->toBe([1440]);
 });

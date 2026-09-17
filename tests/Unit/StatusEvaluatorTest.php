@@ -13,8 +13,6 @@ use App\Externals\Horizon\HorizonReading;
 use App\Monitoring\StatusEvaluator;
 use Carbon\CarbonImmutable;
 
-// Runs without the application: no database, no container, no translator.
-
 beforeEach(fn () => CarbonImmutable::setTestNow('2026-09-17 12:00:00'));
 
 afterEach(fn () => CarbonImmutable::setTestNow());
@@ -29,8 +27,6 @@ function evaluatorMaster(string $status = 'running'): HorizonMaster
 }
 
 /**
- * A healthy reading; each case overrides only what it is about.
- *
  * @param  list<HorizonMaster>|null  $masters
  * @param  list<HorizonQueueLoad>|null  $workload
  * @param  list<HorizonPendingJob>|null  $pendingJobs

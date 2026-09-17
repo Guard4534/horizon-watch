@@ -15,26 +15,14 @@ const { invitations } = defineProps<{
 
 const slug = useTeamSlug();
 
-// Neither action has a payload; useForm is here so the whole phase submits
-// the same way, and its submit() takes the route object's own method (POST
-// to resend, DELETE to revoke).
 const form = useForm({});
 
-// The id of the invitation a request is in flight for, so only its own two
-// buttons go quiet. form.processing cannot say which row that is, and there
-// is one form for every row.
 const busy = ref<number | null>(null);
 
 function act(
     invitation: App.Data.Teams.InvitationData,
     route: typeof resendInvitation | typeof revokeInvitation,
 ) {
-    // The id, never the code: the join code is the invitee's credential and
-    // would end up in the web server's access log (see routes/settings.php).
-    //
-    // Resending is rate limited to six a minute; that 429 and the 409 on an
-    // invitation somebody has just accepted are handled by the exception
-    // handler, not here.
     busy.value = invitation.id;
 
     form.submit(route([slug.value, invitation.id]), {

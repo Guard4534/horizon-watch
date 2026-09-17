@@ -18,15 +18,12 @@ import { show as showEnvironment } from '@/routes/environments';
 
 const { environment, thresholds } = defineProps<{
     environment: App.Data.Monitoring.EnvironmentData;
-    // The organization defaults keyed by metric.
     thresholds: Record<string, number>;
 }>();
 
 const slug = useTeamSlug();
 const tone = computed(() => statusTone(environment));
 
-// The left bar is the environment's own colour, so status lives on the
-// lamp, a tinted ground and a soft halo (as on the wall's tiles).
 const cardStyle = computed(() =>
     needsAttention(environment)
         ? {
@@ -36,15 +33,10 @@ const cardStyle = computed(() =>
         : {},
 );
 
-// Zeros that were not measured (no reading yet, a hidden row, a failed or
-// overdue reading) are shown as dashes.
 const hasNumbers = computed(() => hasMeasurement(environment));
 </script>
 
 <template>
-    <!-- An unwatched environment (listed by the viewer's permission,
-         hidden by their visibility) has no detail page for them, so its
-         card is not a link: see EnvironmentData::$watched. -->
     <component
         :is="environment.watched ? Link : 'div'"
         :href="
@@ -102,7 +94,6 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                 )
             }}
         </span>
-        <!-- The pending trend of the last hour, as on the wall. -->
         <span v-else class="mt-[var(--nc-space-3)] block">
             <TrendLine
                 :values="environment.trend"

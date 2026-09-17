@@ -5,8 +5,6 @@ import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatThreshold, ruleIcon, ruleLabel } from '@/lib/alertRules';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 
-// The organization defaults: the values the evaluator applies to every
-// environment until phase 4 brings real per-environment overrides.
 defineProps<{
     rules: App.Data.Monitoring.AlertRuleData[];
 }>();
@@ -61,8 +59,6 @@ const slug = useTeamSlug();
                     style="letter-spacing: 0.01em; color: var(--nc-neutral-300)"
                     >{{ formatThreshold(rule.threshold, rule.unit) }}</span
                 >
-                <!-- "override" / "org" stay English in both languages: the mockup
-                     keeps rule-origin badges untranslated on purpose. -->
                 <span
                     class="nc-tag nc-tag-sm flex-none"
                     :class="

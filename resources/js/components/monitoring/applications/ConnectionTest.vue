@@ -1,6 +1,4 @@
 <script lang="ts">
-// Exported so a parent can keep one outcome per row (the wizard's step 3)
-// and read it through v-model:outcome.
 export type ConnectionOutcome =
     | { state: 'idle' }
     | { state: 'testing' }
@@ -29,14 +27,9 @@ const {
     auto = false,
     disabled = false,
 } = defineProps<{
-    // One of the two Wayfinder test-connection routes.
     url: RouteDefinition<'post'>;
-    // Null tests what is saved (environments.test-connection without a
-    // body, the member's test); an object tests what was typed. A blank
-    // password there means "the one on file" on the edit form.
     payload: App.Data.Applications.TestConnectionData | null;
     showButton?: boolean;
-    // Run once on mount, unless an outcome is already there.
     auto?: boolean;
     disabled?: boolean;
 }>();
@@ -45,8 +38,6 @@ const outcome = defineModel<ConnectionOutcome>('outcome', {
     default: () => ({ state: 'idle' }),
 });
 
-// A newer attempt, or a change to what is being tested, makes the answer
-// of an older request meaningless: it is dropped rather than shown.
 let attempt = 0;
 
 const failureOf = (error: unknown): ConnectionOutcome => {
@@ -68,9 +59,7 @@ const failureOf = (error: unknown): ConnectionOutcome => {
             if (message) {
                 return { state: 'invalid', message };
             }
-        } catch {
-            // Not the validation body we expected: a generic failure.
-        }
+        } catch {}
     }
 
     return { state: 'failed' };
@@ -81,8 +70,6 @@ const run = async (): Promise<void> => {
     outcome.value = { state: 'testing' };
 
     try {
-        // A plain request, not an Inertia visit: the answer is JSON for this
-        // component only. The client adds the XSRF header on its own.
         const response = await http.getClient().request({
             method: 'post',
             url: url.url,
@@ -119,8 +106,6 @@ onMounted(() => {
     }
 });
 
-// The wizard unmounts its rows between steps: an answer arriving after that
-// belongs to nobody.
 onUnmounted(() => {
     attempt++;
 });

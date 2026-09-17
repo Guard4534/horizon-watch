@@ -13,10 +13,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * The latest reading of one environment, in detail. The JSON shapes are
- * documented in the migration and are shared by the poller and
- * StoredReadings.
- *
  * @property int $id
  * @property int $environment_id
  * @property CarbonImmutable $captured_at
@@ -50,8 +46,6 @@ class EnvironmentState extends Model
     use HasFactory;
 
     /**
-     * Get the environment this state belongs to.
-     *
      * @return BelongsTo<Environment, $this>
      */
     public function environment(): BelongsTo
@@ -60,8 +54,6 @@ class EnvironmentState extends Model
     }
 
     /**
-     * Get the attributes that should be cast.
-     *
      * @return array<string, string>
      */
     protected function casts(): array

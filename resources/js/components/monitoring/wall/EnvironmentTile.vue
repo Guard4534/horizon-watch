@@ -24,9 +24,6 @@ const { environment, failedPerHourThreshold } = defineProps<{
 
 const slug = useTeamSlug();
 
-// The left bar is the environment's own colour, so trouble cannot be a
-// coloured border too: it is the lamp, a tinted ground and a soft halo.
-// A row with no status yet is not trouble, only not started.
 const troubled = computed(
     () => environment.status !== null && environment.status !== 'active',
 );
@@ -75,8 +72,6 @@ const failedColor = computed(() =>
         : 'var(--nc-neutral-600)',
 );
 
-// What the footer says instead of nodes and workers when the numbers
-// above are not a current reading.
 const silence = computed<string | null>(() => {
     if (!environment.pollingEnabled) {
         return 'paused';

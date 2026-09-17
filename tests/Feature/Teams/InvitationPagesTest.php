@@ -36,8 +36,6 @@ test('a guest sees the registration state with the organization, the role and th
             ->where('page.roleLabel', 'Member')
             ->where('page.visibilityLabel', 'All environments')
             ->where('page.email', 'invited@example.com')
-            // "All environments" says it all; naming the organization's
-            // environments to someone who hasn't joined it would not.
             ->where('page.visibleEnvironmentNames', []));
 });
 
@@ -88,13 +86,7 @@ test('someone signed in with another address sees only the wrong account message
             ->where('page.email', null));
 });
 
-// The page renders these three states from their message and a link to the
-// login page alone: the four detail props are null, so anything built from
-// them would be empty — and nothing leaks about the organization either.
 test('a closed invitation says only what happened', function (string $factoryState, string $expectedState) {
-    // No expires_at here on purpose: the expired state sets its own, and a
-    // null expiry never expires, so the revoked and accepted rows are closed
-    // by their own state and by nothing else.
     $invitation = TeamInvitation::factory()->{$factoryState}()->create([
         'team_id' => $this->team->id,
         'email' => 'invited@example.com',
@@ -146,10 +138,6 @@ test('a manual invitation names the environments the invitee will see', function
 });
 
 test('a guest whose address already has an account is asked to sign in, not to register', function () {
-    // Written in mixed case on purpose: the address is normalized where it
-    // enters the system (User::email()), so the check below is an indexed
-    // exact match on users.email rather than the LOWER(email) scan this
-    // public, unthrottled route used to run.
     $existing = User::factory()->create(['email' => 'Invited@example.com']);
 
     expect($existing->fresh()->email)->toBe('invited@example.com');
@@ -174,9 +162,6 @@ test('a guest whose address already has an account is asked to sign in, not to r
             ->where('page.visibleEnvironmentNames', []));
 });
 
-// The starter kit passed a "teamInvitation" banner to the login page from an
-// ?invitation= query string; invitations now have their own page, so the
-// login page knows nothing about them.
 test('the login page carries no invitation context', function () {
     $invitation = TeamInvitation::factory()->create([
         'team_id' => $this->team->id,

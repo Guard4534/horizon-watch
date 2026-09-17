@@ -23,11 +23,11 @@ test('readings older than the retention are deleted and newer ones kept', functi
     $other = Environment::factory()->create();
 
     $kept = [
-        ($this->snapshotAt)('2026-08-19 10:00:00'),          // 29 days ago
+        ($this->snapshotAt)('2026-08-19 10:00:00'),
         ($this->snapshotAt)('2026-09-17 09:59:45'),
         ($this->snapshotAt)('2026-08-19 10:00:00', $other),
     ];
-    ($this->snapshotAt)('2026-08-17 10:00:00');              // 31 days ago
+    ($this->snapshotAt)('2026-08-17 10:00:00');
     ($this->snapshotAt)('2026-08-17 10:00:00', $other);
     ($this->snapshotAt)('2026-01-01 00:00:00');
     EnvironmentState::factory()->for($this->environment)->create(['captured_at' => '2026-08-01 00:00:00']);
@@ -44,8 +44,8 @@ test('readings older than the retention are deleted and newer ones kept', functi
 test('the retention period comes from the configuration', function () {
     config(['horizon-watch.retention_days' => 7]);
 
-    $kept = ($this->snapshotAt)('2026-09-11 10:00:00');       // 6 days ago
-    ($this->snapshotAt)('2026-09-09 10:00:00');               // 8 days ago
+    $kept = ($this->snapshotAt)('2026-09-11 10:00:00');
+    ($this->snapshotAt)('2026-09-09 10:00:00');
 
     $this->artisan('monitoring:prune')->expectsOutput('Deleted 1 reading.')->assertSuccessful();
 
@@ -69,7 +69,6 @@ test('old readings are deleted in chunks until none is left', function () {
         ->expectsOutput('Deleted 5 readings.')
         ->assertSuccessful();
 
-    // Three chunks of at most two, then the one that finds nothing.
     expect($deletes)->toBe(4)
         ->and(EnvironmentSnapshot::query()->pluck('id')->all())->toBe([$kept->id]);
 });

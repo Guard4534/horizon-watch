@@ -1,6 +1,3 @@
-/* Nocturne design system, ported with an nc- prefix so it never collides with
-   Tailwind's own theme variables (--color-neutral-*, --color-accent) or with
-   utility names such as .table. */
 :root {
     --nc-bg: #161826;
     --nc-surface: #232532;
@@ -45,7 +42,6 @@
     --nc-shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
     --nc-shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
 
-    /* Status and environment palettes belong to the mockup, not the design system. */
     --st-ok: oklch(0.74 0.09 158);
     --st-warn: oklch(0.81 0.12 85);
     --st-down: oklch(0.68 0.16 25);
@@ -78,13 +74,6 @@
     background: color-mix(in srgb, var(--nc-accent) 30%, transparent);
 }
 
-/* One font everywhere (design v2): URLs, job and queue names and snippets
-   keep Inter with a little tracking instead of switching to a monospace.
-   Unlayered, so it also wins over Tailwind's font-mono utility.
-   Trap: tabular numbers are opted into with nc-num, never set on body —
-   Inter's tnum also widens the hyphen, so "worker-batch" and "Read-only"
-   would read "worker - batch" everywhere. */
-
 code,
 kbd,
 pre,
@@ -93,12 +82,6 @@ samp,
 .nc-code {
     font-family: var(--nc-font);
     letter-spacing: 0.01em;
-    /* Inter's disambiguation: slashed zero (zero), open digits (ss01), l
-       with a tail (cv05), I with serifs (cv08), so recovery codes and hosts
-       read unambiguously. Trap: the @fontsource-variable/inter 5.3 subsets
-       bundled today strip every one of these (their GSUB holds only calt,
-       ccmp, dnom, frac, locl, numr, pnum, tnum), so this line does nothing
-       until an unsubsetted Inter is bundled. */
     font-feature-settings:
         'zero' 1,
         'ss01' 1,
@@ -238,10 +221,6 @@ samp,
     opacity: 0.45;
     cursor: not-allowed;
 }
-/* A native select keeps the browser's own chevron and a light popup unless
-   told otherwise: the caret is Phosphor's caret-down (inlined, so nothing is
-   fetched), and color-scheme makes the option list dark too. The caret is
-   drawn in --nc-neutral-400 (#b2b6ca); a data URI cannot read a variable. */
 select.nc-input {
     appearance: none;
     color-scheme: dark;
@@ -349,8 +328,6 @@ select.nc-input option {
     border: 1px solid var(--nc-accent);
     color: var(--nc-accent);
 }
-/* Small secondary badges (rule origin, auth mode, override counts): same
-   family as .nc-tag, tighter size and radius-sm per the mockup. */
 .nc-tag-sm {
     font-size: 10px;
     padding: 1px 6px;

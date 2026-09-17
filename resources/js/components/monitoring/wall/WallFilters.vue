@@ -24,8 +24,6 @@ const ORDER = [
     'testing',
 ];
 
-// The mockup's names first, in its order; any other name the organization
-// uses follows alphabetically, so no environment lacks a chip.
 const chips = computed(() => {
     const names = [
         ...new Set(environments.map((environment) => environment.name)),

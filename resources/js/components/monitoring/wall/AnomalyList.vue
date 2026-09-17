@@ -15,10 +15,6 @@ defineProps<{
 
 const slug = useTeamSlug();
 
-// Keyed by what opened the anomaly, not by the environment's status: a
-// paused Horizon can also carry a pending-jobs breach, and the two rows
-// must not read the same. Titles and icons are the alerts page's own
-// (lib/alertRules.ts), so the two pages name an anomaly alike.
 function color(alert: App.Data.Monitoring.AlertData): string {
     if (alert.metric === 'horizon.paused') {
         return 'var(--st-off)';
@@ -93,8 +89,6 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                                 )
                             }}
                         </div>
-                        <!-- Muting and marking as handled arrive with the
-                             next release. -->
                         <div
                             class="flex flex-wrap"
                             style="

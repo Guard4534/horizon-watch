@@ -12,19 +12,10 @@ use App\Models\Team;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Support\SyntheticReadings;
 
-/**
- * Stored readings for the page tests, written through the factories: the
- * numbers are the test's own, never a function of the clock or a slug.
- */
 final class Readings
 {
     public const int STATE_RUN_MINUTES = 30;
 
-    /**
-     * The seeder's scripted incidents, written as readings on the seeded
-     * organization; every other environment reads healthy. One anomaly
-     * each: six in all.
-     */
     public static function mockup(Team $team): void
     {
         Environment::query()->where('team_id', $team->id)->each(function (Environment $environment) {
@@ -40,8 +31,6 @@ final class Readings
     }
 
     /**
-     * One reading, now: a snapshot and the matching state.
-     *
      * @param  list<AlertRuleMetric>  $breaches
      * @param  array<string, mixed>  $snapshot
      * @param  array<string, mixed>  $state

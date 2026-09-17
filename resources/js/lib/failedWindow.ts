@@ -1,10 +1,5 @@
 import { trans } from 'laravel-vue-i18n';
 
-// Horizon counts failed jobs over a window it states itself (often a week,
-// see EnvironmentData::$failedWindowMinutes). A count is shown with its own
-// window and never scaled to another.
-
-/** "Failed · 24h", "Failed · 7d", "Failed · 90 min"; null = windows differ. */
 export function failedLabel(windowMinutes: number | null): string {
     switch (windowMinutes) {
         case null:
@@ -20,7 +15,6 @@ export function failedLabel(windowMinutes: number | null): string {
     }
 }
 
-/** The sentence under a failed count; null = windows differ. */
 export function failedWindowNote(windowMinutes: number | null): string {
     switch (windowMinutes) {
         case null:
@@ -36,7 +30,6 @@ export function failedWindowNote(windowMinutes: number | null): string {
     }
 }
 
-/** "24h", "7d", "90 min": the window alone, beside a count. */
 export function failedWindowShort(windowMinutes: number): string {
     switch (windowMinutes) {
         case 1440:

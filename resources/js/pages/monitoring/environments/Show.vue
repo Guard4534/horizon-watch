@@ -49,13 +49,9 @@ const slug = useTeamSlug();
 const isMobile = useIsMobile();
 const environment = computed(() => page.environment);
 
-// The organization defaults, the same values as the rules card: what the
-// evaluator uses.
 const threshold = (metric: App.Enums.AlertRuleMetric) =>
     page.thresholds[metric] ?? 0;
 
-// Reserved jobs are measured on each successful reading: only a fresh one
-// may say there are none.
 const longRunningUnknown = computed(
     () =>
         environment.value.readingError !== null ||
@@ -70,9 +66,6 @@ const incident = computed(() => {
     return status !== null && status !== 'active' ? status : null;
 });
 
-// A failed reading stores zero counters and keeps the nodes, queues and
-// failures of the last one that worked: say so, with that reading's age,
-// so the zeros above and the detail below do not contradict each other.
 const lastKnown = computed(() => {
     if (environment.value.readingError === null) {
         return null;
@@ -89,8 +82,6 @@ const lastKnown = computed(() => {
 
 type Tile = { label: string; value: string; color: string; note: string };
 
-// Labels stay English in both languages (Horizon vocabulary, as in the
-// mockup); notes are translated here.
 const tiles = computed<Tile[]>(() => [
     {
         label: 'Master',
@@ -210,8 +201,6 @@ const tiles = computed<Tile[]>(() => [
                 class="ml-auto flex flex-wrap items-center justify-end"
                 style="gap: var(--nc-space-2)"
             >
-                <!-- The saved address, no body: what a member may run on
-                     an environment they watch. -->
                 <ConnectionTest
                     v-if="page.canTestConnection"
                     class="flex-row-reverse"
@@ -223,7 +212,6 @@ const tiles = computed<Tile[]>(() => [
                     "
                     :payload="null"
                 />
-                <!-- The stored dashboard URL, userinfo already stripped. -->
                 <a
                     :href="environment.horizonUrl"
                     target="_blank"
@@ -236,7 +224,6 @@ const tiles = computed<Tile[]>(() => [
             </div>
         </div>
 
-        <!-- No Horizon version here: the API does not expose it. -->
         <div
             class="flex flex-wrap items-center"
             style="

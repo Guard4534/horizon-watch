@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 
-// Recipients and the webhook URL belong to ManageAlertRules: settings is
-// null for everyone else, who sees counts instead.
 defineProps<{
     summary: App.Data.Pages.NotificationSummaryData;
     settings: App.Data.Monitoring.NotificationSettingsData | null;

@@ -12,19 +12,11 @@ const {
     hasPassword = false,
 } = defineProps<{
     colors: App.Data.Pages.EnvironmentFormPageData['colors'];
-    // Inertia's flat error bag. The wizard nests every row under
-    // "environments.N.", the two environment pages use no prefix at all.
     errors: Record<string, string | undefined>;
     prefix?: string;
-    // Whether a basic-auth password is already on file. The password itself
-    // is never sent to the browser (EnvironmentSummaryData has no such
-    // property): this only drives the "set / not set" indicator, and an
-    // empty field on submit means "leave it as it is".
     hasPassword?: boolean;
 }>();
 
-// The prefix carries dots for the wizard's rows; ids and radio group names
-// read better without them.
 const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
 </script>
 

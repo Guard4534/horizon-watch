@@ -10,14 +10,9 @@ const {
     hasEarlierReading,
     compact = false,
 } = defineProps<{
-    // Only a status that needs attention: the page decides when to show it.
     status: Exclude<App.Enums.EnvironmentStatus, 'active'>;
     readingError: App.Enums.ReadingError | null;
-    // The environment's first open anomaly; null when the reading has not
-    // lasted long enough to be one, or its start is unknown.
     alert: App.Data.Monitoring.AlertData | null;
-    // Whether anything was ever read: an environment that never answered
-    // has no last known detail to point at.
     hasEarlierReading: boolean;
     compact?: boolean;
 }>();
@@ -25,7 +20,6 @@ const {
 const color = computed(() => statusColor(status));
 const icon = computed(() => statusIcon(status));
 
-// "less than a minute ago" for a fresh one, never "for 0 s".
 const since = computed(() =>
     alert ? formatElapsed(alert.minutesAgo, alert.sinceTruncated) : null,
 );

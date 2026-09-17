@@ -7,8 +7,6 @@ import { ruleIcon, ruleLabel } from '@/lib/alertRules';
 import { formatElapsed, statusColor } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 
-// Open anomalies of this application's watched environments; resolved
-// ones join with phase 4. Nothing is sent yet, so no channel is named.
 defineProps<{
     alerts: App.Data.Monitoring.AlertData[];
 }>();

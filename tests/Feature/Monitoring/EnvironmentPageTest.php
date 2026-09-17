@@ -28,8 +28,6 @@ test('a down environment carries its incident', function () {
         'reservedAt' => now()->subSeconds($secondsAgo)->toIso8601String(),
     ];
 
-    // Five failures and four reserved jobs, one of them still under the
-    // 120-second runtime threshold.
     Environment::query()->where('slug', 'fatturaomatic-production')->sole()->state->update([
         'failed_jobs' => array_map($failed, range(1, 5)),
         'pending_jobs' => [$reserved(1, 600), $reserved(2, 300), $reserved(3, 121), $reserved(4, 30)],
@@ -47,8 +45,6 @@ test('a down environment carries its incident', function () {
 });
 
 test('a healthy environment has no incident', function () {
-    // The repository resolves the viewer from the authenticated guard, so
-    // acting as the user has to happen before it is asked for anything.
     $this->actingAs($this->user);
 
     $healthy = collect(app(MonitoringRepository::class)->environments($this->user->currentTeam))

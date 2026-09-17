@@ -38,5 +38,4 @@ void createInertiaApp({
     },
 });
 
-// This will listen for flash toast data from the server...
 initializeFlashToast();

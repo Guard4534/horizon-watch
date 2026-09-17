@@ -10,9 +10,6 @@ enum EnvironmentStatus: string
     case Inactive = 'inactive';
     case Unreachable = 'unreachable';
 
-    /**
-     * Lower is worse: the wall lists the lowest first.
-     */
     public function severity(): int
     {
         return match ($this) {

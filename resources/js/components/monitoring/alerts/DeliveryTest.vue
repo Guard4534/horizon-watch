@@ -2,8 +2,6 @@
 import { PhEnvelopeSimple, PhWebhooksLogo } from '@phosphor-icons/vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 
-// The addresses and the webhook URL reach only who may manage alert rules
-// (settings is null for everyone else): the others see counts.
 defineProps<{
     summary: App.Data.Pages.NotificationSummaryData;
     settings: App.Data.Monitoring.NotificationSettingsData | null;

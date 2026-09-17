@@ -6,13 +6,8 @@ import { index as alertRulesIndex } from '@/routes/alert-rules';
 import { create as createApplication } from '@/routes/applications';
 import { index as membersIndex } from '@/routes/members';
 
-// Only for someone who may add applications, in an organization with
-// nothing in it: the other empty states (hidden by visibility, nothing
-// configured by an admin yet, an application without environments) stay
-// the plain EmptyState card.
 const slug = useTeamSlug();
 
-// The fixed palette an environment picks its colour from.
 const PALETTE = [
     'prod',
     'preprod',

@@ -20,8 +20,6 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Gate;
 
 beforeEach(function () {
-    // Stands in for the real client: never opens a connection, answers
-    // with the queued outcome and remembers every target it was handed.
     $this->reader = new class implements HorizonReader
     {
         /** @var list<array{url: string, username: string|null, password: string|null}> */
@@ -62,7 +60,6 @@ beforeEach(function () {
     $this->admin = User::factory()->create();
     $this->team->members()->attach($this->admin, ['role' => TeamRole::Admin->value]);
 
-    // Sees staging, not production.
     $this->member = User::factory()->create();
     $this->team->members()->attach($this->member, [
         'role' => TeamRole::Member->value,
@@ -152,7 +149,6 @@ test('a viewer cannot test a watched environment, and a hidden one still answers
 });
 
 test('an admin testing the edit form with a blank password uses the stored one on its own address, and never sends it back', function () {
-    // Same scheme, host and port, same username: only the path differs.
     $response = $this->actingAs($this->admin)
         ->postJson(($this->environmentUrl)($this->production), [
             'horizonUrl' => 'HTTPS://Invoicer.example.com:443/ops/horizon',
@@ -211,7 +207,6 @@ test('a test that moves the stored credential to another address or username nee
 
     $url = ($this->environmentUrl)($this->production);
 
-    // The saved address with a new path, blank or retyped password: allowed.
     $this->actingAs($this->admin)
         ->postJson($url, ['horizonUrl' => 'https://invoicer.example.com/ops/horizon', 'basicAuthUser' => 'monitor'])
         ->assertOk();
@@ -219,7 +214,6 @@ test('a test that moves the stored credential to another address or username nee
         ->postJson($url, ['horizonUrl' => 'https://invoicer.example.com/horizon', 'basicAuthUser' => 'monitor', 'basicAuthPassword' => 'typed'])
         ->assertOk();
 
-    // Another host, another username, or no username: refused even with a typed password.
     $this->actingAs($this->admin)
         ->postJson($url, ['horizonUrl' => 'https://elsewhere.example.net/horizon', 'basicAuthUser' => 'monitor', 'basicAuthPassword' => 'typed'])
         ->assertForbidden();
@@ -230,7 +224,6 @@ test('a test that moves the stored credential to another address or username nee
         ->postJson($url, ['horizonUrl' => 'https://invoicer.example.com/horizon'])
         ->assertForbidden();
 
-    // An environment with nothing on file has no credential to move.
     $bare = Environment::factory()->for($this->application)->create([
         'name' => 'develop',
         'horizon_url' => 'https://develop.invoicer.example.com/horizon',
@@ -288,8 +281,6 @@ test('an admin may test an environment hidden from their own wall through the ed
         ])
         ->assertOk();
 
-    // Without a body it is the watched-environment test, and this admin does
-    // not watch production.
     $this->actingAs($admin)
         ->postJson(($this->environmentUrl)($this->production))
         ->assertNotFound();
@@ -411,7 +402,6 @@ test('the eleventh test in a minute is refused, across both routes', function ()
         ->postJson(($this->environmentUrl)($this->staging))
         ->assertTooManyRequests();
 
-    // The budget is per person.
     $this->actingAs($this->member)
         ->postJson(($this->environmentUrl)($this->staging))
         ->assertOk();
@@ -436,7 +426,6 @@ test('a connection test writes no reading and does not touch the polling schedul
 });
 
 test('a failed validation does not flash the typed password into the session', function () {
-    // A plain form post (not JSON) is the one that redirects with old input.
     $this->actingAs($this->admin)
         ->from('/somewhere')
         ->post($this->applicationUrl, [

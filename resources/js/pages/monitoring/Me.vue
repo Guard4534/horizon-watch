@@ -34,8 +34,6 @@ const slug = useTeamSlug();
 const user = computed(() => shared.props.auth.user);
 const { getInitials } = useInitials();
 
-// The profile tab exists for the phone shell only; a wide screen has the
-// sidebar and the settings pages, so it moves on there.
 const isMobile = useIsMobile();
 
 function leaveIfWide(): void {
@@ -78,7 +76,6 @@ watch(isMobile, leaveIfWide);
             class="flex flex-col"
             style="padding: var(--nc-space-3) var(--nc-space-4) 0"
         >
-            <!-- Notifications to the person arrive with the next release. -->
             <button
                 type="button"
                 class="row"

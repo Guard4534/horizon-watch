@@ -20,8 +20,6 @@ use Illuminate\Support\Facades\URL;
 trait HasTeams
 {
     /**
-     * Get all of the teams the user belongs to.
-     *
      * @return BelongsToMany<Team, $this>
      */
     public function teams(): BelongsToMany
@@ -32,8 +30,6 @@ trait HasTeams
     }
 
     /**
-     * Get all of the teams the user owns.
-     *
      * @return HasManyThrough<Team, Membership, $this>
      */
     public function ownedTeams(): HasManyThrough
@@ -49,8 +45,6 @@ trait HasTeams
     }
 
     /**
-     * Get all of the memberships for the user.
-     *
      * @return HasMany<Membership, $this>
      */
     public function teamMemberships(): HasMany
@@ -59,8 +53,6 @@ trait HasTeams
     }
 
     /**
-     * Get the user's current team.
-     *
      * @return BelongsTo<Team, $this>
      */
     public function currentTeam(): BelongsTo
@@ -68,9 +60,6 @@ trait HasTeams
         return $this->belongsTo(Team::class, 'current_team_id');
     }
 
-    /**
-     * Get the user's personal team.
-     */
     public function personalTeam(): ?Team
     {
         return $this->ownedTeams()
@@ -78,9 +67,6 @@ trait HasTeams
             ->first();
     }
 
-    /**
-     * Switch to the given team.
-     */
     public function switchTeam(Team $team): bool
     {
         if (! $this->belongsToTeam($team)) {
@@ -95,33 +81,21 @@ trait HasTeams
         return true;
     }
 
-    /**
-     * Determine if the user belongs to the given team.
-     */
     public function belongsToTeam(Team $team): bool
     {
         return $this->teams()->where('teams.id', $team->id)->exists();
     }
 
-    /**
-     * Determine if the given team is the user's current team.
-     */
     public function isCurrentTeam(Team $team): bool
     {
         return $this->current_team_id === $team->id;
     }
 
-    /**
-     * Determine if the user is the owner of the given team.
-     */
     public function ownsTeam(Team $team): bool
     {
         return $this->teamRole($team) === TeamRole::Owner;
     }
 
-    /**
-     * Get the user's role on the given team.
-     */
     public function teamRole(Team $team): ?TeamRole
     {
         return $this->teamMemberships()
@@ -130,14 +104,6 @@ trait HasTeams
             ?->role;
     }
 
-    /**
-     * Get the user's environment visibility on the given team.
-     *
-     * Visibility is an axis of its own: a role says what someone may do,
-     * this says how much of the organization they see. An admin can hold
-     * "manual" visibility and an owner "non_production", so nothing may
-     * infer one from the other.
-     */
     public function teamVisibility(Team $team): ?MemberVisibility
     {
         return $this->teamMemberships()
@@ -147,8 +113,6 @@ trait HasTeams
     }
 
     /**
-     * Get the user's teams as a collection of UserTeam objects.
-     *
      * @return Collection<int, UserTeam>
      */
     public function toUserTeams(bool $includeCurrent = false): Collection
@@ -160,9 +124,6 @@ trait HasTeams
             ->values();
     }
 
-    /**
-     * Get the user's team as a UserTeam object.
-     */
     public function toUserTeam(Team $team): UserTeam
     {
         $role = $this->teamRole($team);
@@ -178,40 +139,11 @@ trait HasTeams
         );
     }
 
-    /**
-     * The one label of a role tag in the panel, shared by every producer of
-     * one: this trait's toUserTeam(), TeamController::edit() and
-     * MembersQuery. Static because none of them is "a user" — two build the
-     * label of somebody else's membership.
-     *
-     * The format is the lowercase enum value. The mockup writes the role
-     * tags that way (its members table, its permission-matrix header and
-     * its invite radios all read "admin", "member", "viewer"), and those
-     * three words read the same in both languages, which is why
-     * TeamRole::label() stays out of __() and off the container — see that
-     * docblock. Only the owner gets a sentence, and only the owner is
-     * translated: "Owner · admin" is the mockup's own wording (t.roleAdmin),
-     * because the owner holds every admin permission plus deleting the
-     * organization.
-     *
-     * TeamRole::label() keeps the capitalised prose form, for the two places
-     * a role sits inside a sentence rather than in a tag: the invitation
-     * email and the invitation card.
-     */
     public static function roleLabel(TeamRole $role): string
     {
         return $role === TeamRole::Owner ? __('Owner · admin') : $role->value;
     }
 
-    /**
-     * Get the standard permissions for a team as a TeamPermissions object.
-     *
-     * Read through the Gate, one ability per flag, so the page's buttons and
-     * the server's refusals cannot answer differently. Asking
-     * TeamRole::hasPermission() directly used to skip the Policies' extra
-     * clauses: TeamPolicy::delete() also refuses a personal team, which the
-     * Vue template then had to patch back in by hand.
-     */
     public function toTeamPermissions(Team $team): TeamPermissions
     {
         $gate = Gate::forUser($this);
@@ -233,9 +165,6 @@ trait HasTeams
             ->first();
     }
 
-    /**
-     * Determine if the user has the given permission on the team.
-     */
     public function hasTeamPermission(Team $team, TeamPermission $permission): bool
     {
         return $this->teamRole($team)?->hasPermission($permission) ?? false;

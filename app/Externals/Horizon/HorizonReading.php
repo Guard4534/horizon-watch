@@ -8,10 +8,6 @@ use App\Externals\Horizon\Data\HorizonPendingJob;
 use App\Externals\Horizon\Data\HorizonQueueLoad;
 use App\Externals\Horizon\Data\HorizonStats;
 
-/**
- * A null job list means the secondary call failed: the poller keeps the
- * previous section rather than showing an empty one.
- */
 final readonly class HorizonReading
 {
     /**

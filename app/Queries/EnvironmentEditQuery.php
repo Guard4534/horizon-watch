@@ -24,7 +24,6 @@ class EnvironmentEditQuery
             ),
             application: ApplicationFormData::from($environment->application),
             colors: EnvironmentColor::options(),
-            // Presence check only: never reads the decrypted value.
             hasPassword: $environment->basic_auth_password !== null,
             applicationSlug: $environment->application->slug,
             slug: $environment->slug,

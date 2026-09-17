@@ -11,8 +11,6 @@ const { throughput, maxWait, range } = defineProps<{
     range: App.Enums.SeriesRange;
 }>();
 
-// router.reload's ReloadOptions drops preserveScroll/preserveState, so a
-// query-string change goes through router.get instead.
 const selected = computed({
     get: () => range,
     set: (next: App.Enums.SeriesRange) =>

@@ -15,9 +15,6 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 class EnvironmentSnapshotFactory extends Factory
 {
     /**
-     * A healthy reading: every number stays below its default threshold,
-     * so the empty breach list is consistent with the active status.
-     *
      * @return array<string, mixed>
      */
     public function definition(): array
@@ -40,9 +37,6 @@ class EnvironmentSnapshotFactory extends Factory
         ];
     }
 
-    /**
-     * A reading that failed: nothing was measured.
-     */
     public function failed(ReadingError $error = ReadingError::Unreachable): static
     {
         return $this->state(fn () => [
@@ -61,8 +55,6 @@ class EnvironmentSnapshotFactory extends Factory
     }
 
     /**
-     * A reading with the given thresholds exceeded.
-     *
      * @param  list<AlertRuleMetric>  $breaches
      */
     public function degraded(array $breaches = [AlertRuleMetric::QueuePending]): static

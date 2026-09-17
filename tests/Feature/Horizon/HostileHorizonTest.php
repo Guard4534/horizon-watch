@@ -5,10 +5,6 @@ use App\Externals\Horizon\Exceptions\HorizonReadFailed;
 use App\Externals\Horizon\HorizonReader;
 use App\Externals\Horizon\HorizonTarget;
 
-// A real server on the loopback, through the real guard, resolver and
-// cURL: body caps, stalls and concurrency happen on the wire, where
-// Http::fake does not go.
-
 beforeAll(function () {
     $socket = stream_socket_server('tcp://127.0.0.1:0');
     $port = (int) substr((string) strrchr((string) stream_socket_get_name($socket, false), ':'), 1);
@@ -40,8 +36,6 @@ beforeAll(function () {
 afterAll(function () {
     ['process' => $process, 'counter' => $counter] = $GLOBALS['hostileHorizon'];
 
-    // The array form of proc_open runs php itself, not a shell, and php -S
-    // takes its worker children down when it gets SIGTERM.
     proc_terminate($process);
     proc_close($process);
     @unlink($counter);
@@ -84,8 +78,6 @@ test('an answer that announces more than 2 MiB is refused at once', function () 
 });
 
 test('an answer that never ends is cut at 2 MiB without buffering it', function () {
-    // Production's limit: without the cap this dies here instead of taking
-    // the machine's memory.
     $limit = ini_set('memory_limit', '256M');
     memory_reset_peak_usage();
     $memory = memory_get_usage(true);

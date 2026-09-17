@@ -22,13 +22,8 @@ const slug = useTeamSlug();
 const shared = usePage();
 const isMobile = useIsMobile();
 
-// page.groups, not the filtered list: a search that matches nothing is not
-// an unconfigured organization.
 const nothingVisible = computed(() => page.groups.length === 0);
 
-// Restricted only means something is being kept from this member if the
-// organization holds anything at all: a viewer limited to non-production
-// in an empty organization has nothing hidden from them.
 const somethingIsHidden = computed(
     () =>
         shared.props.visibilityRestricted &&

@@ -68,11 +68,6 @@ const handleOpenChange = (nextOpen: boolean) => {
 
                 <div class="space-y-4 py-4">
                     <div class="grid gap-2">
-                        <!-- One key, not "Type" + the name + "to confirm":
-                             the name's place in the sentence is the
-                             translator's to move. Same as
-                             ConfirmByNameDialog, so the two confirmations
-                             read alike. -->
                         <Label for="confirmation-name">
                             {{
                                 $t('Type :name to confirm', {

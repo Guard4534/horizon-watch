@@ -8,8 +8,6 @@ const { environment } = defineProps<{
     environment: App.Data.Monitoring.EnvironmentData;
 }>();
 
-// The stored URL is the dashboard's; the client reads its /api. The
-// repository has already stripped any userinfo from it.
 const path = computed(() => {
     try {
         return new URL(environment.horizonUrl).pathname.replace(/\/+$/, '');
@@ -23,8 +21,6 @@ const interval = computed(() =>
     formatInterval(environment.pollIntervalSeconds),
 );
 
-// Never the password, not even its length; the panel's own address is not
-// known to the panel behind NAT or a proxy, so it stays a placeholder.
 const snippet = computed(() =>
     [
         '# .env of the monitored application',

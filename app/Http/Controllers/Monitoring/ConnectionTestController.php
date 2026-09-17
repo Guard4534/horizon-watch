@@ -14,31 +14,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
-/**
- * JSON for the ConnectionTest component's own request, not an Inertia
- * visit. A result is always 200, reachable or not: the status codes are
- * left to authorization (403/404), validation (422) and the limiter (429).
- */
 class ConnectionTestController extends Controller
 {
-    /**
-     * Two modes on one route, told apart by whether there is a body.
-     *
-     * Without one, the saved address and credentials are probed. That is
-     * the "test connection" permission a member holds, so it is limited to
-     * an environment the person watches — the detail page's own lookup,
-     * checked before the permission, so a hidden environment answers 404 to
-     * everyone who cannot see it, as its page does.
-     *
-     * With one (the edit form, before saving), the address is whatever was
-     * typed. Letting a member do that would let them aim the server at any
-     * URL through an environment they can merely see, so it takes the same
-     * permission as saving the form — and, when it would pair the stored
-     * password with another username or address, the credentials
-     * permission too. A blank password there means the one on file, and
-     * only on the address and with the username it was saved for; the
-     * stored password is never sent anywhere else.
-     */
     public function environment(
         Request $request,
         Team $current_team,
@@ -66,10 +43,6 @@ class ConnectionTestController extends Controller
         return response()->json($testConnection->handle($target)->toArray());
     }
 
-    /**
-     * An address that is not saved anywhere yet: the wizard's rows and the
-     * add-environment form, so the permission is the one that creates them.
-     */
     public function application(Request $request, Team $current_team, TestConnection $testConnection): JsonResponse
     {
         Gate::authorize('create', [Application::class, $current_team]);

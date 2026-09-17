@@ -18,16 +18,6 @@ use Inertia\Response;
 
 class MemberController extends Controller
 {
-    /**
-     * Show the organization's members, its pending invitations and what
-     * each role may do.
-     *
-     * Known limitation of this view: the "Last seen" column the mockup
-     * drew is always an em dash. The starter kit records no last-seen
-     * timestamp and adding a column is out of phase 2's scope; the column
-     * stays so the table keeps the shape it will have once there is
-     * something to put in it.
-     */
     public function index(Request $request, Team $current_team, MembersQuery $query): Response
     {
         return Inertia::render('monitoring/Members', [
@@ -35,14 +25,6 @@ class MemberController extends Controller
         ]);
     }
 
-    /**
-     * Change a member's role, their visibility, or both.
-     *
-     * A {user} who is not a member of this organization is a 404, raised by
-     * whichever action runs: both open on the membership with
-     * firstOrFail(). Kept there rather than here so the starter kit's own
-     * member routes cannot answer differently.
-     */
     public function update(
         Request $request,
         Team $current_team,
@@ -66,9 +48,6 @@ class MemberController extends Controller
         return back();
     }
 
-    /**
-     * Remove a member from the organization.
-     */
     public function destroy(
         Request $request,
         Team $current_team,
@@ -81,9 +60,6 @@ class MemberController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Member removed.')]);
 
-        // An admin is allowed to remove themselves; back() would then land
-        // on a page of an organization they no longer belong to, which
-        // EnsureTeamMembership answers with a 403.
         return $request->user()?->is($user)
             ? to_route('home')
             : back();

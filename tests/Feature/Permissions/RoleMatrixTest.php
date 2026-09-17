@@ -7,9 +7,6 @@ use App\Models\Team;
 use App\Models\User;
 use Illuminate\Support\Facades\Gate;
 
-// One test per row of the permission matrix in the spec ("Permessi"), every
-// role asserted explicitly: a generated/looped version could silently drop
-// a role from a row and no one would notice.
 beforeEach(function () {
     $this->team = Team::factory()->create();
 

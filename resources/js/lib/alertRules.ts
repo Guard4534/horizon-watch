@@ -22,10 +22,6 @@ const ICONS: Record<App.Enums.AlertRuleMetric, Component> = {
     'workers.missing': PhUsers,
 };
 
-// Each entry calls trans() with a literal, so TranslationsTest sees every
-// key. The thunks run when a component renders, which is what keeps them
-// reactive to a language switch (trans() reads laravel-vue-i18n's reactive
-// messages, exactly like $t): never call them at module load.
 const LABELS: Record<
     App.Enums.AlertRuleMetric,
     { label: () => string; hint: () => string }
@@ -58,8 +54,6 @@ const LABELS: Record<
         label: () => trans('Failed jobs / hour'),
         hint: () => trans('failed in the last hour, above'),
     },
-    // StatusEvaluator counts queues with jobs waiting and no process, and
-    // fires at the threshold itself (>=), not below it.
     'workers.missing': {
         label: () => trans('Missing workers'),
         hint: () => trans('queues with waiting jobs and no worker, at least'),
@@ -76,12 +70,10 @@ export function ruleIcon(metric: App.Enums.AlertRuleMetric): Component {
     return ICONS[metric];
 }
 
-/** Translated: callers must not wrap it in $t(). */
 export function ruleLabel(metric: App.Enums.AlertRuleMetric): string {
     return LABELS[metric].label();
 }
 
-/** Translated: callers must not wrap it in $t(). */
 export function ruleHint(metric: App.Enums.AlertRuleMetric): string {
     return LABELS[metric].hint();
 }
@@ -90,7 +82,6 @@ export function isStateMetric(metric: App.Enums.AlertRuleMetric): boolean {
     return STATE_METRICS.has(metric);
 }
 
-/** "5 min", "60s", "2000": the spacing the mockup uses for each unit. */
 export function formatThreshold(threshold: number, unit: string): string {
     const value = Number.isInteger(threshold)
         ? String(threshold)

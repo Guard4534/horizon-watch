@@ -5,11 +5,6 @@ namespace App\Data\Monitoring;
 use App\Enums\ReadingError;
 use Spatie\LaravelData\Data;
 
-/**
- * The answer to "Test connection". Reachable carries what Horizon said;
- * unreachable carries only the reason, never a message or a body from the
- * other side.
- */
 class ConnectionResultData extends Data
 {
     public function __construct(

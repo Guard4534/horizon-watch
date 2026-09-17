@@ -8,9 +8,6 @@ use App\Externals\Horizon\SafeUrlGuard;
 use Tests\Fixtures\Horizon\FakeResolver;
 use Tests\Support\TraceArguments;
 
-// Runs without the application: the guard gets its resolver and its
-// private-network switch through the constructor.
-
 /**
  * @param  array<string, list<string>>  $answers
  */

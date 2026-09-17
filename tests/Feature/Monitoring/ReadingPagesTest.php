@@ -76,7 +76,6 @@ test('a fresh reading reaches the environment page with its age, interval and no
             ->missing('page.nodes.0.lastHeartbeatSecondsAgo')
             ->missing('page.nodes.0.jobsPerMinute')
             ->missing('page.environment.redisMemoryGb')
-            // The queue whose runtime Horizon does not record stays null.
             ->where('page.queues.2.runtimeSeconds', null)
             ->where('page.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
                 && (float) $thresholds['job.runtime'] === AlertRuleMetric::JobRuntime->defaultThreshold())
@@ -84,8 +83,6 @@ test('a fresh reading reaches the environment page with its age, interval and no
 });
 
 test('the environment page lists the rules its thresholds come from, and only the defaults', function () {
-    // production carries invented phase-1 overrides (pending 5000, max wait
-    // 30 s, inactive 2 min): the evaluator ignores them, so must this page.
     Readings::record($this->environment);
 
     $this->get(readingEnvironmentUrl($this->environment))
@@ -111,7 +108,6 @@ test('the rules and thresholds of the environment page agree', function () {
 });
 
 test('an old reading is flagged as not updated', function () {
-    // Thirty-second interval: ten minutes without a reading is far past it.
     Readings::record($this->environment, snapshot: ['captured_at' => now()->subMinutes(10)]);
 
     $this->get(readingEnvironmentUrl($this->environment))
@@ -154,7 +150,6 @@ test('a failed reading carries its reason, zero counters and the last known deta
             ->where('page.environment.latencyMs', null)
             ->where('page.environment.pending', 0)
             ->where('page.environment.workers', 0)
-            // The detail of the last reading that worked, dated by it.
             ->where('page.nodes.0.seenSecondsAgo', 420)
             ->where('page.nodes.0.status', 'unreachable')
             ->has('page.queues', 3)
@@ -225,7 +220,6 @@ test('the application page does not query once per environment', function () {
     };
 
     Readings::record($this->environment);
-    // The first request of a test pays for things the others do not.
     $count($this->application);
     $one = $count($this->application);
 
@@ -233,8 +227,6 @@ test('the application page does not query once per environment', function () {
         Readings::record(Environment::factory()->for($this->application)->{$state}()->create());
     }
 
-    // Four environments, their states and trends, in the same number of
-    // queries as one: no series per card any more.
     expect($count($this->application))->toBe($one);
 });
 

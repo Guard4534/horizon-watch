@@ -11,17 +11,9 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
-        // Feature tests render the Blade root view; without this they would
-        // need a built Vite manifest on every machine and in every lane.
         $this->withoutVite();
     }
 
-    /**
-     * A test sends several requests through one application, where a real
-     * server starts each request with fresh scoped instances (php-fpm) or
-     * flushes them (Octane). Without this, the scoped MonitoringRepository
-     * would carry one request's user and data into the next.
-     */
     public function call($method, $uri, $parameters = [], $cookies = [], $files = [], $server = [], $content = null)
     {
         $this->app?->forgetScopedInstances();

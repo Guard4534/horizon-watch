@@ -14,15 +14,12 @@ import { formatCount, formatWait, waitColor } from '@/lib/monitoring';
 
 const { environments, thresholds } = defineProps<{
     environments: App.Data.Monitoring.EnvironmentData[];
-    // The organization defaults keyed by metric.
     thresholds: Record<string, number>;
 }>();
 
 const threshold = (metric: App.Enums.AlertRuleMetric) =>
     thresholds[metric] ?? 0;
 
-// Only measured rows have a window worth naming: unwatched, never-read and
-// unreachable rows carry zeros under a default or inherited window.
 const windows = computed(
     () =>
         new Set(
@@ -32,8 +29,6 @@ const windows = computed(
         ),
 );
 
-// No window when nothing was measured, the common one when the rows agree,
-// otherwise "mixed" in the header and each cell names its own.
 const header = computed(() => {
     if (windows.value.size === 0) {
         return 'Failed';
@@ -73,8 +68,6 @@ const header = computed(() => {
                                 }}</span
                             >
                         </td>
-                        <!-- No measurement: dashes, and why, instead of
-                             zeros that read like one. -->
                         <template v-if="!hasMeasurement(environment)">
                             <td
                                 v-for="column in 5"

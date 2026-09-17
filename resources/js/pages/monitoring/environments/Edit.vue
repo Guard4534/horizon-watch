@@ -20,18 +20,9 @@ const { page } = defineProps<{
 
 const slug = useTeamSlug();
 
-// Always filled here: EnvironmentFormPageData only makes them nullable
-// because the create page reuses it with nothing to edit yet.
 const environment = computed(() => page.slug ?? '');
 const name = computed(() => page.environment?.name ?? '');
 
-// One level down so the form component can take it as a writable model
-// (v-model needs an assignable expression); transform() flattens it back
-// into EnvironmentFormData for the request.
-//
-// basicAuthPassword starts empty on purpose, and no prop ever carries the
-// stored one: an empty field means "keep the password already on file"
-// (EnvironmentFormData::hasNewPassword()).
 const form = useForm<{
     environment: App.Data.Applications.EnvironmentFormData;
 }>({
@@ -47,9 +38,6 @@ const form = useForm<{
     },
 });
 
-// What is typed, not what is saved: the test runs before the save. The
-// password field is blank unless retyped, and blank means the stored one
-// (TestConnectionData::target()), which never comes back to the browser.
 const testPayload = computed<App.Data.Applications.TestConnectionData>(() => ({
     horizonUrl: form.environment.horizonUrl,
     basicAuthUser: form.environment.basicAuthUser,

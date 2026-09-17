@@ -6,12 +6,8 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        // Only populated for members whose visibility is "manual".
         Schema::create('environment_user', function (Blueprint $table) {
             $table->id();
             $table->foreignId('environment_id')->constrained()->cascadeOnDelete();
@@ -21,9 +17,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('environment_user');

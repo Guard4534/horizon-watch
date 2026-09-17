@@ -13,13 +13,6 @@ class ApplicationListQuery
 {
     public function __construct(private MonitoringRepository $monitoring) {}
 
-    /**
-     * The Applications view lists what the viewer may configure, not what
-     * they watch: a member who may manage applications sees every
-     * environment of the organization here, even the ones their own
-     * visibility hides from the wall (phase 2 spec, "la visibilità non è un
-     * permesso"). For everybody else the two lists are the same.
-     */
     public function handle(Team $team): ApplicationListPageData
     {
         $environments = $this->monitoring->configurableEnvironments($team);
@@ -30,8 +23,6 @@ class ApplicationListQuery
             return new ApplicationGroupData(
                 application: $application,
                 environments: $own,
-                // Watched rows with a reading only: an unwatched row carries
-                // no status, and "no reading yet" is not a problem to triage.
                 triageCount: count(array_filter(
                     $own,
                     fn (EnvironmentData $environment) => $environment->watched

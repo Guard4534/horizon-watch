@@ -10,11 +10,6 @@ use App\Externals\Horizon\HorizonTarget;
 use RuntimeException;
 use Throwable;
 
-/**
- * One synchronous probe, through the same guard and client as the poller.
- * Writes nothing: a test is not a reading, and an address that was never
- * saved has no environment to write it to.
- */
 class TestConnection
 {
     public function __construct(private HorizonReader $reader) {}
@@ -26,11 +21,6 @@ class TestConnection
         } catch (HorizonReadFailed $exception) {
             return ConnectionResultData::failed($exception->reason);
         } catch (Throwable $exception) {
-            // Same containment as PollEnvironment: the reader promises
-            // HorizonReadFailed only, and anything else may carry what an
-            // HTTP library put in its message (a URL with credentials, a
-            // body). Reported by class and place alone, never chained, and
-            // the person testing sees "does not answer" instead of a 500.
             report(new RuntimeException(sprintf(
                 'The Horizon reader threw %s at %s:%d instead of HorizonReadFailed.',
                 $exception::class,

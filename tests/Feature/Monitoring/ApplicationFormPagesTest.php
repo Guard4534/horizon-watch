@@ -137,8 +137,6 @@ test('no form page prop is a password field, and none carries the stored one', f
             fn (string $key) => str_contains(strtolower($key), 'password'),
         ));
 
-        // "hasPassword" is the only thing about the credential a page may
-        // say: a boolean. Any other password-ish prop is a leak.
         expect(array_unique($passwordKeys))->each->toBe('hasPassword');
         expect(json_encode($props, JSON_THROW_ON_ERROR))->not->toContain('ry3-lin3n-pillow');
     }

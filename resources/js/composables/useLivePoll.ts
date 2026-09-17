@@ -4,14 +4,6 @@ import { useRefreshInterval } from '@/composables/useRefreshInterval';
 
 type Poll = ReturnType<typeof router.poll>;
 
-/**
- * Reloads the given props at the interval picked in the header.
- *
- * Inertia's usePoll() reads its interval once, so a changed header menu
- * would keep the old cadence until the next visit: the poll is rebuilt
- * instead. "rest" waits for a reload to finish before counting down again,
- * so a slow page on the 5 s setting never stacks requests.
- */
 export function useLivePoll(only: string[]): void {
     const { interval } = useRefreshInterval();
     let poll: Poll | null = null;

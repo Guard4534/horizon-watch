@@ -7,13 +7,6 @@ use JsonSerializable;
 use LogicException;
 use SensitiveParameter;
 
-/**
- * The password is private and every way PHP has of printing an object
- * (var_dump, print_r, json_encode, serialize) is overridden, so a target
- * that ends up in a log, a dump or a job payload does not carry it. There
- * is no __toString on purpose. The dashboard URL is masked the same way,
- * because nothing stops someone from pasting "https://user:secret@host".
- */
 final readonly class HorizonTarget implements JsonSerializable
 {
     public function __construct(
@@ -37,21 +30,11 @@ final readonly class HorizonTarget implements JsonSerializable
         return $this->password;
     }
 
-    /**
-     * Basic auth is sent only when both halves are present.
-     */
     public function hasBasicAuth(): bool
     {
         return filled($this->username) && filled($this->password);
     }
 
-    /**
-     * The URL people copy from the browser is the dashboard; a trailing
-     * slash or an "/api" pasted by mistake is dropped before the API path
-     * is appended. So is a query string or a fragment, which the form now
-     * refuses but rows saved before that rule may still carry: appended
-     * after them, the API path would never reach the server as a path.
-     */
     public function apiUrl(string $path): string
     {
         $base = rtrim((string) preg_replace('/[?#].*$/s', '', $this->dashboardUrl), '/');
@@ -80,8 +63,6 @@ final readonly class HorizonTarget implements JsonSerializable
     }
 
     /**
-     * A target is rebuilt from its environment, never carried in a payload.
-     *
      * @return array<string, mixed>
      */
     public function __serialize(): array

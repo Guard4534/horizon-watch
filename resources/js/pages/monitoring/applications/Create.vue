@@ -36,17 +36,10 @@ const { page } = defineProps<{
 
 const slug = useTeamSlug();
 
-// One page, three client-side steps, one POST at the end: the application
-// and its first environments are created in a single transaction
-// (AddApplication), so there is nothing to persist in between.
 const step = ref(1);
 
-// Only here to suggest each environment's URL: it is not a field of the
-// application and is never sent.
 const horizonPath = ref('horizon');
 
-// The usual names, each with the palette color of the same name, offered in
-// this order as rows are added.
 const SUGGESTED_NAMES: Array<[string, string]> = [
     ['production', 'prod'],
     ['staging', 'staging'],
@@ -58,18 +51,10 @@ const SUGGESTED_NAMES: Array<[string, string]> = [
 
 type Row = {
     key: number;
-    // Whether the basic-auth fields are shown. Turning it off clears them,
-    // so a hidden credential is never sent.
     auth: boolean;
-    // Once the URL is typed by hand, the domain and path stop rewriting it.
     urlEdited: boolean;
     outcome: ConnectionOutcome;
-    // What the outcome above was measured on; a different row by the time
-    // step 3 opens again means the outcome no longer applies.
     testedSignature: string;
-    // Whether opening step 3 tests the row by itself. Off for a row whose
-    // test was cut short by leaving the step: its values did not change, so
-    // it waits for "Test again" rather than spending the rate limit twice.
     autoTest: boolean;
 };
 
@@ -86,7 +71,6 @@ const blankEnvironment = (
 
     return {
         name: suggestion?.[0] ?? '',
-        // Otherwise walk the palette so two rows never start out the same.
         color: (suggestion?.[1] ??
             page.colors[index % page.colors.length]
                 .value) as App.Enums.EnvironmentColor,
@@ -117,8 +101,6 @@ const form = useForm<{
 
 const rows = ref<Row[]>([blankRow()]);
 
-// Inertia's error bag is flat and dotted ("application.host",
-// "environments.1.horizonUrl"); the field components look keys up by name.
 const errors = computed(
     () => form.errors as Record<string, string | undefined>,
 );
@@ -195,7 +177,6 @@ const addEnvironment = () => {
 const removeEnvironment = (index: number) => {
     form.environments.splice(index, 1);
     rows.value.splice(index, 1);
-    // Every error key after the removed row now points at the wrong row.
     form.clearErrors();
 };
 
@@ -210,10 +191,6 @@ const testPayload = (
 const signatureOf = (environment: App.Data.Applications.EnvironmentFormData) =>
     JSON.stringify(testPayload(environment));
 
-// Before step 3 renders, forget the outcomes of rows changed since their
-// test (those test again as soon as the step mounts), and of tests cut
-// short by leaving the step: ConnectionTest drops an answer that arrives
-// after it unmounts, so those rows read "not tested" until asked again.
 watch(step, (current) => {
     if (current !== 3) {
         return;
@@ -234,7 +211,6 @@ watch(step, (current) => {
     });
 });
 
-// Keyed by row: a template-ref array does not promise to follow row order.
 const tests = new Map<number, InstanceType<typeof ConnectionTest>>();
 
 const rememberTest = (key: number, instance: unknown) => {
@@ -248,11 +224,7 @@ const rememberTest = (key: number, instance: unknown) => {
 const reachable = (outcome: ConnectionOutcome): boolean =>
     outcome.state === 'done' && outcome.result.reachable;
 
-// Only the rows that have not answered yet, one after the other in row
-// order: rows that passed do not spend the rate limit again, and when the
-// limit is hit it is the last rows that wait.
 const testAgain = async () => {
-    // A snapshot: the rows may change while a test is awaited.
     for (const row of rows.value.slice()) {
         if (!reachable(row.outcome)) {
             await tests.get(row.key)?.run();
@@ -292,10 +264,6 @@ const pillStyle = (color: App.Enums.EnvironmentColor) => ({
     background: `color-mix(in srgb, ${envColor(color)} 20%, transparent)`,
 });
 
-// Server-side validation has to land the user back on the step that owns the
-// offending field, or the message would be invisible. Anything that belongs
-// to neither step falls through to step 3, which renders it (unplacedErrors)
-// rather than swallowing it.
 const stepOf = (keys: string[]): number => {
     if (keys.some((key) => key.startsWith('application'))) {
         return 1;
@@ -304,9 +272,6 @@ const stepOf = (keys: string[]): number => {
     return keys.some((key) => key.startsWith('environments')) ? 2 : 3;
 };
 
-// No rule produces such a key today — ApplicationWizardData validates
-// "environments" as a whole plus the two nested Data objects — but one added
-// later must not vanish between the steps.
 const unplacedErrors = computed(() =>
     Object.entries(errors.value)
         .filter(
@@ -323,8 +288,6 @@ const submit = () => {
         onError: (bag) => {
             const keys = Object.keys(bag);
 
-            // A credential error on a row whose fields are folded away would
-            // be invisible.
             rows.value.forEach((row, index) => {
                 if (
                     keys.some((key) =>

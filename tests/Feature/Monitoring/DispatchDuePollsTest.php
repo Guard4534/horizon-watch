@@ -13,10 +13,8 @@ use Illuminate\Support\Facades\Queue;
 beforeEach(function () {
     Queue::fake();
 
-    // A fraction on purpose: the next poll is computed from whole seconds.
     $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:00.700'));
 
-    // next_poll_at is not mass assignable.
     $this->environment = fn (array $attributes = [], ?string $nextPollAt = null): Environment => tap(
         Environment::factory()->create($attributes),
         fn (Environment $environment) => $environment->forceFill(['next_poll_at' => $nextPollAt])->save(),
@@ -45,9 +43,6 @@ test('only enabled environments that are due are queued', function () {
         ->and($pausedNeverPolled->fresh()->next_poll_at)->toBeNull();
 });
 
-// Documents intent rather than guarding it: Laravel's binding format already
-// drops the fraction, so this passes with or without the truncation in the
-// action.
 test('next_poll_at moves one interval ahead of the current whole second', function () {
     $fast = ($this->environment)(['poll_interval_seconds' => 15], '2026-09-17 09:59:00');
     $slow = ($this->environment)(['poll_interval_seconds' => 300]);
@@ -73,11 +68,8 @@ test('the next tick, one interval later, queues the environment again once its j
 
     ($this->dispatch)();
 
-    // The faked queue never runs the job, so its unique lock is released
-    // by hand, as the worker does when the job ends.
     (new UniqueLock(app(Cache::class)))->release(new PollEnvironmentJob($environment->id));
 
-    // The next tick of the scheduler, a little later within its second.
     $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:15.100'));
 
     expect(($this->dispatch)())->toBe(1)
@@ -97,7 +89,6 @@ test('an environment due again while its previous job still waits is not queued 
 
     Queue::assertPushed(PollEnvironmentJob::class, 1);
 
-    // The interval still moves: the missed reading is replaced by the next.
     expect($environment->fresh()->next_poll_at->toDateTimeString())->toBe('2026-09-17 10:00:30');
 });
 
@@ -105,9 +96,6 @@ test('a claim that rolls back queues nothing', function () {
     $first = ($this->environment)();
     $second = ($this->environment)();
 
-    // Fails the claim of the second environment, after the first one's
-    // next_poll_at has been written: a job queued per row, before the
-    // commit, would already be out.
     DB::listen(function (QueryExecuted $query) use ($second) {
         if (str_starts_with($query->sql, 'update "environments"') && in_array($second->id, $query->bindings, true)) {
             throw new RuntimeException('Claim failed.');

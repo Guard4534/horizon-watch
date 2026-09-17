@@ -4,10 +4,6 @@ namespace Tests\Fixtures\Horizon;
 
 use App\Externals\Horizon\Dns\Resolver;
 
-/**
- * Answers from a fixed table and remembers every name it was asked for,
- * so a test can tell whether the guard looked a host up at all.
- */
 final class FakeResolver implements Resolver
 {
     /** @var list<string> */
