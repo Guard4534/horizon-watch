@@ -2,7 +2,9 @@
 import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import {
+    hasMeasurement,
     needsAttention,
+    pendingTone,
     statusText,
     statusTone,
 } from '@/components/monitoring/environment/readings';
@@ -14,8 +16,10 @@ import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCount, formatWait, waitColor } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
-const { environment } = defineProps<{
+const { environment, thresholds } = defineProps<{
     environment: App.Data.Monitoring.EnvironmentData;
+    // The organization defaults keyed by metric.
+    thresholds: Record<string, number>;
 }>();
 
 const slug = useTeamSlug();
@@ -32,9 +36,9 @@ const cardStyle = computed(() =>
         : {},
 );
 
-// Without a status the counters are zeros that mean nothing: no reading
-// yet, or a row whose reading the viewer may not see.
-const hasNumbers = computed(() => environment.status !== null);
+// Zeros that were not measured (no reading yet, a hidden row, a failed or
+// overdue reading) are shown as dashes.
+const hasNumbers = computed(() => hasMeasurement(environment));
 </script>
 
 <template>
@@ -118,9 +122,21 @@ const hasNumbers = computed(() => environment.status !== null);
             style="gap: var(--nc-space-2)"
         >
             <span>
-                <span class="block" style="font-size: 16px">{{
-                    hasNumbers ? formatCount(environment.pending) : '—'
-                }}</span>
+                <span
+                    class="block"
+                    style="font-size: 16px"
+                    :style="{
+                        color: hasNumbers
+                            ? pendingTone(
+                                  environment.pending,
+                                  thresholds['queue.pending'] ?? 0,
+                              )
+                            : undefined,
+                    }"
+                    >{{
+                        hasNumbers ? formatCount(environment.pending) : '—'
+                    }}</span
+                >
                 <span class="figure-label">pending</span>
             </span>
             <span>
@@ -129,7 +145,10 @@ const hasNumbers = computed(() => environment.status !== null);
                     style="font-size: 16px"
                     :style="{
                         color: hasNumbers
-                            ? waitColor(environment.maxWaitSeconds)
+                            ? waitColor(
+                                  environment.maxWaitSeconds,
+                                  thresholds['queue.max_wait'],
+                              )
                             : undefined,
                     }"
                     >{{

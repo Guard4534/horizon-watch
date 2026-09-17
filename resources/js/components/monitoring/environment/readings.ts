@@ -7,7 +7,7 @@ import { statusColor, statusLabel } from '@/lib/monitoring';
 
 type Environment = Pick<
     App.Data.Monitoring.EnvironmentData,
-    'status' | 'watched'
+    'status' | 'watched' | 'pollingEnabled'
 >;
 
 /**
@@ -26,9 +26,50 @@ export function statusText(environment: Environment): string {
         return statusLabel(environment.status);
     }
 
-    return environment.watched
+    if (!environment.watched) {
+        return trans('Not on your wall');
+    }
+
+    // Never read and not collected: no first reading is coming.
+    return environment.pollingEnabled
         ? trans('waiting for the first reading')
-        : trans('Not on your wall');
+        : trans('Collection paused');
+}
+
+/**
+ * Whether the counters are a measurement: an unwatched row, a never-read
+ * environment and a failed or overdue reading all carry zeros that are not.
+ */
+export function hasMeasurement(
+    environment: Pick<App.Data.Monitoring.EnvironmentData, 'status'>,
+): boolean {
+    return environment.status !== null && environment.status !== 'unreachable';
+}
+
+/** Red strictly above the queue.pending threshold, as the evaluator fires. */
+export function pendingTone(pending: number, threshold: number): string {
+    return pending > threshold ? 'var(--st-down)' : 'var(--nc-text)';
+}
+
+// EnvironmentStatus::severity(), lowest first.
+const SEVERITY: Record<App.Enums.EnvironmentStatus, number> = {
+    inactive: 0,
+    unreachable: 0,
+    paused: 1,
+    degraded: 2,
+    active: 3,
+};
+
+/** The colour of the worst status among rows that have one, or null. */
+export function worstTone(
+    environments: Pick<App.Data.Monitoring.EnvironmentData, 'status'>[],
+): string | null {
+    const statuses = environments
+        .map((environment) => environment.status)
+        .filter((status): status is App.Enums.EnvironmentStatus => !!status)
+        .sort((a, b) => SEVERITY[a] - SEVERITY[b]);
+
+    return statuses[0] ? statusColor(statuses[0]) : null;
 }
 
 /** Down, degraded or paused: the states that tint a card. */

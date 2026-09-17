@@ -56,12 +56,17 @@ export function formatWait(seconds: number): string {
     return seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`;
 }
 
-export function waitColor(seconds: number): string {
-    if (seconds >= 300) {
+/**
+ * Amber strictly above the queue.max_wait threshold, as StatusEvaluator
+ * fires; red strictly above five minutes (or the threshold, if higher).
+ * The default is the rule's default, for pages that carry no thresholds.
+ */
+export function waitColor(seconds: number, threshold = 60): string {
+    if (seconds > Math.max(300, threshold)) {
         return 'var(--st-down)';
     }
 
-    return seconds >= 60 ? 'var(--st-warn)' : 'var(--nc-neutral-400)';
+    return seconds > threshold ? 'var(--st-warn)' : 'var(--nc-neutral-400)';
 }
 
 export function pendingColor(pending: number): string {

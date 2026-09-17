@@ -5,12 +5,14 @@ import {
     PhBellSlash,
     PhCaretLeft,
 } from '@phosphor-icons/vue';
+import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
 import IncidentBanner from '@/components/monitoring/environment/IncidentBanner.vue';
 import {
     failedColor,
     formatAge,
+    pendingTone,
     statusText,
     statusTone,
 } from '@/components/monitoring/environment/readings';
@@ -21,7 +23,6 @@ import { failedLabel } from '@/lib/failedWindow';
 import {
     formatCount,
     formatWait,
-    pendingColor,
     statusColor,
     waitColor,
 } from '@/lib/monitoring';
@@ -42,6 +43,13 @@ const incident = computed(() => {
     return status !== null && status !== 'active' ? status : null;
 });
 
+// The desktop thresholds, applied the same way (strictly above).
+const threshold = (metric: App.Enums.AlertRuleMetric) =>
+    page.thresholds[metric] ?? 0;
+
+// Nodes and queues are the last successful reading's during an outage.
+const lastKnown = computed(() => environment.value.readingError !== null);
+
 const lastKnownAge = computed(() => {
     if (environment.value.readingError === null || !page.nodes.length) {
         return null;
@@ -52,17 +60,29 @@ const lastKnownAge = computed(() => {
     );
 });
 
+const lastKnownText = computed(() =>
+    lastKnownAge.value
+        ? trans('last known · :time ago', { time: lastKnownAge.value })
+        : trans('last known'),
+);
+
 // Metric names stay English in both languages, as on the desktop tiles.
 const tiles = computed(() => [
     {
         label: 'Pending',
         value: formatCount(environment.value.pending),
-        color: pendingColor(environment.value.pending),
+        color: pendingTone(
+            environment.value.pending,
+            threshold('queue.pending'),
+        ),
     },
     {
         label: 'Max wait',
         value: formatWait(environment.value.maxWaitSeconds),
-        color: waitColor(environment.value.maxWaitSeconds),
+        color: waitColor(
+            environment.value.maxWaitSeconds,
+            threshold('queue.max_wait'),
+        ),
     },
     {
         label: 'Workers',
@@ -78,7 +98,7 @@ const tiles = computed(() => [
         color: failedColor(
             environment.value.failedLast24Hours,
             environment.value.failedWindowMinutes,
-            page.thresholds['jobs.failed_per_hour'] ?? 0,
+            threshold('jobs.failed_per_hour'),
         ),
     },
     {
@@ -209,6 +229,13 @@ const tiles = computed(() => [
                 <div class="mb-[var(--nc-space-2)] flex items-baseline gap-2">
                     <span style="font-size: 13px">Queues</span>
                     <span
+                        v-if="lastKnown"
+                        class="ml-auto"
+                        style="font-size: 10px; color: var(--st-warn)"
+                        >{{ lastKnownText }}</span
+                    >
+                    <span
+                        v-else
                         class="ml-auto"
                         style="font-size: 10px; color: var(--nc-neutral-600)"
                         >pending · wait</span
@@ -242,7 +269,12 @@ const tiles = computed(() => [
                     >
                     <span
                         class="nc-num w-[42px] flex-none text-right"
-                        :style="{ color: waitColor(queue.waitSeconds) }"
+                        :style="{
+                            color: waitColor(
+                                queue.waitSeconds,
+                                threshold('queue.max_wait'),
+                            ),
+                        }"
                         >{{ formatWait(queue.waitSeconds) }}</span
                     >
                 </div>
@@ -252,16 +284,10 @@ const tiles = computed(() => [
                 <div class="mb-[var(--nc-space-2)] flex items-baseline gap-2">
                     <span style="font-size: 13px">{{ $t('Nodes') }}</span>
                     <span
-                        v-if="environment.readingError !== null"
+                        v-if="lastKnown"
                         class="ml-auto"
                         style="font-size: 10px; color: var(--st-warn)"
-                        >{{
-                            lastKnownAge
-                                ? $t('last known · :time ago', {
-                                      time: lastKnownAge,
-                                  })
-                                : $t('last known')
-                        }}</span
+                        >{{ lastKnownText }}</span
                     >
                 </div>
                 <div

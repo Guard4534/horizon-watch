@@ -4,8 +4,7 @@ import { PhCheckCircle } from '@phosphor-icons/vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { ruleIcon, ruleLabel } from '@/lib/alertRules';
-import { formatAge } from '@/components/monitoring/environment/readings';
-import { statusColor } from '@/lib/monitoring';
+import { formatElapsed, statusColor } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 
 // Open anomalies of this application's watched environments; resolved
@@ -77,11 +76,12 @@ const slug = useTeamSlug();
                         style="font-size: 11px; color: var(--nc-neutral-600)"
                     >
                         {{
-                            alert.sinceTruncated
-                                ? $t('open for more than 24 h')
-                                : $t('open for :time', {
-                                      time: formatAge(alert.minutesAgo * 60),
-                                  })
+                            $t('opened :elapsed', {
+                                elapsed: formatElapsed(
+                                    alert.minutesAgo,
+                                    alert.sinceTruncated,
+                                ),
+                            })
                         }}
                     </div>
                 </div>

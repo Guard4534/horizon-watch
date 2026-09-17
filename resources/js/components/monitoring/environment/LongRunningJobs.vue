@@ -9,8 +9,8 @@ const {
 } = defineProps<{
     jobs: App.Data.Monitoring.LongRunningJobData[];
     thresholdSeconds: number;
-    // Reserved jobs are a live measurement: a failed reading empties them
-    // instead of keeping old ones, so the list is unknown, not empty.
+    // Reserved jobs are a live measurement: a failed, overdue or missing
+    // reading leaves the list unknown, not empty.
     unknown?: boolean;
 }>();
 
@@ -34,7 +34,7 @@ function color(seconds: number): string {
         >
             {{
                 unknown
-                    ? $t('Unknown until Horizon answers again.')
+                    ? $t('Unknown until the next successful reading.')
                     : $t('No job is running past the threshold.')
             }}
         </div>

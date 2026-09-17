@@ -17,6 +17,7 @@ import TrendChart from '@/components/monitoring/environment/TrendChart.vue';
 import {
     failedColor,
     formatAge,
+    pendingTone,
     statusText,
     statusTone,
 } from '@/components/monitoring/environment/readings';
@@ -47,10 +48,20 @@ const slug = useTeamSlug();
 const isMobile = useIsMobile();
 const environment = computed(() => page.environment);
 
-// The thresholds that open anomalies, not the (still invented) overrides
-// listed under "Effective alert rules".
+// The organization defaults, the same values as the rules card: what the
+// evaluator uses.
 const threshold = (metric: App.Enums.AlertRuleMetric) =>
     page.thresholds[metric] ?? 0;
+
+// Reserved jobs are measured on each successful reading: only a fresh one
+// may say there are none.
+const longRunningUnknown = computed(
+    () =>
+        environment.value.readingError !== null ||
+        environment.value.stale ||
+        environment.value.status === null ||
+        environment.value.status === 'unreachable',
+);
 
 const incident = computed(() => {
     const status = environment.value.status;
@@ -91,16 +102,19 @@ const tiles = computed<Tile[]>(() => [
     {
         label: 'Pending',
         value: formatCount(environment.value.pending),
-        color:
-            environment.value.pending > threshold('queue.pending')
-                ? 'var(--st-down)'
-                : 'var(--nc-text)',
+        color: pendingTone(
+            environment.value.pending,
+            threshold('queue.pending'),
+        ),
         note: trans(':count queue', { count: String(page.queues.length) }),
     },
     {
         label: 'Max wait',
         value: formatWait(environment.value.maxWaitSeconds),
-        color: waitColor(environment.value.maxWaitSeconds),
+        color: waitColor(
+            environment.value.maxWaitSeconds,
+            threshold('queue.max_wait'),
+        ),
         note: trans('threshold :value', {
             value: `${threshold('queue.max_wait')}s`,
         }),
@@ -325,20 +339,20 @@ const tiles = computed<Tile[]>(() => [
                     :max-wait="page.maxWait"
                     :range="page.range"
                 />
-                <QueueTable :queues="page.queues" :note="lastKnown" />
+                <QueueTable
+                    :queues="page.queues"
+                    :note="lastKnown"
+                    :wait-threshold="threshold('queue.max_wait')"
+                />
                 <FailedJobTable :jobs="page.failedJobs" :note="lastKnown" />
             </div>
             <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
                 <LongRunningJobs
                     :jobs="page.longRunningJobs"
                     :threshold-seconds="threshold('job.runtime')"
-                    :unknown="environment.readingError !== null"
+                    :unknown="longRunningUnknown"
                 />
-                <EffectiveRules
-                    :rules="page.rules"
-                    :override-count="page.overrideCount"
-                    :scope="page.scope"
-                />
+                <EffectiveRules :rules="page.rules" />
                 <ConnectionCard :environment="environment" />
             </div>
         </div>

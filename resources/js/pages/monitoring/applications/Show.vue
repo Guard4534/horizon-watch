@@ -5,6 +5,7 @@ import { computed } from 'vue';
 import EnvironmentCard from '@/components/monitoring/applications/EnvironmentCard.vue';
 import EnvironmentComparison from '@/components/monitoring/applications/EnvironmentComparison.vue';
 import RecentAlerts from '@/components/monitoring/applications/RecentAlerts.vue';
+import { hasMeasurement } from '@/components/monitoring/environment/readings';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
@@ -29,11 +30,9 @@ const slug = useTeamSlug();
 const shared = usePage();
 const isMobile = useIsMobile();
 
-// Unwatched rows carry zeros, not readings: they are counted as
-// environments and nothing else.
-const watched = computed(() =>
-    page.environments.filter((environment) => environment.status !== null),
-);
+// Only measured rows add to the totals: unwatched, never-read and
+// unreachable rows carry zeros, not readings.
+const watched = computed(() => page.environments.filter(hasMeasurement));
 
 const stats = computed(() => [
     {
@@ -208,6 +207,7 @@ const stats = computed(() => [
                     v-for="environment in page.environments"
                     :key="environment.id"
                     :environment="environment"
+                    :thresholds="page.thresholds"
                 />
             </div>
         </div>
@@ -216,7 +216,7 @@ const stats = computed(() => [
             <EnvironmentComparison
                 v-if="page.environments.length"
                 :environments="page.environments"
-                :failed-per-hour-threshold="page.failedPerHourThreshold"
+                :thresholds="page.thresholds"
             />
             <RecentAlerts :alerts="page.recentAlerts" />
         </div>

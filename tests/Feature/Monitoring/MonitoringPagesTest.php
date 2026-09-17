@@ -84,9 +84,7 @@ test('the environment page follows the requested range', function () {
             ->has('page.nodes', 1)
             ->has('page.queues', 3)
             ->has('page.maxWait', 48)
-            ->has('page.rules', 8)
-            ->where('page.overrideCount', 3)
-            ->where('page.scope', 'production'));
+            ->has('page.rules', 8));
 });
 
 test('the alert log defaults to open alerts and can switch state', function () {

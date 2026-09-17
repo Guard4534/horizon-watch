@@ -4,11 +4,8 @@ namespace App\Queries;
 
 use App\Data\Monitoring\AlertData;
 use App\Data\Monitoring\AlertRuleData;
-use App\Data\Monitoring\RuleScopeData;
 use App\Data\Pages\EnvironmentDetailPageData;
-use App\Enums\AlertRuleMetric;
 use App\Enums\AlertState;
-use App\Enums\RuleOrigin;
 use App\Enums\SeriesRange;
 use App\Enums\TeamPermission;
 use App\Models\Team;
@@ -27,9 +24,9 @@ class EnvironmentDetailQuery
     {
         $environment = $this->monitoring->environment($team, $environmentId) ?? abort(404);
 
-        $scopeIds = array_map(fn (RuleScopeData $scope) => $scope->id, $this->monitoring->ruleScopes($team));
-        $scope = in_array($environment->name, $scopeIds, true) ? $environment->name : 'organization';
-        $rules = $this->monitoring->alertRules($team, $scope);
+        // Never the environment's own scope: its overrides are invented
+        // until phase 4, and the evaluator ignores them.
+        $rules = $this->monitoring->alertRules($team, 'organization');
 
         $openAlerts = array_filter(
             $this->monitoring->alerts($team, AlertState::Open),
@@ -47,12 +44,10 @@ class EnvironmentDetailQuery
             throughput: $this->monitoring->throughputSeries($team, $environment->id, $range),
             maxWait: $this->monitoring->maxWaitSeries($team, $environment->id, $range),
             rules: $rules,
-            overrideCount: count(array_filter($rules, fn (AlertRuleData $rule) => $rule->origin === RuleOrigin::Override)),
-            scope: $scope,
             canTestConnection: $this->canTestConnection($team),
             thresholds: array_combine(
-                array_map(fn (AlertRuleMetric $metric) => $metric->value, AlertRuleMetric::cases()),
-                array_map(fn (AlertRuleMetric $metric) => $metric->defaultThreshold(), AlertRuleMetric::cases()),
+                array_map(fn (AlertRuleData $rule) => $rule->metric->value, $rules),
+                array_map(fn (AlertRuleData $rule) => $rule->threshold, $rules),
             ),
         );
     }
@@ -60,7 +55,9 @@ class EnvironmentDetailQuery
     /**
      * EnvironmentPolicy::testConnection() is a team permission and the
      * environment was just found in this team, so the answer is the same
-     * without loading the model the repository keeps to itself.
+     * without loading the model the repository keeps to itself. Trap: this
+     * mirrors the policy instead of calling it — if the policy ever looks
+     * at the environment, change this too.
      */
     private function canTestConnection(Team $team): bool
     {

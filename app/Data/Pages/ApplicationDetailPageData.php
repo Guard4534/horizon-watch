@@ -22,8 +22,10 @@ class ApplicationDetailPageData extends Data
         // EnvironmentData::compareBySeverityThenPending()), or null when it
         // has none. Computed here so the front end stops re-deriving it.
         public ?EnvironmentStatus $worstStatus,
-        // The failed counts are over each environment's own window: the
-        // comparison table colours them by their hourly rate against this.
-        public float $failedPerHourThreshold,
+        // The organization defaults keyed by metric, the values the
+        // evaluator uses: the cards and the comparison colour against them
+        // (failed counts by their hourly rate, over each row's own window).
+        /** @var array<string, float> */
+        public array $thresholds,
     ) {}
 }

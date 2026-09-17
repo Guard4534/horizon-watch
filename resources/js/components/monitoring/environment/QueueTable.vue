@@ -8,11 +8,13 @@ import {
     waitColor,
 } from '@/lib/monitoring';
 
-defineProps<{
+const { waitThreshold } = defineProps<{
     queues: App.Data.Monitoring.QueueData[];
     // "last known …" when the latest reading failed and these rows are
     // from an earlier one.
     note?: string | null;
+    // queue.max_wait, which the evaluator applies to each queue too.
+    waitThreshold: number;
 }>();
 </script>
 
@@ -61,7 +63,12 @@ defineProps<{
                         <td
                             class="nc-num"
                             style="text-align: right"
-                            :style="{ color: waitColor(queue.waitSeconds) }"
+                            :style="{
+                                color: waitColor(
+                                    queue.waitSeconds,
+                                    waitThreshold,
+                                ),
+                            }"
                         >
                             {{ formatWait(queue.waitSeconds) }}
                         </td>

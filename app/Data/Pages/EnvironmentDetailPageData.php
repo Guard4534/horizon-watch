@@ -30,21 +30,16 @@ class EnvironmentDetailPageData extends Data
         public array $throughput,
         /** @var array<int, int> */
         public array $maxWait,
+        // The organization defaults, the values the evaluator uses. The
+        // per-environment overrides are invented examples until phase 4 and
+        // stay on the alert-rules page: here they would contradict the
+        // status next to them.
         /** @var array<int, AlertRuleData> */
         public array $rules,
-        public int $overrideCount,
-        // The effective rule scope backing $rules: the environment's own name
-        // when it has one, otherwise 'organization'. Computed here so the
-        // front end stops re-deriving it from overrideCount (a non-zero
-        // override count and a real per-environment scope are not the same
-        // thing).
-        public string $scope,
         // The saved-address probe (environments.test-connection without a
         // body), which a member may run on what they watch.
         public bool $canTestConnection,
-        // The thresholds that open anomalies, keyed by metric. Not $rules:
-        // their overrides are invented until phase 4 makes them real, and
-        // the page's colours and notes must agree with the status.
+        // $rules keyed by metric, for the page's colours and notes.
         /** @var array<string, float> */
         public array $thresholds,
     ) {}

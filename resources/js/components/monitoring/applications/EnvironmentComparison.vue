@@ -2,46 +2,47 @@
 import { computed } from 'vue';
 import {
     failedColor,
+    hasMeasurement,
+    pendingTone,
     statusText,
+    statusTone,
 } from '@/components/monitoring/environment/readings';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
-import { failedLabel } from '@/lib/failedWindow';
+import { failedLabel, failedWindowShort } from '@/lib/failedWindow';
 import { formatCount, formatWait, waitColor } from '@/lib/monitoring';
 
-const { environments, failedPerHourThreshold } = defineProps<{
+const { environments, thresholds } = defineProps<{
     environments: App.Data.Monitoring.EnvironmentData[];
-    failedPerHourThreshold: number;
+    // The organization defaults keyed by metric.
+    thresholds: Record<string, number>;
 }>();
 
-// Rows with a reading only: the others carry zeros that mean nothing.
+const threshold = (metric: App.Enums.AlertRuleMetric) =>
+    thresholds[metric] ?? 0;
+
+// Only measured rows have a window worth naming: unwatched, never-read and
+// unreachable rows carry zeros under a default or inherited window.
 const windows = computed(
     () =>
         new Set(
             environments
-                .filter((environment) => environment.status !== null)
+                .filter(hasMeasurement)
                 .map((environment) => environment.failedWindowMinutes),
         ),
 );
 
-// One window for the whole column when the rows agree; otherwise the
-// header says so and each cell names its own.
-const commonWindow = computed(() =>
-    windows.value.size <= 1
-        ? ([...windows.value][0] ??
-          environments[0]?.failedWindowMinutes ??
-          1440)
-        : null,
-);
-
-// Units read the same in both languages.
-const windowShort = (minutes: number): string => {
-    if (minutes % 1440 === 0) {
-        return `${minutes / 1440}d`;
+// No window when nothing was measured, the common one when the rows agree,
+// otherwise "mixed" in the header and each cell names its own.
+const header = computed(() => {
+    if (windows.value.size === 0) {
+        return 'Failed';
     }
 
-    return minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes} min`;
-};
+    return windows.value.size === 1
+        ? failedLabel([...windows.value][0])
+        : failedLabel(null);
+});
 </script>
 
 <template>
@@ -54,7 +55,7 @@ const windowShort = (minutes: number): string => {
                         <th style="text-align: right">Pending</th>
                         <th style="text-align: right">Max wait</th>
                         <th style="text-align: right">
-                            {{ failedLabel(commonWindow) }}
+                            {{ header }}
                         </th>
                         <th style="text-align: right">Workers</th>
                         <th style="text-align: right">jobs/min</th>
@@ -72,19 +73,35 @@ const windowShort = (minutes: number): string => {
                                 }}</span
                             >
                         </td>
-                        <td
-                            v-if="environment.status === null"
-                            colspan="5"
-                            style="
-                                text-align: right;
-                                font-size: 12px;
-                                color: var(--nc-neutral-500);
-                            "
-                        >
-                            {{ statusText(environment) }}
-                        </td>
+                        <!-- No measurement: dashes, and why, instead of
+                             zeros that read like one. -->
+                        <template v-if="!hasMeasurement(environment)">
+                            <td
+                                v-for="column in 5"
+                                :key="column"
+                                style="
+                                    text-align: right;
+                                    color: var(--nc-neutral-600);
+                                "
+                            >
+                                <span
+                                    v-if="column === 1"
+                                    style="margin-right: 6px; font-size: 11px"
+                                    :style="{ color: statusTone(environment) }"
+                                    >{{ statusText(environment) }}</span
+                                >—
+                            </td>
+                        </template>
                         <template v-else>
-                            <td style="text-align: right">
+                            <td
+                                style="text-align: right"
+                                :style="{
+                                    color: pendingTone(
+                                        environment.pending,
+                                        threshold('queue.pending'),
+                                    ),
+                                }"
+                            >
                                 {{ formatCount(environment.pending) }}
                             </td>
                             <td
@@ -92,6 +109,7 @@ const windowShort = (minutes: number): string => {
                                 :style="{
                                     color: waitColor(
                                         environment.maxWaitSeconds,
+                                        threshold('queue.max_wait'),
                                     ),
                                 }"
                             >
@@ -103,20 +121,20 @@ const windowShort = (minutes: number): string => {
                                     color: failedColor(
                                         environment.failedLast24Hours,
                                         environment.failedWindowMinutes,
-                                        failedPerHourThreshold,
+                                        threshold('jobs.failed_per_hour'),
                                     ),
                                 }"
                             >
                                 {{ formatCount(environment.failedLast24Hours)
                                 }}<span
-                                    v-if="commonWindow === null"
+                                    v-if="windows.size > 1"
                                     style="
                                         margin-left: 4px;
                                         font-size: 10px;
                                         color: var(--nc-neutral-500);
                                     "
                                     >{{
-                                        windowShort(
+                                        failedWindowShort(
                                             environment.failedWindowMinutes,
                                         )
                                     }}</span

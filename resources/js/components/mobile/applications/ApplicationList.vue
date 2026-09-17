@@ -4,6 +4,7 @@ import { PhCaretRight } from '@phosphor-icons/vue';
 import {
     needsAttention,
     statusTone,
+    worstTone,
 } from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { envColor } from '@/lib/monitoring';
@@ -16,6 +17,22 @@ defineProps<{
 }>();
 
 const slug = useTeamSlug();
+
+// Tinted with the worst status, as the mockup does; rows without a status
+// (unwatched, never read) do not count.
+const badgeStyle = (group: App.Data.Pages.ApplicationGroupData) => {
+    const tone = group.triageCount ? worstTone(group.environments) : null;
+
+    return tone
+        ? {
+              background: `color-mix(in srgb, ${tone} 18%, transparent)`,
+              color: tone,
+          }
+        : {
+              background: 'var(--nc-neutral-900)',
+              color: 'var(--nc-neutral-500)',
+          };
+};
 
 const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
     background: envColor(environment.color),
@@ -74,18 +91,7 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
                     padding: 1px 7px;
                     border-radius: var(--nc-radius-sm);
                 "
-                :style="
-                    group.triageCount
-                        ? {
-                              background:
-                                  'color-mix(in srgb, var(--st-down) 18%, transparent)',
-                              color: 'var(--st-down)',
-                          }
-                        : {
-                              background: 'var(--nc-neutral-900)',
-                              color: 'var(--nc-neutral-500)',
-                          }
-                "
+                :style="badgeStyle(group)"
                 :title="
                     group.triageCount
                         ? $t(':count to triage', {

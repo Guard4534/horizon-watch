@@ -5,10 +5,10 @@ import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatThreshold, ruleIcon, ruleLabel } from '@/lib/alertRules';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 
-const { rules, overrideCount, scope } = defineProps<{
+// The organization defaults: the values the evaluator applies to every
+// environment until phase 4 brings real per-environment overrides.
+defineProps<{
     rules: App.Data.Monitoring.AlertRuleData[];
-    overrideCount: number;
-    scope: string;
 }>();
 
 const slug = useTeamSlug();
@@ -18,9 +18,9 @@ const slug = useTeamSlug();
     <SectionCard :title="$t('Effective alert rules')">
         <template #actions>
             <Link
-                :href="alertRulesIndex({ current_team: slug, scope })"
+                :href="alertRulesIndex({ current_team: slug })"
                 style="font-size: 11px"
-                >{{ $t('Edit') }}</Link
+                >{{ $t('Alert settings') }}</Link
             >
         </template>
         <div
@@ -28,9 +28,8 @@ const slug = useTeamSlug();
             style="font-size: 11px; color: var(--nc-neutral-500)"
         >
             {{
-                $tChoice(
-                    'Organization defaults with :count override on this environment|Organization defaults with :count overrides on this environment',
-                    overrideCount,
+                $t(
+                    'Organization defaults: the thresholds the anomalies use today.',
                 )
             }}
         </div>

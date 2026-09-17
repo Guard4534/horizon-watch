@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
-import { formatAge } from '@/components/monitoring/environment/readings';
 import { formatRule } from '@/lib/alertRules';
-import { statusColor, statusIcon } from '@/lib/monitoring';
+import { formatElapsed, statusColor, statusIcon } from '@/lib/monitoring';
 
 const {
     status,
@@ -27,15 +25,10 @@ const {
 const color = computed(() => statusColor(status));
 const icon = computed(() => statusIcon(status));
 
-const since = computed(() => {
-    if (!alert) {
-        return null;
-    }
-
-    return alert.sinceTruncated
-        ? trans('more than 24 h')
-        : formatAge(alert.minutesAgo * 60);
-});
+// "less than a minute ago" for a fresh one, never "for 0 s".
+const since = computed(() =>
+    alert ? formatElapsed(alert.minutesAgo, alert.sinceTruncated) : null,
+);
 </script>
 
 <template>
@@ -65,27 +58,22 @@ const since = computed(() => {
                 }"
             >
                 <template v-if="status === 'unreachable'">{{
-                    since
-                        ? $t('Endpoint unreachable for :time', { time: since })
-                        : $t('Endpoint unreachable')
+                    $t('Endpoint unreachable')
                 }}</template>
                 <template v-else-if="status === 'inactive'">{{
-                    since
-                        ? $t('No active master supervisor for :time', {
-                              time: since,
-                          })
-                        : $t('No active master supervisor')
+                    $t('No active master supervisor')
                 }}</template>
                 <template v-else-if="status === 'paused'">{{
-                    since
-                        ? $t('Horizon paused for :time', { time: since })
-                        : $t('Horizon paused')
+                    $t('Horizon paused')
                 }}</template>
-                <template v-else>{{
-                    since
-                        ? $t('Threshold exceeded for :time', { time: since })
-                        : $t('Threshold exceeded')
-                }}</template>
+                <template v-else>{{ $t('Threshold exceeded') }}</template>
+                <span
+                    v-if="since"
+                    class="nc-num"
+                    style="font-size: 11px; color: var(--nc-neutral-500)"
+                >
+                    · {{ $t('started :elapsed', { elapsed: since }) }}</span
+                >
             </div>
             <div
                 class="mt-[3px]"

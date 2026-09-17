@@ -81,15 +81,31 @@ test('a fresh reading reaches the environment page with its age, interval and no
             ->where('page.canTestConnection', true));
 });
 
-test('the page thresholds are the defaults, not the invented scope overrides', function () {
-    // production carries a phase-1 override of queue.pending (5000): the
-    // anomalies still use 2000, and so must the page's colours.
+test('the environment page lists the rules its thresholds come from, and only the defaults', function () {
+    // production carries invented phase-1 overrides (pending 5000, max wait
+    // 30 s, inactive 2 min): the evaluator ignores them, so must this page.
     Readings::record($this->environment);
 
     $this->get(readingEnvironmentUrl($this->environment))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.rules', fn ($rules) => (float) collect($rules)->firstWhere('metric', 'queue.pending')['threshold'] === 5000.0)
-            ->where('page.thresholds', fn ($thresholds) => (float) $thresholds['queue.pending'] === 2000.0));
+            ->has('page.rules', count(AlertRuleMetric::cases()))
+            ->missing('page.overrideCount')
+            ->missing('page.scope')
+            ->where('page.rules', fn ($rules) => collect($rules)->every(
+                fn ($rule) => $rule['origin'] === 'organization'
+                    && (float) $rule['threshold'] === AlertRuleMetric::from($rule['metric'])->defaultThreshold(),
+            ))
+            ->where('page.thresholds', fn ($thresholds) => $thresholds->map(fn ($value) => (float) $value)->all()
+                === collect(AlertRuleMetric::cases())->mapWithKeys(fn ($metric) => [$metric->value => $metric->defaultThreshold()])->all()));
+});
+
+test('the rules and thresholds of the environment page agree', function () {
+    Readings::record($this->environment);
+
+    $this->get(readingEnvironmentUrl($this->environment))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page', fn ($page) => collect($page['rules'])->mapWithKeys(fn ($rule) => [$rule['metric'] => (float) $rule['threshold']])->all()
+                === collect($page['thresholds'])->map(fn ($value) => (float) $value)->all()));
 });
 
 test('an old reading is flagged as not updated', function () {
@@ -173,7 +189,8 @@ test('a seven-day failed window is carried to every page that shows the count', 
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environments.0.failedLast24Hours', 300)
             ->where('page.environments.0.failedWindowMinutes', 10080)
-            ->where('page.failedPerHourThreshold', fn ($threshold) => (float) $threshold === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()));
+            ->where('page.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
+                && (float) $thresholds['queue.pending'] === AlertRuleMetric::QueuePending->defaultThreshold()));
 
     $this->get(route('applications.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page

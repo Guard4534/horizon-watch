@@ -3,9 +3,9 @@
 namespace App\Queries;
 
 use App\Data\Monitoring\AlertData;
+use App\Data\Monitoring\AlertRuleData;
 use App\Data\Monitoring\EnvironmentData;
 use App\Data\Pages\ApplicationDetailPageData;
-use App\Enums\AlertRuleMetric;
 use App\Enums\AlertState;
 use App\Models\Team;
 use App\Monitoring\MonitoringRepository;
@@ -47,8 +47,23 @@ class ApplicationDetailQuery
             environments: $environments,
             recentAlerts: array_slice(array_values($alerts), 0, 3),
             worstStatus: $worstEnvironments[0]->status ?? null,
-            // Thresholds are the defaults until phase 4 lets them be edited.
-            failedPerHourThreshold: AlertRuleMetric::JobsFailedPerHour->defaultThreshold(),
+            thresholds: $this->thresholds($team),
+        );
+    }
+
+    /**
+     * The organization scope: its overrides are invented until phase 4, the
+     * same ruling as the environment page.
+     *
+     * @return array<string, float>
+     */
+    private function thresholds(Team $team): array
+    {
+        $rules = $this->monitoring->alertRules($team, 'organization');
+
+        return array_combine(
+            array_map(fn (AlertRuleData $rule) => $rule->metric->value, $rules),
+            array_map(fn (AlertRuleData $rule) => $rule->threshold, $rules),
         );
     }
 }
