@@ -33,6 +33,7 @@ next to `compose.prod.yaml`):
 | `HORIZON_WATCH_PORT`                                                                           | `8080`                  | Port published on the host                   |
 | `HORIZON_WATCH_WORKERS`                                                                        | `2`                     | Parallel queue workers (readings, email)     |
 | `HORIZON_WATCH_RETENTION_DAYS`                                                                 | `30`                    | Days of readings kept before pruning         |
+| `HORIZON_WATCH_ALERT_RETENTION_DAYS`                                                           | `90`                    | Days resolved alerts are kept before pruning |
 | `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS`                                                         | `false`                 | Refuse Horizon addresses on private networks |
 | `APP_URL`                                                                                      | `http://localhost:8080` | Public URL, used in links and emails         |
 | `APP_LOCALE`                                                                                   | `en`                    | Default language (`en` or `it`)              |

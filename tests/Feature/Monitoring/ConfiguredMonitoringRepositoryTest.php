@@ -735,7 +735,6 @@ test('an anomaly older than the look-back is reported as truncated, capped at a 
     $alert = $this->repository->alerts($this->team, AlertState::Open)[0];
 
     expect($alert->metric)->toBe(AlertRuleMetric::EndpointUnreachable)
-        ->and($alert->sinceTruncated)->toBeTrue()
         ->and($alert->minutesAgo)->toBe(1440);
 });
 
@@ -748,8 +747,7 @@ test('a run that starts inside the look-back is not truncated, even with older u
 
     $alert = $this->repository->alerts($this->team, AlertState::Open)[0];
 
-    expect($alert->sinceTruncated)->toBeFalse()
-        ->and($alert->minutesAgo)->toBe(180);
+    expect($alert->minutesAgo)->toBe(180);
 });
 
 test('a paused horizon opens its own anomaly, with the thresholds it still breaks', function () {

@@ -64,10 +64,9 @@ test('open anomalies come from the stored readings, each with the start of its r
         $alert['severity'],
         $alert['environmentStatus'],
         $alert['minutesAgo'],
-        $alert['sinceTruncated'],
     ], $alerts))->toBe([
-        [$this->production->slug, 'endpoint.unreachable', 'critical', 'unreachable', 30, false],
-        [$this->staging->slug, 'queue.pending', 'warning', 'degraded', 7, false],
+        [$this->production->slug, 'endpoint.unreachable', 'critical', 'unreachable', 30],
+        [$this->staging->slug, 'queue.pending', 'warning', 'degraded', 7],
     ])
         ->and($alerts[1]['pending'])->toBe(4_200)
         ->and($alerts[1]['applicationName'])->toBe('Billing');
@@ -83,7 +82,6 @@ test('an anomaly older than the look-back reaches the page as "more than 24 h"',
     $alerts = alertsOn($this->team->slug);
 
     expect($alerts)->toHaveCount(1)
-        ->and($alerts[0]['sinceTruncated'])->toBeTrue()
         ->and($alerts[0]['minutesAgo'])->toBe(1440);
 });
 
@@ -95,8 +93,7 @@ test('an anomaly whose readings stopped past the cap is flagged, not shown as 14
     $alerts = alertsOn($this->team->slug);
 
     expect($alerts)->toHaveCount(1)
-        ->and($alerts[0]['minutesAgo'])->toBe(1440)
-        ->and($alerts[0]['sinceTruncated'])->toBeTrue();
+        ->and($alerts[0]['minutesAgo'])->toBe(1440);
 });
 
 test('a stale run still under the cap keeps its minutes and no flag', function () {
@@ -106,8 +103,7 @@ test('a stale run still under the cap keeps its minutes and no flag', function (
     $this->actingAs($this->admin);
     $alerts = alertsOn($this->team->slug);
 
-    expect($alerts[0]['minutesAgo'])->toBe(180)
-        ->and($alerts[0]['sinceTruncated'])->toBeFalse();
+    expect($alerts[0]['minutesAgo'])->toBe(180);
 });
 
 test('a paused horizon is an open warning on the page', function () {

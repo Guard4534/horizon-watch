@@ -8,4 +8,5 @@ enum SentNotificationKind: string
     case WebhookDelivery = 'webhook_delivery';
     case WarningDigest = 'warning_digest';
     case Resolved = 'resolved';
+    case Test = 'test';
 }

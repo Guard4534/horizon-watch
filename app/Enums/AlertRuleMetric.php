@@ -49,4 +49,25 @@ enum AlertRuleMetric: string
     {
         return ! in_array($this, [self::JobRuntime, self::WorkersMissing, self::HorizonPaused], true);
     }
+
+    public function minimumThreshold(): float
+    {
+        return 1;
+    }
+
+    public function maximumThreshold(): float
+    {
+        return match ($this) {
+            self::HorizonMasterInactive, self::EndpointUnreachable, self::HorizonPaused => 1440,
+            self::JobsFailedPerHour => 49,
+            self::QueuePending => 2147483647,
+            self::QueueMaxWait, self::JobRuntime => 86400,
+            self::WorkersMissing => 1000,
+        };
+    }
+
+    public function isStateRule(): bool
+    {
+        return in_array($this, [self::HorizonMasterInactive, self::EndpointUnreachable, self::HorizonPaused], true);
+    }
 }

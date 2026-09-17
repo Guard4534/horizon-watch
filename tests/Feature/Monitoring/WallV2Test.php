@@ -219,7 +219,6 @@ test('an anomaly older than the look-back is marked as such', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->has('page.anomalies', 1)
             ->where('page.anomalies.0.metric', 'horizon.paused')
-            ->where('page.anomalies.0.sinceTruncated', true)
             ->where('page.anomalies.0.minutesAgo', 1440));
 });
 

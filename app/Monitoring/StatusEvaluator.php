@@ -2,6 +2,7 @@
 
 namespace App\Monitoring;
 
+use App\Alerts\RuleSet;
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
 use App\Externals\Horizon\Data\HorizonFailedJob;
@@ -15,21 +16,30 @@ final class StatusEvaluator
 {
     public const int FAILED_RATE_MINUTES = 60;
 
-    public function evaluate(HorizonReading $reading): EvaluatedStatus
+    public function evaluate(HorizonReading $reading, RuleSet $rules): EvaluatedStatus
     {
         $failedLastHour = $this->failedLastHour($reading->failedJobs ?? []);
 
         if ($reading->stats->status === 'inactive' || $reading->masters === []) {
-            return new EvaluatedStatus(EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive], $failedLastHour);
+            return new EvaluatedStatus(
+                EnvironmentStatus::Inactive,
+                $this->enabled([AlertRuleMetric::HorizonMasterInactive], $rules),
+                $failedLastHour,
+            );
         }
 
         $breaches = array_values(array_filter(
             AlertRuleMetric::cases(),
-            fn (AlertRuleMetric $metric) => $this->breached($metric, $reading, $failedLastHour),
+            fn (AlertRuleMetric $metric) => $rules->for($metric)->enabled
+                && $this->breached($metric, $reading, $failedLastHour, $rules->for($metric)->threshold),
         ));
 
         if ($reading->stats->status === 'paused' || $this->everyMasterPaused($reading->masters)) {
-            return new EvaluatedStatus(EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused, ...$breaches], $failedLastHour);
+            return new EvaluatedStatus(
+                EnvironmentStatus::Paused,
+                [...$this->enabled([AlertRuleMetric::HorizonPaused], $rules), ...$breaches],
+                $failedLastHour,
+            );
         }
 
         return new EvaluatedStatus(
@@ -37,6 +47,15 @@ final class StatusEvaluator
             $breaches,
             $failedLastHour,
         );
+    }
+
+    /**
+     * @param  list<AlertRuleMetric>  $metrics
+     * @return list<AlertRuleMetric>
+     */
+    private function enabled(array $metrics, RuleSet $rules): array
+    {
+        return array_values(array_filter($metrics, fn (AlertRuleMetric $metric) => $rules->for($metric)->enabled));
     }
 
     /**
@@ -68,9 +87,8 @@ final class StatusEvaluator
         return true;
     }
 
-    private function breached(AlertRuleMetric $metric, HorizonReading $reading, int $failedLastHour): bool
+    private function breached(AlertRuleMetric $metric, HorizonReading $reading, int $failedLastHour, float $threshold): bool
     {
-        $threshold = $metric->defaultThreshold();
         $workload = $reading->workload;
 
         return match ($metric) {

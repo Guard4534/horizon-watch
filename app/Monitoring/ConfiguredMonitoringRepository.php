@@ -302,7 +302,6 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
                     $environment->status,
                     $anomaly['metric'],
                     $minutes,
-                    $anomaly['truncated'] || $minutes >= $cap,
                 );
             }
         }
@@ -578,7 +577,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         return (int) $state?->getAttribute("snapshot_{$column}");
     }
 
-    private function makeAlert(EnvironmentData $environment, EnvironmentStatus $status, AlertRuleMetric $metric, int $minutesAgo, bool $sinceTruncated): AlertData
+    private function makeAlert(EnvironmentData $environment, EnvironmentStatus $status, AlertRuleMetric $metric, int $minutesAgo): AlertData
     {
         return new AlertData(
             id: "{$environment->id}:{$metric->value}",
@@ -587,6 +586,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             metric: $metric,
             threshold: $metric->defaultThreshold(),
             unit: $metric->unit(),
+            value: null,
             environmentId: $environment->id,
             applicationName: $environment->applicationName,
             environmentName: $environment->name,
@@ -596,7 +596,15 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             pending: $environment->pending,
             maxWaitSeconds: $environment->maxWaitSeconds,
             minutesAgo: $minutesAgo,
-            sinceTruncated: $sinceTruncated,
+            resolvedMinutesAgo: null,
+            mutedUntil: null,
+            mutedUntilResolved: false,
+            mutedBy: null,
+            handledBy: null,
+            handledMinutesAgo: null,
+            channels: [],
+            canMute: false,
+            canHandle: false,
         );
     }
 }

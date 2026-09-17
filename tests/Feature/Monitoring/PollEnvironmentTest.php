@@ -17,6 +17,7 @@ use App\Externals\Horizon\HorizonReader;
 use App\Externals\Horizon\HorizonReading;
 use App\Externals\Horizon\HorizonTarget;
 use App\Jobs\PollEnvironmentJob;
+use App\Models\AlertRule;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
@@ -691,4 +692,126 @@ test('the job is unique per environment, never retried and bounded in time', fun
         ->and($job->tries)->toBe(1)
         ->and($job->timeout)->toBe(30)
         ->and($job->uniqueFor)->toBe(60);
+});
+
+test('the state remembers since when its status holds, across readings of the same status', function () {
+    $this->reader->results = [($this->reading)(), ($this->reading)(['latencyMs' => 60])];
+
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00');
+
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->captured_at->toDateTimeString())->toBe('2026-09-17 10:00:15')
+        ->and($state->latency_ms)->toBe(60)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00');
+});
+
+test('a change of status moves the start of the run to the new reading', function () {
+    $this->reader->results = [
+        ($this->reading)(),
+        ($this->reading)(['workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 1, processes: 7)]]),
+        new HorizonReadFailed(ReadingError::Unreachable),
+    ];
+
+    ($this->poll)();
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->status)->toBe(EnvironmentStatus::Degraded)
+        ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:00:15');
+
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:00:30');
+});
+
+test('failed readings in a row keep the start of the unreachable run', function () {
+    $this->reader->results = [
+        new HorizonReadFailed(ReadingError::Unreachable),
+        new HorizonReadFailed(ReadingError::Unauthorized),
+        ($this->reading)(),
+    ];
+
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00');
+
+    $this->travel(5)->minutes();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->error)->toBe(ReadingError::Unauthorized)
+        ->and($state->captured_at->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00');
+
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->status)->toBe(EnvironmentStatus::Degraded)
+        ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:05:15');
+});
+
+test('a late reading moves neither the status nor the start of the run', function () {
+    $this->reader->results = [
+        new HorizonReadFailed(ReadingError::Unreachable),
+        ($this->reading)(),
+    ];
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:15'));
+    ($this->poll)();
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:00'));
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:15');
+});
+
+test('the thresholds of the team decide the status of a reading', function () {
+    AlertRule::factory()->for($this->environment->application->team)->create([
+        'scope' => 'organization',
+        'metric' => AlertRuleMetric::QueuePending,
+        'threshold' => 10,
+        'severity' => null,
+        'notify_email' => null,
+        'enabled' => null,
+    ]);
+
+    $this->reader->results = [($this->reading)()];
+
+    $snapshot = ($this->poll)();
+
+    expect($snapshot->status)->toBe(EnvironmentStatus::Degraded)
+        ->and($snapshot->breaches->all())->toBe([AlertRuleMetric::QueuePending])
+        ->and(EnvironmentState::query()->sole()->status)->toBe(EnvironmentStatus::Degraded);
+});
+
+test('a rule disabled for the name of the environment does not degrade it', function () {
+    AlertRule::factory()->for($this->environment->application->team)->create([
+        'scope' => 'Production',
+        'metric' => AlertRuleMetric::QueuePending,
+        'threshold' => null,
+        'severity' => null,
+        'notify_email' => null,
+        'enabled' => false,
+    ]);
+
+    $this->reader->results = [($this->reading)([
+        'workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 1, processes: 7)],
+    ])];
+
+    $snapshot = ($this->poll)();
+
+    expect($snapshot->status)->toBe(EnvironmentStatus::Active)
+        ->and($snapshot->breaches->all())->toBe([]);
 });

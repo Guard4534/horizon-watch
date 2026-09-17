@@ -205,7 +205,6 @@ test('the application page carries the recent anomalies with their start', funct
             ->missing('page.cards')
             ->where('page.worstStatus', 'paused')
             ->where('page.recentAlerts.0.metric', 'horizon.paused')
-            ->where('page.recentAlerts.0.sinceTruncated', false)
             ->where('page.recentAlerts.0.minutesAgo', Readings::STATE_RUN_MINUTES));
 });
 

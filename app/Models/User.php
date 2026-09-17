@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Concerns\HasTeams;
 use App\Enums\Locale;
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -21,6 +22,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string $name
  * @property string $email
  * @property Locale|null $locale
+ * @property bool $alert_emails
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
@@ -35,12 +37,24 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property-read Collection<int, Membership> $teamMemberships
  * @property-read Collection<int, Team> $teams
  */
-#[Fillable(['name', 'email', 'password', 'email_verified_at', 'current_team_id', 'locale'])]
+#[Fillable(['name', 'email', 'password', 'email_verified_at', 'current_team_id', 'locale', 'alert_emails'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
-class User extends Authenticatable
+class User extends Authenticatable implements HasLocalePreference
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasTeams, Notifiable, TwoFactorAuthenticatable;
+
+    /**
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'alert_emails' => false,
+    ];
+
+    public function preferredLocale(): ?string
+    {
+        return $this->locale?->value;
+    }
 
     /**
      * @return Attribute<string, string>
@@ -60,6 +74,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'locale' => Locale::class,
+            'alert_emails' => 'boolean',
         ];
     }
 }

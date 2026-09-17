@@ -2,6 +2,7 @@
 
 namespace App\Actions\Monitoring;
 
+use App\Alerts\EffectiveRules;
 use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
@@ -19,6 +20,7 @@ use App\Models\EnvironmentState;
 use App\Monitoring\EvaluatedStatus;
 use App\Monitoring\StatusEvaluator;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -31,6 +33,7 @@ class PollEnvironment
     public function __construct(
         private readonly HorizonReader $reader,
         private readonly StatusEvaluator $evaluator,
+        private readonly EffectiveRules $rules,
     ) {}
 
     public function handle(Environment $environment): ?EnvironmentSnapshot
@@ -69,7 +72,7 @@ class PollEnvironment
                 queueRuntimes: $reading->queueRuntimes,
                 latencyMs: $reading->latencyMs,
             )
-            : $reading);
+            : $reading, $this->rules->forEnvironment($environment));
 
         $state = [
             'status' => $evaluated->status,
@@ -81,7 +84,7 @@ class PollEnvironment
             'pending_jobs' => $reading->pendingJobs === null ? [] : $this->reservedJobs($reading->pendingJobs),
         ];
 
-        $sectionsOnInsert = [];
+        $sectionsOnInsert = ['status_since' => $capturedAt];
 
         if ($reading->failedJobs === null) {
             $sectionsOnInsert['failed_jobs'] = [];
@@ -123,6 +126,7 @@ class PollEnvironment
             'latency_ms' => null,
             'pending_jobs' => [],
         ], [
+            'status_since' => $capturedAt,
             'horizon_status' => null,
             'nodes' => [],
             'queues' => [],
@@ -234,7 +238,11 @@ class PollEnvironment
         $query = DB::table($model->getTable());
         $grammar = $query->getGrammar();
 
-        $sql = $grammar->compileUpsert($query, [$row], ['environment_id'], [...array_keys($state), 'updated_at'])
+        $statusSince = new Expression(
+            'case when "environment_states"."status" = excluded."status" then "environment_states"."status_since" else excluded."status_since" end',
+        );
+
+        $sql = $grammar->compileUpsert($query, [$row], ['environment_id'], [...array_keys($state), 'status_since' => $statusSince, 'updated_at'])
             .' where '.$grammar->wrap($model->getTable().'.captured_at').' <= '.$grammar->wrap('excluded.captured_at');
 
         DB::affectingStatement($sql, array_values($row));

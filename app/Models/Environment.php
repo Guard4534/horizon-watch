@@ -37,6 +37,7 @@ use Illuminate\Support\Str;
  * @property-read Application $application
  * @property-read Collection<int, EnvironmentSnapshot> $snapshots
  * @property-read EnvironmentState|null $state
+ * @property-read Collection<int, Alert> $alerts
  */
 #[Fillable([
     'name',
@@ -106,6 +107,14 @@ class Environment extends Model
     public function state(): HasOne
     {
         return $this->hasOne(EnvironmentState::class);
+    }
+
+    /**
+     * @return HasMany<Alert, $this>
+     */
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(Alert::class);
     }
 
     /**
