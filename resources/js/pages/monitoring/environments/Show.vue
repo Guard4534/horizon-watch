@@ -220,6 +220,7 @@ const tiles = computed<Tile[]>(() => [
                     target="_blank"
                     rel="noopener noreferrer"
                     class="nc-btn nc-btn-primary"
+                    style="font-size: 12px"
                 >
                     <PhArrowSquareOut :size="14" />{{ $t('Open Horizon') }}
                 </a>
