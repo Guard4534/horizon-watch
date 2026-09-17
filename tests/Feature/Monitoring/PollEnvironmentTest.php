@@ -447,6 +447,20 @@ test('the breaches of the evaluation are stored with a degraded status', functio
     expect(json_decode($raw, true))->toEqualCanonicalizing(['queue.pending', 'queue.max_wait', 'job.runtime']);
 });
 
+test('the pending total of several saturated queues is saturated too, so the snapshot is still written', function () {
+    $this->reader->results = [($this->reading)([
+        'workload' => [
+            new HorizonQueueLoad(name: 'default', length: 2147483647, wait: 0, processes: 1),
+            new HorizonQueueLoad(name: 'emails', length: 2147483647, wait: 0, processes: 1),
+        ],
+    ])];
+
+    $snapshot = ($this->poll)();
+
+    expect($snapshot->pending)->toBe(2147483647)
+        ->and(DB::table('environment_snapshots')->value('pending'))->toBe(2147483647);
+});
+
 test('last_polled_at moves with every reading, failed or not, and updated_at does not', function () {
     $updatedAt = $this->environment->fresh()->updated_at->toDateTimeString();
 

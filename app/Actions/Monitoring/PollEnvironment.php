@@ -24,6 +24,9 @@ use Throwable;
 
 class PollEnvironment
 {
+    /** The largest value the snapshot's integer columns can hold. */
+    private const MAX_COUNT = 2147483647;
+
     // Horizon's failed-jobs window when the application sets none.
     private const HORIZON_FAILED_WINDOW_MINUTES = 10080;
 
@@ -98,7 +101,10 @@ class PollEnvironment
         }
 
         return $this->store($environment, $capturedAt, $evaluated, [
-            'pending' => array_sum(array_map(fn (HorizonQueueLoad $queue) => $queue->length, $reading->workload)),
+            // The client saturates each queue at the integer column's limit,
+            // but the sum of several saturated queues would still overflow it
+            // and fail the insert on every poll: saturate the total too.
+            'pending' => min(self::MAX_COUNT, array_sum(array_map(fn (HorizonQueueLoad $queue) => $queue->length, $reading->workload))),
             'max_wait_seconds' => max([0, ...array_map(fn (HorizonQueueLoad $queue) => $queue->wait, $reading->workload)]),
             'jobs_per_minute' => $reading->stats->jobsPerMinute,
             'failed_last_24_hours' => $reading->stats->failedJobs,
