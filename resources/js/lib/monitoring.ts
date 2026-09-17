@@ -77,10 +77,6 @@ export function pendingColor(pending: number): string {
     return pending > 1000 ? 'var(--st-warn)' : 'var(--nc-text)';
 }
 
-export function formatMinutesAgo(minutes: number): string {
-    return trans(':minutes min ago', { minutes: String(minutes) });
-}
-
 /**
  * How long ago something began, for readers: under a minute, minutes under
  * an hour, then whole hours. `capped` means the real start lies beyond the
@@ -103,5 +99,12 @@ export function formatElapsed(minutes: number, capped = false): string {
 }
 
 export function formatDuration(seconds: number): string {
-    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    }
+
+    return `${minutes}m ${seconds % 60}s`;
 }

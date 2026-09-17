@@ -5,7 +5,7 @@ import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatRule, ruleIcon, ruleLabel } from '@/lib/alertRules';
-import { formatMinutesAgo } from '@/lib/monitoring';
+import { formatElapsed } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 import { show as showEnvironment } from '@/routes/environments';
 
@@ -74,7 +74,7 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                                     $t('more than 24 h')
                                 }}</template>
                                 <template v-else>{{
-                                    formatMinutesAgo(alert.minutesAgo)
+                                    formatElapsed(alert.minutesAgo)
                                 }}</template></span
                             >
                         </div>
