@@ -5,12 +5,16 @@ use App\Http\Controllers\Monitoring\AlertRuleController;
 use App\Http\Controllers\Monitoring\ApplicationController;
 use App\Http\Controllers\Monitoring\ConnectionTestController;
 use App\Http\Controllers\Monitoring\EnvironmentController;
+use App\Http\Controllers\Monitoring\MeController;
 use App\Http\Controllers\Monitoring\MemberController;
 use App\Http\Controllers\Monitoring\WallController;
 use App\Http\Middleware\EnsureTeamMembership;
 use Illuminate\Support\Facades\Route;
 
 Route::get('wall', WallController::class)->name('wall');
+
+// The mobile shell's profile tab; open to every member.
+Route::get('me', MeController::class)->name('me');
 
 Route::get('applications', [ApplicationController::class, 'index'])->name('applications.index');
 

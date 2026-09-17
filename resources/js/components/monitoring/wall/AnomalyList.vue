@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
+import { PhBellSlash, PhCheck } from '@phosphor-icons/vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatMinutesAgo, statusColor, statusIcon } from '@/lib/monitoring';
+import { formatRule, ruleIcon, ruleLabel } from '@/lib/alertRules';
+import { formatMinutesAgo } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 import { show as showEnvironment } from '@/routes/environments';
 
@@ -13,13 +15,17 @@ defineProps<{
 
 const slug = useTeamSlug();
 
-const TITLES: Record<App.Enums.EnvironmentStatus, string> = {
-    inactive: 'Master supervisor inactive, queues not draining',
-    unreachable: 'Horizon endpoint unreachable (timeout)',
-    paused: 'Supervisor paused for more than 2 hours',
-    degraded: 'Max wait above threshold on several queues',
-    active: 'Max wait above threshold on several queues',
-};
+// Keyed by what opened the anomaly, not by the environment's status: a
+// paused Horizon can also carry a pending-jobs breach, and the two rows
+// must not read the same. Titles and icons are the alerts page's own
+// (lib/alertRules.ts), so the two pages name an anomaly alike.
+function color(alert: App.Data.Monitoring.AlertData): string {
+    if (alert.metric === 'horizon.paused') {
+        return 'var(--st-off)';
+    }
+
+    return alert.severity === 'critical' ? 'var(--st-down)' : 'var(--st-warn)';
+}
 </script>
 
 <template>
@@ -30,31 +36,26 @@ const TITLES: Record<App.Enums.EnvironmentStatus, string> = {
             }}</Link>
         </template>
         <div class="flex flex-col" style="gap: var(--nc-space-3)">
-            <Link
-                v-for="alert in anomalies"
-                :key="alert.id"
-                :href="
-                    showEnvironment({
-                        current_team: slug,
-                        environment: alert.environmentId,
-                    })
-                "
-                class="anomaly block"
-            >
-                <span class="flex items-start gap-[9px]">
+            <div v-for="alert in anomalies" :key="alert.id" class="anomaly">
+                <div class="flex items-start gap-[9px]">
                     <component
-                        :is="statusIcon(alert.environmentStatus)"
+                        :is="ruleIcon(alert.metric)"
                         :size="15"
-                        class="mt-[2px]"
-                        :style="{ color: statusColor(alert.environmentStatus) }"
+                        class="mt-[2px] flex-none"
+                        :style="{ color: color(alert) }"
                     />
-                    <span class="min-w-0 flex-1">
-                        <span
-                            class="block"
-                            style="font-size: 13px; line-height: 1.35"
-                            >{{ $t(TITLES[alert.environmentStatus]) }}</span
+                    <div class="min-w-0 flex-1">
+                        <Link
+                            :href="
+                                showEnvironment({
+                                    current_team: slug,
+                                    environment: alert.environmentId,
+                                })
+                            "
+                            class="title block"
+                            >{{ $t(ruleLabel(alert.metric)) }}</Link
                         >
-                        <span
+                        <div
                             class="mt-[3px] flex items-center gap-[6px]"
                             style="
                                 font-size: 11px;
@@ -66,36 +67,81 @@ const TITLES: Record<App.Enums.EnvironmentStatus, string> = {
                                 shape="bar"
                                 :size="11"
                             />
-                            {{ alert.applicationName }} /
-                            {{ alert.environmentName }} ·
-                            {{ formatMinutesAgo(alert.minutesAgo) }}
-                        </span>
-                        <span
-                            class="mt-[3px] block"
+                            <span class="min-w-0 truncate"
+                                >{{ alert.applicationName }} /
+                                {{ alert.environmentName }} ·
+                                <template v-if="alert.sinceTruncated">{{
+                                    $t('more than 24 h')
+                                }}</template>
+                                <template v-else>{{
+                                    formatMinutesAgo(alert.minutesAgo)
+                                }}</template></span
+                            >
+                        </div>
+                        <div
+                            class="nc-code mt-[3px]"
                             style="
                                 font-size: 11px;
                                 color: var(--nc-neutral-600);
                             "
-                            >{{
-                                $t('Email to 3 recipients · webhook ok')
-                            }}</span
                         >
-                    </span>
-                </span>
-            </Link>
+                            {{
+                                formatRule(
+                                    alert.metric,
+                                    alert.threshold,
+                                    alert.unit,
+                                )
+                            }}
+                        </div>
+                        <!-- Muting and marking as handled arrive with the
+                             next release. -->
+                        <div
+                            class="flex flex-wrap"
+                            style="
+                                gap: var(--nc-space-2);
+                                margin-top: var(--nc-space-2);
+                            "
+                        >
+                            <button
+                                type="button"
+                                class="nc-btn nc-btn-secondary"
+                                style="font-size: 11px; padding: 2px 8px"
+                                disabled
+                                :title="$t('Available soon')"
+                            >
+                                <PhBellSlash :size="12" />{{ $t('Mute 1h') }}
+                            </button>
+                            <button
+                                type="button"
+                                class="nc-btn nc-btn-ghost"
+                                style="font-size: 11px; padding: 2px 8px"
+                                disabled
+                                :title="$t('Available soon')"
+                            >
+                                <PhCheck :size="12" />{{ $t('Handled') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </SectionCard>
 </template>
 
 <style scoped>
 .anomaly {
-    color: inherit;
-    text-decoration: none;
     padding: 0 0 var(--nc-space-3);
     border-bottom: 1px solid color-mix(in srgb, var(--nc-text) 7%, transparent);
 }
 
-.anomaly:hover {
-    opacity: 0.72;
+.title {
+    font-size: 13px;
+    line-height: 1.35;
+    color: inherit;
+    text-decoration: none;
+}
+
+.title:hover {
+    color: var(--nc-accent);
 }
 </style>

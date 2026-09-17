@@ -1,16 +1,22 @@
 <script setup lang="ts">
-import { Head, Link, router, usePage, usePoll } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
+import { trans } from 'laravel-vue-i18n';
 import { computed, ref, watch } from 'vue';
+import MobileWall from '@/components/mobile/wall/MobileWall.vue';
 import EmptyState from '@/components/monitoring/EmptyState.vue';
-import EnvironmentTile from '@/components/monitoring/wall/EnvironmentTile.vue';
 import AnomalyList from '@/components/monitoring/wall/AnomalyList.vue';
+import ApplicationGroup from '@/components/monitoring/wall/ApplicationGroup.vue';
+import FirstRun from '@/components/monitoring/wall/FirstRun.vue';
 import SentNotifications from '@/components/monitoring/wall/SentNotifications.vue';
 import WallFilters from '@/components/monitoring/wall/WallFilters.vue';
 import KpiCard from '@/components/nocturne/KpiCard.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
+import { useIsMobile } from '@/composables/useIsMobile';
+import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
 import { formatCount } from '@/lib/monitoring';
 import {
     create as createApplication,
@@ -29,7 +35,9 @@ const { page } = defineProps<{
     page: App.Data.Pages.WallPageData;
 }>();
 
-usePoll(15000, { only: ['page', 'openAlertCount'] });
+useLivePoll(['page', 'openAlertCount']);
+
+const isMobile = useIsMobile();
 
 const slug = useTeamSlug();
 const shared = usePage();
@@ -78,8 +86,23 @@ watch([filter, environmentName, search], () => {
     router.replace({ url, preserveState: true, preserveScroll: true });
 });
 
+// A row without a status is waiting for its first reading: not a problem,
+// and it keeps the quiet look of a healthy tile until it has one.
 const problems = computed(() =>
-    page.environments.filter((environment) => environment.status !== 'active'),
+    page.environments.filter(
+        (environment) =>
+            environment.status !== null && environment.status !== 'active',
+    ),
+);
+
+// The first-run steps are for someone who can act on them, in an
+// organization that holds nothing yet.
+const firstRun = computed(
+    () =>
+        nothingVisible.value &&
+        !somethingIsHidden.value &&
+        canManageApplications.value &&
+        !needsEnvironment.value,
 );
 
 const shown = computed(() => {
@@ -100,36 +123,77 @@ const shown = computed(() => {
         );
 });
 
+// Groups keep the server's order: an application ranks where its worst
+// environment does, which is where its first one sits.
+const groups = computed(() => {
+    const byApplication = new Map<
+        string,
+        {
+            id: string;
+            name: string;
+            environments: App.Data.Monitoring.EnvironmentData[];
+        }
+    >();
+
+    for (const environment of shown.value) {
+        const group = byApplication.get(environment.applicationId) ?? {
+            id: environment.applicationId,
+            name: environment.applicationName,
+            environments: [],
+        };
+
+        group.environments.push(environment);
+        byApplication.set(environment.applicationId, group);
+    }
+
+    return [...byApplication.values()];
+});
+
+// What the viewer opened or closed by hand, per application; survives the
+// poll because the page component is kept.
+const openGroups = ref<Record<string, boolean | undefined>>({});
+
+const waiting = computed(
+    () =>
+        page.environments.filter((environment) => environment.status === null)
+            .length,
+);
+
+// Translated here, like KpiCard's other callers, so every string has a
+// literal call site.
 const kpis = computed(() => [
     {
-        label: 'Environments up',
+        label: trans('Environments up'),
         value: `${page.kpis.environmentsUp} / ${page.kpis.environmentsTotal}`,
+        // An environment still waiting for its first reading is not down.
         color:
-            page.kpis.environmentsUp === page.kpis.environmentsTotal
+            page.kpis.environmentsUp + waiting.value ===
+            page.kpis.environmentsTotal
                 ? 'var(--st-ok)'
                 : 'var(--st-warn)',
-        note: 'across all applications',
+        note: trans('across all applications'),
     },
     {
-        label: 'Anomalies',
+        label: trans('Anomalies'),
         value: String(page.kpis.openAnomalies),
         color: page.kpis.openAnomalies ? 'var(--st-down)' : 'var(--st-ok)',
-        note: 'to triage',
+        note: trans('to triage'),
     },
     {
-        label: 'Queued jobs',
+        label: trans('Queued jobs'),
         value: formatCount(page.kpis.pendingTotal),
         color: 'var(--nc-text)',
-        note: 'sum of every queue',
+        note: trans('sum of every queue'),
     },
     {
-        label: 'Failed · 24h',
-        value: formatCount(page.kpis.failedLast24HoursTotal),
-        color:
-            page.kpis.failedLast24HoursTotal > 200
-                ? 'var(--st-warn)'
-                : 'var(--nc-text)',
-        note: 'last 24 hours',
+        // Each environment's count over its own window, summed as is; the
+        // warning is a rate, never this total.
+        label: failedLabel(page.kpis.failedWindowMinutes),
+        value: formatCount(page.kpis.failedTotal),
+        color: page.kpis.environmentsOverFailedRate
+            ? 'var(--st-warn)'
+            : 'var(--nc-text)',
+        note: failedWindowNote(page.kpis.failedWindowMinutes),
     },
 ]);
 </script>
@@ -137,16 +201,59 @@ const kpis = computed(() => [
 <template>
     <Head :title="$t('Status wall')" />
 
-    <div
-        class="grid items-start"
-        :style="{
-            padding: 'var(--nc-space-6)',
-            gap: 'var(--nc-space-6)',
-            gridTemplateColumns: nothingVisible
-                ? 'minmax(0, 1fr)'
-                : 'minmax(0, 1fr) 322px',
-        }"
-    >
+    <div v-if="firstRun" class="wall-pad">
+        <FirstRun />
+    </div>
+
+    <div v-else-if="nothingVisible" class="wall-pad">
+        <EmptyState
+            :icon="PhStackSimple"
+            :kicker="$t('Nothing connected')"
+            :title="$t('No environments yet')"
+            :body="
+                somethingIsHidden
+                    ? $t(
+                          'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
+                      )
+                    : needsEnvironment
+                      ? $t(
+                            'An application is configured but has no environment yet. Add one to it and it shows up here.',
+                        )
+                      : $t(
+                            'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                        )
+            "
+        >
+            <Link
+                v-if="!somethingIsHidden && needsEnvironment"
+                class="nc-btn nc-btn-primary"
+                style="margin-top: var(--nc-space-2)"
+                :href="applicationsIndex(slug)"
+            >
+                <PhPlus :size="14" />{{ $t('Add environment') }}
+            </Link>
+            <Link
+                v-else-if="canManageApplications"
+                class="nc-btn nc-btn-primary"
+                style="margin-top: var(--nc-space-2)"
+                :href="createApplication(slug)"
+            >
+                <PhPlus :size="14" />{{ $t('Add application') }}
+            </Link>
+        </EmptyState>
+    </div>
+
+    <div v-else-if="isMobile" class="wall-pad">
+        <MobileWall
+            v-model:filter="filter"
+            :environments="page.environments"
+            :problems="problems"
+            :kpis="page.kpis"
+            :failed-per-hour-threshold="page.failedPerHourThreshold"
+        />
+    </div>
+
+    <div v-else class="wall-pad wall-grid">
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
             <div
                 class="grid"
@@ -158,90 +265,39 @@ const kpis = computed(() => [
                 <KpiCard
                     v-for="kpi in kpis"
                     :key="kpi.label"
-                    :label="$t(kpi.label)"
+                    :label="kpi.label"
                     :value="kpi.value"
                     :color="kpi.color"
-                    :note="$t(kpi.note)"
+                    :note="kpi.note"
                 />
             </div>
 
-            <EmptyState
-                v-if="nothingVisible"
-                :icon="PhStackSimple"
-                :kicker="$t('Nothing connected')"
-                :title="$t('No environments yet')"
-                :body="
-                    somethingIsHidden
-                        ? $t(
-                              'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
-                          )
-                        : needsEnvironment
-                          ? $t(
-                                'An application is configured but has no environment yet. Add one to it and it shows up here.',
-                            )
-                          : canManageApplications
-                            ? $t(
-                                  'Add an application and its environments, and every one of them shows up here.',
-                              )
-                            : $t(
-                                  'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
-                              )
-                "
+            <WallFilters
+                v-model:filter="filter"
+                v-model:environment-name="environmentName"
+                v-model:search="search"
+                :environments="page.environments"
+                :problem-count="problems.length"
+            />
+
+            <ApplicationGroup
+                v-for="group in groups"
+                :key="group.id"
+                v-model:expanded="openGroups[group.id]"
+                :application-id="group.id"
+                :application-name="group.name"
+                :environments="group.environments"
+                :failed-per-hour-threshold="page.failedPerHourThreshold"
+            />
+            <p
+                v-if="groups.length === 0"
+                style="font-size: 13px; color: var(--nc-neutral-500)"
             >
-                <Link
-                    v-if="!somethingIsHidden && needsEnvironment"
-                    class="nc-btn nc-btn-primary"
-                    style="margin-top: var(--nc-space-2)"
-                    :href="applicationsIndex(slug)"
-                >
-                    <PhPlus :size="14" />{{ $t('Add environment') }}
-                </Link>
-                <Link
-                    v-else-if="canManageApplications"
-                    class="nc-btn nc-btn-primary"
-                    style="margin-top: var(--nc-space-2)"
-                    :href="createApplication(slug)"
-                >
-                    <PhPlus :size="14" />{{ $t('Add application') }}
-                </Link>
-            </EmptyState>
-
-            <template v-else>
-                <WallFilters
-                    v-model:filter="filter"
-                    v-model:environment-name="environmentName"
-                    v-model:search="search"
-                    :environments="page.environments"
-                    :problem-count="problems.length"
-                />
-
-                <div
-                    class="grid"
-                    style="
-                        grid-template-columns: repeat(
-                            auto-fill,
-                            minmax(176px, 1fr)
-                        );
-                        gap: var(--nc-space-3);
-                    "
-                >
-                    <EnvironmentTile
-                        v-for="environment in shown"
-                        :key="environment.id"
-                        :environment="environment"
-                    />
-                </div>
-            </template>
+                {{ $t('No environment matches these filters.') }}
+            </p>
         </div>
 
-        <!-- Anomalies, throughput and sent notifications all describe
-             environments: with none visible they would contradict the empty
-             state next to them, so the whole column goes. -->
-        <div
-            v-if="!nothingVisible"
-            class="flex min-w-0 flex-col"
-            style="gap: var(--nc-space-4)"
-        >
+        <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
             <AnomalyList :anomalies="page.anomalies" />
 
             <SectionCard :title="$t('Organization throughput')">
@@ -272,3 +328,30 @@ const kpis = computed(() => [
         </div>
     </div>
 </template>
+
+<style scoped>
+.wall-pad {
+    padding: var(--nc-space-6);
+}
+
+.wall-grid {
+    display: grid;
+    align-items: start;
+    gap: var(--nc-space-6);
+    grid-template-columns: minmax(0, 1fr) 322px;
+}
+
+/* Not in the mockup: between the phone and a wide screen the side column
+   drops below the groups instead of squeezing them. */
+@media (max-width: 1023px) {
+    .wall-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 639px) {
+    .wall-pad {
+        padding: var(--nc-space-3) var(--nc-space-4) var(--nc-space-4);
+    }
+}
+</style>

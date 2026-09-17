@@ -12,6 +12,16 @@ export function useIsMobile(): Ref<boolean> {
         return isMobile;
     }
 
+    // No matchMedia (server rendering, old embedded browsers, tests): the
+    // desktop layout is the one that works everywhere. Not cached, so a
+    // later call in a real browser still gets the listener.
+    if (
+        typeof window === 'undefined' ||
+        typeof window.matchMedia !== 'function'
+    ) {
+        return ref(false);
+    }
+
     const media = window.matchMedia(QUERY);
     const current = ref(media.matches);
 

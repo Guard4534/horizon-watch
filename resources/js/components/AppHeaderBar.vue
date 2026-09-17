@@ -2,7 +2,9 @@
 import { usePage } from '@inertiajs/vue3';
 import { PhEye } from '@phosphor-icons/vue';
 import { computed } from 'vue';
+import BrandMark from '@/components/nocturne/BrandMark.vue';
 import { useLastRefresh } from '@/composables/useLastRefresh';
+import { useRefreshInterval } from '@/composables/useRefreshInterval';
 
 const { title, subtitle, live } = defineProps<{
     title?: string;
@@ -15,53 +17,139 @@ const updatedAt = useLastRefresh();
 const secondLine = computed(
     () => subtitle ?? page.props.currentTeam?.name ?? '',
 );
+
+// How often this browser refreshes the open page; how often an environment
+// is read is that environment's own setting. The polling pages pick the
+// change up at once (useLivePoll).
+const { interval, options, set } = useRefreshInterval();
+
+function label(ms: number): string {
+    return ms < 60000 ? `${ms / 1000}s` : `${ms / 60000} min`;
+}
+
+function choose(event: Event): void {
+    set(Number((event.target as HTMLSelectElement).value));
+}
 </script>
 
 <template>
-    <header
-        class="flex flex-wrap items-center"
-        style="
-            gap: var(--nc-space-4);
-            padding: var(--nc-space-4) var(--nc-space-6);
-            border-bottom: 1px solid var(--nc-divider);
-        "
-    >
+    <header class="bar">
+        <BrandMark class="phone-only" :size="14" :with-name="false" />
         <div class="min-w-0">
-            <h4 style="margin: 0; font-size: 20px; letter-spacing: -0.015em">
+            <h4 class="title truncate">
                 {{ title ? $t(title) : '' }}
             </h4>
-            <div style="font-size: 12px; color: var(--nc-neutral-500)">
+            <div class="subtitle truncate">
                 {{ subtitle ? $t(subtitle) : secondLine }}
             </div>
         </div>
         <div class="ml-auto flex items-center" style="gap: var(--nc-space-3)">
             <span
                 v-if="live"
-                class="nc-num inline-flex items-center gap-[6px]"
+                class="nc-num inline-flex items-center gap-[7px]"
                 style="font-size: 11px; color: var(--nc-neutral-400)"
             >
                 <span
-                    class="size-[6px] rounded-full"
+                    class="size-[6px] flex-none rounded-full"
                     style="
                         background: var(--st-ok);
                         animation: nc-pulse 2.4s ease-in-out infinite;
                     "
                 />
-                {{ $t('polling every 15s · updated') }} {{ updatedAt }}
+                <span class="desktop-only">{{ $t('refresh every') }}</span>
+                <select
+                    class="nc-input interval"
+                    :value="interval"
+                    :aria-label="$t('Page refresh interval')"
+                    @change="choose"
+                >
+                    <option
+                        v-for="option in options"
+                        :key="option"
+                        :value="option"
+                    >
+                        {{ label(option) }}
+                    </option>
+                </select>
+                <span class="desktop-only">{{
+                    $t('· updated :time', { time: updatedAt })
+                }}</span>
             </span>
-            <span
-                class="inline-flex items-center gap-[6px]"
-                style="
-                    font-size: 11px;
-                    color: var(--nc-neutral-500);
-                    border: 1px solid var(--nc-divider);
-                    border-radius: var(--nc-radius-sm);
-                    padding: 3px 8px;
-                "
-            >
+            <span class="read-only desktop-only">
                 <PhEye :size="13" />
                 {{ $t('Read-only') }}
             </span>
         </div>
     </header>
 </template>
+
+<style scoped>
+.bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--nc-space-4);
+    padding: var(--nc-space-4) var(--nc-space-6);
+    border-bottom: 1px solid var(--nc-divider);
+}
+
+.title {
+    margin: 0;
+    font-size: 20px;
+    letter-spacing: -0.015em;
+}
+
+.subtitle {
+    font-size: 12px;
+    color: var(--nc-neutral-500);
+}
+
+.interval {
+    width: auto;
+    min-height: 0;
+    padding: 2px 6px;
+    font-size: 11px;
+}
+
+.read-only {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--nc-neutral-500);
+    border: 1px solid var(--nc-divider);
+    border-radius: var(--nc-radius-sm);
+    padding: 3px 8px;
+}
+
+.phone-only {
+    display: none;
+}
+
+/* The phone header of the mockup: one compact line, the brand in front,
+   the refresh menu without its words, no read-only pill. */
+@media (max-width: 639px) {
+    .bar {
+        flex-wrap: nowrap;
+        gap: var(--nc-space-2);
+        padding: var(--nc-space-3) var(--nc-space-4);
+    }
+
+    .title {
+        font-size: 14px;
+        letter-spacing: 0;
+    }
+
+    .subtitle {
+        display: none;
+    }
+
+    .phone-only {
+        display: inline-flex;
+    }
+
+    .desktop-only {
+        display: none;
+    }
+}
+</style>

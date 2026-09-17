@@ -24,10 +24,17 @@ const ORDER = [
     'testing',
 ];
 
+// The mockup's names first, in its order; any other name the organization
+// uses follows alphabetically, so no environment lacks a chip.
 const chips = computed(() => {
-    const names = ORDER.filter((name) =>
-        environments.some((environment) => environment.name === name),
-    );
+    const names = [
+        ...new Set(environments.map((environment) => environment.name)),
+    ].sort((a, b) => {
+        const rank = (name: string) =>
+            ORDER.includes(name) ? ORDER.indexOf(name) : ORDER.length;
+
+        return rank(a) - rank(b) || a.localeCompare(b);
+    });
 
     return names.map((name) => {
         const sample = environments.find(

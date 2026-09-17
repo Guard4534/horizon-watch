@@ -1,0 +1,212 @@
+<?php
+
+use App\Enums\AlertRuleMetric;
+use App\Enums\EnvironmentStatus;
+use App\Enums\MemberVisibility;
+use App\Enums\TeamRole;
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\Application;
+use App\Models\Environment;
+use App\Models\EnvironmentSnapshot;
+use App\Models\Team;
+use App\Models\User;
+use Illuminate\Testing\TestResponse;
+use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Readings;
+
+beforeEach(function () {
+    // Mid-bucket, so the five-minute trend buckets below are unambiguous.
+    $this->travelTo(now()->setTime(12, 2, 30));
+
+    $this->team = Team::factory()->create();
+    $this->admin = User::factory()->create();
+    $this->team->members()->attach($this->admin, ['role' => TeamRole::Admin->value]);
+    $this->admin->switchTeam($this->team);
+
+    $this->application = Application::factory()->for($this->team)->create(['name' => 'Invoicer']);
+    $this->production = Environment::factory()->for($this->application)->production()->create();
+    $this->staging = Environment::factory()->for($this->application)->staging()->create();
+});
+
+function wallPage(User $user, Team $team): TestResponse
+{
+    return test()->actingAs($user)->get(route('wall', ['current_team' => $team->slug]));
+}
+
+/**
+ * Five-minute buckets, oldest first: the reading "now" is the last value.
+ *
+ * @param  list<int>  $pending
+ */
+function pendingHistory(Environment $environment, array $pending): void
+{
+    $last = count($pending) - 1;
+
+    foreach ($pending as $index => $value) {
+        $at = now()->subMinutes(5 * ($last - $index));
+
+        if ($index === $last) {
+            Readings::record($environment, snapshot: ['pending' => $value, 'captured_at' => $at]);
+
+            continue;
+        }
+
+        EnvironmentSnapshot::factory()->for($environment)->create(['pending' => $value, 'captured_at' => $at]);
+    }
+}
+
+test('each watched environment carries what its group and tile draw', function () {
+    pendingHistory($this->staging, [100, 100, 100, 200, 200, 200]);
+    Readings::record($this->production, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending]);
+
+    wallPage($this->admin, $this->team)
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('monitoring/Wall')
+            ->has('page.environments', 2)
+            // Worst first: the degraded production leads its group.
+            ->where('page.environments.0.id', $this->production->slug)
+            ->where('page.environments.0.status', 'degraded')
+            ->where('page.environments.1.id', $this->staging->slug)
+            ->where('page.environments.1.applicationId', $this->application->slug)
+            ->where('page.environments.1.applicationName', 'Invoicer')
+            ->where('page.environments.1.status', 'active')
+            ->where('page.environments.1.color', 'staging')
+            ->where('page.environments.1.pending', 200)
+            ->where('page.environments.1.trend', [0, 0, 0, 0, 0, 0, 100, 100, 100, 200, 200, 200])
+            ->where('page.environments.1.trendPercent', 100)
+            ->where('page.failedPerHourThreshold', fn ($threshold) => (float) $threshold === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()));
+});
+
+test('an environment hidden from the viewer is not on the wall at all', function () {
+    $member = User::factory()->create();
+    $this->team->members()->attach($member, [
+        'role' => TeamRole::Member->value,
+        'visibility' => MemberVisibility::NonProduction->value,
+    ]);
+    $member->switchTeam($this->team);
+
+    Readings::record($this->production, EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
+    Readings::record($this->staging);
+
+    $response = wallPage($member, $this->team)->assertOk();
+
+    $response->assertInertia(fn (Assert $page) => $page
+        ->has('page.environments', 1)
+        ->where('page.environments.0.id', $this->staging->slug)
+        ->where('page.kpis.environmentsTotal', 1)
+        ->where('page.kpis.openAnomalies', 0)
+        ->has('page.anomalies', 0));
+
+    expect($response->getContent())->not->toContain($this->production->slug);
+});
+
+test('an environment never read is on the wall without a status, and is not counted as up', function () {
+    Readings::record($this->production);
+
+    // A row with nothing to say sorts with the paused ones, above the
+    // working production.
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.environments.0.id', $this->staging->slug)
+            ->where('page.environments.0.status', null)
+            ->where('page.environments.0.lastReadingAt', null)
+            ->where('page.kpis.environmentsUp', 1)
+            ->where('page.kpis.environmentsTotal', 2)
+            ->where('page.kpis.openAnomalies', 0));
+});
+
+test('the failed KPI names the window the environments share', function (int $production, int $staging, ?int $expected) {
+    Readings::record($this->production, snapshot: ['failed_last_24_hours' => 30, 'failed_window_minutes' => $production]);
+    Readings::record($this->staging, snapshot: ['failed_last_24_hours' => 12, 'failed_window_minutes' => $staging]);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.kpis.failedWindowMinutes', $expected)
+            // Summed as counted, never scaled to a common period.
+            ->where('page.kpis.failedTotal', 42));
+})->with([
+    'both a day' => [1440, 1440, 1440],
+    'both a week' => [10080, 10080, 10080],
+    'both an hour' => [60, 60, 60],
+    'a day and a week' => [1440, 10080, null],
+]);
+
+test('an environment not read yet does not make the failed window mixed', function () {
+    Readings::record($this->production, snapshot: ['failed_window_minutes' => 1440]);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.environments.0.id', $this->staging->slug)
+            ->where('page.environments.0.failedWindowMinutes', 10080)
+            ->where('page.kpis.failedWindowMinutes', 1440));
+});
+
+test('with nothing read yet the failed window is the default the rows carry', function () {
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page->where('page.kpis.failedWindowMinutes', 10080));
+});
+
+test('the failed warning counts environments over the hourly rate, not over a count', function () {
+    // 600 in a week is about 3.6 an hour: under the default of 20.
+    Readings::record($this->production, snapshot: ['failed_last_24_hours' => 600, 'failed_window_minutes' => 10080]);
+    // 21 in an hour is above it, although the count is far smaller.
+    Readings::record($this->staging, snapshot: ['failed_last_24_hours' => 21, 'failed_window_minutes' => 60]);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.kpis.environmentsOverFailedRate', 1)
+            ->where('page.kpis.failedTotal', 621));
+});
+
+test('a rate exactly at the threshold does not warn, as the evaluator decides', function () {
+    // 480 a day is exactly 20 an hour.
+    Readings::record($this->production, snapshot: ['failed_last_24_hours' => 480, 'failed_window_minutes' => 1440]);
+    Readings::record($this->staging, snapshot: ['failed_last_24_hours' => 481, 'failed_window_minutes' => 1440]);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page->where('page.kpis.environmentsOverFailedRate', 1));
+});
+
+test('an anomaly older than the look-back is marked as such', function () {
+    EnvironmentSnapshot::factory()->for($this->production)->create([
+        'status' => EnvironmentStatus::Paused,
+        'breaches' => [AlertRuleMetric::HorizonPaused],
+        'captured_at' => now()->subHours(30),
+    ]);
+    Readings::record($this->production, EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused]);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('page.anomalies', 1)
+            ->where('page.anomalies.0.metric', 'horizon.paused')
+            ->where('page.anomalies.0.sinceTruncated', true)
+            ->where('page.anomalies.0.minutesAgo', 1440));
+});
+
+test('the poll reload answers with only the props it asks for, and with the new reading', function () {
+    Readings::record($this->production, snapshot: ['pending' => 500]);
+    $state = Readings::record($this->staging, snapshot: ['pending' => 5]);
+
+    $this->actingAs($this->admin)->get(route('wall', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page->where('page.environments.1.pending', 5));
+
+    $this->travel(20)->seconds();
+    EnvironmentSnapshot::factory()->for($this->staging)->create(['pending' => 9, 'captured_at' => now()]);
+    $state->update(['captured_at' => now()]);
+
+    // What useLivePoll sends on every tick, whatever the interval.
+    $version = app(HandleInertiaRequests::class)->version(request());
+
+    $this->withHeaders([
+        'X-Inertia' => 'true',
+        'X-Inertia-Version' => (string) $version,
+        'X-Inertia-Partial-Component' => 'monitoring/Wall',
+        'X-Inertia-Partial-Data' => 'page,openAlertCount',
+    ])->get(route('wall', ['current_team' => $this->team->slug]))
+        ->assertOk()
+        ->assertJsonPath('props.page.environments.1.pending', 9)
+        ->assertJsonPath('props.openAlertCount', 0)
+        ->assertJsonMissingPath('props.teams')
+        ->assertJsonMissingPath('props.canManageApplications');
+});
