@@ -239,6 +239,25 @@ samp,
     opacity: 0.45;
     cursor: not-allowed;
 }
+/* A native select keeps the browser's own chevron and a light popup unless
+   told otherwise: the caret is Phosphor's caret-down (inlined, so nothing is
+   fetched), and color-scheme makes the option list dark too. The caret is
+   drawn in --nc-neutral-400 (#b2b6ca); a data URI cannot read a variable. */
+select.nc-input {
+    appearance: none;
+    color-scheme: dark;
+    padding-right: 28px;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='%23b2b6ca'%3E%3Cpath d='M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+    background-size: 12px 12px;
+    font-variant-numeric: tabular-nums;
+}
+select.nc-input option {
+    color: var(--nc-text);
+    background: var(--nc-surface);
+}
 
 .nc-radio {
     display: inline-flex;

@@ -112,8 +112,17 @@ function choose(event: Event): void {
 .interval {
     width: auto;
     min-height: 0;
-    padding: 2px 6px;
+    padding: 3px 22px 3px 8px;
     font-size: 11px;
+    line-height: 1.4;
+    color: var(--nc-neutral-300);
+    background-color: transparent;
+    background-position: right 6px center;
+    background-size: 10px 10px;
+    border-radius: var(--nc-radius-sm);
+}
+.interval:hover {
+    color: var(--nc-text);
 }
 
 .read-only {
