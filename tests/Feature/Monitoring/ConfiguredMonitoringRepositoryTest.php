@@ -720,21 +720,26 @@ test('a url saved with credentials is handed out without them', function (string
     'no credentials' => ['https://app.example.com/horizon', 'https://app.example.com/horizon'],
 ]);
 
-test('a row with nothing to say sorts with the paused ones', function () {
+test('a row with nothing to say sorts between degraded and active', function () {
     $application = Application::factory()->for($this->team)->create(['name' => 'Alpha']);
     $active = Environment::factory()->for($application)->production()->create();
     $paused = Environment::factory()->for($application)->staging()->create();
-    $waiting = Environment::factory()->for($application)->develop()->create();
+    // Collection off and never read: its status stays null for good.
+    $waiting = Environment::factory()->for($application)->develop()->create(['polling_enabled' => false]);
     $down = Environment::factory()->for($application)->demo()->create();
+    $degraded = Environment::factory()->for($application)->testing()->create();
     Readings::record($active, snapshot: ['pending' => 5000]);
     Readings::record($paused, EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused], snapshot: ['pending' => 10]);
     Readings::record($down, EnvironmentStatus::Unreachable);
+    // As many pending jobs as the waiting row (none): only the status can
+    // put it first.
+    Readings::record($degraded, EnvironmentStatus::Degraded, [AlertRuleMetric::QueueMaxWait], snapshot: ['pending' => 0]);
 
     $environments = $this->repository->environments($this->team);
     usort($environments, EnvironmentData::compareBySeverityThenPending(...));
 
     expect(array_map(fn ($environment) => $environment->id, $environments))
-        ->toBe([$down->slug, $paused->slug, $waiting->slug, $active->slug]);
+        ->toBe([$down->slug, $paused->slug, $degraded->slug, $waiting->slug, $active->slug]);
 });
 
 test('a state whose snapshots were all pruned keeps its status and detail, with no numbers', function () {

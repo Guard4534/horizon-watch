@@ -37,6 +37,18 @@ export function failedWindowNote(windowMinutes: number | null): string {
     }
 }
 
+/** "24h", "7d", "90 min": the window alone, beside a count. */
+export function failedWindowShort(windowMinutes: number): string {
+    switch (windowMinutes) {
+        case 1440:
+            return '24h';
+        case 10080:
+            return '7d';
+        default:
+            return `${windowMinutes} min`;
+    }
+}
+
 /** Failures per hour, the same arithmetic as StatusEvaluator. */
 export function failedPerHour(count: number, windowMinutes: number): number {
     return (count * 60) / Math.max(1, windowMinutes);

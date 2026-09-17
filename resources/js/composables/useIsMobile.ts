@@ -24,10 +24,16 @@ export function useIsMobile(): Ref<boolean> {
 
     const media = window.matchMedia(QUERY);
     const current = ref(media.matches);
-
-    media.addEventListener('change', (event) => {
+    const update = (event: MediaQueryListEvent) => {
         current.value = event.matches;
-    });
+    };
+
+    // Safari 13 and older only have the deprecated addListener().
+    if (typeof media.addEventListener === 'function') {
+        media.addEventListener('change', update);
+    } else {
+        media.addListener(update);
+    }
 
     isMobile = current;
 

@@ -61,6 +61,7 @@ const startsWith = (...prefixes: string[]) =>
                 :icon="PhSquaresFour"
                 label="Status wall"
                 :active="startsWith(`/${slug}/wall`)"
+                :aria-current="startsWith(`/${slug}/wall`) ? 'page' : undefined"
             />
             <SidebarLink
                 :href="applicationsIndex(slug)"
@@ -69,12 +70,20 @@ const startsWith = (...prefixes: string[]) =>
                 :active="
                     startsWith(`/${slug}/applications`, `/${slug}/environments`)
                 "
+                :aria-current="
+                    startsWith(`/${slug}/applications`, `/${slug}/environments`)
+                        ? 'page'
+                        : undefined
+                "
             />
             <SidebarLink
                 :href="alertsIndex(slug)"
                 :icon="PhBellRinging"
                 label="Alerts"
                 :active="startsWith(`/${slug}/alerts`)"
+                :aria-current="
+                    startsWith(`/${slug}/alerts`) ? 'page' : undefined
+                "
                 :badge="page.props.openAlertCount"
             />
         </nav>
@@ -91,12 +100,18 @@ const startsWith = (...prefixes: string[]) =>
                 :icon="PhSlidersHorizontal"
                 label="Alert settings"
                 :active="startsWith(`/${slug}/alert-rules`)"
+                :aria-current="
+                    startsWith(`/${slug}/alert-rules`) ? 'page' : undefined
+                "
             />
             <SidebarLink
                 :href="membersIndex(slug)"
                 :icon="PhUsersThree"
                 label="Members"
                 :active="startsWith(`/${slug}/members`)"
+                :aria-current="
+                    startsWith(`/${slug}/members`) ? 'page' : undefined
+                "
             />
         </nav>
 

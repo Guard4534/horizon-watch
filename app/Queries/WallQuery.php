@@ -28,6 +28,7 @@ class WallQuery
         return new WallPageData(
             kpis: new WallKpisData(
                 environmentsUp: count(array_filter($environments, fn (EnvironmentData $environment) => in_array($environment->status, [EnvironmentStatus::Active, EnvironmentStatus::Degraded], true))),
+                environmentsActive: count(array_filter($environments, fn (EnvironmentData $environment) => $environment->status === EnvironmentStatus::Active)),
                 environmentsTotal: count($environments),
                 openAnomalies: count($anomalies),
                 pendingTotal: $sum(fn (EnvironmentData $environment) => $environment->pending),

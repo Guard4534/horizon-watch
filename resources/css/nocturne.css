@@ -94,6 +94,17 @@ samp,
 .nc-code {
     font-family: var(--nc-font);
     letter-spacing: 0.01em;
+    /* Inter's disambiguation: slashed zero (zero), open digits (ss01), l
+       with a tail (cv05), I with serifs (cv08), so recovery codes and hosts
+       read unambiguously. Trap: the @fontsource-variable/inter 5.3 subsets
+       bundled today strip every one of these (their GSUB holds only calt,
+       ccmp, dnom, frac, locl, numr, pnum, tnum), so this line does nothing
+       until an unsubsetted Inter is bundled. */
+    font-feature-settings:
+        'zero' 1,
+        'ss01' 1,
+        'cv05' 1,
+        'cv08' 1;
 }
 
 :focus-visible {

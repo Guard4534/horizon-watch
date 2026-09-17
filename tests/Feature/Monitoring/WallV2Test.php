@@ -104,8 +104,7 @@ test('an environment hidden from the viewer is not on the wall at all', function
 test('an environment never read is on the wall without a status, and is not counted as up', function () {
     Readings::record($this->production);
 
-    // A row with nothing to say sorts with the paused ones, above the
-    // working production.
+    // A row with nothing to say sorts above the working production.
     wallPage($this->admin, $this->team)
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environments.0.id', $this->staging->slug)
@@ -114,6 +113,58 @@ test('an environment never read is on the wall without a status, and is not coun
             ->where('page.kpis.environmentsUp', 1)
             ->where('page.kpis.environmentsTotal', 2)
             ->where('page.kpis.openAnomalies', 0));
+});
+
+test('a row that will never be read stays below every row in trouble', function () {
+    // Collection off from the start: no reading, never stale, status null
+    // for good. It must not float above the degraded application.
+    $quiet = Application::factory()->for($this->team)->create(['name' => 'Archive']);
+    $waiting = Environment::factory()->for($quiet)->production()->create(['polling_enabled' => false]);
+    Readings::record($this->production, EnvironmentStatus::Degraded, [AlertRuleMetric::QueueMaxWait], snapshot: ['pending' => 0]);
+    Readings::record($this->staging, snapshot: ['pending' => 900]);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.environments.0.id', $this->production->slug)
+            ->where('page.environments.1.id', $waiting->slug)
+            ->where('page.environments.1.status', null)
+            ->where('page.environments.2.id', $this->staging->slug));
+});
+
+test('an application first appears on the wall at its worst environment', function () {
+    // The wall groups by first appearance, so this is what ranks a group
+    // by its worst row: a busy healthy row must not come before its own
+    // application's troubled one, nor lift its group above a worse one.
+    $other = Application::factory()->for($this->team)->create(['name' => 'Billing']);
+    $otherDown = Environment::factory()->for($other)->staging()->create();
+    $otherBusy = Environment::factory()->for($other)->production()->create();
+    Readings::record($otherDown, EnvironmentStatus::Unreachable);
+    Readings::record($otherBusy, snapshot: ['pending' => 1900]);
+    Readings::record($this->production, EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused], snapshot: ['pending' => 1]);
+    Readings::record($this->staging, snapshot: ['pending' => 1800]);
+
+    $response = wallPage($this->admin, $this->team);
+    $rows = collect($response->inertiaProps('page.environments'));
+
+    $firstByApplication = $rows->unique('applicationId')->pluck('id')->all();
+
+    expect($firstByApplication)->toBe([$otherDown->slug, $this->production->slug])
+        ->and($rows->pluck('id')->all())->toBe([
+            $otherDown->slug,
+            $this->production->slug,
+            $otherBusy->slug,
+            $this->staging->slug,
+        ]);
+});
+
+test('the phone counts only active environments as up', function () {
+    Readings::record($this->production, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending]);
+    Readings::record($this->staging);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.kpis.environmentsUp', 2)
+            ->where('page.kpis.environmentsActive', 1));
 });
 
 test('the failed KPI names the window the environments share', function (int $production, int $staging, ?int $expected) {

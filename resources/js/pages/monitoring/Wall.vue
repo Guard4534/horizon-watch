@@ -69,16 +69,27 @@ const needsEnvironment = computed(
 );
 
 const query = new URLSearchParams(window.location.search);
-const filter = ref<'all' | 'problems'>(
-    query.get('filter') === 'problems' ? 'problems' : 'all',
+// Null until someone picks: the phone then opens on the problems, a wide
+// screen on everything, as the two mockups do. A pick is kept in the URL
+// either way, so narrowing the window does not change what is shown.
+const chosenFilter = ref<'all' | 'problems' | null>(
+    query.get('filter') === 'problems' || query.get('filter') === 'all'
+        ? (query.get('filter') as 'all' | 'problems')
+        : null,
 );
+const filter = computed<'all' | 'problems'>({
+    get: () => chosenFilter.value ?? (isMobile.value ? 'problems' : 'all'),
+    set: (value) => {
+        chosenFilter.value = value;
+    },
+});
 const environmentName = ref(query.get('environment') ?? '');
 const search = ref(query.get('q') ?? '');
 
-watch([filter, environmentName, search], () => {
+watch([chosenFilter, environmentName, search], () => {
     const params = new URLSearchParams();
 
-    if (filter.value === 'problems') params.set('filter', 'problems');
+    if (chosenFilter.value) params.set('filter', chosenFilter.value);
     if (environmentName.value) params.set('environment', environmentName.value);
     if (search.value) params.set('q', search.value);
 
@@ -105,6 +116,19 @@ const firstRun = computed(
         !needsEnvironment.value,
 );
 
+const waitingCount = computed(
+    () =>
+        page.environments.filter((environment) => environment.status === null)
+            .length,
+);
+
+function clearNarrowing(): void {
+    environmentName.value = '';
+    search.value = '';
+}
+
+// The same URL filters on both layouts: a filtered link opened on a phone
+// shows what its URL says.
 const shown = computed(() => {
     const needle = search.value.trim().toLowerCase();
 
@@ -123,8 +147,10 @@ const shown = computed(() => {
         );
 });
 
-// Groups keep the server's order: an application ranks where its worst
-// environment does, which is where its first one sits.
+// Groups keep the server's order. The list is sorted worst first by
+// EnvironmentData::compareBySeverityThenPending, so the first row met for
+// an application is its worst one, and a group ranks by that row: a
+// group's calm rows never lift it, its troubled row always does.
 const groups = computed(() => {
     const byApplication = new Map<
         string,
@@ -153,12 +179,6 @@ const groups = computed(() => {
 // poll because the page component is kept.
 const openGroups = ref<Record<string, boolean | undefined>>({});
 
-const waiting = computed(
-    () =>
-        page.environments.filter((environment) => environment.status === null)
-            .length,
-);
-
 // Translated here, like KpiCard's other callers, so every string has a
 // literal call site.
 const kpis = computed(() => [
@@ -167,7 +187,7 @@ const kpis = computed(() => [
         value: `${page.kpis.environmentsUp} / ${page.kpis.environmentsTotal}`,
         // An environment still waiting for its first reading is not down.
         color:
-            page.kpis.environmentsUp + waiting.value ===
+            page.kpis.environmentsUp + waitingCount.value ===
             page.kpis.environmentsTotal
                 ? 'var(--st-ok)'
                 : 'var(--st-warn)',
@@ -246,10 +266,15 @@ const kpis = computed(() => [
     <div v-else-if="isMobile" class="wall-pad">
         <MobileWall
             v-model:filter="filter"
-            :environments="page.environments"
-            :problems="problems"
+            :rows="shown"
+            :total-count="page.environments.length"
+            :problem-count="problems.length"
+            :waiting-count="waitingCount"
+            :environment-name="environmentName"
+            :search="search"
             :kpis="page.kpis"
             :failed-per-hour-threshold="page.failedPerHourThreshold"
+            @clear="clearNarrowing"
         />
     </div>
 

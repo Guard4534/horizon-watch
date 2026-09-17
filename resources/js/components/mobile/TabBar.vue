@@ -18,6 +18,18 @@ const slug = useTeamSlug();
 const path = computed(() => page.url.split('?')[0]);
 const startsWith = (...prefixes: string[]) =>
     prefixes.some((prefix) => path.value.startsWith(prefix));
+
+const active = computed(() => ({
+    wall: startsWith(`/${slug.value}/wall`),
+    alerts: startsWith(`/${slug.value}/alerts`),
+    apps: startsWith(
+        `/${slug.value}/applications`,
+        `/${slug.value}/environments`,
+    ),
+    me: startsWith(`/${slug.value}/me`, '/settings'),
+}));
+
+const current = (on: boolean) => (on ? ('page' as const) : undefined);
 </script>
 
 <template>
@@ -25,7 +37,8 @@ const startsWith = (...prefixes: string[]) =>
         <Link
             :href="wall(slug)"
             class="tab"
-            :class="{ 'is-active': startsWith(`/${slug}/wall`) }"
+            :class="{ 'is-active': active.wall }"
+            :aria-current="current(active.wall)"
         >
             <PhSquaresFour :size="18" />
             <span>{{ $t('Wall') }}</span>
@@ -33,7 +46,8 @@ const startsWith = (...prefixes: string[]) =>
         <Link
             :href="alertsIndex(slug)"
             class="tab"
-            :class="{ 'is-active': startsWith(`/${slug}/alerts`) }"
+            :class="{ 'is-active': active.alerts }"
+            :aria-current="current(active.alerts)"
         >
             <PhBellRinging :size="18" />
             <span>{{ $t('Alerts') }}</span>
@@ -41,12 +55,8 @@ const startsWith = (...prefixes: string[]) =>
         <Link
             :href="applicationsIndex(slug)"
             class="tab"
-            :class="{
-                'is-active': startsWith(
-                    `/${slug}/applications`,
-                    `/${slug}/environments`,
-                ),
-            }"
+            :class="{ 'is-active': active.apps }"
+            :aria-current="current(active.apps)"
         >
             <PhStack :size="18" />
             <span>{{ $t('Apps') }}</span>
@@ -54,9 +64,8 @@ const startsWith = (...prefixes: string[]) =>
         <Link
             :href="me(slug)"
             class="tab"
-            :class="{
-                'is-active': startsWith(`/${slug}/me`, '/settings'),
-            }"
+            :class="{ 'is-active': active.me }"
+            :aria-current="current(active.me)"
         >
             <PhUser :size="18" />
             <span>{{ $t('Profile') }}</span>

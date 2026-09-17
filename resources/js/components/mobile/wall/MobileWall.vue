@@ -5,7 +5,11 @@ import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { failedPerHour } from '@/lib/failedWindow';
+import {
+    failedPerHour,
+    failedWindowNote,
+    failedWindowShort,
+} from '@/lib/failedWindow';
 import {
     envColor,
     formatCount,
@@ -19,20 +23,39 @@ import { show as showEnvironment } from '@/routes/environments';
 
 // A list, not groups: with a handful of rows on screen a group header
 // costs more room than it saves, so the application name sits in the row.
-// The server order already puts the environments in trouble on top.
-const { environments, problems, kpis, failedPerHourThreshold } = defineProps<{
-    environments: App.Data.Monitoring.EnvironmentData[];
-    problems: App.Data.Monitoring.EnvironmentData[];
+// The rows arrive filtered and in the server order, troubled ones on top.
+const {
+    rows,
+    totalCount,
+    problemCount,
+    waitingCount,
+    environmentName,
+    search,
+    kpis,
+    failedPerHourThreshold,
+} = defineProps<{
+    rows: App.Data.Monitoring.EnvironmentData[];
+    totalCount: number;
+    problemCount: number;
+    waitingCount: number;
+    environmentName: string;
+    search: string;
     kpis: App.Data.Pages.WallKpisData;
     failedPerHourThreshold: number;
 }>();
+
+const emit = defineEmits<{ clear: [] }>();
 
 const filter = defineModel<'all' | 'problems'>('filter', { required: true });
 
 const slug = useTeamSlug();
 
-const rows = computed(() =>
-    filter.value === 'problems' ? problems : environments,
+// The desktop filters travel in the URL: say so, since the phone has no
+// field to show them in.
+const narrowing = computed(() =>
+    [environmentName, search.trim() ? `"${search.trim()}"` : '']
+        .filter(Boolean)
+        .join(' · '),
 );
 
 function troubled(environment: App.Data.Monitoring.EnvironmentData): boolean {
@@ -63,7 +86,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
             <div class="kpi">
                 <div class="kpi-label">{{ $t('Up') }}</div>
                 <div class="kpi-value">
-                    {{ kpis.environmentsUp }}/{{ kpis.environmentsTotal }}
+                    {{ kpis.environmentsActive }}/{{ kpis.environmentsTotal }}
                 </div>
             </div>
             <div class="kpi">
@@ -71,12 +94,10 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                 <div
                     class="kpi-value"
                     :style="{
-                        color: problems.length
-                            ? 'var(--st-down)'
-                            : 'var(--st-ok)',
+                        color: problemCount ? 'var(--st-down)' : 'var(--st-ok)',
                     }"
                 >
-                    {{ problems.length }}
+                    {{ problemCount }}
                 </div>
             </div>
             <div class="kpi">
@@ -94,11 +115,25 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
             :options="[
                 {
                     value: 'problems',
-                    label: `${$t('Problems')} ${problems.length}`,
+                    label: `${$t('Problems')} ${problemCount}`,
                 },
-                { value: 'all', label: `${$t('All')} ${environments.length}` },
+                { value: 'all', label: `${$t('All')} ${totalCount}` },
             ]"
         />
+
+        <div v-if="narrowing" class="narrowing">
+            <span class="min-w-0 truncate">{{
+                $t('Filtered by :filters', { filters: narrowing })
+            }}</span>
+            <button
+                type="button"
+                class="nc-btn nc-btn-ghost"
+                style="font-size: 12px"
+                @click="emit('clear')"
+            >
+                {{ $t('Clear filters') }}
+            </button>
+        </div>
 
         <div class="flex flex-col" style="gap: var(--nc-space-2)">
             <Link
@@ -160,6 +195,9 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                         >{{ formatWait(environment.maxWaitSeconds) }} wait</span
                     >
                     <span
+                        :title="
+                            failedWindowNote(environment.failedWindowMinutes)
+                        "
                         :style="{
                             color:
                                 failedPerHour(
@@ -169,7 +207,10 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                                     ? 'var(--st-warn)'
                                     : undefined,
                         }"
-                        >{{ environment.failedLast24Hours }} failed</span
+                        >{{ environment.failedLast24Hours }} failed ·
+                        {{
+                            failedWindowShort(environment.failedWindowMinutes)
+                        }}</span
                     >
                 </span>
             </Link>
@@ -183,7 +224,17 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                     color: var(--nc-neutral-500);
                 "
             >
-                {{ $t('Nothing to handle: every environment is running.') }}
+                <template v-if="narrowing">{{
+                    $t('No environment matches these filters.')
+                }}</template>
+                <template v-else-if="waitingCount > 0">{{
+                    $t(
+                        'Nothing to handle. Some environments are still waiting for their first reading.',
+                    )
+                }}</template>
+                <template v-else>{{
+                    $t('Nothing to handle: every environment is running.')
+                }}</template>
             </p>
         </div>
     </div>
@@ -225,6 +276,14 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
     flex: 1;
     justify-content: center;
     font-size: 12px;
+}
+
+.narrowing {
+    display: flex;
+    align-items: center;
+    gap: var(--nc-space-2);
+    font-size: 12px;
+    color: var(--nc-neutral-400);
 }
 
 .row {

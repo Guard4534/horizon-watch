@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { PhCaretDown, PhCaretRight } from '@phosphor-icons/vue';
+import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import EnvironmentTile from '@/components/monitoring/wall/EnvironmentTile.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { envColor, formatCount, statusColor } from '@/lib/monitoring';
+import {
+    envColor,
+    formatCount,
+    statusColor,
+    statusLabel,
+} from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
 // One application's environments, already in the wall's order (worst
@@ -43,6 +49,14 @@ const pending = computed(() =>
     environments.reduce((total, environment) => total + environment.pending, 0),
 );
 
+function dotLabel(environment: App.Data.Monitoring.EnvironmentData): string {
+    return `${environment.name} · ${
+        environment.status === null
+            ? trans('No reading yet')
+            : statusLabel(environment.status)
+    }`;
+}
+
 function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
     const halo =
         environment.status !== null && environment.status !== 'active'
@@ -59,19 +73,39 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
         style="gap: var(--nc-space-2); margin-top: var(--nc-space-2)"
     >
         <div class="head flex items-center gap-2">
+            <!-- The name opens the application (PROMPT item 1); the chevron
+                 folds the group. -->
             <button
                 type="button"
                 class="toggle"
                 :aria-expanded="expanded"
+                :aria-controls="`wall-group-${applicationId}`"
+                :aria-label="
+                    expanded
+                        ? $t('Hide the environments of :application', {
+                              application: applicationName,
+                          })
+                        : $t('Show the environments of :application', {
+                              application: applicationName,
+                          })
+                "
                 @click="forced = !expanded"
             >
                 <component
                     :is="expanded ? PhCaretDown : PhCaretRight"
                     :size="12"
-                    style="color: var(--nc-neutral-500)"
                 />
-                {{ applicationName }}
             </button>
+            <Link
+                :href="
+                    showApplication({
+                        current_team: slug,
+                        application: applicationId,
+                    })
+                "
+                class="name min-w-0 truncate"
+                >{{ applicationName }}</Link
+            >
             <span
                 v-if="troubled.length"
                 class="badge"
@@ -100,8 +134,10 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
                     v-for="environment in environments"
                     :key="environment.id"
                     class="dot"
+                    role="img"
                     :style="dotStyle(environment)"
-                    :title="`${environment.name} · ${environment.status ?? $t('No reading yet')}`"
+                    :title="dotLabel(environment)"
+                    :aria-label="dotLabel(environment)"
                 />
             </span>
             <span
@@ -115,20 +151,10 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
                 }}
                 · {{ formatCount(pending) }} pending</span
             >
-            <Link
-                :href="
-                    showApplication({
-                        current_team: slug,
-                        application: applicationId,
-                    })
-                "
-                class="flex-none"
-                style="font-size: 11px; color: var(--nc-accent)"
-                >{{ $t('Detail') }}</Link
-            >
         </div>
         <div
             v-if="expanded"
+            :id="`wall-group-${applicationId}`"
             class="grid"
             style="
                 grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
@@ -152,20 +178,32 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
 }
 
 .toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin-right: -4px;
     border: 0;
+    border-radius: var(--nc-radius-sm);
     background: transparent;
     padding: 0;
-    color: inherit;
-    font: inherit;
-    font-size: 14px;
+    color: var(--nc-neutral-500);
     cursor: pointer;
 }
 
 .toggle:hover {
+    color: var(--nc-accent);
+    background: color-mix(in srgb, var(--nc-text) 7%, transparent);
+}
+
+.name {
+    font-size: 14px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.name:hover {
     color: var(--nc-accent);
 }
 

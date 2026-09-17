@@ -76,11 +76,16 @@ class EnvironmentData extends Data
     }
 
     /**
-     * A row with nothing to say sorts with the paused ones: not healthy
-     * enough to sink below the working environments, not known to be down.
+     * Lower is worse. The statuses keep their order, doubled, so a row with
+     * nothing to say fits between degraded and active: it is not healthy
+     * enough to sink below the working environments, and never above one
+     * in trouble. With the collection switched off a row can stay without
+     * a status for good, and it must not push a degraded one down the wall.
      */
     public function severity(): int
     {
-        return ($this->status ?? EnvironmentStatus::Paused)->severity();
+        return $this->status === null
+            ? 2 * EnvironmentStatus::Degraded->severity() + 1
+            : 2 * $this->status->severity();
     }
 }

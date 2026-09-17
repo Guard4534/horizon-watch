@@ -7,7 +7,10 @@ use Spatie\LaravelData\Data;
 class WallKpisData extends Data
 {
     public function __construct(
+        // Active or degraded: Horizon is working, perhaps slowly.
         public int $environmentsUp,
+        // Active only, the phone's "Up": degraded ones are its "Issues".
+        public int $environmentsActive,
         public int $environmentsTotal,
         public int $openAnomalies,
         public int $pendingTotal,

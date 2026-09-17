@@ -56,21 +56,26 @@ function choose(event: Event): void {
                         animation: nc-pulse 2.4s ease-in-out infinite;
                     "
                 />
-                <span class="desktop-only">{{ $t('refresh every') }}</span>
-                <select
-                    class="nc-input interval"
-                    :value="interval"
-                    :aria-label="$t('Page refresh interval')"
-                    @change="choose"
-                >
-                    <option
-                        v-for="option in options"
-                        :key="option"
-                        :value="option"
+                <!-- The visible words name the select (WCAG 2.5.3); on a
+                     phone they are hidden from sight only. -->
+                <label class="inline-flex items-center gap-[7px]">
+                    <span class="phone-hidden-words">{{
+                        $t('refresh every')
+                    }}</span>
+                    <select
+                        class="nc-input interval"
+                        :value="interval"
+                        @change="choose"
                     >
-                        {{ label(option) }}
-                    </option>
-                </select>
+                        <option
+                            v-for="option in options"
+                            :key="option"
+                            :value="option"
+                        >
+                            {{ label(option) }}
+                        </option>
+                    </select>
+                </label>
                 <span class="desktop-only">{{
                     $t('· updated :time', { time: updatedAt })
                 }}</span>
@@ -150,6 +155,15 @@ function choose(event: Event): void {
 
     .desktop-only {
         display: none;
+    }
+
+    .phone-hidden-words {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 }
 </style>
