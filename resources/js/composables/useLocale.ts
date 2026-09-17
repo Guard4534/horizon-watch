@@ -1,5 +1,4 @@
 import { router, usePage } from '@inertiajs/vue3';
-import { loadLanguageAsync } from 'laravel-vue-i18n';
 import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
 import { update } from '@/routes/locale';
@@ -18,7 +17,6 @@ export function useLocale(): {
             {
                 preserveScroll: true,
                 preserveState: true,
-                onSuccess: () => void loadLanguageAsync(next),
             },
         );
     }
