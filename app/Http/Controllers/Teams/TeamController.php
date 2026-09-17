@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Teams;
 
 use App\Actions\Teams\CreateTeam;
+use App\Actions\Teams\RemoveMember;
 use App\Enums\TeamRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Teams\DeleteTeamRequest;
@@ -67,21 +68,31 @@ class TeamController extends Controller
                     'email' => $member->email,
                     'avatar' => $member->avatar ?? null,
                     'role' => $membership->role->value,
-                    'role_label' => $membership->role->label(),
+                    'role_label' => User::roleLabel($membership->role),
                 ];
             }),
-            'invitations' => $team->invitations()
-                ->whereNull('accepted_at')
-                ->get()
-                ->map(fn ($invitation) => [
-                    'code' => $invitation->code,
-                    'email' => $invitation->email,
-                    'role' => $invitation->role->value,
-                    'role_label' => $invitation->role->label(),
-                    'created_at' => $invitation->created_at->toISOString(),
-                ]),
+            // A count, not a list. This route is gated by team membership
+            // with no minimum role, so a viewer reads these props out of
+            // the page source; who has been invited is an admin's business
+            // (MembersQuery withholds the same list without canInvite), and
+            // the page has had nothing but a count to draw since the
+            // read-only table moved to the Members view.
+            //
+            // pending(), not whereNull('accepted_at'): that also excludes
+            // revoked and expired rows, so this number and the Members view
+            // it links to cannot disagree.
+            'pendingInvitationCount' => $team->invitations()->pending()->count(),
             'permissions' => $user->toTeamPermissions($team),
-            'availableRoles' => TeamRole::assignable(),
+            // assignable() stays the source of which roles can be picked;
+            // the label comes from the one function that builds a role tag,
+            // so the dropdown and the badge next to it read the same.
+            'availableRoles' => array_map(
+                fn (array $option) => [
+                    'value' => $option['value'],
+                    'label' => User::roleLabel(TeamRole::from($option['value'])),
+                ],
+                TeamRole::assignable(),
+            ),
         ]);
     }
 
@@ -120,23 +131,16 @@ class TeamController extends Controller
     /**
      * Leave the specified team.
      */
-    public function leave(Request $request, Team $team): RedirectResponse
+    public function leave(Request $request, Team $team, RemoveMember $removeMember): RedirectResponse
     {
         Gate::authorize('leave', $team);
 
         $user = $request->user();
 
-        $fallbackTeam = $user->isCurrentTeam($team)
-            ? $user->fallbackTeam($team)
-            : null;
-
-        $team->memberships()
-            ->where('user_id', $user->id)
-            ->delete();
-
-        if ($fallbackTeam) {
-            $user->switchTeam($fallbackTeam);
-        }
+        // Through the action, not inline: leaving is a membership removal
+        // like any other, and the inline version forgot the member's
+        // environment_user grants.
+        $removeMember->handle($team, $user);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('You left the team ":name"', ['name' => $team->name])]);
 
@@ -160,6 +164,19 @@ class TeamController extends Controller
 
             $team->invitations()->delete();
             $team->memberships()->delete();
+
+            // Before the team row, and on purpose. Team uses the starter
+            // kit's SoftDeletes, so $team->delete() is an UPDATE and the
+            // cascadeOnDelete() on applications.team_id never fires: the
+            // applications, their environments, the environment_user grants
+            // and the still-decryptable basic-auth passwords would all stay
+            // in the database, unreferenced by any live team and unreachable
+            // through the interface. The spec asks for a cascade and says
+            // phase 2 archives nothing; deleting the applications here lets
+            // the application → environments → environment_user cascade do
+            // the rest, while the team row keeps the kit's restore path.
+            $team->applications()->delete();
+
             $team->delete();
         });
 

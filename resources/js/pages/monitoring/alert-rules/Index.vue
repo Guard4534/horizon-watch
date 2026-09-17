@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, usePage } from '@inertiajs/vue3';
+import { PhSlidersHorizontal } from '@phosphor-icons/vue';
 import { computed } from 'vue';
+import EmptyState from '@/components/monitoring/EmptyState.vue';
 import NotificationSettings from '@/components/monitoring/rules/NotificationSettings.vue';
 import RuleRow from '@/components/monitoring/rules/RuleRow.vue';
 import ScopeList from '@/components/monitoring/rules/ScopeList.vue';
@@ -14,12 +16,54 @@ const { page } = defineProps<{
 }>();
 
 const organization = computed(() => page.scope === 'organization');
+
+const shared = usePage();
+
+// The organization scope counts every visible environment (see
+// MonitoringRepository::ruleScopes): zero means there are no thresholds
+// worth showing, since there is nothing they could apply to.
+const nothingVisible = computed(
+    () =>
+        page.scopes.find((scope) => scope.id === 'organization')
+            ?.environmentCount === 0,
+);
+
+// Restricted only means something is being kept from this member if the
+// organization holds anything at all: a viewer limited to non-production
+// in an empty organization has nothing hidden from them.
+const somethingIsHidden = computed(
+    () =>
+        shared.props.visibilityRestricted &&
+        shared.props.organizationHasEnvironments,
+);
 </script>
 
 <template>
     <Head :title="$t('Alert settings')" />
 
+    <div v-if="nothingVisible" style="padding: var(--nc-space-6)">
+        <EmptyState
+            :icon="PhSlidersHorizontal"
+            :kicker="$t('Nothing to watch')"
+            :title="$t('No thresholds yet')"
+            :body="
+                somethingIsHidden
+                    ? $t(
+                          'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
+                      )
+                    : shared.props.canManageApplications
+                      ? $t(
+                            'Configure an application with at least one environment first: its thresholds can be reviewed here afterwards.',
+                        )
+                      : $t(
+                            'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                        )
+            "
+        />
+    </div>
+
     <div
+        v-else
         class="grid items-start"
         style="
             padding: var(--nc-space-6);

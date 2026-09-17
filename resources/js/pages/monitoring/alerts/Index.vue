@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { Head, router, usePoll } from '@inertiajs/vue3';
+import { Head, router, usePage, usePoll } from '@inertiajs/vue3';
+import { PhBellSimpleSlash } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
+import EmptyState from '@/components/monitoring/EmptyState.vue';
 import AlertTable from '@/components/monitoring/alerts/AlertTable.vue';
 import EmailPreview from '@/components/monitoring/alerts/EmailPreview.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
@@ -15,6 +17,21 @@ const { page } = defineProps<{
 }>();
 
 usePoll(15000, { only: ['page', 'openAlertCount'] });
+
+const shared = usePage();
+
+// No visible environment at all: the three tabs and the delivery policy have
+// nothing to describe, so the page is just the explanation.
+const nothingVisible = computed(() => page.environmentCount === 0);
+
+// Restricted only means something is being kept from this member if the
+// organization holds anything at all: a viewer limited to non-production
+// in an empty organization has nothing hidden from them.
+const somethingIsHidden = computed(
+    () =>
+        shared.props.visibilityRestricted &&
+        shared.props.organizationHasEnvironments,
+);
 
 const state = computed({
     get: () => page.state,
@@ -42,7 +59,29 @@ const alerts = computed(() => {
 <template>
     <Head :title="$t('Alerts')" />
 
+    <div v-if="nothingVisible" style="padding: var(--nc-space-6)">
+        <EmptyState
+            :icon="PhBellSimpleSlash"
+            :kicker="$t('Nothing to watch')"
+            :title="$t('No alerts yet')"
+            :body="
+                somethingIsHidden
+                    ? $t(
+                          'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
+                      )
+                    : shared.props.canManageApplications
+                      ? $t(
+                            'Configure an application with at least one environment first: alerts appear as soon as there is something to watch.',
+                        )
+                      : $t(
+                            'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                        )
+            "
+        />
+    </div>
+
     <div
+        v-else
         class="grid items-start"
         style="
             padding: var(--nc-space-6);

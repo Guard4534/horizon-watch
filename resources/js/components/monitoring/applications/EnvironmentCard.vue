@@ -21,14 +21,21 @@ const slug = useTeamSlug();
 </script>
 
 <template>
-    <Link
+    <!-- An unwatched environment (listed by the viewer's permission,
+         hidden by their visibility) has no detail page for them, so its
+         card is not a link: see EnvironmentData::$watched. -->
+    <component
+        :is="card.environment.watched ? Link : 'div'"
         :href="
-            showEnvironment({
-                current_team: slug,
-                environment: card.environment.id,
-            })
+            card.environment.watched
+                ? showEnvironment({
+                      current_team: slug,
+                      environment: card.environment.id,
+                  })
+                : undefined
         "
         class="env-card"
+        :class="{ 'env-card-link': card.environment.watched }"
     >
         <EnvSwatch :color="card.environment.color" shape="edge" :size="3" />
         <span class="flex items-center gap-2">
@@ -51,7 +58,19 @@ const slug = useTeamSlug();
         >
             {{ card.environment.horizonUrl.replace('https://', '') }}
         </span>
-        <span class="mt-[var(--nc-space-3)] block">
+        <span
+            v-if="!card.environment.watched"
+            class="mt-[var(--nc-space-3)] flex items-center"
+            style="height: 26px; font-size: 11px; color: var(--nc-neutral-500)"
+            :title="
+                $t(
+                    'Your visibility does not cover this environment: no detail page and no chart, but you can still configure it.',
+                )
+            "
+        >
+            {{ $t('Not on your wall') }}
+        </span>
+        <span v-else class="mt-[var(--nc-space-3)] block">
             <TrendLine
                 :values="card.sparkline"
                 :width="190"
@@ -120,7 +139,7 @@ const slug = useTeamSlug();
                 </span>
             </span>
         </span>
-    </Link>
+    </component>
 </template>
 
 <style scoped>
@@ -138,7 +157,7 @@ const slug = useTeamSlug();
     overflow: hidden;
 }
 
-.env-card:hover {
+.env-card-link:hover {
     box-shadow: var(--nc-shadow-md);
 }
 </style>

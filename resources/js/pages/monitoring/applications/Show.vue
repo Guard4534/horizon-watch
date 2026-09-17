@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Head, Link, usePoll } from '@inertiajs/vue3';
-import { PhKey } from '@phosphor-icons/vue';
+import { Head, Link, usePage, usePoll } from '@inertiajs/vue3';
+import { PhKey, PhPlus } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import EnvironmentCard from '@/components/monitoring/applications/EnvironmentCard.vue';
 import EnvironmentComparison from '@/components/monitoring/applications/EnvironmentComparison.vue';
@@ -9,6 +9,10 @@ import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCount, statusColor, statusLabel } from '@/lib/monitoring';
 import { index as applicationsIndex } from '@/routes/applications';
+import {
+    create as createEnvironment,
+    edit as editEnvironment,
+} from '@/routes/environments';
 
 defineOptions({
     layout: { title: 'Application detail', live: true },
@@ -21,7 +25,12 @@ const { page } = defineProps<{
 usePoll(15000, { only: ['page', 'openAlertCount'] });
 
 const slug = useTeamSlug();
+const shared = usePage();
 const environments = computed(() => page.cards.map((card) => card.environment));
+
+const canManageApplications = computed(
+    () => shared.props.canManageApplications,
+);
 
 const stats = computed(() => [
     {
@@ -138,15 +147,51 @@ const stats = computed(() => [
                             )
                         }}
                     </div>
-                    <button
-                        type="button"
-                        class="nc-btn nc-btn-secondary mt-[var(--nc-space-3)]"
-                        style="font-size: 12px"
-                        disabled
-                        :title="$t('Available soon')"
+                    <!-- Credentials are stored per environment, so this is
+                         one way in per environment. An application with no
+                         environment yet is reachable on purpose (an admin
+                         lands here right after the wizard, or after deleting
+                         the last one): that case gets the only way forward
+                         the page can offer instead of an empty row. -->
+                    <template
+                        v-if="canManageApplications && environments.length"
                     >
-                        <PhKey :size="13" />{{ $t('Manage credentials') }}
-                    </button>
+                        <div class="nc-label mt-[var(--nc-space-4)]">
+                            {{ $t('Manage credentials') }}
+                        </div>
+                        <div
+                            class="flex flex-wrap"
+                            style="gap: var(--nc-space-2)"
+                        >
+                            <Link
+                                v-for="environment in environments"
+                                :key="environment.id"
+                                class="nc-btn nc-btn-secondary"
+                                style="font-size: 12px"
+                                :href="
+                                    editEnvironment({
+                                        current_team: slug,
+                                        environment: environment.id,
+                                    })
+                                "
+                            >
+                                <PhKey :size="13" />{{ environment.name }}
+                            </Link>
+                        </div>
+                    </template>
+                    <Link
+                        v-else-if="canManageApplications"
+                        class="nc-btn nc-btn-secondary mt-[var(--nc-space-4)]"
+                        style="font-size: 12px"
+                        :href="
+                            createEnvironment({
+                                current_team: slug,
+                                application: page.application.id,
+                            })
+                        "
+                    >
+                        <PhPlus :size="13" />{{ $t('Add environment') }}
+                    </Link>
                 </SectionCard>
             </div>
         </div>

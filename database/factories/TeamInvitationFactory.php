@@ -51,6 +51,16 @@ class TeamInvitationFactory extends Factory
     }
 
     /**
+     * Indicate that the invitation has been revoked.
+     */
+    public function revoked(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'revoked_at' => now(),
+        ]);
+    }
+
+    /**
      * Indicate that the invitation expires in the given time.
      */
     public function expiresIn(int $value, string $unit = 'days'): static

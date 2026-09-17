@@ -23,6 +23,9 @@ declare module '@inertiajs/core' {
             currentTeam: Team | null;
             teams: Team[];
             openAlertCount: number | null;
+            canManageApplications: boolean;
+            visibilityRestricted: boolean;
+            organizationHasEnvironments: boolean;
             [key: string]: unknown;
         };
     }

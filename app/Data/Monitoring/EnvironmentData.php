@@ -25,6 +25,15 @@ class EnvironmentData extends Data
         public ?string $basicAuthUser,
         public float $redisMemoryGb,
         public int $latencyMs,
+        // Whether this environment is on the viewer's wall. False only on
+        // the Applications pages, and only for a viewer whose *permission*
+        // put it there while their visibility hides it (see the split note
+        // in ConfiguredMonitoringRepository): those rows keep every
+        // configuration control and lose the ones that would lead to the
+        // operational view, which answers 404 for them. Everywhere else —
+        // wall, alerts, environment detail — a row exists only if it is
+        // watched, so it is true.
+        public bool $watched,
     ) {}
 
     /**

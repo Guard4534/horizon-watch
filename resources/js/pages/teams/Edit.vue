@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head, router } from '@inertiajs/vue3';
+import { Form, Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import {
     PhCaretDown,
     PhEnvelopeSimple,
@@ -8,11 +8,9 @@ import {
 } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed, ref } from 'vue';
-import CancelInvitationModal from '@/components/CancelInvitationModal.vue';
 import DeleteTeamModal from '@/components/DeleteTeamModal.vue';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
-import InviteMemberModal from '@/components/InviteMemberModal.vue';
 import RemoveMemberModal from '@/components/RemoveMemberModal.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -32,20 +30,18 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useInitials } from '@/composables/useInitials';
+import { losingTheLastAdmin } from '@/lib/members';
+import { index as membersIndex } from '@/routes/members';
 import { edit, index, update } from '@/routes/teams';
 import { update as updateMember } from '@/routes/teams/members';
-import type {
-    RoleOption,
-    Team,
-    TeamInvitation,
-    TeamMember,
-    TeamPermissions,
-} from '@/types';
+import type { RoleOption, Team, TeamMember, TeamPermissions } from '@/types';
 
 type Props = {
     team: Team;
     members: TeamMember[];
-    invitations: TeamInvitation[];
+    // A count, not a list: the invited addresses are an admin's business and
+    // this route has no minimum role (see TeamController::edit).
+    pendingInvitationCount: number;
     permissions: TeamPermissions;
     availableRoles: RoleOption[];
 };
@@ -69,12 +65,9 @@ defineOptions({
 
 const { getInitials } = useInitials();
 
-const inviteDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
 const removeMemberDialogOpen = ref(false);
 const memberToRemove = ref<TeamMember | null>(null);
-const cancelInvitationDialogOpen = ref(false);
-const invitationToCancel = ref<TeamInvitation | null>(null);
 
 const pageTitle = computed(() =>
     trans(props.permissions.canUpdateTeam ? 'Edit :team' : 'View :team', {
@@ -82,9 +75,16 @@ const pageTitle = computed(() =>
     }),
 );
 
+// useForm, the phase's one submit idiom: it carries the validation message
+// the role change can come back with (ChangeMemberRole's sole-admin
+// self-demotion guard, and "owner is not assignable") and the in-flight
+// flag, instead of both being read back out of the shared page props.
+const roleForm = useForm<{ role: string }>({ role: '' });
+
 const updateMemberRole = (member: TeamMember, newRole: string) => {
-    router.visit(updateMember([props.team.slug, member.id]), {
-        data: { role: newRole },
+    roleForm.role = newRole;
+
+    roleForm.patch(updateMember([props.team.slug, member.id]).url, {
         preserveScroll: true,
     });
 };
@@ -94,10 +94,19 @@ const confirmRemoveMember = (member: TeamMember) => {
     removeMemberDialogOpen.value = true;
 };
 
-const confirmCancelInvitation = (invitation: TeamInvitation) => {
-    invitationToCancel.value = invitation;
-    cancelInvitationDialogOpen.value = true;
-};
+const inertiaPage = usePage();
+
+const removeTargetIsSelf = computed(
+    () => memberToRemove.value?.id === inertiaPage.props.auth.user?.id,
+);
+
+const removeTargetIsLastAdmin = computed(() =>
+    losingTheLastAdmin(
+        memberToRemove.value,
+        removeTargetIsSelf.value,
+        props.members,
+    ),
+);
 </script>
 
 <template>
@@ -160,14 +169,21 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
                     "
                 />
 
+                <!-- Inviting, resending and revoking happen in the Members
+                     view now (phase 2): this page keeps the organization's
+                     own settings. -->
                 <Button
                     v-if="permissions.canCreateInvitation"
+                    as-child
                     data-test="invite-member-button"
-                    @click="inviteDialogOpen = true"
                 >
-                    <PhUserPlus /> {{ $t('Invite member') }}
+                    <Link :href="membersIndex(team.slug)">
+                        <PhUserPlus /> {{ $t('Invite member') }}
+                    </Link>
                 </Button>
             </div>
+
+            <InputError :message="roleForm.errors.role" />
 
             <div class="space-y-3">
                 <div
@@ -260,65 +276,49 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
             </div>
         </div>
 
-        <!-- Pending Invitations Section -->
-        <div v-if="invitations.length > 0" class="space-y-6">
+        <!-- Pending Invitations Section. Resending and revoking live in the
+             Members view, which also shows the role, the visibility and the
+             expiry: a second read-only copy here would only be a place for
+             the two to disagree. -->
+        <div v-if="pendingInvitationCount > 0" class="space-y-6">
             <Heading
                 variant="small"
                 :title="$t('Pending invitations')"
-                :description="$t('Invitations that haven\'t been accepted yet')"
+                :description="
+                    $tChoice(
+                        ':count invitation is waiting to be accepted.|:count invitations are waiting to be accepted.',
+                        pendingInvitationCount,
+                    )
+                "
             />
 
-            <div class="space-y-3">
-                <div
-                    v-for="invitation in invitations"
-                    :key="invitation.code"
-                    data-test="invitation-row"
-                    class="flex items-center justify-between rounded-lg border p-4"
-                >
-                    <div class="flex items-center gap-4">
-                        <div
-                            class="bg-muted flex h-10 w-10 items-center justify-center rounded-full"
-                        >
-                            <PhEnvelopeSimple
-                                class="text-muted-foreground h-5 w-5"
-                            />
-                        </div>
-                        <div>
-                            <div class="font-medium">
-                                {{ invitation.email }}
-                            </div>
-                            <div class="text-muted-foreground text-sm">
-                                {{ invitation.role_label }}
-                            </div>
-                        </div>
+            <div
+                data-test="invitation-row"
+                class="flex items-center justify-between rounded-lg border p-4"
+            >
+                <div class="flex items-center gap-4">
+                    <div
+                        class="bg-muted flex h-10 w-10 items-center justify-center rounded-full"
+                    >
+                        <PhEnvelopeSimple
+                            class="text-muted-foreground h-5 w-5"
+                        />
                     </div>
-
-                    <TooltipProvider v-if="permissions.canCancelInvitation">
-                        <Tooltip>
-                            <TooltipTrigger as-child>
-                                <Button
-                                    data-test="invitation-cancel-button"
-                                    variant="ghost"
-                                    size="sm"
-                                    @click="confirmCancelInvitation(invitation)"
-                                >
-                                    <PhX class="h-4 w-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{{ $t('Cancel invitation') }}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                    <div class="text-muted-foreground text-sm">
+                        {{ $t('Manage them from the Members view.') }}
+                    </div>
                 </div>
+
+                <Button as-child variant="secondary">
+                    <Link :href="membersIndex(team.slug)">
+                        {{ $t('Members') }}
+                    </Link>
+                </Button>
             </div>
         </div>
 
         <!-- Danger Zone -->
-        <div
-            v-if="permissions.canDeleteTeam && !team.isPersonal"
-            class="space-y-6"
-        >
+        <div v-if="permissions.canDeleteTeam" class="space-y-6">
             <Heading
                 variant="small"
                 :title="$t('Delete team')"
@@ -355,30 +355,17 @@ const confirmCancelInvitation = (invitation: TeamInvitation) => {
         </div>
     </div>
 
-    <InviteMemberModal
-        v-if="permissions.canCreateInvitation"
-        :team="team"
-        :available-roles="availableRoles"
-        :open="inviteDialogOpen"
-        @update:open="inviteDialogOpen = $event"
-    />
-
     <RemoveMemberModal
         :team="team"
         :member="memberToRemove"
+        :is-self="removeTargetIsSelf"
+        :losing-the-last-admin="removeTargetIsLastAdmin"
         :open="removeMemberDialogOpen"
         @update:open="removeMemberDialogOpen = $event"
     />
 
-    <CancelInvitationModal
-        :team="team"
-        :invitation="invitationToCancel"
-        :open="cancelInvitationDialogOpen"
-        @update:open="cancelInvitationDialogOpen = $event"
-    />
-
     <DeleteTeamModal
-        v-if="permissions.canDeleteTeam && !team.isPersonal"
+        v-if="permissions.canDeleteTeam"
         :team="team"
         :open="deleteDialogOpen"
         @update:open="deleteDialogOpen = $event"

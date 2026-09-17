@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Support\Carbon;
 
@@ -13,12 +15,13 @@ use Illuminate\Support\Carbon;
  * @property int $team_id
  * @property int $user_id
  * @property TeamRole $role
+ * @property MemberVisibility $visibility
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Team $team
  * @property-read User $user
  */
-#[Fillable(['team_id', 'user_id', 'role'])]
+#[Fillable(['team_id', 'user_id', 'role', 'visibility'])]
 class Membership extends Pivot
 {
     /**
@@ -56,6 +59,34 @@ class Membership extends Pivot
     }
 
     /**
+     * Get the environments explicitly granted to this member. Only
+     * meaningful when visibility is "manual" — other visibilities compute
+     * their environments from the team's applications instead.
+     *
+     * environment_user is keyed by user_id, not by membership id, so the
+     * raw pivot holds the grants of every organization this person belongs
+     * to. The relation therefore narrows reads to this membership's own
+     * team: without that, reading it would report (and a sync() would
+     * delete) another organization's grants. Writes still touch the pivot
+     * directly, so anything that removes rows must scope them itself — see
+     * ChangeMemberVisibility.
+     *
+     * Never eager-load this relation: Eloquent builds an eager constraint
+     * from a fresh instance, whose team_id is null, so it would match
+     * nothing. And since the pivot is keyed by user_id, eager results for
+     * two memberships of the same person could not be told apart anyway.
+     * TeamInvitation::environments() had the same trap and solved it with
+     * a column comparison, which has no equivalent here.
+     *
+     * @return BelongsToMany<Environment, $this>
+     */
+    public function visibleEnvironments(): BelongsToMany
+    {
+        return $this->belongsToMany(Environment::class, 'environment_user', 'user_id', 'environment_id', 'user_id')
+            ->where('environments.team_id', $this->team_id);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -64,6 +95,7 @@ class Membership extends Pivot
     {
         return [
             'role' => TeamRole::class,
+            'visibility' => MemberVisibility::class,
         ];
     }
 }

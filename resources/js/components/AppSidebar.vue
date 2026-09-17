@@ -18,7 +18,7 @@ import { wall } from '@/routes';
 import { index as alertsIndex } from '@/routes/alerts';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 import { index as applicationsIndex } from '@/routes/applications';
-import { edit as editTeam } from '@/routes/teams';
+import { index as membersIndex } from '@/routes/members';
 
 const page = usePage();
 const slug = useTeamSlug();
@@ -93,10 +93,10 @@ const startsWith = (...prefixes: string[]) =>
                 :active="startsWith(`/${slug}/alert-rules`)"
             />
             <SidebarLink
-                :href="editTeam(slug)"
+                :href="membersIndex(slug)"
                 :icon="PhUsersThree"
                 label="Members"
-                :active="startsWith('/settings/teams')"
+                :active="startsWith(`/${slug}/members`)"
             />
         </nav>
 

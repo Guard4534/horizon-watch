@@ -14,5 +14,9 @@ class AlertLogPageData extends Data
         /** @var array<int, AlertData> */
         public array $alerts,
         public ?AlertData $preview,
+        // Zero means the organization has no visible environment at all, so
+        // there is nothing for an alert to be about yet: the page shows the
+        // empty state instead of three empty tabs.
+        public int $environmentCount,
     ) {}
 }

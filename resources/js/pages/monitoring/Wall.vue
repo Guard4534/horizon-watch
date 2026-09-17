@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { Head, router, usePoll } from '@inertiajs/vue3';
+import { Head, Link, router, usePage, usePoll } from '@inertiajs/vue3';
+import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
 import { computed, ref, watch } from 'vue';
+import EmptyState from '@/components/monitoring/EmptyState.vue';
 import EnvironmentTile from '@/components/monitoring/wall/EnvironmentTile.vue';
 import AnomalyList from '@/components/monitoring/wall/AnomalyList.vue';
 import SentNotifications from '@/components/monitoring/wall/SentNotifications.vue';
@@ -8,7 +10,12 @@ import WallFilters from '@/components/monitoring/wall/WallFilters.vue';
 import KpiCard from '@/components/nocturne/KpiCard.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
+import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCount } from '@/lib/monitoring';
+import {
+    create as createApplication,
+    index as applicationsIndex,
+} from '@/routes/applications';
 
 defineOptions({
     layout: {
@@ -23,6 +30,35 @@ const { page } = defineProps<{
 }>();
 
 usePoll(15000, { only: ['page', 'openAlertCount'] });
+
+const slug = useTeamSlug();
+const shared = usePage();
+
+// Nothing visible: the organization may have no environment yet, or this
+// member's visibility may cover none of the ones that exist. Which of the
+// two it is decides the wording, and it is never the role that says so.
+const nothingVisible = computed(() => page.environments.length === 0);
+const canManageApplications = computed(
+    () => shared.props.canManageApplications,
+);
+// Restricted only means something is being kept from this member if the
+// organization holds anything at all: a viewer limited to non-production
+// in an empty organization has nothing hidden from them.
+const somethingIsHidden = computed(
+    () =>
+        shared.props.visibilityRestricted &&
+        shared.props.organizationHasEnvironments,
+);
+
+// An application survives losing its last environment (on purpose: nothing
+// else could ever reach it again), so an admin can land here with
+// applications and no environment. Adding another application is not what
+// they need — adding an environment to the one they have is. Checked after
+// somethingIsHidden, so a restricted admin who really is missing a whole
+// environment is not sent to configure a second one.
+const needsEnvironment = computed(
+    () => canManageApplications.value && page.applicationCount > 0,
+);
 
 const query = new URLSearchParams(window.location.search);
 const filter = ref<'all' | 'problems'>(
@@ -103,11 +139,13 @@ const kpis = computed(() => [
 
     <div
         class="grid items-start"
-        style="
-            padding: var(--nc-space-6);
-            gap: var(--nc-space-6);
-            grid-template-columns: minmax(0, 1fr) 322px;
-        "
+        :style="{
+            padding: 'var(--nc-space-6)',
+            gap: 'var(--nc-space-6)',
+            gridTemplateColumns: nothingVisible
+                ? 'minmax(0, 1fr)'
+                : 'minmax(0, 1fr) 322px',
+        }"
     >
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
             <div
@@ -127,33 +165,83 @@ const kpis = computed(() => [
                 />
             </div>
 
-            <WallFilters
-                v-model:filter="filter"
-                v-model:environment-name="environmentName"
-                v-model:search="search"
-                :environments="page.environments"
-                :problem-count="problems.length"
-            />
-
-            <div
-                class="grid"
-                style="
-                    grid-template-columns: repeat(
-                        auto-fill,
-                        minmax(176px, 1fr)
-                    );
-                    gap: var(--nc-space-3);
+            <EmptyState
+                v-if="nothingVisible"
+                :icon="PhStackSimple"
+                :kicker="$t('Nothing connected')"
+                :title="$t('No environments yet')"
+                :body="
+                    somethingIsHidden
+                        ? $t(
+                              'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
+                          )
+                        : needsEnvironment
+                          ? $t(
+                                'An application is configured but has no environment yet. Add one to it and it shows up here.',
+                            )
+                          : canManageApplications
+                            ? $t(
+                                  'Add an application and its environments, and every one of them shows up here.',
+                              )
+                            : $t(
+                                  'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                              )
                 "
             >
-                <EnvironmentTile
-                    v-for="environment in shown"
-                    :key="environment.id"
-                    :environment="environment"
+                <Link
+                    v-if="!somethingIsHidden && needsEnvironment"
+                    class="nc-btn nc-btn-primary"
+                    style="margin-top: var(--nc-space-2)"
+                    :href="applicationsIndex(slug)"
+                >
+                    <PhPlus :size="14" />{{ $t('Add environment') }}
+                </Link>
+                <Link
+                    v-else-if="canManageApplications"
+                    class="nc-btn nc-btn-primary"
+                    style="margin-top: var(--nc-space-2)"
+                    :href="createApplication(slug)"
+                >
+                    <PhPlus :size="14" />{{ $t('Add application') }}
+                </Link>
+            </EmptyState>
+
+            <template v-else>
+                <WallFilters
+                    v-model:filter="filter"
+                    v-model:environment-name="environmentName"
+                    v-model:search="search"
+                    :environments="page.environments"
+                    :problem-count="problems.length"
                 />
-            </div>
+
+                <div
+                    class="grid"
+                    style="
+                        grid-template-columns: repeat(
+                            auto-fill,
+                            minmax(176px, 1fr)
+                        );
+                        gap: var(--nc-space-3);
+                    "
+                >
+                    <EnvironmentTile
+                        v-for="environment in shown"
+                        :key="environment.id"
+                        :environment="environment"
+                    />
+                </div>
+            </template>
         </div>
 
-        <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
+        <!-- Anomalies, throughput and sent notifications all describe
+             environments: with none visible they would contradict the empty
+             state next to them, so the whole column goes. -->
+        <div
+            v-if="!nothingVisible"
+            class="flex min-w-0 flex-col"
+            style="gap: var(--nc-space-4)"
+        >
             <AnomalyList :anomalies="page.anomalies" />
 
             <SectionCard :title="$t('Organization throughput')">

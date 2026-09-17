@@ -4,6 +4,7 @@ namespace App\Concerns;
 
 use App\Data\TeamPermissions;
 use App\Data\UserTeam;
+use App\Enums\MemberVisibility;
 use App\Enums\TeamPermission;
 use App\Enums\TeamRole;
 use App\Models\Membership;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
 
 trait HasTeams
@@ -129,6 +131,22 @@ trait HasTeams
     }
 
     /**
+     * Get the user's environment visibility on the given team.
+     *
+     * Visibility is an axis of its own: a role says what someone may do,
+     * this says how much of the organization they see. An admin can hold
+     * "manual" visibility and an owner "non_production", so nothing may
+     * infer one from the other.
+     */
+    public function teamVisibility(Team $team): ?MemberVisibility
+    {
+        return $this->teamMemberships()
+            ->where('team_id', $team->id)
+            ->first()
+            ?->visibility;
+    }
+
+    /**
      * Get the user's teams as a collection of UserTeam objects.
      *
      * @return Collection<int, UserTeam>
@@ -155,26 +173,55 @@ trait HasTeams
             slug: $team->slug,
             isPersonal: $team->is_personal,
             role: $role?->value,
-            roleLabel: $role?->label(),
+            roleLabel: $role === null ? null : self::roleLabel($role),
             isCurrent: $this->isCurrentTeam($team),
         );
     }
 
     /**
+     * The one label of a role tag in the panel, shared by every producer of
+     * one: this trait's toUserTeam(), TeamController::edit() and
+     * MembersQuery. Static because none of them is "a user" — two build the
+     * label of somebody else's membership.
+     *
+     * The format is the lowercase enum value. The mockup writes the role
+     * tags that way (its members table, its permission-matrix header and
+     * its invite radios all read "admin", "member", "viewer"), and those
+     * three words read the same in both languages, which is why
+     * TeamRole::label() stays out of __() and off the container — see that
+     * docblock. Only the owner gets a sentence, and only the owner is
+     * translated: "Owner · admin" is the mockup's own wording (t.roleAdmin),
+     * because the owner holds every admin permission plus deleting the
+     * organization.
+     *
+     * TeamRole::label() keeps the capitalised prose form, for the two places
+     * a role sits inside a sentence rather than in a tag: the invitation
+     * email and the invitation card.
+     */
+    public static function roleLabel(TeamRole $role): string
+    {
+        return $role === TeamRole::Owner ? __('Owner · admin') : $role->value;
+    }
+
+    /**
      * Get the standard permissions for a team as a TeamPermissions object.
+     *
+     * Read through the Gate, one ability per flag, so the page's buttons and
+     * the server's refusals cannot answer differently. Asking
+     * TeamRole::hasPermission() directly used to skip the Policies' extra
+     * clauses: TeamPolicy::delete() also refuses a personal team, which the
+     * Vue template then had to patch back in by hand.
      */
     public function toTeamPermissions(Team $team): TeamPermissions
     {
-        $role = $this->teamRole($team);
+        $gate = Gate::forUser($this);
 
         return new TeamPermissions(
-            canUpdateTeam: $role?->hasPermission(TeamPermission::UpdateTeam) ?? false,
-            canDeleteTeam: $role?->hasPermission(TeamPermission::DeleteTeam) ?? false,
-            canAddMember: $role?->hasPermission(TeamPermission::AddMember) ?? false,
-            canUpdateMember: $role?->hasPermission(TeamPermission::UpdateMember) ?? false,
-            canRemoveMember: $role?->hasPermission(TeamPermission::RemoveMember) ?? false,
-            canCreateInvitation: $role?->hasPermission(TeamPermission::CreateInvitation) ?? false,
-            canCancelInvitation: $role?->hasPermission(TeamPermission::CancelInvitation) ?? false,
+            canUpdateTeam: $gate->allows('update', $team),
+            canDeleteTeam: $gate->allows('delete', $team),
+            canUpdateMember: $gate->allows('updateMember', $team),
+            canRemoveMember: $gate->allows('removeMember', $team),
+            canCreateInvitation: $gate->allows('inviteMember', $team),
         );
     }
 

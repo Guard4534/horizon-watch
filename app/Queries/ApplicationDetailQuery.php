@@ -17,10 +17,13 @@ class ApplicationDetailQuery
 
     public function handle(Team $team, string $applicationId): ApplicationDetailPageData
     {
-        $application = $this->monitoring->application($team, $applicationId) ?? abort(404);
+        // The configuration view, like the list this page is opened from:
+        // see ApplicationListQuery::handle(). The alerts below stay the
+        // watched ones, so a hidden environment simply brings none.
+        $application = $this->monitoring->configurableApplication($team, $applicationId) ?? abort(404);
 
         $environments = array_values(array_filter(
-            $this->monitoring->environments($team),
+            $this->monitoring->configurableEnvironments($team),
             fn (EnvironmentData $environment) => $environment->applicationId === $application->id,
         ));
         $environmentIds = array_map(fn (EnvironmentData $environment) => $environment->id, $environments);
@@ -37,7 +40,12 @@ class ApplicationDetailQuery
             application: $application,
             cards: array_map(fn (EnvironmentData $environment) => new EnvironmentCardData(
                 environment: $environment,
-                sparkline: array_slice($this->monitoring->throughputSeries($team, $environment->id, SeriesRange::ThreeHours), -24),
+                // No series for an environment off the viewer's wall: the
+                // repository would refuse it anyway (it is the operational
+                // view), and the card says why instead of drawing nothing.
+                sparkline: $environment->watched
+                    ? array_slice($this->monitoring->throughputSeries($team, $environment->id, SeriesRange::ThreeHours), -24)
+                    : [],
             ), $environments),
             recentAlerts: array_slice(array_values($alerts), 0, 3),
             worstStatus: $worstEnvironments[0]->status ?? null,

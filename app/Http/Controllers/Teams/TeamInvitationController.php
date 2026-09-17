@@ -2,17 +2,16 @@
 
 namespace App\Http\Controllers\Teams;
 
-use App\Enums\TeamRole;
+use App\Actions\Teams\InviteMember;
+use App\Actions\Teams\ResendInvitation;
+use App\Actions\Teams\RevokeInvitation;
+use App\Data\Teams\InviteMemberData;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Teams\CreateTeamInvitationRequest;
-use App\Http\Requests\Teams\RespondToTeamInvitationRequest;
 use App\Models\Team;
 use App\Models\TeamInvitation;
-use App\Notifications\Teams\TeamInvitation as TeamInvitationNotification;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
 
 class TeamInvitationController extends Controller
@@ -20,75 +19,54 @@ class TeamInvitationController extends Controller
     /**
      * Store a newly created invitation.
      */
-    public function store(CreateTeamInvitationRequest $request, Team $team): RedirectResponse
+    public function store(Request $request, Team $current_team, InviteMemberData $data, InviteMember $inviteMember): RedirectResponse
     {
-        Gate::authorize('inviteMember', $team);
+        Gate::authorize('inviteMember', $current_team);
 
-        $invitation = $team->invitations()->create([
-            'email' => $request->validated('email'),
-            'role' => TeamRole::from($request->validated('role')),
-            'invited_by' => $request->user()->id,
-            'expires_at' => now()->addDays(3),
-        ]);
-
-        Notification::route('mail', $invitation->email)
-            ->notify(new TeamInvitationNotification($invitation));
+        $inviteMember->handle($current_team, $request->user(), $data);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation sent.')]);
 
-        return to_route('teams.edit', ['team' => $team->slug]);
+        return back();
     }
 
     /**
-     * Cancel the specified invitation.
+     * Resend the specified invitation: same code, new expiry.
      */
-    public function destroy(Team $team, TeamInvitation $invitation): RedirectResponse
+    public function resend(Team $current_team, TeamInvitation $invitation, ResendInvitation $resendInvitation): RedirectResponse
+    {
+        $this->ensureBelongsToTeam($invitation, $current_team);
+        Gate::authorize('inviteMember', $current_team);
+
+        $resendInvitation->handle($invitation);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation resent.')]);
+
+        return back();
+    }
+
+    /**
+     * Revoke the specified invitation.
+     */
+    public function destroy(Team $current_team, TeamInvitation $invitation, RevokeInvitation $revokeInvitation): RedirectResponse
+    {
+        $this->ensureBelongsToTeam($invitation, $current_team);
+        Gate::authorize('cancelInvitation', $current_team);
+
+        $revokeInvitation->handle($invitation);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation revoked.')]);
+
+        return back();
+    }
+
+    /**
+     * An invitation resolved by id alone doesn't know which organization it
+     * belongs to: without this check, an admin of one team could act on
+     * another team's invitation just by counting up.
+     */
+    private function ensureBelongsToTeam(TeamInvitation $invitation, Team $team): void
     {
         abort_unless($invitation->team_id === $team->id, 404);
-
-        Gate::authorize('cancelInvitation', $team);
-
-        $invitation->delete();
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation cancelled.')]);
-
-        return to_route('teams.edit', ['team' => $team->slug]);
-    }
-
-    /**
-     * Accept the invitation.
-     */
-    public function accept(RespondToTeamInvitationRequest $request, TeamInvitation $invitation): RedirectResponse
-    {
-        $user = $request->user();
-
-        DB::transaction(function () use ($user, $invitation) {
-            $team = $invitation->team;
-
-            $team->memberships()->firstOrCreate(
-                ['user_id' => $user->id],
-                ['role' => $invitation->role],
-            );
-
-            $invitation->update(['accepted_at' => now()]);
-
-            $user->switchTeam($team);
-        });
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation accepted.')]);
-
-        return to_route('wall');
-    }
-
-    /**
-     * Decline the invitation.
-     */
-    public function decline(RespondToTeamInvitationRequest $request, TeamInvitation $invitation): RedirectResponse
-    {
-        $invitation->delete();
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation declined.')]);
-
-        return to_route('wall');
     }
 }
