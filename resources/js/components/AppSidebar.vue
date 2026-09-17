@@ -8,7 +8,6 @@ import {
     PhUsersThree,
 } from '@phosphor-icons/vue';
 import { computed } from 'vue';
-import LocaleSwitch from '@/components/LocaleSwitch.vue';
 import BrandMark from '@/components/nocturne/BrandMark.vue';
 import NavUser from '@/components/NavUser.vue';
 import SidebarLink from '@/components/SidebarLink.vue';
@@ -42,11 +41,6 @@ const startsWith = (...prefixes: string[]) =>
             style="padding: 0 var(--nc-space-2)"
         >
             <BrandMark />
-            <LocaleSwitch
-                name="sidebar-locale"
-                padding="1px 5px"
-                class="ml-auto"
-            />
         </div>
 
         <nav class="flex flex-col gap-[2px]">
