@@ -71,7 +71,6 @@ switch ($scenario) {
         header('Content-Length: '.(3 * 1024 * 1024));
         echo $stats;
         flush();
-        sleep(30);
         break;
 
     case 'endless':
