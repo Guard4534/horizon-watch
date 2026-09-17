@@ -19,4 +19,10 @@ Schedule::call(fn () => app(DispatchDuePolls::class)->handle())
     ->everyFifteenSeconds()
     ->withoutOverlapping(1);
 
-Schedule::command('monitoring:prune')->daily();
+// In the background, so a long prune (after a shorter retention, say) does
+// not hold up the midnight polls, and guarded like any long job.
+Schedule::command('monitoring:prune')
+    ->daily()
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->runInBackground();

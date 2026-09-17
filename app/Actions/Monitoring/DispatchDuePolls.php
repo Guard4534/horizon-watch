@@ -14,11 +14,14 @@ class DispatchDuePolls
      * and move its next poll one interval ahead. Returns how many were
      * queued.
      *
-     * The rows are locked with SKIP LOCKED, so two schedulers running at
-     * once (a second host, an overlapping tick) split the due environments
-     * instead of both reading them. The jobs are queued only once the new
-     * next_poll_at is committed: a job pushed first could run and be
-     * followed by a rollback that makes the environment due again.
+     * The jobs are queued only once the new next_poll_at is committed: a
+     * job pushed first could run and be followed by a rollback that makes
+     * the environment due again.
+     *
+     * Must not be called inside a transaction. On this stack the unique job
+     * lock is a row in the database cache table, on the same connection:
+     * when the lock is already held its insert fails, and on PostgreSQL a
+     * failed statement aborts the whole surrounding transaction.
      */
     public function handle(): int
     {
@@ -35,7 +38,15 @@ class DispatchDuePolls
                 ->where('polling_enabled', true)
                 ->where(fn ($query) => $query->whereNull('next_poll_at')->orWhere('next_poll_at', '<=', $now))
                 ->orderBy('id')
-                ->lock('for update skip locked')
+                // NO KEY UPDATE, not UPDATE: a poll storing its reading
+                // holds FOR KEY SHARE on the row through the snapshot's
+                // foreign key, which FOR UPDATE conflicts with, so SKIP
+                // LOCKED would pass over that environment for a whole
+                // interval. SKIP LOCKED itself is not needed for
+                // correctness: under READ COMMITTED a second scheduler would
+                // wait, re-check the condition and find the row no longer
+                // due. It only saves that wait.
+                ->lock('for no key update skip locked')
                 ->get();
 
             foreach ($environments as $environment) {
@@ -50,14 +61,11 @@ class DispatchDuePolls
             return $environments->modelKeys();
         });
 
-        // Dispatched after the transaction has returned, not from inside
-        // it with afterCommit alone: the unique lock is taken when a job is
-        // dispatched, and one taken inside a transaction that then rolls
-        // back would keep the environment unpolled for the lock's lifetime.
-        // afterCommit still holds the push back if a caller has wrapped
-        // this in a transaction of its own.
+        // Dispatched after the transaction has returned, for the two
+        // reasons in the docblock: the job cannot run before next_poll_at
+        // is committed, and a refused unique lock cannot abort the claim.
         foreach ($due as $environmentId) {
-            PollEnvironmentJob::dispatch($environmentId)->afterCommit();
+            PollEnvironmentJob::dispatch($environmentId, $now->getTimestamp());
         }
 
         return count($due);

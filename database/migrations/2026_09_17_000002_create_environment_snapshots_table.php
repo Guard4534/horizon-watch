@@ -36,6 +36,9 @@ return new class extends Migration
 
             // Also serves the foreign key: PostgreSQL does not index it.
             $table->index(['environment_id', 'captured_at']);
+            // For monitoring:prune, which deletes by age across every
+            // environment in chunks: without it each chunk scans the table.
+            $table->index('captured_at');
         });
     }
 

@@ -31,23 +31,34 @@ class PollEnvironment
 
     /**
      * Read the environment once and store the result: a new snapshot row
-     * and the replaced state row, in one transaction.
+     * and the replaced state row, in one transaction. Returns null when the
+     * environment was deleted while it was being read.
      */
-    public function handle(Environment $environment): EnvironmentSnapshot
+    public function handle(Environment $environment): ?EnvironmentSnapshot
     {
         $capturedAt = CarbonImmutable::now();
 
+        // Outside the try: a password that no longer decrypts (a rotated
+        // APP_KEY) is a failure of this panel, not of Horizon, and must
+        // surface as the DecryptException it is.
+        $target = HorizonTarget::fromEnvironment($environment);
+
         try {
-            $reading = $this->reader->read(HorizonTarget::fromEnvironment($environment));
+            $reading = $this->reader->read($target);
         } catch (HorizonReadFailed $exception) {
             return $this->storeFailure($environment, $capturedAt, $exception->reason);
         } catch (Throwable $exception) {
             // The reader promises HorizonReadFailed only. Anything else is a
             // bug in it, and its message may carry what an HTTP library put
             // there (a URL with credentials, a response body): it is
-            // reported by class name alone, never chained, and the reading
-            // counts as unreachable.
-            report(new RuntimeException('The Horizon reader threw '.$exception::class.' instead of HorizonReadFailed.'));
+            // reported by class, file and line alone, never chained, and the
+            // reading counts as unreachable.
+            report(new RuntimeException(sprintf(
+                'The Horizon reader threw %s at %s:%d instead of HorizonReadFailed.',
+                $exception::class,
+                $exception->getFile(),
+                $exception->getLine(),
+            )));
 
             return $this->storeFailure($environment, $capturedAt, ReadingError::Unreachable);
         }
@@ -55,7 +66,7 @@ class PollEnvironment
         return $this->storeReading($environment, $capturedAt, $reading);
     }
 
-    private function storeReading(Environment $environment, CarbonImmutable $capturedAt, HorizonReading $reading): EnvironmentSnapshot
+    private function storeReading(Environment $environment, CarbonImmutable $capturedAt, HorizonReading $reading): ?EnvironmentSnapshot
     {
         $evaluated = $this->evaluator->evaluate($reading);
 
@@ -65,23 +76,22 @@ class PollEnvironment
             'latency_ms' => $reading->latencyMs,
             'nodes' => array_map($this->node(...), $reading->masters),
             'queues' => array_map(fn (HorizonQueueLoad $queue) => $this->queue($queue, $reading), $reading->workload),
+            // Reserved jobs are a live measurement: the page shows how long
+            // each has been running, measured from now. Kept from an older
+            // reading they would keep "running" long after they finished,
+            // so a failed call empties the section instead.
+            'pending_jobs' => $reading->pendingJobs === null ? [] : $this->reservedJobs($reading->pendingJobs),
         ];
 
-        // A secondary call that failed keeps the section of the previous
-        // reading: it is left out of the update and only inserted, empty,
-        // when there is no previous reading at all.
+        // Failed jobs are context, not a measurement: a failed call keeps
+        // the section of the previous reading. It is left out of the update
+        // and only inserted, empty, when there is no previous reading.
         $sectionsOnInsert = [];
 
         if ($reading->failedJobs === null) {
             $sectionsOnInsert['failed_jobs'] = [];
         } else {
             $state['failed_jobs'] = array_map($this->failedJob(...), $reading->failedJobs);
-        }
-
-        if ($reading->pendingJobs === null) {
-            $sectionsOnInsert['pending_jobs'] = [];
-        } else {
-            $state['pending_jobs'] = $this->reservedJobs($reading->pendingJobs);
         }
 
         return $this->store($environment, $capturedAt, $evaluated, [
@@ -95,13 +105,15 @@ class PollEnvironment
         ], $state, $sectionsOnInsert);
     }
 
-    private function storeFailure(Environment $environment, CarbonImmutable $capturedAt, ReadingError $error): EnvironmentSnapshot
+    private function storeFailure(Environment $environment, CarbonImmutable $capturedAt, ReadingError $error): ?EnvironmentSnapshot
     {
         $evaluated = $this->evaluator->failed($error);
 
-        // Nothing was measured; the state keeps the detail of the last
-        // reading that worked, so the page still shows the last known
-        // nodes, queues and jobs next to the error.
+        // Nothing was measured. Nodes, queues and failed jobs are context:
+        // the state keeps those of the last reading that worked, so the page
+        // still shows them next to the error. Reserved jobs are a live
+        // measurement (their running time is counted from now), so they
+        // are emptied rather than kept.
         return $this->store($environment, $capturedAt, $evaluated, [
             'error' => $error,
             'pending' => 0,
@@ -115,11 +127,11 @@ class PollEnvironment
             'status' => $evaluated->status,
             'error' => $error,
             'latency_ms' => null,
+            'pending_jobs' => [],
         ], [
             'nodes' => [],
             'queues' => [],
             'failed_jobs' => [],
-            'pending_jobs' => [],
         ]);
     }
 
@@ -135,8 +147,18 @@ class PollEnvironment
         array $snapshot,
         array $state,
         array $insertOnly,
-    ): EnvironmentSnapshot {
+    ): ?EnvironmentSnapshot {
         return DB::transaction(function () use ($environment, $capturedAt, $evaluated, $snapshot, $state, $insertOnly) {
+            // The same lock the snapshot's foreign key would take, taken
+            // first: a delete committed while Horizon was being read leaves
+            // nothing to lock, and a harmless race ends quietly instead of
+            // as a foreign-key failure; a delete arriving now waits for us.
+            $locked = DB::table('environments')->where('id', $environment->id)->lock('for key share')->value('id');
+
+            if ($locked === null) {
+                return null;
+            }
+
             $stored = EnvironmentSnapshot::query()->create([
                 'environment_id' => $environment->id,
                 'captured_at' => $capturedAt,
@@ -146,26 +168,62 @@ class PollEnvironment
                 ...$snapshot,
             ]);
 
-            $state = ['captured_at' => $capturedAt, ...$state];
-
-            // An upsert rather than updateOrCreate: two readings of the same
-            // environment racing past the unique job lock would otherwise
-            // both try the insert and one would fail on the unique index.
-            // The query builder does not cast, so a model instance does.
-            $row = (new EnvironmentState)
-                ->forceFill(['environment_id' => $environment->id, ...$insertOnly, ...$state])
-                ->getAttributes();
-
-            EnvironmentState::query()->upsert($row, ['environment_id'], array_keys($state));
+            $this->upsertState($environment, [
+                'captured_at' => $capturedAt,
+                ...$state,
+            ], $insertOnly);
 
             // Through the base query: an Eloquent update would also bump
             // updated_at, which records configuration changes, every poll.
-            Environment::query()->whereKey($environment->id)->toBase()->update(['last_polled_at' => $capturedAt]);
+            // Never moved backwards by a reading that finished late.
+            $moved = Environment::query()
+                ->whereKey($environment->id)
+                ->where(fn ($query) => $query->whereNull('last_polled_at')->orWhere('last_polled_at', '<', $capturedAt))
+                ->toBase()
+                ->update(['last_polled_at' => $capturedAt]);
 
-            $environment->forceFill(['last_polled_at' => $capturedAt])->syncOriginalAttribute('last_polled_at');
+            if ($moved > 0) {
+                $environment->forceFill(['last_polled_at' => $capturedAt])->syncOriginalAttribute('last_polled_at');
+            }
 
             return $stored;
         });
+    }
+
+    /**
+     * An upsert rather than updateOrCreate: two readings of the same
+     * environment (two workers, or a duplicate job) would otherwise both try
+     * the insert and one would fail on the unique index. The update only
+     * applies when the reading is not older than the stored one, so a
+     * reading that finished late never replaces a newer state. The query
+     * builder has no WHERE for ON CONFLICT, hence the appended clause, and
+     * does not cast, hence the model instance.
+     *
+     * @param  array<string, mixed>  $state  columns written on insert and on update
+     * @param  array<string, mixed>  $insertOnly  columns written only on insert
+     */
+    private function upsertState(Environment $environment, array $state, array $insertOnly): void
+    {
+        $model = new EnvironmentState;
+        $timestamp = $model->freshTimestamp();
+
+        $row = $model
+            ->forceFill([
+                'environment_id' => $environment->id,
+                ...$insertOnly,
+                ...$state,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ])
+            ->getAttributes();
+
+        $query = DB::table($model->getTable());
+        $grammar = $query->getGrammar();
+
+        $sql = $grammar->compileUpsert($query, [$row], ['environment_id'], [...array_keys($state), 'updated_at'])
+            .' where '.$grammar->wrap($model->getTable().'.captured_at').' <= '.$grammar->wrap('excluded.captured_at');
+
+        DB::affectingStatement($sql, array_values($row));
     }
 
     /**

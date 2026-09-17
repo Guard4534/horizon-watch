@@ -20,6 +20,7 @@ use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
@@ -32,7 +33,7 @@ beforeEach(function () {
     // and remembers the password of every target it was given.
     $this->reader = new class implements HorizonReader
     {
-        /** @var list<HorizonReading|Throwable> */
+        /** @var list<HorizonReading|Throwable|Closure(): HorizonReading> */
         public array $results = [];
 
         /** @var list<string|null> */
@@ -43,6 +44,10 @@ beforeEach(function () {
             $this->passwords[] = $target->password();
 
             $result = array_shift($this->results) ?? throw new LogicException('No reading queued.');
+
+            if ($result instanceof Closure) {
+                $result = $result();
+            }
 
             if ($result instanceof Throwable) {
                 throw $result;
@@ -108,7 +113,7 @@ beforeEach(function () {
         'latencyMs' => 42,
     ], $overrides));
 
-    $this->poll = fn (): EnvironmentSnapshot => app(PollEnvironment::class)->handle($this->environment);
+    $this->poll = fn (): ?EnvironmentSnapshot => app(PollEnvironment::class)->handle($this->environment);
 });
 
 test('a reading writes a snapshot and the state in the documented shapes', function () {
@@ -182,7 +187,7 @@ test('a second reading replaces the state and adds a snapshot', function () {
         ->and($state->queues[0]['pending'])->toBe(1);
 });
 
-test('a failed reading is stored as unreachable with its reason and keeps the last known detail', function () {
+test('a failed reading is stored as unreachable with its reason, keeps the context and empties the reserved jobs', function () {
     $this->reader->results = [
         ($this->reading)(),
         new HorizonReadFailed(ReadingError::Unauthorized),
@@ -211,7 +216,8 @@ test('a failed reading is stored as unreachable with its reason and keeps the la
         ->and($after->nodes)->toBe($before->nodes)
         ->and($after->queues)->toBe($before->queues)
         ->and($after->failed_jobs)->toBe($before->failed_jobs)
-        ->and($after->pending_jobs)->toBe($before->pending_jobs);
+        ->and($before->pending_jobs)->not->toBe([])
+        ->and($after->pending_jobs)->toBe([]);
 });
 
 test('a first reading that fails creates an empty state', function () {
@@ -229,7 +235,7 @@ test('a first reading that fails creates an empty state', function () {
         ->and($state->pending_jobs)->toBe([]);
 });
 
-test('a failed secondary call keeps the previous section and still replaces the rest', function () {
+test('failed secondary calls keep the failed jobs, empty the reserved jobs and replace the rest', function () {
     $this->reader->results = [
         ($this->reading)(),
         ($this->reading)(['failedJobs' => null, 'pendingJobs' => null, 'workload' => []]),
@@ -242,7 +248,8 @@ test('a failed secondary call keeps the previous section and still replaces the 
     $after = EnvironmentState::query()->sole();
 
     expect($after->failed_jobs)->toBe($before->failed_jobs)->not->toBe([])
-        ->and($after->pending_jobs)->toBe($before->pending_jobs)->not->toBe([])
+        ->and($before->pending_jobs)->not->toBe([])
+        ->and($after->pending_jobs)->toBe([])
         ->and($after->queues)->toBe([]);
 });
 
@@ -271,6 +278,73 @@ test('an empty secondary list replaces the previous section', function () {
 
     expect($state->failed_jobs)->toBe([])
         ->and($state->pending_jobs)->toBe([]);
+});
+
+test('a reading that finished late does not replace a newer state nor move last_polled_at back', function () {
+    $this->reader->results = [
+        ($this->reading)(['latencyMs' => 99]),
+        ($this->reading)(['latencyMs' => 11, 'workload' => []]),
+    ];
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:15'));
+    ($this->poll)();
+
+    // The older reading is stored second.
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:00'));
+    $late = ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->captured_at->toDateTimeString())->toBe('2026-09-17 10:00:15')
+        ->and($state->latency_ms)->toBe(99)
+        ->and($state->queues)->toHaveCount(4)
+        ->and($this->environment->fresh()->last_polled_at->toDateTimeString())->toBe('2026-09-17 10:00:15')
+        ->and($this->environment->last_polled_at->toDateTimeString())->toBe('2026-09-17 10:00:15')
+        // The snapshot is history and is kept.
+        ->and($late->captured_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and(EnvironmentSnapshot::query()->count())->toBe(2);
+});
+
+test('a reading of the same second replaces the state', function () {
+    $this->reader->results = [
+        ($this->reading)(['latencyMs' => 99]),
+        ($this->reading)(['latencyMs' => 11]),
+    ];
+
+    ($this->poll)();
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->latency_ms)->toBe(11);
+});
+
+test('an environment deleted while it is being read ends quietly', function () {
+    Exceptions::fake();
+
+    $this->reader->results = [function () {
+        Environment::query()->whereKey($this->environment->id)->delete();
+
+        return ($this->reading)();
+    }];
+
+    expect(($this->poll)())->toBeNull()
+        ->and(EnvironmentSnapshot::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->count())->toBe(0);
+
+    Exceptions::assertNothingReported();
+});
+
+test('a password that no longer decrypts fails loudly and is not blamed on Horizon', function () {
+    Exceptions::fake();
+
+    DB::table('environments')->where('id', $this->environment->id)->update(['basic_auth_password' => 'not-an-encrypted-value']);
+
+    expect(fn () => app(PollEnvironment::class)->handle($this->environment->fresh()))
+        ->toThrow(DecryptException::class);
+
+    expect($this->reader->passwords)->toBe([])
+        ->and(EnvironmentSnapshot::query()->count())->toBe(0);
+
+    Exceptions::assertNothingReported();
 });
 
 test('the breaches of the evaluation are stored with a degraded status', function () {
@@ -335,7 +409,8 @@ test('the reader gets the decrypted password, and no stored row or queued payloa
 
     expect(DB::table('jobs')->count())->toBe(1)
         ->and($stored)->not->toContain('super-secret-value')
-        ->and(serialize(new PollEnvironmentJob($this->environment->id)))->not->toContain('super-secret-value');
+        ->and(serialize(new PollEnvironmentJob($this->environment->id)))->not->toContain('super-secret-value')
+        ->and(array_keys(get_object_vars(new PollEnvironmentJob($this->environment->id))))->toContain('environmentId', 'dispatchedAt');
 });
 
 test('a reader that breaks its contract counts as unreachable and is reported without its message', function () {
@@ -350,6 +425,7 @@ test('a reader that breaks its contract counts as unreachable and is reported wi
 
     Exceptions::assertReported(fn (RuntimeException $exception) => $exception->getPrevious() === null
         && str_contains($exception->getMessage(), RuntimeException::class)
+        && str_contains($exception->getMessage(), 'PollEnvironmentTest.php:')
         && ! str_contains($exception->getMessage(), 'super-secret-value'));
 });
 
@@ -360,6 +436,39 @@ test('the job reads an enabled environment', function () {
 
     expect($this->reader->passwords)->toHaveCount(1)
         ->and(EnvironmentSnapshot::query()->count())->toBe(1);
+});
+
+test('a job older than the interval drops itself', function () {
+    PollEnvironmentJob::dispatchSync($this->environment->id, now()->getTimestamp() - 16);
+
+    expect($this->reader->passwords)->toBe([])
+        ->and(EnvironmentSnapshot::query()->count())->toBe(0);
+});
+
+test('a job exactly one interval old still reads', function () {
+    $this->reader->results = [($this->reading)()];
+
+    PollEnvironmentJob::dispatchSync($this->environment->id, now()->getTimestamp() - 15);
+
+    expect($this->reader->passwords)->toHaveCount(1);
+});
+
+test('a job whose environment was read since its dispatch drops itself', function () {
+    $this->environment->forceFill(['last_polled_at' => now()->subSeconds(3)])->save();
+
+    PollEnvironmentJob::dispatchSync($this->environment->id, now()->getTimestamp() - 3);
+
+    expect($this->reader->passwords)->toBe([])
+        ->and(EnvironmentSnapshot::query()->count())->toBe(0);
+});
+
+test('a job whose environment was last read before its dispatch reads', function () {
+    $this->reader->results = [($this->reading)()];
+    $this->environment->forceFill(['last_polled_at' => now()->subSeconds(4)])->save();
+
+    PollEnvironmentJob::dispatchSync($this->environment->id, now()->getTimestamp() - 3);
+
+    expect($this->reader->passwords)->toHaveCount(1);
 });
 
 test('the job does not read a paused environment', function () {
