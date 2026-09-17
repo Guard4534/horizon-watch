@@ -80,11 +80,10 @@
 
 /* One font everywhere (design v2): URLs, job and queue names and snippets
    keep Inter with a little tracking instead of switching to a monospace.
-   Unlayered, so it also wins over Tailwind's font-mono utility. Numbers are
-   tabular everywhere, not only where a component remembered nc-num. */
-body {
-    font-variant-numeric: tabular-nums;
-}
+   Unlayered, so it also wins over Tailwind's font-mono utility.
+   Trap: tabular numbers are opted into with nc-num, never set on body —
+   Inter's tnum also widens the hyphen, so "worker-batch" and "Read-only"
+   would read "worker - batch" everywhere. */
 
 code,
 kbd,
@@ -252,7 +251,6 @@ select.nc-input {
     background-repeat: no-repeat;
     background-position: right 9px center;
     background-size: 12px 12px;
-    font-variant-numeric: tabular-nums;
 }
 select.nc-input option {
     color: var(--nc-text);

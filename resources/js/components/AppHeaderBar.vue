@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
-import { PhEye } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import BrandMark from '@/components/nocturne/BrandMark.vue';
 import { useLastRefresh } from '@/composables/useLastRefresh';
@@ -63,7 +62,7 @@ function choose(event: Event): void {
                         $t('refresh every')
                     }}</span>
                     <select
-                        class="nc-input interval"
+                        class="nc-input nc-num interval"
                         :value="interval"
                         @change="choose"
                     >
@@ -79,10 +78,6 @@ function choose(event: Event): void {
                 <span class="desktop-only">{{
                     $t('· updated :time', { time: updatedAt })
                 }}</span>
-            </span>
-            <span class="read-only desktop-only">
-                <PhEye :size="13" />
-                {{ $t('Read-only') }}
             </span>
         </div>
     </header>
@@ -125,23 +120,12 @@ function choose(event: Event): void {
     color: var(--nc-text);
 }
 
-.read-only {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    color: var(--nc-neutral-500);
-    border: 1px solid var(--nc-divider);
-    border-radius: var(--nc-radius-sm);
-    padding: 3px 8px;
-}
-
 .phone-only {
     display: none;
 }
 
 /* The phone header of the mockup: one compact line, the brand in front,
-   the refresh menu without its words, no read-only pill. */
+   the refresh menu without its words. */
 @media (max-width: 639px) {
     .bar {
         flex-wrap: nowrap;

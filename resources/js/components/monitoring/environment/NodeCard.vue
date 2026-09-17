@@ -51,9 +51,11 @@ const figures = computed(() => [
                 >{{ statusLabel(node.status) }}</span
             >
         </div>
+        <!-- Each figure takes its own width: three equal columns were too
+             narrow for "supervisors" and the labels ran into each other. -->
         <div
-            class="nc-num mt-[var(--nc-space-3)] grid grid-cols-3"
-            style="gap: var(--nc-space-2)"
+            class="nc-num mt-[var(--nc-space-3)] flex flex-wrap"
+            style="gap: var(--nc-space-2) var(--nc-space-4)"
         >
             <!-- Horizon vocabulary: English in both languages. -->
             <div v-for="figure in figures" :key="figure.key">

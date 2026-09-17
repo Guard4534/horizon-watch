@@ -38,7 +38,7 @@ const slug = useTeamSlug();
             style="gap: var(--nc-space-2); font-size: 12px"
         >
             <div
-                v-for="rule in rules.slice(0, 5)"
+                v-for="rule in rules"
                 :key="rule.metric"
                 class="flex items-center gap-2"
             >
