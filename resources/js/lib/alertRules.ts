@@ -115,3 +115,75 @@ export function formatRule(
 
     return `${metric} ${comparison} ${formatThreshold(threshold, unit)}`;
 }
+
+export type RuleField = 'threshold' | 'severity' | 'notifyByEmail' | 'enabled';
+
+export const RULE_FIELDS: readonly RuleField[] = [
+    'threshold',
+    'severity',
+    'notifyByEmail',
+    'enabled',
+];
+
+export function severityLabel(severity: App.Enums.AlertSeverity): string {
+    switch (severity) {
+        case 'critical':
+            return trans('Critical');
+        case 'warning':
+            return trans('Warning');
+    }
+}
+
+export function severityColor(severity: App.Enums.AlertSeverity): string {
+    return severity === 'critical' ? 'var(--st-down)' : 'var(--st-warn)';
+}
+
+export function ruleFields(
+    rule: App.Data.Monitoring.AlertRuleData,
+    organizationScope: boolean,
+): App.Data.Alerts.AlertRuleInputData {
+    if (organizationScope) {
+        return {
+            metric: rule.metric,
+            threshold: Math.round(rule.threshold),
+            severity: rule.severity,
+            notifyByEmail: rule.notifyByEmail,
+            enabled: rule.enabled,
+        };
+    }
+
+    return {
+        metric: rule.metric,
+        threshold:
+            rule.overrideThreshold === null
+                ? null
+                : Math.round(rule.overrideThreshold),
+        severity: rule.overrideSeverity,
+        notifyByEmail: rule.overrideNotifyByEmail,
+        enabled: rule.overrideEnabled,
+    };
+}
+
+export type RuleValues = {
+    threshold: number;
+    severity: App.Enums.AlertSeverity;
+    notifyByEmail: boolean;
+    enabled: boolean;
+};
+
+export function ruleValues(
+    rule: App.Data.Monitoring.AlertRuleData,
+): RuleValues {
+    return {
+        threshold: Math.round(rule.threshold),
+        severity: rule.severity,
+        notifyByEmail: rule.notifyByEmail,
+        enabled: rule.enabled,
+    };
+}
+
+export function overriddenFieldCount(
+    fields: App.Data.Alerts.AlertRuleInputData,
+): number {
+    return RULE_FIELDS.filter((field) => fields[field] !== null).length;
+}

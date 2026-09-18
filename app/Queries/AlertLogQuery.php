@@ -2,6 +2,7 @@
 
 namespace App\Queries;
 
+use App\Data\Monitoring\ApplicationData;
 use App\Data\Pages\AlertLogPageData;
 use App\Data\Pages\NotificationSummaryData;
 use App\Enums\AlertState;
@@ -18,6 +19,8 @@ class AlertLogQuery
     {
         $settings = $this->monitoring->notificationSettings($team);
         $alerts = $this->monitoring->alerts($team, $state, $application, $page);
+        $environments = $this->monitoring->environments($team);
+        $watched = array_column($environments, 'applicationId', 'applicationId');
 
         return new AlertLogPageData(
             state: $state,
@@ -27,10 +30,13 @@ class AlertLogQuery
             total: $alerts->total,
             perPage: $alerts->perPage,
             application: $application,
-            applications: $this->monitoring->applications($team),
+            applications: array_values(array_filter(
+                $this->monitoring->applications($team),
+                fn (ApplicationData $candidate) => isset($watched[$candidate->id]),
+            )),
             notificationSummary: NotificationSummaryData::of($settings),
             notifications: Gate::forUser($viewer)->allows('manageAlertRules', $team) ? $settings : null,
-            environmentCount: count($this->monitoring->environments($team)),
+            environmentCount: count($environments),
         );
     }
 }

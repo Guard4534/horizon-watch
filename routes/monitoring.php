@@ -100,3 +100,4 @@ Route::middleware('can:manageAlertRules,current_team')->group(function () {
 Route::post('alerts/{alert}/mute', [AlertActionController::class, 'mute'])->name('alerts.mute');
 Route::delete('alerts/{alert}/mute', [AlertActionController::class, 'unmute'])->name('alerts.unmute');
 Route::post('alerts/{alert}/handle', [AlertActionController::class, 'handle'])->name('alerts.handle');
+Route::get('alerts/{alert}/preview', [AlertActionController::class, 'preview'])->name('alerts.preview');

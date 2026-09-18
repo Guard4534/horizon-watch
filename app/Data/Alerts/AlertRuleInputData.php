@@ -48,6 +48,19 @@ class AlertRuleInputData extends Data
         ];
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public static function attributes(): array
+    {
+        return [
+            'threshold' => __('threshold'),
+            'severity' => __('severity'),
+            'notifyByEmail' => __('email'),
+            'enabled' => __('active'),
+        ];
+    }
+
     public function isEmpty(): bool
     {
         return $this->threshold === null

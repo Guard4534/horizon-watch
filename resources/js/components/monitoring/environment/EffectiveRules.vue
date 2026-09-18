@@ -1,22 +1,32 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatThreshold, ruleIcon, ruleLabel } from '@/lib/alertRules';
+import {
+    formatThreshold,
+    ruleIcon,
+    ruleLabel,
+    severityColor,
+    severityLabel,
+} from '@/lib/alertRules';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 
-defineProps<{
+const { rules, environmentName } = defineProps<{
     rules: App.Data.Monitoring.AlertRuleData[];
+    environmentName: string;
 }>();
 
 const slug = useTeamSlug();
+
+const scope = computed(() => environmentName.toLowerCase());
 </script>
 
 <template>
     <SectionCard :title="$t('Effective alert rules')">
         <template #actions>
             <Link
-                :href="alertRulesIndex({ current_team: slug })"
+                :href="alertRulesIndex({ current_team: slug, scope })"
                 style="font-size: 11px"
                 >{{ $t('Alert settings') }}</Link
             >
@@ -27,7 +37,8 @@ const slug = useTeamSlug();
         >
             {{
                 $t(
-                    'Organization defaults: the thresholds the anomalies use today.',
+                    'The organization rules, with the overrides of the :scope environments.',
+                    { scope },
                 )
             }}
         </div>
@@ -39,25 +50,30 @@ const slug = useTeamSlug();
                 v-for="rule in rules"
                 :key="rule.metric"
                 class="flex items-center gap-2"
+                :style="{ opacity: rule.enabled ? 1 : 0.55 }"
             >
                 <component
                     :is="ruleIcon(rule.metric)"
                     :size="14"
                     class="flex-none"
                     :style="{
-                        color:
-                            rule.severity === 'critical'
-                                ? 'var(--st-down)'
-                                : 'var(--st-warn)',
+                        color: rule.enabled
+                            ? severityColor(rule.severity)
+                            : 'var(--nc-neutral-500)',
                     }"
+                    :aria-label="severityLabel(rule.severity)"
                 />
                 <span class="min-w-0 truncate">{{
                     ruleLabel(rule.metric)
                 }}</span>
                 <span
-                    class="ml-auto flex-none"
+                    class="nc-num ml-auto flex-none"
                     style="letter-spacing: 0.01em; color: var(--nc-neutral-300)"
-                    >{{ formatThreshold(rule.threshold, rule.unit) }}</span
+                    >{{
+                        rule.enabled
+                            ? formatThreshold(rule.threshold, rule.unit)
+                            : $t('Disabled')
+                    }}</span
                 >
                 <span
                     class="nc-tag nc-tag-sm flex-none"

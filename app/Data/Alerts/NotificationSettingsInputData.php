@@ -38,6 +38,22 @@ class NotificationSettingsInputData extends Data
     }
 
     /**
+     * @return array<string, string>
+     */
+    public static function attributes(): array
+    {
+        return [
+            'recipients' => __('recipients'),
+            'recipients.*' => __('address'),
+            'webhookUrl' => __('webhook URL'),
+            'quietFrom' => __('quiet hours start'),
+            'quietTo' => __('quiet hours end'),
+            'timezone' => __('time zone'),
+            'repeatMinutes' => __('alert repeat'),
+        ];
+    }
+
+    /**
      * @return list<string>
      */
     public function uniqueRecipients(): array

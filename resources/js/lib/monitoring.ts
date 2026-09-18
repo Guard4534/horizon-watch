@@ -74,11 +74,7 @@ export function waitColor(seconds: number, threshold = 60): string {
     return seconds > threshold ? 'var(--st-warn)' : 'var(--nc-neutral-400)';
 }
 
-export function formatElapsed(minutes: number, capped = false): string {
-    if (capped) {
-        return trans('more than 24 h ago');
-    }
-
+export function formatElapsed(minutes: number): string {
     if (minutes < 1) {
         return trans('less than a minute ago');
     }
@@ -87,7 +83,13 @@ export function formatElapsed(minutes: number, capped = false): string {
         return trans(':minutes min ago', { minutes: String(minutes) });
     }
 
-    return trans(':hours h ago', { hours: String(Math.floor(minutes / 60)) });
+    if (minutes < 1440) {
+        return trans(':hours h ago', {
+            hours: String(Math.floor(minutes / 60)),
+        });
+    }
+
+    return trans(':days d ago', { days: String(Math.floor(minutes / 1440)) });
 }
 
 export function formatDuration(seconds: number): string {

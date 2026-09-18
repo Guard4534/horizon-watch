@@ -433,3 +433,59 @@ test('the sidebar badge is one count, with no alert built for it', function () {
         ->and(array_filter($some, fn (string $sql) => str_contains($sql, 'alert_notifications') || str_contains($sql, 'environment_states')))->toBe([])
         ->and(array_filter($some, fn (string $sql) => str_contains($sql, 'from "alerts"')))->toHaveCount(1);
 });
+
+test('the application filter offers only the applications with an environment the viewer watches', function () {
+    Application::factory()->for($this->team)->create(['name' => 'Empty']);
+
+    $member = ($this->memberAs)(TeamRole::Member, MemberVisibility::NonProduction);
+
+    expect(array_column(($this->page)()['applications'], 'id'))->toBe([$this->billing->slug, $this->shop->slug])
+        ->and(array_column(($this->page)([], $member)['applications'], 'name'))->toBe(['Billing']);
+});
+
+test('an alert carries the longest job and the queues without workers it was opened for', function () {
+    Alert::factory()->for($this->production)->create([
+        'metric' => AlertRuleMetric::JobRuntime,
+        'unit' => 's',
+        'value' => 300,
+        'detail' => ['job' => 'App\Jobs\BuildReport', 'queue' => 'reports', 'seconds' => 300],
+    ]);
+    Alert::factory()->for($this->staging)->create([
+        'metric' => AlertRuleMetric::WorkersMissing,
+        'unit' => '',
+        'value' => 2,
+        'detail' => ['queues' => ['default', 'emails']],
+    ]);
+    Alert::factory()->for($this->shopProduction)->create();
+
+    $alerts = collect(($this->page)()['alerts'])->keyBy('metric');
+
+    expect($alerts['job.runtime'])->toMatchArray(['longestJob' => 'App\Jobs\BuildReport', 'longestJobQueue' => 'reports', 'queuesWithoutWorkers' => []])
+        ->and($alerts['workers.missing'])->toMatchArray(['longestJob' => null, 'longestJobQueue' => null, 'queuesWithoutWorkers' => ['default', 'emails']])
+        ->and($alerts['queue.pending'])->toMatchArray(['longestJob' => null, 'longestJobQueue' => null, 'queuesWithoutWorkers' => []]);
+});
+
+test('a detail of an unexpected shape is left out', function (array $detail, array $queues) {
+    Alert::factory()->for($this->production)->create([
+        'metric' => AlertRuleMetric::WorkersMissing,
+        'detail' => $detail,
+    ]);
+
+    expect(($this->page)()['alerts'][0])->toMatchArray(['longestJob' => null, 'longestJobQueue' => null, 'queuesWithoutWorkers' => $queues]);
+})->with([
+    'scalars where lists belong' => [['queues' => 'default', 'job' => ['nested'], 'queue' => 7], []],
+    'foreign items in the queue list' => [['queues' => ['default', ['nested'], 7, 'emails']], ['default', 'emails']],
+]);
+
+test('an alert still open on an environment whose collection is paused says so', function () {
+    $this->production->update(['polling_enabled' => false]);
+    Alert::factory()->for($this->production)->create();
+    Alert::factory()->for($this->production)->resolved()->create(['metric' => AlertRuleMetric::QueueMaxWait]);
+    Alert::factory()->for($this->staging)->create();
+
+    $open = collect(($this->page)()['alerts'])->keyBy('environmentName');
+
+    expect($open['production']['collectionPaused'])->toBeTrue()
+        ->and($open['staging']['collectionPaused'])->toBeFalse()
+        ->and(($this->page)(['state' => 'resolved'])['alerts'][0]['collectionPaused'])->toBeFalse();
+});

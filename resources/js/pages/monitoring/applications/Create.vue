@@ -729,7 +729,7 @@ const submit = () => {
                 >
                     {{
                         $t(
-                            'The organization defaults apply from the first reading; rules per environment arrive with the next release.',
+                            'The organization defaults apply from the first reading; thresholds per environment name are set on the Alert settings page.',
                         )
                     }}
                 </div>

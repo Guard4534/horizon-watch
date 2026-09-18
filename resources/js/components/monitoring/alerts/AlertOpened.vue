@@ -7,5 +7,5 @@ defineProps<{
 </script>
 
 <template>
-    {{ formatElapsed(alert.minutesAgo, alert.sinceTruncated) }}
+    {{ formatElapsed(alert.minutesAgo) }}
 </template>

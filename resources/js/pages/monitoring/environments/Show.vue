@@ -349,7 +349,10 @@ const tiles = computed<Tile[]>(() => [
                     :threshold-seconds="threshold('job.runtime')"
                     :unknown="longRunningUnknown"
                 />
-                <EffectiveRules :rules="page.rules" />
+                <EffectiveRules
+                    :rules="page.rules"
+                    :environment-name="page.environment.name"
+                />
                 <ConnectionCard :environment="environment" />
             </div>
         </div>

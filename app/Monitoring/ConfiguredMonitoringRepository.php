@@ -802,11 +802,17 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             threshold: $alert->threshold,
             unit: $alert->unit,
             value: $alert->value,
+            longestJob: $this->detailText($alert, 'job'),
+            longestJobQueue: $this->detailText($alert, 'queue'),
+            queuesWithoutWorkers: is_array($alert->detail['queues'] ?? null)
+                ? array_values(array_filter($alert->detail['queues'], is_string(...)))
+                : [],
             environmentId: $environment?->id,
             applicationName: $alert->application_name,
             environmentName: $alert->environment_name,
             color: $alert->environment_color,
             environmentStatus: $environment?->status,
+            collectionPaused: $open && $environment !== null && ! $environment->pollingEnabled,
             nodeCount: $environment->nodeCount ?? 0,
             pending: $environment->pending ?? 0,
             maxWaitSeconds: $environment->maxWaitSeconds ?? 0,
@@ -821,5 +827,12 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             canMute: $open && $abilities['mute'],
             canHandle: $open && $abilities['handle'],
         );
+    }
+
+    private function detailText(Alert $alert, string $key): ?string
+    {
+        $value = $alert->detail[$key] ?? null;
+
+        return is_string($value) ? $value : null;
     }
 }
