@@ -151,7 +151,7 @@ class DatabaseSeeder extends Seeder
             'webhook_secret' => RegenerateWebhookSecret::newSecret(),
             'quiet_from' => '23:00',
             'quiet_to' => '07:00',
-            'timezone' => NotificationSetting::DEFAULT_TIMEZONE,
+            'timezone' => NotificationSetting::defaultTimezone(),
             'repeat_minutes' => 30,
         ]);
 

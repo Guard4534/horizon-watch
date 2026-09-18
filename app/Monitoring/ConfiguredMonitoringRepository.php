@@ -49,8 +49,6 @@ use Illuminate\Support\Str;
 
 class ConfiguredMonitoringRepository implements MonitoringRepository
 {
-    private const int ALERTS_PER_PAGE = 50;
-
     /**
      * @var array<int, EloquentCollection<int, Environment>>
      */
@@ -294,13 +292,14 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     public function alerts(Team $team, AlertState $state, ?string $application = null, int $page = 1): AlertPageData
     {
         $page = max(1, $page);
+        $perPage = config()->integer('horizon-watch.pages.alerts_per_page');
         $query = $this->alertsIn($team, $state, $application);
         $total = (clone $query)->count();
 
         return new AlertPageData(
-            alerts: $total === 0 ? [] : $this->toAlertData($team, $query->forPage($page, self::ALERTS_PER_PAGE)->get()),
+            alerts: $total === 0 ? [] : $this->toAlertData($team, $query->forPage($page, $perPage)->get()),
             total: $total,
-            perPage: self::ALERTS_PER_PAGE,
+            perPage: $perPage,
             page: $page,
         );
     }
@@ -337,7 +336,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             ->with('alert:id,application_name,environment_name')
             ->orderByDesc('sent_at')
             ->orderByDesc('id')
-            ->limit(6);
+            ->limit(config()->integer('horizon-watch.pages.sent_notifications'));
 
         if ($user->teamVisibility($team) !== MemberVisibility::All) {
             $query->whereHas('alert', fn (Builder $alerts) => $alerts
@@ -422,8 +421,8 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
                 webhookSecretSet: false,
                 quietFrom: null,
                 quietTo: null,
-                timezone: NotificationSetting::DEFAULT_TIMEZONE,
-                repeatMinutes: NotificationSetting::DEFAULT_REPEAT_MINUTES,
+                timezone: NotificationSetting::defaultTimezone(),
+                repeatMinutes: NotificationSetting::defaultRepeatMinutes(),
                 timezones: DateTimeZone::listIdentifiers(),
             );
         }
@@ -603,7 +602,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
                 default => null,
             },
             pending: $this->snapshotNumber($state, 'pending'),
-            trend: $watched ? $trend['points'] ?? array_fill(0, StoredReadings::TREND_POINTS, 0) : [],
+            trend: $watched ? $trend['points'] ?? array_fill(0, StoredReadings::trendPoints(), 0) : [],
             trendPercent: $trend['percent'] ?? null,
             maxWaitSeconds: $this->snapshotNumber($state, 'max_wait_seconds'),
             failedInWindow: $this->snapshotNumber($state, 'failed_in_window'),

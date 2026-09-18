@@ -11,10 +11,14 @@ use App\Externals\Horizon\Data\HorizonPendingJob;
 use App\Externals\Horizon\Data\HorizonQueueLoad;
 use App\Externals\Horizon\HorizonReading;
 use Carbon\CarbonImmutable;
+use Illuminate\Container\Attributes\Config;
 
 final class StatusEvaluator
 {
-    public const int FAILED_RATE_MINUTES = 60;
+    public function __construct(
+        #[Config('horizon-watch.readings.failed_rate_minutes')]
+        private readonly int $failedRateMinutes,
+    ) {}
 
     public function evaluate(HorizonReading $reading, RuleSet $rules): EvaluatedStatus
     {
@@ -63,7 +67,7 @@ final class StatusEvaluator
      */
     public function failedLastHour(array $jobs): int
     {
-        $since = CarbonImmutable::now()->subMinutes(self::FAILED_RATE_MINUTES);
+        $since = CarbonImmutable::now()->subMinutes($this->failedRateMinutes);
 
         return count(array_filter($jobs, fn (HorizonFailedJob $job) => $job->failedAt->gte($since)));
     }

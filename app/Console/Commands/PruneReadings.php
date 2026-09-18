@@ -12,13 +12,13 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-#[Signature('monitoring:prune {--chunk=10000 : Rows deleted per statement}')]
+#[Signature('monitoring:prune {--chunk= : Rows deleted per statement}')]
 #[Description('Delete the readings and the resolved alerts older than their retention periods')]
 class PruneReadings extends Command
 {
     public function handle(): int
     {
-        $chunk = max(1, (int) $this->option('chunk'));
+        $chunk = max(1, (int) ($this->option('chunk') ?? config()->integer('horizon-watch.readings.prune_chunk')));
         $readingCutoff = now()->subDays((int) config('horizon-watch.retention_days'));
         $alertCutoff = now()->subDays((int) config('horizon-watch.alert_retention_days'));
 

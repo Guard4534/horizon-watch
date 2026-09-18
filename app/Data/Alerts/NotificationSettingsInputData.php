@@ -11,10 +11,6 @@ use Spatie\LaravelData\Support\Validation\ValidationContext;
 
 class NotificationSettingsInputData extends Data
 {
-    public const int MAX_RECIPIENTS = 20;
-
-    public const array REPEAT_MINUTES = [15, 30, 60];
-
     public function __construct(
         /** @var array<int, string> */
         public array $recipients,
@@ -31,13 +27,13 @@ class NotificationSettingsInputData extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'recipients' => ['present', 'array', 'list', 'max:'.self::MAX_RECIPIENTS],
+            'recipients' => ['present', 'array', 'list', 'max:'.config()->integer('horizon-watch.notifications.max_recipients')],
             'recipients.*' => ['required', 'string', 'max:255', 'email:rfc'],
             'webhookUrl' => ['present', 'nullable', 'string', 'max:2048', 'url:http,https', new WebhookUrl],
             'quietFrom' => ['present', 'nullable', 'date_format:H:i', 'required_with:'.self::key($context, 'quietTo')],
             'quietTo' => ['present', 'nullable', 'date_format:H:i', 'required_with:'.self::key($context, 'quietFrom')],
             'timezone' => ['required', 'string', Rule::in(DateTimeZone::listIdentifiers())],
-            'repeatMinutes' => ['present', 'nullable', 'integer', Rule::in(self::REPEAT_MINUTES)],
+            'repeatMinutes' => ['present', 'nullable', 'integer', Rule::in(config()->array('horizon-watch.notifications.repeat_minutes'))],
         ];
     }
 

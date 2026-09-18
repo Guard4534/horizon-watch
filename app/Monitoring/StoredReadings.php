@@ -12,18 +12,6 @@ use Illuminate\Support\Facades\DB;
 
 class StoredReadings
 {
-    public const SERIES_POINTS = 48;
-
-    public const TREND_POINTS = 12;
-
-    private const TREND_STEP_SECONDS = 300;
-
-    private const TREND_SPAN = 3;
-
-    private const POLL_TICK_SECONDS = 15;
-
-    private const POLL_SLACK_SECONDS = 15;
-
     private const SERIES_ORIGIN = '1970-01-01 00:00:00+00';
 
     /**
@@ -108,7 +96,10 @@ class StoredReadings
      */
     private function series(array $environmentIds, SeriesRange $range, string $aggregate): array
     {
-        $values = array_fill(0, self::SERIES_POINTS, 0.0);
+        $points = self::seriesPoints();
+        $tick = config()->integer('horizon-watch.readings.poll_tick_seconds');
+        $slack = config()->integer('horizon-watch.readings.poll_slack_seconds');
+        $values = array_fill(0, $points, 0.0);
 
         if ($environmentIds === []) {
             return array_map(fn () => 0, $values);
@@ -138,9 +129,9 @@ class StoredReadings
         foreach ($rows as $row) {
             $index = intdiv((int) $row->bucket - $from->getTimestamp(), $step);
 
-            if ($index >= 0 && $index < self::SERIES_POINTS) {
+            if ($index >= 0 && $index < $points) {
                 $buckets[(int) $row->environment_id][$index] = $row->value === null ? null : (float) $row->value;
-                $gap = (int) ceil((int) $row->poll_interval / self::POLL_TICK_SECONDS) * self::POLL_TICK_SECONDS + self::POLL_SLACK_SECONDS;
+                $gap = (int) ceil((int) $row->poll_interval / $tick) * $tick + $slack;
                 $reach[(int) $row->environment_id] = (int) ceil($gap / $step) - 1;
             }
         }
@@ -149,7 +140,7 @@ class StoredReadings
             $last = null;
             $lastIndex = 0;
 
-            for ($index = 0; $index < self::SERIES_POINTS; $index++) {
+            for ($index = 0; $index < $points; $index++) {
                 if (array_key_exists($index, $own)) {
                     [$last, $lastIndex] = [$own[$index], $index];
                     $values[$index] += $last ?? 0.0;
@@ -178,7 +169,9 @@ class StoredReadings
             return [];
         }
 
-        [$from, $until] = $this->window(self::TREND_STEP_SECONDS, self::TREND_POINTS);
+        $step = config()->integer('horizon-watch.readings.trend_step_seconds');
+        $points = self::trendPoints();
+        [$from, $until] = $this->window($step, $points);
         $placeholders = implode(', ', array_fill(0, count($averages), '?'));
 
         $rows = DB::select(
@@ -192,27 +185,27 @@ class StoredReadings
                   and error is null
                 group by environment_id, bucket
                 SQL,
-            [self::TREND_STEP_SECONDS, self::SERIES_ORIGIN, ...array_keys($averages), $from->toIso8601String(), $until->toIso8601String()],
+            [$step, self::SERIES_ORIGIN, ...array_keys($averages), $from->toIso8601String(), $until->toIso8601String()],
         );
 
         foreach ($rows as $row) {
-            $index = intdiv((int) $row->bucket - $from->getTimestamp(), self::TREND_STEP_SECONDS);
+            $index = intdiv((int) $row->bucket - $from->getTimestamp(), $step);
 
-            if ($index >= 0 && $index < self::TREND_POINTS) {
+            if ($index >= 0 && $index < $points) {
                 $averages[(int) $row->environment_id][$index] = (float) $row->value;
             }
         }
 
-        return array_map(function (array $buckets): array {
+        return array_map(function (array $buckets) use ($points): array {
             ksort($buckets);
 
-            $points = array_fill(0, self::TREND_POINTS, 0);
+            $values = array_fill(0, $points, 0);
 
             foreach ($buckets as $index => $value) {
-                $points[$index] = (int) round($value);
+                $values[$index] = (int) round($value);
             }
 
-            return ['points' => $points, 'percent' => $this->variation(array_values($buckets))];
+            return ['points' => array_values($values), 'percent' => $this->variation(array_values($buckets))];
         }, $averages);
     }
 
@@ -221,12 +214,14 @@ class StoredReadings
      */
     private function variation(array $buckets): ?int
     {
-        if (count($buckets) < 2 * self::TREND_SPAN) {
+        $span = config()->integer('horizon-watch.readings.trend_span');
+
+        if ($span < 1 || count($buckets) < 2 * $span) {
             return null;
         }
 
-        $recent = array_sum(array_slice($buckets, -self::TREND_SPAN)) / self::TREND_SPAN;
-        $base = array_sum(array_slice($buckets, -2 * self::TREND_SPAN, self::TREND_SPAN)) / self::TREND_SPAN;
+        $recent = array_sum(array_slice($buckets, -$span)) / $span;
+        $base = array_sum(array_slice($buckets, -2 * $span, $span)) / $span;
 
         if ($base == 0.0) {
             return null;
@@ -240,13 +235,24 @@ class StoredReadings
      */
     private function grid(SeriesRange $range): array
     {
+        $points = self::seriesPoints();
         $step = intdiv(match ($range) {
             SeriesRange::ThreeHours => 3 * 3600,
             SeriesRange::Day => 24 * 3600,
             SeriesRange::Week => 7 * 24 * 3600,
-        }, self::SERIES_POINTS);
+        }, $points);
 
-        return [...$this->window($step, self::SERIES_POINTS), $step];
+        return [...$this->window($step, $points), $step];
+    }
+
+    public static function seriesPoints(): int
+    {
+        return config()->integer('horizon-watch.readings.series_points');
+    }
+
+    public static function trendPoints(): int
+    {
+        return config()->integer('horizon-watch.readings.trend_points');
     }
 
     /**

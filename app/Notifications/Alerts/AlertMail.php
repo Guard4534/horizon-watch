@@ -23,8 +23,6 @@ final class AlertMail
 
     public const string RESOLVED_COLOR = '#6fbf99';
 
-    private const int MAX_NODES = 5;
-
     public static function message(): MailMessage
     {
         return (new MailMessage)->theme(self::THEME);
@@ -92,7 +90,7 @@ final class AlertMail
         }
 
         if ($alert->metric === AlertRuleMetric::WorkersMissing && is_array($detail['queues'] ?? null)) {
-            $queues = array_slice(array_values(array_filter($detail['queues'], is_string(...))), 0, 10);
+            $queues = array_slice(array_values(array_filter($detail['queues'], is_string(...))), 0, config()->integer('horizon-watch.alerts.listed_queues'));
 
             return $queues === [] ? null : self::queues($queues);
         }
@@ -176,16 +174,17 @@ final class AlertMail
             return '—';
         }
 
-        $shown = implode(', ', array_slice($names, 0, self::MAX_NODES));
+        $listed = config()->integer('horizon-watch.notifications.mail_nodes');
+        $shown = implode(', ', array_slice($names, 0, $listed));
 
-        return count($names) > self::MAX_NODES ? $shown.' +'.(count($names) - self::MAX_NODES) : $shown;
+        return count($names) > $listed ? $shown.' +'.(count($names) - $listed) : $shown;
     }
 
     private static function timezone(?Team $team): string
     {
         return $team === null
-            ? NotificationSetting::DEFAULT_TIMEZONE
-            : (NotificationSetting::query()->whereKey($team->id)->value('timezone') ?? NotificationSetting::DEFAULT_TIMEZONE);
+            ? NotificationSetting::defaultTimezone()
+            : (NotificationSetting::query()->whereKey($team->id)->value('timezone') ?? NotificationSetting::defaultTimezone());
     }
 
     private static function time(CarbonImmutable $at, string $timezone): string
@@ -193,7 +192,7 @@ final class AlertMail
         try {
             return $at->setTimezone($timezone)->format('Y-m-d H:i');
         } catch (Throwable) {
-            return $at->setTimezone(NotificationSetting::DEFAULT_TIMEZONE)->format('Y-m-d H:i');
+            return $at->setTimezone(NotificationSetting::defaultTimezone())->format('Y-m-d H:i');
         }
     }
 }

@@ -22,14 +22,14 @@ class SendAlertWebhook implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 3;
+    public int $tries;
 
     /**
      * @var list<int>
      */
-    public array $backoff = [10, 60];
+    public array $backoff;
 
-    public int $timeout = 30;
+    public int $timeout;
 
     /**
      * @param  array<string, mixed>  $payload
@@ -41,7 +41,11 @@ class SendAlertWebhook implements ShouldQueue
         public readonly string $event,
         public readonly array $payload,
         public readonly ?int $environmentCount = null,
-    ) {}
+    ) {
+        $this->tries = config()->integer('horizon-watch.notifications.delivery_tries');
+        $this->backoff = array_values(array_map(intval(...), config()->array('horizon-watch.notifications.delivery_backoff_seconds')));
+        $this->timeout = config()->integer('horizon-watch.notifications.delivery_timeout_seconds');
+    }
 
     public function handle(WebhookClient $client): void
     {

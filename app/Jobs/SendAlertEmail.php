@@ -27,14 +27,14 @@ class SendAlertEmail implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 3;
+    public int $tries;
 
     /**
      * @var list<int>
      */
-    public array $backoff = [10, 60];
+    public array $backoff;
 
-    public int $timeout = 30;
+    public int $timeout;
 
     /**
      * @param  array{repeated?: bool, alertIds?: list<string>, environmentCount?: int}  $payload
@@ -47,7 +47,11 @@ class SendAlertEmail implements ShouldQueue
         public readonly ?string $addressKey,
         public readonly string $locale,
         public readonly array $payload = [],
-    ) {}
+    ) {
+        $this->tries = config()->integer('horizon-watch.notifications.delivery_tries');
+        $this->backoff = array_values(array_map(intval(...), config()->array('horizon-watch.notifications.delivery_backoff_seconds')));
+        $this->timeout = config()->integer('horizon-watch.notifications.delivery_timeout_seconds');
+    }
 
     public function handle(Recipients $recipients): void
     {

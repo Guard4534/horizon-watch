@@ -17,8 +17,6 @@ use Illuminate\Support\Facades\DB;
 #[Bind(AlertEngine::class)]
 final class AlertEngine
 {
-    private const int LISTED_QUEUES = 10;
-
     public function __construct(private EffectiveRules $rules) {}
 
     public function afterReading(Environment $environment, EnvironmentSnapshot $snapshot, EnvironmentState $state): void
@@ -129,7 +127,7 @@ final class AlertEngine
             }
         }
 
-        return [count($names), ['queues' => array_slice($names, 0, self::LISTED_QUEUES)]];
+        return [count($names), ['queues' => array_slice($names, 0, config()->integer('horizon-watch.alerts.listed_queues'))]];
     }
 
     /**

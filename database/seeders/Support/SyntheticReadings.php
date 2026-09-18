@@ -47,9 +47,12 @@ final class SyntheticReadings
 
     private const RESERVED_JOBS = ['App\\Jobs\\RebuildIndex', 'App\\Jobs\\ExportLedger', 'App\\Jobs\\TranscodeVideo'];
 
-    public function __construct(
-        private readonly StatusEvaluator $evaluator = new StatusEvaluator,
-    ) {}
+    private readonly StatusEvaluator $evaluator;
+
+    public function __construct(?StatusEvaluator $evaluator = null)
+    {
+        $this->evaluator = $evaluator ?? app(StatusEvaluator::class);
+    }
 
     public function seed(Environment $environment, CarbonImmutable $until, int $hours = 24, int $stepMinutes = 5): void
     {

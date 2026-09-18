@@ -22,11 +22,24 @@ class EnvironmentFormData extends Data
         public string $name,
         public EnvironmentColor $color,
         public string $horizonUrl,
+        public int $pollIntervalSeconds,
         public ?string $basicAuthUser = null,
         public ?string $basicAuthPassword = null,
-        public int $pollIntervalSeconds = 15,
         public bool $pollingEnabled = true,
     ) {}
+
+    /**
+     * @param  array<array-key, mixed>  $properties
+     * @return array<array-key, mixed>
+     */
+    public static function prepareForPipeline(array $properties): array
+    {
+        if (! array_key_exists('pollIntervalSeconds', $properties)) {
+            $properties['pollIntervalSeconds'] = config()->integer('horizon-watch.readings.poll_interval_seconds.default');
+        }
+
+        return $properties;
+    }
 
     /**
      * @return array<string, array<int, mixed>>
@@ -39,7 +52,7 @@ class EnvironmentFormData extends Data
             'horizonUrl' => self::horizonUrlRules(),
             'basicAuthUser' => self::basicAuthUserRules(self::key($context, 'basicAuthPassword')),
             'basicAuthPassword' => ['nullable', 'string', ...self::passwordRequiredWithUsernameRules($context)],
-            'pollIntervalSeconds' => ['integer', 'between:15,300'],
+            'pollIntervalSeconds' => ['integer', 'between:'.config()->integer('horizon-watch.readings.poll_interval_seconds.min').','.config()->integer('horizon-watch.readings.poll_interval_seconds.max')],
             'pollingEnabled' => ['boolean'],
         ];
     }

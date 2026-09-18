@@ -30,10 +30,6 @@ class NotificationSetting extends Model
     /** @use HasFactory<NotificationSettingFactory> */
     use HasFactory;
 
-    public const string DEFAULT_TIMEZONE = 'Europe/Rome';
-
-    public const int DEFAULT_REPEAT_MINUTES = 30;
-
     /**
      * @var string
      */
@@ -49,9 +45,30 @@ class NotificationSetting extends Model
      */
     protected $attributes = [
         'recipients' => '[]',
-        'timezone' => self::DEFAULT_TIMEZONE,
-        'repeat_minutes' => self::DEFAULT_REPEAT_MINUTES,
     ];
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    public function __construct(array $attributes = [])
+    {
+        $this->attributes += [
+            'timezone' => self::defaultTimezone(),
+            'repeat_minutes' => self::defaultRepeatMinutes(),
+        ];
+
+        parent::__construct($attributes);
+    }
+
+    public static function defaultTimezone(): string
+    {
+        return config()->string('horizon-watch.notifications.default_timezone');
+    }
+
+    public static function defaultRepeatMinutes(): int
+    {
+        return config()->integer('horizon-watch.notifications.default_repeat_minutes');
+    }
 
     /**
      * @return BelongsTo<Team, $this>

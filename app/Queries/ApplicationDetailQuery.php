@@ -12,8 +12,6 @@ use App\Monitoring\MonitoringRepository;
 
 class ApplicationDetailQuery
 {
-    private const int RESOLVED_ALERTS = 5;
-
     public function __construct(private MonitoringRepository $monitoring) {}
 
     public function handle(Team $team, string $applicationId): ApplicationDetailPageData
@@ -30,7 +28,7 @@ class ApplicationDetailQuery
             $this->monitoring->openAlerts($team),
             fn (AlertData $alert) => in_array($alert->environmentId, $environmentIds, true),
         );
-        $resolved = array_slice($this->monitoring->alerts($team, AlertState::Resolved, $application->id)->alerts, 0, self::RESOLVED_ALERTS);
+        $resolved = array_slice($this->monitoring->alerts($team, AlertState::Resolved, $application->id)->alerts, 0, config()->integer('horizon-watch.pages.resolved_alerts'));
 
         $worstEnvironments = array_values(array_filter(
             $environments,

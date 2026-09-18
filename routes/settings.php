@@ -26,7 +26,7 @@ Route::middleware(['auth'])->group(function () {
         ->name('security.edit');
 
     Route::put('settings/password', [SecurityController::class, 'update'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:'.config()->integer('horizon-watch.rate_limits.password_update_per_minute').',1')
         ->name('user-password.update');
 
     Route::get('settings/teams', [TeamController::class, 'index'])->name('teams.index');
@@ -50,7 +50,7 @@ Route::prefix('{current_team}')
         Route::post('members/invitations', [TeamInvitationController::class, 'store'])->name('members.invitations.store');
 
         Route::post('members/invitations/{invitation:id}/resend', [TeamInvitationController::class, 'resend'])
-            ->middleware('throttle:6,1')
+            ->middleware('throttle:'.config()->integer('horizon-watch.rate_limits.invitations_per_minute').',1')
             ->name('members.invitations.resend');
 
         Route::delete('members/invitations/{invitation:id}', [TeamInvitationController::class, 'destroy'])->name('members.invitations.destroy');

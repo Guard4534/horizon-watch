@@ -23,8 +23,8 @@ class NotificationSettingFactory extends Factory
             'webhook_secret' => null,
             'quiet_from' => null,
             'quiet_to' => null,
-            'timezone' => NotificationSetting::DEFAULT_TIMEZONE,
-            'repeat_minutes' => NotificationSetting::DEFAULT_REPEAT_MINUTES,
+            'timezone' => NotificationSetting::defaultTimezone(),
+            'repeat_minutes' => NotificationSetting::defaultRepeatMinutes(),
         ];
     }
 

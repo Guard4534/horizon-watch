@@ -115,7 +115,7 @@ function reservedJob(int $secondsAgo, string $status = 'reserved'): HorizonPendi
 }
 
 test('a reading is evaluated in the order of the spec', function (HorizonReading $reading, EnvironmentStatus $status, array $breaches) {
-    $evaluated = (new StatusEvaluator)->evaluate($reading, RuleSet::defaults());
+    $evaluated = (new StatusEvaluator(60))->evaluate($reading, RuleSet::defaults());
 
     expect($evaluated->status)->toBe($status)
         ->and($evaluated->breaches)->toBe($breaches);
@@ -302,14 +302,14 @@ test('a reading is evaluated in the order of the spec', function (HorizonReading
 ]);
 
 test('a failed reading is unreachable with the endpoint breach', function () {
-    $evaluated = (new StatusEvaluator)->failed();
+    $evaluated = (new StatusEvaluator(60))->failed();
 
     expect($evaluated->status)->toBe(EnvironmentStatus::Unreachable)
         ->and($evaluated->breaches)->toBe([AlertRuleMetric::EndpointUnreachable]);
 });
 
 test('the failed jobs of the last hour are counted', function () {
-    $evaluated = (new StatusEvaluator)->evaluate(evaluatorReading(
+    $evaluated = (new StatusEvaluator(60))->evaluate(evaluatorReading(
         failed: [...failedJobsAgo(7), ...failedJobsAgo(4, secondsAgo: 4000)],
     ), RuleSet::defaults());
 
@@ -317,15 +317,15 @@ test('the failed jobs of the last hour are counted', function () {
 });
 
 test('a reading whose failed jobs could not be read counts none', function () {
-    expect((new StatusEvaluator)->evaluate(evaluatorReading(failed: null), RuleSet::defaults())->failedLastHour)->toBe(0);
+    expect((new StatusEvaluator(60))->evaluate(evaluatorReading(failed: null), RuleSet::defaults())->failedLastHour)->toBe(0);
 });
 
 test('a failed reading counts no failed jobs', function () {
-    expect((new StatusEvaluator)->failed()->failedLastHour)->toBe(0);
+    expect((new StatusEvaluator(60))->failed()->failedLastHour)->toBe(0);
 });
 
 test('a reading is evaluated against the rules it is given', function (HorizonReading $reading, array $changes, EnvironmentStatus $status, array $breaches) {
-    $evaluated = (new StatusEvaluator)->evaluate($reading, evaluatorRules($changes));
+    $evaluated = (new StatusEvaluator(60))->evaluate($reading, evaluatorRules($changes));
 
     expect($evaluated->status)->toBe($status)
         ->and($evaluated->breaches)->toBe($breaches);
@@ -399,7 +399,7 @@ test('a reading is evaluated against the rules it is given', function (HorizonRe
 ]);
 
 test('a failed reading is unreachable with the endpoint breach and nothing else', function () {
-    $failed = (new StatusEvaluator)->failed();
+    $failed = (new StatusEvaluator(60))->failed();
 
     expect($failed->status)->toBe(EnvironmentStatus::Unreachable)
         ->and($failed->breaches)->toBe([AlertRuleMetric::EndpointUnreachable])

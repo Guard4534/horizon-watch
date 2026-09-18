@@ -46,7 +46,7 @@ final class QuietHours
         try {
             return new DateTimeZone($timezone);
         } catch (Throwable) {
-            return new DateTimeZone(NotificationSetting::DEFAULT_TIMEZONE);
+            return new DateTimeZone(NotificationSetting::defaultTimezone());
         }
     }
 }

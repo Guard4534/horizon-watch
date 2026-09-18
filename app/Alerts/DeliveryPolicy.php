@@ -69,7 +69,7 @@ final readonly class DeliveryPolicy
                 ->whereNull('alerts.last_notified_at')
                 ->orWhere(fn (Builder $default) => $default
                     ->whereNull('notification_settings.team_id')
-                    ->where('alerts.last_notified_at', '<=', $now->subMinutes(NotificationSetting::DEFAULT_REPEAT_MINUTES)))
+                    ->where('alerts.last_notified_at', '<=', $now->subMinutes(NotificationSetting::defaultRepeatMinutes())))
                 ->orWhere(fn (Builder $configured) => $configured
                     ->whereNotNull('notification_settings.repeat_minutes')
                     ->whereRaw('alerts.last_notified_at <= ?::timestamptz - make_interval(mins => notification_settings.repeat_minutes)', [$now->toIso8601String()])))
@@ -92,7 +92,7 @@ final readonly class DeliveryPolicy
                     ->whereNull('alerts.digested_at')
                     ->unmutedAt($now))
                 ->orWhere(fn (Builder $resolved) => $resolved
-                    ->where('alerts.resolved_at', '>=', $now->subDay())
+                    ->where('alerts.resolved_at', '>=', $now->subHours(config()->integer('horizon-watch.notifications.digest_look_back_hours')))
                     ->where(fn (Builder $undigested) => $undigested
                         ->whereNull('alerts.digested_at')
                         ->orWhereColumn('alerts.digested_at', '<', 'alerts.resolved_at'))
