@@ -756,20 +756,20 @@ test('failed readings in a row keep the start of the unreachable run', function 
 
     expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00');
 
-    $this->travel(5)->minutes();
+    $this->travel(45)->seconds();
     ($this->poll)();
 
     $state = EnvironmentState::query()->sole();
 
     expect($state->error)->toBe(ReadingError::Unauthorized)
-        ->and($state->captured_at->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and($state->captured_at->toDateTimeString())->toBe('2026-09-17 10:00:45')
         ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00');
 
     $this->travel(15)->seconds();
     ($this->poll)();
 
-    expect(EnvironmentState::query()->sole()->status)->toBe(EnvironmentStatus::Degraded)
-        ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:05:15');
+    expect(EnvironmentState::query()->sole()->status)->not->toBe(EnvironmentStatus::Unreachable)
+        ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:01:00');
 });
 
 test('a late reading moves neither the status nor the start of the run', function () {

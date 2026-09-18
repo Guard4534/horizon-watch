@@ -14,8 +14,8 @@ import type { Component } from 'vue';
 export function thresholdOf(
     environment: App.Data.Monitoring.EnvironmentData,
     metric: App.Enums.AlertRuleMetric,
-): number {
-    return environment.thresholds[metric] ?? 0;
+): number | null {
+    return environment.thresholds[metric] ?? null;
 }
 
 const ICONS: Record<App.Enums.AlertRuleMetric, Component> = {
@@ -89,6 +89,19 @@ export function isStateMetric(metric: App.Enums.AlertRuleMetric): boolean {
     return STATE_METRICS.has(metric);
 }
 
+export function unitLabel(unit: string): string {
+    switch (unit) {
+        case 'min':
+            return trans('min');
+        case 's':
+            return trans('s');
+        case 'job':
+            return trans('jobs');
+        default:
+            return unit;
+    }
+}
+
 export function formatThreshold(threshold: number, unit: string): string {
     const value = Number.isInteger(threshold)
         ? String(threshold)
@@ -96,12 +109,12 @@ export function formatThreshold(threshold: number, unit: string): string {
 
     switch (unit) {
         case 's':
-            return `${value}s`;
+            return `${value}${unitLabel(unit)}`;
         case 'job':
         case '':
             return value;
         default:
-            return `${value} ${unit}`;
+            return `${value} ${unitLabel(unit)}`;
     }
 }
 
@@ -124,19 +137,6 @@ export const RULE_FIELDS: readonly RuleField[] = [
     'notifyByEmail',
     'enabled',
 ];
-
-export function severityLabel(severity: App.Enums.AlertSeverity): string {
-    switch (severity) {
-        case 'critical':
-            return trans('Critical');
-        case 'warning':
-            return trans('Warning');
-    }
-}
-
-export function severityColor(severity: App.Enums.AlertSeverity): string {
-    return severity === 'critical' ? 'var(--st-down)' : 'var(--st-warn)';
-}
 
 export function ruleFields(
     rule: App.Data.Monitoring.AlertRuleData,

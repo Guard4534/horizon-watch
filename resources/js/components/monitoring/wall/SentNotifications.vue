@@ -8,20 +8,41 @@ defineProps<{
     notifications: App.Data.Monitoring.SentNotificationData[];
 }>();
 
+const WEBHOOK_EVENTS: Record<App.Enums.SentNotificationKind, string> = {
+    critical_alert: 'alert.opened',
+    critical_repeated: 'alert.repeated',
+    resolved: 'alert.resolved',
+    warning_digest: 'alert.digest',
+    test: 'test',
+};
+
+function prefix(
+    notification: App.Data.Monitoring.SentNotificationData,
+): string {
+    return notification.channel === 'webhook'
+        ? `POST ${WEBHOOK_EVENTS[notification.kind]} · `
+        : '';
+}
+
 function text(
     notification: App.Data.Monitoring.SentNotificationData,
 ): string | null {
+    const webhook = notification.channel === 'webhook';
+    const subject = `${prefix(notification)}${notification.subject}`;
+
     switch (notification.kind) {
         case 'critical_alert':
-            return `${trans('CRITICAL')} · ${notification.subject}`;
+            return webhook ? subject : `${trans('CRITICAL')} · ${subject}`;
+        case 'critical_repeated':
+            return webhook
+                ? subject
+                : `${trans('CRITICAL · repeated')} · ${subject}`;
+        case 'resolved':
+            return webhook ? subject : `${trans('Resolved')} · ${subject}`;
         case 'warning_digest':
             return null;
-        case 'resolved':
-            return `${trans('Resolved')} · ${notification.subject}`;
-        case 'webhook_delivery':
-            return `POST · ${notification.subject}`;
         case 'test':
-            return notification.channel === 'webhook'
+            return webhook
                 ? trans('Test delivery to the webhook')
                 : trans('Test email');
     }
@@ -61,10 +82,11 @@ function text(
                     <div class="truncate">
                         {{
                             text(notification) ??
-                            $tChoice(
-                                'Warning digest · :count environment|Warning digest · :count environments',
-                                Number(notification.subject),
-                            )
+                            prefix(notification) +
+                                $tChoice(
+                                    'Warning digest · :count environment|Warning digest · :count environments',
+                                    Number(notification.subject),
+                                )
                         }}
                     </div>
                     <div

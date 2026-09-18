@@ -33,6 +33,7 @@ return new class extends Migration
             $table->timestampTz('last_notified_at')->nullable();
             $table->boolean('notified')->default(false);
             $table->timestampTz('digested_at')->nullable();
+            $table->timestampTz('resolution_notified_at')->nullable();
             $table->timestamps();
 
             $table->index(['team_id', 'resolved_at', 'opened_at']);

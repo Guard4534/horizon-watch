@@ -78,7 +78,8 @@ test('a fresh reading reaches the environment page with its age, interval and no
             ->missing('page.nodes.0.jobsPerMinute')
             ->missing('page.environment.redisMemoryGb')
             ->where('page.queues.2.runtimeSeconds', null)
-            ->where('page.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
+            ->missing('page.thresholds')
+            ->where('page.environment.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
                 && (float) $thresholds['job.runtime'] === AlertRuleMetric::JobRuntime->defaultThreshold())
             ->where('page.canTestConnection', true));
 });
@@ -95,7 +96,7 @@ test('the environment page lists the rules its thresholds come from, and only th
                 fn ($rule) => $rule['origin'] === 'organization'
                     && (float) $rule['threshold'] === AlertRuleMetric::from($rule['metric'])->defaultThreshold(),
             ))
-            ->where('page.thresholds', fn ($thresholds) => $thresholds->map(fn ($value) => (float) $value)->all()
+            ->where('page.environment.thresholds', fn ($thresholds) => $thresholds->map(fn ($value) => (float) $value)->all()
                 === collect(AlertRuleMetric::cases())->mapWithKeys(fn ($metric) => [$metric->value => $metric->defaultThreshold()])->all()));
 });
 
@@ -105,7 +106,7 @@ test('the rules and thresholds of the environment page agree', function () {
     $this->get(readingEnvironmentUrl($this->environment))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page', fn ($page) => collect($page['rules'])->mapWithKeys(fn ($rule) => [$rule['metric'] => (float) $rule['threshold']])->all()
-                === collect($page['thresholds'])->map(fn ($value) => (float) $value)->all()));
+                === collect($page['environment']['thresholds'])->map(fn ($value) => (float) $value)->all()));
 });
 
 test('an old reading is flagged as not updated', function () {

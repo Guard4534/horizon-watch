@@ -95,7 +95,7 @@ watch(isMobile, leaveIfWide);
                 <span class="label">{{ $t('Quiet hours') }}</span>
                 <span class="value nc-num">{{
                     page.quietFrom && page.quietTo
-                        ? `${page.quietFrom} → ${page.quietTo}`
+                        ? `${page.quietFrom} → ${page.quietTo} (${page.timezone})`
                         : $t('None')
                 }}</span>
                 <PhCaretRight :size="13" class="caret" />

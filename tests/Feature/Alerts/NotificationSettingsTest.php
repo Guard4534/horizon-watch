@@ -63,7 +63,8 @@ test('without a saved row the page shows the defaults', function () {
         ->where('page.notifications.quietTo', null)
         ->where('page.notifications.timezone', 'Europe/Rome')
         ->where('page.notifications.repeatMinutes', 30)
-        ->where('page.notifications.timezones', DateTimeZone::listIdentifiers())
+        ->missing('page.notifications.timezones')
+        ->where('page.timezones', DateTimeZone::listIdentifiers())
         ->where('page.notificationSummary', [
             'recipientCount' => 0,
             'webhookConfigured' => false,
@@ -72,6 +73,19 @@ test('without a saved row the page shows the defaults', function () {
             'timezone' => 'Europe/Rome',
             'repeatMinutes' => 30,
         ]));
+});
+
+test('only the alert settings page carries the list of time zones, the polled alerts page does not', function () {
+    $this->actingAs($this->admin);
+
+    $alerts = $this->get(route('alerts.index', ['current_team' => $this->team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.notifications.timezone', 'Europe/Rome')
+            ->missing('page.notifications.timezones')
+            ->missing('page.timezones'));
+
+    expect($alerts->getContent())->not->toContain('America\\/New_York');
 });
 
 test('an admin saves the settings, the recipients deduplicated in lowercase and the quiet hours as H:i', function () {

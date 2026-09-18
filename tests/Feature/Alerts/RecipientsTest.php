@@ -12,6 +12,7 @@ use App\Models\Application;
 use App\Models\Environment;
 use App\Models\NotificationSetting;
 use App\Models\Team;
+use App\Models\User;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Validator;
@@ -39,6 +40,16 @@ beforeEach(function () {
     ]);
 });
 
+/**
+ * @return list<array{email: string, locale: string, user: ?User}>
+ */
+function alertRecipients(Alert $alert): array
+{
+    $recipients = app(Recipients::class);
+
+    return $recipients->forAlertIn($alert, $recipients->forDigest(Team::withTrashed()->findOrFail($alert->team_id)));
+}
+
 function recipientEmails(array $recipients): array
 {
     return array_map(fn (array $recipient) => $recipient['email'], $recipients);
@@ -48,16 +59,16 @@ test('an alert goes to the opted-in members who see its environment and to the e
     $production = Alert::factory()->for($this->production)->create(['metric' => AlertRuleMetric::QueuePending]);
     $staging = Alert::factory()->for($this->staging)->create(['metric' => AlertRuleMetric::QueuePending]);
 
-    expect(recipientEmails(app(Recipients::class)->forAlert($production)))
+    expect(recipientEmails(alertRecipients($production)))
         ->toBe(['admin@example.com', 'viewer@example.com', 'ops@example.com', 'oncall@example.com'])
-        ->and(recipientEmails(app(Recipients::class)->forAlert($staging)))
+        ->and(recipientEmails(alertRecipients($staging)))
         ->toBe(['admin@example.com', 'dev@example.com', 'ops@example.com', 'oncall@example.com']);
 });
 
 test('a member keeps their own language and wins over the same extra address', function () {
     $alert = Alert::factory()->for($this->production)->create();
 
-    $recipients = collect(app(Recipients::class)->forAlert($alert))->keyBy('email');
+    $recipients = collect(alertRecipients($alert))->keyBy('email');
 
     expect($recipients['admin@example.com']['locale'])->toBe('it')
         ->and($recipients['admin@example.com']['user']?->is($this->admin))->toBeTrue()
@@ -67,7 +78,7 @@ test('a member keeps their own language and wins over the same extra address', f
 
     config(['app.locale' => 'it']);
 
-    $recipients = collect(app(Recipients::class)->forAlert($alert))->keyBy('email');
+    $recipients = collect(alertRecipients($alert))->keyBy('email');
 
     expect($recipients['ops@example.com']['locale'])->toBe('it')
         ->and($recipients['viewer@example.com']['locale'])->toBe('it');
@@ -83,9 +94,9 @@ test('nobody gets an email when the effective rule has email off', function () {
     $production = Alert::factory()->for($this->production)->create(['metric' => AlertRuleMetric::QueuePending]);
     $runtime = Alert::factory()->for($this->production)->create(['metric' => AlertRuleMetric::JobRuntime]);
 
-    expect(app(Recipients::class)->forAlert($staging))->toBe([])
-        ->and(app(Recipients::class)->forAlert($production))->not->toBe([])
-        ->and(app(Recipients::class)->forAlert($runtime))->toBe([]);
+    expect(alertRecipients($staging))->toBe([])
+        ->and(alertRecipients($production))->not->toBe([])
+        ->and(alertRecipients($runtime))->toBe([]);
 });
 
 test('an alert of a deleted environment goes only to the extra addresses', function () {
@@ -98,21 +109,21 @@ test('an alert of a deleted environment goes only to the extra addresses', funct
         'metric' => AlertRuleMetric::QueuePending,
     ]);
 
-    expect(recipientEmails(app(Recipients::class)->forAlert($alert)))->toBe(['admin@example.com', 'ops@example.com', 'oncall@example.com']);
+    expect(recipientEmails(alertRecipients($alert)))->toBe(['admin@example.com', 'ops@example.com', 'oncall@example.com']);
 });
 
 test('without settings only members are recipients', function () {
     NotificationSetting::query()->delete();
     $alert = Alert::factory()->for($this->production)->create();
 
-    expect(recipientEmails(app(Recipients::class)->forAlert($alert)))->toBe(['admin@example.com', 'viewer@example.com']);
+    expect(recipientEmails(alertRecipients($alert)))->toBe(['admin@example.com', 'viewer@example.com']);
 });
 
 test('a deleted organization has no recipients', function () {
     $alert = Alert::factory()->for($this->production)->create();
     $this->team->delete();
 
-    expect(app(Recipients::class)->forAlert($alert->fresh()))->toBe([]);
+    expect(alertRecipients($alert->fresh()))->toBe([]);
 });
 
 test('the digest lists each recipient with the environments they see', function () {
@@ -148,14 +159,14 @@ test('an address that is also an extra address reaches every environment, as a m
     ]);
 
     $digest = collect(app(Recipients::class)->forDigest($this->team))->keyBy('email');
-    $alert = collect(app(Recipients::class)->forAlert($production))->keyBy('email');
+    $alert = collect(alertRecipients($production))->keyBy('email');
 
     expect($digest['dev@example.com']['environmentIds'])->toBeNull()
         ->and($digest['dev@example.com']['user']?->is($this->nonProduction))->toBeTrue()
         ->and($digest['viewer@example.com']['environmentIds'])->toBe([$this->production->id])
         ->and($alert->keys()->all())->toBe(['admin@example.com', 'dev@example.com', 'viewer@example.com', 'ops@example.com'])
         ->and($alert['dev@example.com']['user']?->is($this->nonProduction))->toBeTrue()
-        ->and(recipientEmails(app(Recipients::class)->forAlert($gone)))->toBe(['dev@example.com', 'ops@example.com']);
+        ->and(recipientEmails(alertRecipients($gone)))->toBe(['dev@example.com', 'ops@example.com']);
 });
 
 test('extra addresses are checked at send time with the rule that saved them, and a skipped one is logged by count only', function () {

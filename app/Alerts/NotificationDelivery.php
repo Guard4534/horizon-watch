@@ -25,7 +25,7 @@ final readonly class NotificationDelivery implements AlertDelivery
 
     /**
      * @param  list<array{email: string, locale: string, user: ?User}>  $recipients
-     * @param  array{repeated?: bool, alertIds?: list<string>, environmentCount?: int}  $payload
+     * @param  array{alertIds?: list<string>, environmentCount?: int}  $payload
      */
     public function queueEmails(Team $team, ?string $alertId, SentNotificationKind $kind, array $recipients, array $payload = []): int
     {

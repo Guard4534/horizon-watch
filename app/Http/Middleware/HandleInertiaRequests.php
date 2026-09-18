@@ -3,9 +3,9 @@
 namespace App\Http\Middleware;
 
 use App\Data\Auth\AuthUserData;
-use App\Enums\MemberVisibility;
 use App\Models\Application;
 use App\Monitoring\MonitoringRepository;
+use App\Monitoring\VisibleEnvironments;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -44,7 +44,7 @@ class HandleInertiaRequests extends Middleware
                 ? $user->can('create', [Application::class, $user->currentTeam])
                 : false,
             'visibilityRestricted' => fn () => $user?->currentTeam
-                ? $user->teamVisibility($user->currentTeam) !== MemberVisibility::All
+                ? ! app(VisibleEnvironments::class)->seesEverything($user->currentTeam, $user)
                 : false,
             'organizationHasEnvironments' => fn () => $user?->currentTeam
                 ? $user->currentTeam->environments()->exists()

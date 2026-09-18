@@ -125,3 +125,35 @@ test('the application page gives each environment its own thresholds', function 
                 $environment['id'] => (float) $environment['thresholds']['queue.max_wait'],
             ])->sortKeys()->all() === [$this->production->slug => 90.0, $this->staging->slug => 60.0]));
 });
+
+test('a disabled rule leaves its metric out of the thresholds of the environment', function () {
+    ($this->override)('production', AlertRuleMetric::QueuePending, ['enabled' => false]);
+    Readings::record($this->production);
+    Readings::record($this->staging);
+
+    ($this->environmentPage)($this->production)->assertInertia(fn (Assert $page) => $page
+        ->where('page.environment.thresholds', fn ($thresholds) => ! $thresholds->has('queue.pending') && $thresholds->has('queue.max_wait')));
+
+    ($this->environmentPage)($this->staging)->assertInertia(fn (Assert $page) => $page
+        ->where('page.environment.thresholds', fn ($thresholds) => (float) $thresholds['queue.pending'] === AlertRuleMetric::QueuePending->defaultThreshold()));
+});
+
+test('the wall does not count an environment whose failure rule is disabled', function () {
+    ($this->override)('production', AlertRuleMetric::JobsFailedPerHour, ['enabled' => false]);
+    Readings::record($this->production, snapshot: ['failed_last_hour' => 25]);
+    Readings::record($this->staging, snapshot: ['failed_last_hour' => 25]);
+
+    $this->get(route('wall', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page->where('page.kpis.environmentsOverFailedRate', 1));
+});
+
+test('a disabled runtime rule lists no long job', function () {
+    ($this->override)('production', AlertRuleMetric::JobRuntime, ['enabled' => false]);
+    $jobs = [['job' => 'App\\Jobs\\ImportCatalog', 'queue' => 'imports', 'reservedAt' => now()->subHour()->toIso8601String()]];
+
+    Readings::record($this->production, state: ['pending_jobs' => $jobs]);
+    Readings::record($this->staging, state: ['pending_jobs' => $jobs]);
+
+    ($this->environmentPage)($this->production)->assertInertia(fn (Assert $page) => $page->has('page.longRunningJobs', 0));
+    ($this->environmentPage)($this->staging)->assertInertia(fn (Assert $page) => $page->has('page.longRunningJobs', 1));
+});

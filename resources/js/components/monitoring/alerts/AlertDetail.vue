@@ -14,20 +14,24 @@ defineProps<{
         $t('The last reading of Horizon failed')
     }}</template>
     <template v-else-if="alert.metric === 'horizon.paused'">{{
-        $t(':count jobs pending while paused', {
-            count: formatCount(alert.pending),
-        })
+        $t('Horizon or every master supervisor is paused')
     }}</template>
-    <template v-else-if="alert.metric === 'queue.pending'">{{
-        $t(':count jobs pending', {
-            count: formatCount(alert.value ?? alert.pending),
-        })
-    }}</template>
-    <template v-else-if="alert.metric === 'queue.max_wait'">{{
-        $t('oldest job waiting :wait', {
-            wait: formatWait(alert.value ?? alert.maxWaitSeconds),
-        })
-    }}</template>
+    <template
+        v-else-if="alert.metric === 'queue.pending' && alert.value !== null"
+        >{{
+            $t(':count jobs pending', {
+                count: formatCount(alert.value),
+            })
+        }}</template
+    >
+    <template
+        v-else-if="alert.metric === 'queue.max_wait' && alert.value !== null"
+        >{{
+            $t('oldest job waiting :wait', {
+                wait: formatWait(alert.value),
+            })
+        }}</template
+    >
     <template v-else-if="alert.metric === 'job.runtime' && alert.longestJob"
         ><span class="[overflow-wrap:anywhere]">{{
             $t(':job on queue :queue', {

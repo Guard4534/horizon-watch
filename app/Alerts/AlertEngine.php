@@ -28,14 +28,17 @@ final class AlertEngine
         $open = Alert::query()
             ->open()
             ->where('environment_id', $environment->id)
+            ->orderBy('metric')
+            ->orderBy('id')
+            ->lockForUpdate()
             ->get()
             ->keyBy(fn (Alert $alert) => $alert->metric->value);
 
         foreach (AlertRuleMetric::cases() as $metric) {
             $rule = $rules->for($metric);
             $violating = $metric->isStateRule()
-                ? $rule->enabled && $this->stateLasts($metric, $state, $at, $rule->threshold)
-                : ($this->judgesThresholds($snapshot) ? $rule->enabled && $snapshot->breaches->contains($metric) : null);
+                ? $state->status === $this->stateOf($metric)
+                : ($this->judgesThresholds($snapshot) ? $snapshot->breaches->contains($metric) : null);
 
             if ($violating === null) {
                 continue;
@@ -43,14 +46,16 @@ final class AlertEngine
 
             $alert = $open->get($metric->value);
 
-            if ($violating) {
-                [$value, $detail] = $this->measure($metric, $snapshot, $state, $at);
-
-                $alert === null
-                    ? $this->open($environment, $rule, $at, $value, $detail)
-                    : $this->touch($alert, $rule, $at, $value, $detail);
-            } elseif ($alert !== null) {
+            if ($alert !== null && ! $rule->enabled) {
+                $this->resolveQuietly(Alert::query()->whereKey($alert->id), $at);
+            } elseif ($alert !== null && ! $violating) {
                 $this->resolve($alert, $at);
+            } elseif ($alert !== null) {
+                [$value, $detail] = $this->measure($metric, $snapshot, $state, $at);
+                $this->touch($alert, $rule, $at, $value, $detail);
+            } elseif ($rule->enabled && $violating && (! $metric->isStateRule() || $this->runLasts($state, $at, $rule->threshold))) {
+                [$value, $detail] = $this->measure($metric, $snapshot, $state, $at);
+                $this->open($environment, $rule, $at, $value, $detail);
             }
         }
     }
@@ -71,18 +76,30 @@ final class AlertEngine
             ->lockForUpdate()
             ->pluck('environments.id');
 
-        Alert::query()
-            ->open()
-            ->whereIn('environment_id', $ids)
-            ->update(['resolved_at' => $at]);
+        $this->resolveQuietly(Alert::query()->whereIn('environment_id', $ids), $at);
     }
 
     public function resolveOrphans(CarbonImmutable $at): int
     {
-        return Alert::query()
+        return $this->resolveQuietly(Alert::query()->whereNull('environment_id'), $at);
+    }
+
+    /**
+     * @param  Builder<Alert>  $alerts
+     */
+    private function resolveQuietly(Builder $alerts, CarbonImmutable $at): int
+    {
+        $ids = $alerts
             ->open()
-            ->whereNull('environment_id')
-            ->update(['resolved_at' => $at]);
+            ->orderBy('environment_id')
+            ->orderBy('metric')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->pluck('id');
+
+        return Alert::query()
+            ->whereKey($ids)
+            ->update(['resolved_at' => $at, 'resolution_notified_at' => $at, 'digested_at' => $at]);
     }
 
     private function judgesThresholds(EnvironmentSnapshot $snapshot): bool
@@ -90,18 +107,17 @@ final class AlertEngine
         return $snapshot->error === null && $snapshot->status !== EnvironmentStatus::Inactive;
     }
 
-    private function stateLasts(AlertRuleMetric $metric, EnvironmentState $state, CarbonImmutable $at, float $minutes): bool
+    private function stateOf(AlertRuleMetric $metric): EnvironmentStatus
     {
-        $status = match ($metric) {
+        return match ($metric) {
             AlertRuleMetric::EndpointUnreachable => EnvironmentStatus::Unreachable,
             AlertRuleMetric::HorizonMasterInactive => EnvironmentStatus::Inactive,
             default => EnvironmentStatus::Paused,
         };
+    }
 
-        if ($state->status !== $status) {
-            return false;
-        }
-
+    private function runLasts(EnvironmentState $state, CarbonImmutable $at, float $minutes): bool
+    {
         return ($state->status_since ?? $at)->diffInSeconds($at) >= $minutes * 60;
     }
 

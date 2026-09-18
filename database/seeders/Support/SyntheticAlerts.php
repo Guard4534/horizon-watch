@@ -163,7 +163,7 @@ final class SyntheticAlerts
         AlertNotification::query()->create([
             'team_id' => $alert->team_id,
             'alert_id' => $alert->id,
-            'kind' => SentNotificationKind::WebhookDelivery,
+            'kind' => $kind,
             'channel' => NotificationChannel::Webhook,
             'target' => self::WEBHOOK_TARGET,
             'status' => DeliveryStatus::Failed,

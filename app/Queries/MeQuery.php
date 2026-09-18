@@ -20,6 +20,7 @@ class MeQuery
             alertEmails: $viewer->alert_emails,
             quietFrom: $settings->quietFrom,
             quietTo: $settings->quietTo,
+            timezone: $settings->timezone,
         );
     }
 }

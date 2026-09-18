@@ -29,7 +29,7 @@ beforeEach(function () {
     $log = fn (array $attributes) => AlertNotification::factory()->create(['team_id' => $this->team->id, 'alert_id' => null, ...$attributes]);
 
     $log(['alert_id' => $productionAlert->id, 'kind' => SentNotificationKind::CriticalAlert, 'target' => 'ops@example.com', 'sent_at' => now()->subMinutes(2)]);
-    $log(['alert_id' => $productionAlert->id, 'kind' => SentNotificationKind::WebhookDelivery, 'channel' => NotificationChannel::Webhook, 'target' => 'hooks.example.com', 'status' => DeliveryStatus::Failed, 'error' => 'http_5xx', 'sent_at' => now()->subMinutes(3)]);
+    $log(['alert_id' => $productionAlert->id, 'kind' => SentNotificationKind::CriticalAlert, 'channel' => NotificationChannel::Webhook, 'target' => 'hooks.example.com', 'status' => DeliveryStatus::Failed, 'error' => 'http_5xx', 'sent_at' => now()->subMinutes(3)]);
     $log(['alert_id' => $stagingAlert->id, 'kind' => SentNotificationKind::Resolved, 'target' => 'dev@example.com', 'sent_at' => now()->subMinutes(5)]);
     $log(['kind' => SentNotificationKind::WarningDigest, 'target' => 'ops@example.com', 'environment_count' => 3, 'sent_at' => now()->subMinutes(15)]);
     $log(['kind' => SentNotificationKind::Test, 'channel' => NotificationChannel::Webhook, 'target' => 'hooks.example.com', 'sent_at' => now()->subMinutes(20)]);
@@ -49,7 +49,7 @@ test('the panel lists the latest deliveries with their outcome', function () {
 
     expect(array_map(fn (SentNotificationData $row) => $row->toArray(), $rows))->toBe([
         ['channel' => 'mail', 'kind' => 'critical_alert', 'status' => 'sent', 'subject' => 'Alpha · production', 'target' => 'ops@example.com', 'minutesAgo' => 2],
-        ['channel' => 'webhook', 'kind' => 'webhook_delivery', 'status' => 'failed', 'subject' => 'Alpha · production', 'target' => 'hooks.example.com', 'minutesAgo' => 3],
+        ['channel' => 'webhook', 'kind' => 'critical_alert', 'status' => 'failed', 'subject' => 'Alpha · production', 'target' => 'hooks.example.com', 'minutesAgo' => 3],
         ['channel' => 'mail', 'kind' => 'resolved', 'status' => 'sent', 'subject' => 'Alpha · staging', 'target' => 'dev@example.com', 'minutesAgo' => 5],
         ['channel' => 'mail', 'kind' => 'warning_digest', 'status' => 'sent', 'subject' => '3', 'target' => 'ops@example.com', 'minutesAgo' => 15],
         ['channel' => 'webhook', 'kind' => 'test', 'status' => 'sent', 'subject' => '', 'target' => 'hooks.example.com', 'minutesAgo' => 20],

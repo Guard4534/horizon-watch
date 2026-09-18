@@ -68,7 +68,7 @@ test('open alerts reach the page with the minutes since they opened', function (
         [$this->production->slug, 'endpoint.unreachable', 'critical', 'unreachable', 30],
         [$this->staging->slug, 'queue.pending', 'warning', 'degraded', 7],
     ])
-        ->and($alerts[1]['pending'])->toBe(4_200)
+        ->and((float) $alerts[1]['value'])->toBe(4_200.0)
         ->and($alerts[1]['applicationName'])->toBe('Billing');
 });
 
@@ -148,7 +148,7 @@ test('without ManageAlertRules a member only learns how many targets there are',
         ->not->toContain('oncall@example.com')
         ->not->toContain($settings->webhook_secret)
         ->not->toContain('webhookSecretSet')
-        ->not->toContain('timezones');
+        ->not->toContain('America\/New_York');
 })->with([TeamRole::Member, TeamRole::Viewer])->with(['alerts.index', 'alert-rules.index']);
 
 test('a member limited to non-production gets no anomaly of a production environment', function () {

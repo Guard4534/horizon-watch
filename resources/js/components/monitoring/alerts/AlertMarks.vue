@@ -31,7 +31,7 @@ const muted = computed(() => mutedText(alert, locale.value));
                 style="color: var(--st-ok)"
             />
             <span class="min-w-0">{{
-                $t('Taken by :name · :elapsed', {
+                $t('Handled by :name · :elapsed', {
                     name: alert.handledBy.name,
                     elapsed: formatElapsed(alert.handledMinutesAgo ?? 0),
                 })

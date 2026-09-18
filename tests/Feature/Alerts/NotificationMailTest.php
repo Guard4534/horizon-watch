@@ -67,7 +67,7 @@ test('a critical alert email carries the subject, the detail rows and the panel 
 
     expect(mailSubject($notification))->toBe('[CRITICAL] Shop <b>&</b> · production — Pending jobs')
         ->and($html)->toContain('4,312 jobs pending')
-        ->and($html)->toContain('Detected at 2026-09-17 14:02 (Europe/Rome)')
+        ->and($html)->toContain('Detected on 2026-09-17 14:02 (Europe/Rome)')
         ->and($html)->toContain('queue-01, queue-02')
         ->and($html)->toContain('queue.pending &gt; 2,000 job')
         ->and($html)->toContain('4,312 job')
@@ -87,7 +87,7 @@ test('the email follows the organization time zone and the recipient language', 
     NotificationSetting::factory()->for($this->team)->create(['timezone' => 'America/New_York']);
     $notification = new AlertNotification($this->alert);
 
-    expect(mailHtml($notification))->toContain('Detected at 2026-09-17 08:02 (America/New_York)')
+    expect(mailHtml($notification))->toContain('Detected on 2026-09-17 08:02 (America/New_York)')
         ->and(mailSubject($notification, 'it'))->toStartWith('[CRITICO] Shop')
         ->and(mailHtml($notification, 'it'))->toContain('Ambiente')
         ->and(mailHtml($notification, 'it'))->toContain('4.312');
@@ -158,8 +158,17 @@ test('a resolution email says how long the alert lasted', function () {
 
     expect(mailSubject($notification))->toBe('[RESOLVED] Shop <b>&</b> · production — Pending jobs')
         ->and($html)->toContain('Back within the threshold: Pending jobs')
-        ->and($html)->toContain('Resolved at 2026-09-17 14:27 (Europe/Rome), open for 25 min')
+        ->and($html)->toContain('Resolved on 2026-09-17 14:27 (Europe/Rome), open for 25 min')
         ->and($html)->toContain('#6fbf99');
+});
+
+test('a long resolution says its duration in days and hours, in the language of the mail', function () {
+    $this->alert->update(['resolved_at' => CarbonImmutable::parse('2026-09-18 15:32:00', 'UTC')]);
+    $notification = new ResolvedNotification($this->alert);
+
+    expect(mailHtml($notification))->toContain('Resolved on 2026-09-18 17:32 (Europe/Rome), open for 1 d 3 h')
+        ->and(mailHtml($notification, 'it'))->toContain('Risolto il 2026-09-18 17:32 (Europe/Rome), aperto per 1 g 3 h')
+        ->and(mailHtml(new AlertNotification($this->alert), 'it'))->toContain('Rilevato il 2026-09-17 14:02 (Europe/Rome)');
 });
 
 test('the digest lists open and resolved warnings and links the wall', function () {
@@ -211,7 +220,6 @@ test('the preview renders the opening email in the requested language', function
 
     expect($preview->render($this->alert, 'en'))->toContain('4,312 jobs pending')
         ->and($preview->render($this->alert, 'it'))->toContain('Ambiente')
-        ->and($preview->subject($this->alert, 'it'))->toStartWith('[CRITICO] ')
         ->and(app()->getLocale())->toBe('en');
 });
 

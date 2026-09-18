@@ -24,7 +24,6 @@ use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
 use App\Enums\DeliveryStatus;
 use App\Enums\EnvironmentStatus;
-use App\Enums\MemberVisibility;
 use App\Enums\NotificationChannel;
 use App\Enums\SentNotificationKind;
 use App\Enums\SeriesRange;
@@ -40,7 +39,6 @@ use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
 use Carbon\CarbonImmutable;
-use DateTimeZone;
 use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -251,8 +249,14 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             return [];
         }
 
+        $rule = $this->effectiveRules->forEnvironment($environment)->for(AlertRuleMetric::JobRuntime);
+
+        if (! $rule->enabled) {
+            return [];
+        }
+
         $now = $this->now();
-        $threshold = $this->effectiveRules->forEnvironment($environment)->for(AlertRuleMetric::JobRuntime)->threshold;
+        $threshold = $rule->threshold;
         $jobs = [];
 
         foreach ($state->pending_jobs as $job) {
@@ -356,7 +360,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             ->orderByDesc('id')
             ->limit(config()->integer('horizon-watch.pages.sent_notifications'));
 
-        if ($user->teamVisibility($team) !== MemberVisibility::All) {
+        if (! $this->visible->seesEverything($team, $user)) {
             $query->whereHas('alert', fn (Builder $alerts) => $alerts
                 ->whereIn('environment_id', $this->visibleEnvironmentModels($team)->modelKeys()));
         }
@@ -451,7 +455,6 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
                 quietTo: null,
                 timezone: NotificationSetting::defaultTimezone(),
                 repeatMinutes: NotificationSetting::defaultRepeatMinutes(),
-                timezones: DateTimeZone::listIdentifiers(),
             );
         }
 
@@ -463,7 +466,6 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             quietTo: $this->clockTime($settings->quiet_to),
             timezone: $settings->timezone,
             repeatMinutes: $settings->repeat_minutes,
-            timezones: DateTimeZone::listIdentifiers(),
         );
     }
 
@@ -600,7 +602,9 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         $thresholds = [];
 
         foreach ($this->effectiveRules->forEnvironment($environment)->rules as $metric => $rule) {
-            $thresholds[$metric] = $rule->threshold;
+            if ($rule->enabled) {
+                $thresholds[$metric] = $rule->threshold;
+            }
         }
 
         return $thresholds;
@@ -746,7 +750,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         return $this->alertAbilitiesByTeam[$team->id] ??= [
             'mute' => $user->can('muteAlert', $team),
             'handle' => $user->can('handleAnomaly', $team),
-            'all' => $user->teamVisibility($team) === MemberVisibility::All,
+            'all' => $this->visible->seesEverything($team, $user),
         ];
     }
 
@@ -813,9 +817,6 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             color: $alert->environment_color,
             environmentStatus: $environment?->status,
             collectionPaused: $open && $environment !== null && ! $environment->pollingEnabled,
-            nodeCount: $environment->nodeCount ?? 0,
-            pending: $environment->pending ?? 0,
-            maxWaitSeconds: $environment->maxWaitSeconds ?? 0,
             minutesAgo: $minutes($alert->opened_at) ?? 0,
             resolvedMinutesAgo: $minutes($alert->resolved_at),
             mutedUntil: $muted && ! $alert->muted_indefinitely ? $alert->muted_until?->toIso8601String() : null,

@@ -26,7 +26,7 @@ const slug = useTeamSlug();
             <li>
                 <template v-if="summary.repeatMinutes">{{
                     $t(
-                        'A critical alert is sent as soon as it opens, then again every :minutes minutes until it clears, gets muted or is taken in charge.',
+                        'A critical alert is sent as soon as it opens, then again every :minutes minutes until it clears, gets muted or is handled.',
                         { minutes: String(summary.repeatMinutes) },
                     )
                 }}</template>
@@ -58,6 +58,13 @@ const slug = useTeamSlug();
                 {{
                     $t(
                         'When a notified alert clears, a resolution follows. A muted alert sends nothing at all.',
+                    )
+                }}
+            </li>
+            <li>
+                {{
+                    $t(
+                        'An environment whose collection is paused sends no notification.',
                     )
                 }}
             </li>

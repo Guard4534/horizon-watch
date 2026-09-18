@@ -134,7 +134,6 @@ test('an alert copies its environment and casts its columns', function () {
         ->and($alert->notified)->toBeFalse()
         ->and($alert->environment->is($environment))->toBeTrue()
         ->and($alert->team->is($environment->application->team))->toBeTrue()
-        ->and($environment->alerts()->sole()->is($alert))->toBeTrue()
         ->and($environment->application->team->alerts()->sole()->is($alert))->toBeTrue();
 });
 
@@ -210,7 +209,7 @@ test('the alert scopes split open, resolved, muted and unmuted alerts', function
     $sorted = fn (Alert ...$alerts) => collect($alerts)->pluck('id')->sort()->values()->all();
 
     expect($ids(Alert::query()->open()))->toBe($sorted($open, $mutedForAWhile, $muteEnded, $mutedUntilResolved))
-        ->and($ids(Alert::query()->resolved()))->toBe($sorted($resolved))
+        ->and($ids(Alert::query()->whereNotNull('resolved_at')))->toBe($sorted($resolved))
         ->and($ids(Alert::query()->open()->mutedAt($now)))->toBe($sorted($mutedForAWhile, $mutedUntilResolved))
         ->and($ids(Alert::query()->open()->unmutedAt($now)))->toBe($sorted($open, $muteEnded));
 });

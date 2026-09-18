@@ -7,7 +7,6 @@ use App\Actions\Alerts\MuteAlert;
 use App\Actions\Alerts\UnmuteAlert;
 use App\Alerts\EmailPreview;
 use App\Data\Alerts\MuteAlertData;
-use App\Enums\MemberVisibility;
 use App\Http\Controllers\Controller;
 use App\Models\Alert;
 use App\Models\Team;
@@ -72,12 +71,7 @@ class AlertActionController extends Controller
         $alert = Alert::query()->where('team_id', $team->id)->whereKey($id)->first();
 
         abort_if($alert === null, 404);
-
-        $visible = $alert->environment_id === null
-            ? $user->teamVisibility($team) === MemberVisibility::All
-            : $this->visible->query($team, $user)->whereKey($alert->environment_id)->exists();
-
-        abort_unless($visible, 404);
+        abort_unless($this->visible->sees($team, $user, $alert->environment_id), 404);
 
         return $alert;
     }

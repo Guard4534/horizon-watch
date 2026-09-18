@@ -2,7 +2,6 @@
 
 use App\Alerts\EffectiveRule;
 use App\Alerts\EffectiveRules;
-use App\Alerts\RuleSet;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
 use App\Enums\RuleOrigin;
@@ -46,8 +45,6 @@ test('without rows every metric uses the defaults of the code, from the organiza
             enabledOrigin: RuleOrigin::Organization,
         ));
     }
-
-    expect(RuleSet::defaults())->toEqual($rules);
 });
 
 test('the organization row replaces the defaults field by field', function () {

@@ -8,23 +8,35 @@ const {
     unknown = false,
 } = defineProps<{
     jobs: App.Data.Monitoring.LongRunningJobData[];
-    thresholdSeconds: number;
+    thresholdSeconds: number | null;
     unknown?: boolean;
 }>();
 
 function color(seconds: number): string {
+    if (thresholdSeconds === null) return 'var(--nc-neutral-400)';
+
     if (seconds > 300) return 'var(--st-down)';
 
     return seconds > thresholdSeconds ? 'var(--st-warn)' : 'var(--st-ok)';
+}
+
+function width(seconds: number): string {
+    if (thresholdSeconds === null || thresholdSeconds <= 0) return '100%';
+
+    return `${Math.min(100, Math.round((seconds / thresholdSeconds) * 100))}%`;
 }
 </script>
 
 <template>
     <SectionCard :title="$t('Long-running jobs')">
         <template #actions>
-            <span style="font-size: 11px; color: var(--nc-neutral-600)"
-                >{{ $t('threshold') }} {{ thresholdSeconds }}s</span
-            >
+            <span style="font-size: 11px; color: var(--nc-neutral-600)">{{
+                thresholdSeconds === null
+                    ? $t('rule disabled')
+                    : $t('threshold :value', {
+                          value: `${thresholdSeconds}s`,
+                      })
+            }}</span>
         </template>
         <div
             v-if="!jobs.length"
@@ -61,7 +73,7 @@ function color(seconds: number): string {
                     <div
                         class="h-[3px]"
                         :style="{
-                            width: `${Math.min(100, Math.round((job.elapsedSeconds / thresholdSeconds) * 100))}%`,
+                            width: width(job.elapsedSeconds),
                             background: color(job.elapsedSeconds),
                         }"
                     />

@@ -15,6 +15,9 @@ use App\Models\Team;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\AlertTeam;
 
@@ -119,3 +122,38 @@ test('the scheduled repetition also catches up a resolution whose notice was los
 
     expect($alert->refresh()->resolution_notified_at)->not->toBeNull();
 });
+
+test('a failing step of the per-minute run does not stop the other, and is reported by class only', function (string $query, string $reported, string $event) {
+    Exceptions::fake();
+    Alert::factory()->for($this->environment)->critical()->create([
+        'metric' => AlertRuleMetric::HorizonMasterInactive,
+        'notified' => true,
+        'last_notified_at' => now()->subHour(),
+    ]);
+    Alert::factory()->for($this->environment)->critical()->create([
+        'metric' => AlertRuleMetric::EndpointUnreachable,
+        'notified' => true,
+        'last_notified_at' => now()->subMinutes(20),
+        'resolved_at' => now()->subMinutes(2),
+    ]);
+
+    DB::listen(function (QueryExecuted $executed) use ($query) {
+        if (str_starts_with($executed->sql, 'select') && str_contains($executed->sql, $query)) {
+            throw new RuntimeException('secret-detail');
+        }
+    });
+
+    app(DispatchDueNotifications::class)->repeats();
+
+    Queue::assertPushed(SendAlertWebhook::class, 1);
+    Queue::assertPushed(SendAlertWebhook::class, fn (SendAlertWebhook $job) => $job->event === $event);
+
+    $messages = collect(Exceptions::reported())->map(fn (Throwable $exception) => $exception->getMessage());
+
+    expect($messages)->toHaveCount(1)
+        ->and($messages->first())->toStartWith("Alert {$reported} threw RuntimeException at ")
+        ->and($messages->first())->not->toContain('secret-detail');
+})->with([
+    'repetitions' => ['make_interval(mins', 'repetitions', 'alert.resolved'],
+    'resolutions' => ['"alerts"."resolution_notified_at" is null', 'resolutions', 'alert.repeated'],
+]);

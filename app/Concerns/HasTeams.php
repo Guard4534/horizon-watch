@@ -4,7 +4,6 @@ namespace App\Concerns;
 
 use App\Data\TeamPermissions;
 use App\Data\UserTeam;
-use App\Enums\MemberVisibility;
 use App\Enums\TeamPermission;
 use App\Enums\TeamRole;
 use App\Models\Membership;
@@ -102,14 +101,6 @@ trait HasTeams
             ->where('team_id', $team->id)
             ->first()
             ?->role;
-    }
-
-    public function teamVisibility(Team $team): ?MemberVisibility
-    {
-        return $this->teamMemberships()
-            ->where('team_id', $team->id)
-            ->first()
-            ?->visibility;
     }
 
     /**

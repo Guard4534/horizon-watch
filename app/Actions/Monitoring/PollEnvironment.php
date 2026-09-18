@@ -245,14 +245,17 @@ class PollEnvironment
         $grammar = $query->getGrammar();
 
         $statusSince = new Expression(
-            'case when "environment_states"."status" = excluded."status" then coalesce("environment_states"."status_since", excluded."status_since") else excluded."status_since" end',
+            'case when "environment_states"."status" = excluded."status" and "environment_states"."captured_at" >= excluded."captured_at" - make_interval(secs => ?) then coalesce("environment_states"."status_since", excluded."status_since") else excluded."status_since" end',
         );
 
         $sql = $grammar->compileUpsert($query, [$row], ['environment_id'], [...array_keys($state), 'status_since' => $statusSince, 'updated_at'])
             .' where '.$grammar->wrap($model->getTable().'.captured_at').' <= '.$grammar->wrap('excluded.captured_at')
             .' returning *';
 
-        $written = DB::selectOne($sql, array_values($row));
+        $written = DB::selectOne($sql, [
+            ...array_values($row),
+            config()->integer('horizon-watch.stale_after_intervals') * $environment->poll_interval_seconds,
+        ]);
 
         return $written === null ? null : $model->newFromBuilder((array) $written);
     }

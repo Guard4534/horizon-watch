@@ -10,14 +10,21 @@ import {
     update as updateSettings,
 } from '@/routes/alert-settings';
 
-const { summary, settings, newWebhookSecret, repeatChoices, maxRecipients } =
-    defineProps<{
-        summary: App.Data.Pages.NotificationSummaryData;
-        settings: App.Data.Monitoring.NotificationSettingsData | null;
-        newWebhookSecret: string | null;
-        repeatChoices: number[];
-        maxRecipients: number;
-    }>();
+const {
+    summary,
+    settings,
+    newWebhookSecret,
+    repeatChoices,
+    maxRecipients,
+    timezones,
+} = defineProps<{
+    summary: App.Data.Pages.NotificationSummaryData;
+    settings: App.Data.Monitoring.NotificationSettingsData | null;
+    newWebhookSecret: string | null;
+    repeatChoices: number[];
+    maxRecipients: number;
+    timezones: string[];
+}>();
 
 const slug = useTeamSlug();
 const id = useId();
@@ -44,14 +51,13 @@ function received(): SettingsForm {
 
 const form = useForm<SettingsForm>(received());
 
-watch(
-    () => settings,
-    () => {
-        form.defaults(received());
-        form.reset();
-        form.clearErrors();
-    },
-);
+function adoptReceived(): void {
+    form.defaults(received());
+    form.reset();
+    form.clearErrors();
+}
+
+watch(() => JSON.stringify(received()), adoptReceived);
 
 function splitRecipients(value: string): string[] {
     return value
@@ -73,7 +79,10 @@ function save(): void {
         quietTo: data.quietTo === '' ? null : data.quietTo,
         timezone: data.timezone.trim(),
         repeatMinutes: data.repeatMinutes,
-    })).put(updateSettings(slug.value).url, { preserveScroll: true });
+    })).put(updateSettings(slug.value).url, {
+        preserveScroll: true,
+        onSuccess: adoptReceived,
+    });
 }
 
 function cancel(): void {
@@ -249,7 +258,7 @@ const webhookSaved = computed(
                     />
                     <datalist :id="`${id}-timezones`">
                         <option
-                            v-for="zone in settings.timezones"
+                            v-for="zone in timezones"
                             :key="zone"
                             :value="zone"
                         />

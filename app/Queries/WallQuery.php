@@ -34,7 +34,7 @@ class WallQuery
                 failedWindowMinutes: $this->commonFailedWindow($environments),
                 environmentsOverFailedRate: count(array_filter(
                     $environments,
-                    fn (EnvironmentData $environment) => $environment->failedLastHour > $environment->thresholds[AlertRuleMetric::JobsFailedPerHour->value],
+                    fn (EnvironmentData $environment) => $environment->failedLastHour > ($environment->thresholds[AlertRuleMetric::JobsFailedPerHour->value] ?? INF),
                 )),
             ),
             environments: $environments,

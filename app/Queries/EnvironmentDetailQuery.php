@@ -3,7 +3,6 @@
 namespace App\Queries;
 
 use App\Data\Monitoring\AlertData;
-use App\Data\Monitoring\AlertRuleData;
 use App\Data\Pages\EnvironmentDetailPageData;
 use App\Enums\SeriesRange;
 use App\Enums\TeamPermission;
@@ -43,10 +42,6 @@ class EnvironmentDetailQuery
             maxWait: $this->monitoring->maxWaitSeries($team, $environment->id, $range),
             rules: $rules,
             canTestConnection: $this->canTestConnection($team),
-            thresholds: array_combine(
-                array_map(fn (AlertRuleData $rule) => $rule->metric->value, $rules),
-                array_map(fn (AlertRuleData $rule) => $rule->threshold, $rules),
-            ),
         );
     }
 

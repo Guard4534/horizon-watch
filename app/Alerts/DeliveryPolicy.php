@@ -59,6 +59,18 @@ final readonly class DeliveryPolicy
         $this->announceResolution($alert, CarbonImmutable::now()->utc(), $this->reach($team));
     }
 
+    public static function stillDue(Alert $alert, bool $resolution, bool $repeated, CarbonImmutable $now): bool
+    {
+        if ($resolution) {
+            return $alert->resolved_at !== null
+                && ! $alert->muted_indefinitely
+                && $alert->muted_until?->gt($alert->resolved_at) !== true;
+        }
+
+        return $alert->state($now) === AlertState::Open
+            && ($alert->handled_at === null || ! $repeated);
+    }
+
     public function repeatDue(CarbonImmutable $now): void
     {
         $now = $now->utc();
@@ -138,10 +150,13 @@ final readonly class DeliveryPolicy
             $claimed = Alert::query()
                 ->whereKey($alerts->modelKeys())
                 ->where(fn (Builder $pending) => $this->pendingDigest($pending, $now))
-                ->orderBy('opened_at')
+                ->orderBy('environment_id')
+                ->orderBy('metric')
                 ->orderBy('id')
                 ->lockForUpdate()
-                ->get();
+                ->get()
+                ->sortBy([['opened_at', 'asc'], ['id', 'asc']])
+                ->values();
 
             if ($claimed->isEmpty()) {
                 return;
@@ -247,12 +262,14 @@ final readonly class DeliveryPolicy
                 return;
             }
 
-            $event = $previous === null ? WebhookPayload::OPENED : WebhookPayload::REPEATED;
+            [$kind, $event] = $previous === null
+                ? [SentNotificationKind::CriticalAlert, WebhookPayload::OPENED]
+                : [SentNotificationKind::CriticalRepeated, WebhookPayload::REPEATED];
 
-            $this->delivery->queueEmails($team, $alert->id, SentNotificationKind::CriticalAlert, $recipients, ['repeated' => $previous !== null]);
+            $this->delivery->queueEmails($team, $alert->id, $kind, $recipients);
 
             if ($hasWebhook) {
-                $this->delivery->dispatchWebhook($team, $alert->id, SentNotificationKind::WebhookDelivery, WebhookPayload::forAlert($alert, $event));
+                $this->delivery->dispatchWebhook($team, $alert->id, $kind, WebhookPayload::forAlert($alert, $event));
             }
         });
     }
@@ -287,7 +304,7 @@ final readonly class DeliveryPolicy
             $this->delivery->queueEmails($team, $alert->id, SentNotificationKind::Resolved, $recipients);
 
             if ($hasWebhook) {
-                $this->delivery->dispatchWebhook($team, $alert->id, SentNotificationKind::WebhookDelivery, WebhookPayload::forAlert($alert, WebhookPayload::RESOLVED));
+                $this->delivery->dispatchWebhook($team, $alert->id, SentNotificationKind::Resolved, WebhookPayload::forAlert($alert, WebhookPayload::RESOLVED));
             }
         });
     }

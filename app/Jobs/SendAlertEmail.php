@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Alerts\DeliveryPolicy;
 use App\Alerts\Recipients;
 use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
@@ -11,10 +12,12 @@ use App\Models\Alert;
 use App\Models\AlertNotification as DeliveryLog;
 use App\Models\Team;
 use App\Models\User;
+use App\Monitoring\VisibleEnvironments;
 use App\Notifications\Alerts\AlertNotification;
 use App\Notifications\Alerts\ResolvedNotification;
 use App\Notifications\Alerts\TestNotification;
 use App\Notifications\Alerts\WarningDigestNotification;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
@@ -41,7 +44,7 @@ class SendAlertEmail implements ShouldQueue
     public readonly string $deliveryId;
 
     /**
-     * @param  array{repeated?: bool, alertIds?: list<string>, environmentCount?: int}  $payload
+     * @param  array{alertIds?: list<string>, environmentCount?: int}  $payload
      */
     public function __construct(
         public readonly int $teamId,
@@ -58,7 +61,7 @@ class SendAlertEmail implements ShouldQueue
         $this->deliveryId = (string) Str::uuid();
     }
 
-    public function handle(Recipients $recipients): void
+    public function handle(Recipients $recipients, VisibleEnvironments $visible): void
     {
         if ($this->recorded()) {
             return;
@@ -66,7 +69,7 @@ class SendAlertEmail implements ShouldQueue
 
         $team = Team::query()->find($this->teamId);
         $email = $team === null ? null : $this->address($team, $recipients);
-        $notification = $team === null || $email === null ? null : $this->notification($team);
+        $notification = $team === null || $email === null ? null : $this->notification($team, $visible);
 
         if ($email === null || $notification === null) {
             return;
@@ -120,11 +123,13 @@ class SendAlertEmail implements ShouldQueue
         return $this->addressKey === null ? null : $recipients->extraAddress($team, $this->addressKey);
     }
 
-    private function notification(Team $team): ?Notification
+    private function notification(Team $team, VisibleEnvironments $visible): ?Notification
     {
         if ($this->kind === SentNotificationKind::Test) {
             return new TestNotification($team);
         }
+
+        $member = $this->userId === null ? null : User::query()->find($this->userId);
 
         if ($this->kind === SentNotificationKind::WarningDigest) {
             $alerts = Alert::query()
@@ -134,7 +139,13 @@ class SendAlertEmail implements ShouldQueue
                 ->orderBy('opened_at')
                 ->get();
 
-            return $alerts->isEmpty() ? null : new WarningDigestNotification($team, $alerts->toBase());
+            if ($member !== null) {
+                $membership = $member->teamMemberships()->where('team_id', $team->id)->first();
+                $ids = $membership === null ? [] : $visible->idsFor($team, $membership);
+                $alerts = $alerts->filter(fn (Alert $alert) => $ids === null || in_array($alert->environment_id, $ids, true));
+            }
+
+            return $alerts->isEmpty() ? null : new WarningDigestNotification($team, $alerts->values()->toBase());
         }
 
         $alert = $this->alertId === null
@@ -142,10 +153,17 @@ class SendAlertEmail implements ShouldQueue
             : Alert::query()->where('team_id', $team->id)->with(['team', 'environment.state'])->find($this->alertId);
 
         return match (true) {
-            $alert === null => null,
+            $alert === null,
+            ! DeliveryPolicy::stillDue($alert, $this->kind === SentNotificationKind::Resolved, $this->repeated(), CarbonImmutable::now()),
+            $member !== null && ! $visible->sees($team, $member, $alert->environment_id) => null,
             $this->kind === SentNotificationKind::Resolved => new ResolvedNotification($alert),
-            default => new AlertNotification($alert, repeated: (bool) ($this->payload['repeated'] ?? false)),
+            default => new AlertNotification($alert, repeated: $this->repeated()),
         };
+    }
+
+    private function repeated(): bool
+    {
+        return $this->kind === SentNotificationKind::CriticalRepeated;
     }
 
     private function log(DeliveryStatus $status, ?DeliveryError $error, string $email): void

@@ -2,14 +2,17 @@
 
 use App\Alerts\AlertDelivery;
 use App\Alerts\NotificationDelivery;
+use App\Alerts\Payloads\WebhookPayload;
 use App\Alerts\Recipients;
 use App\Enums\AlertRuleMetric;
 use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
 use App\Enums\Locale;
+use App\Enums\MemberVisibility;
 use App\Enums\NotificationChannel;
 use App\Enums\SentNotificationKind;
 use App\Enums\TeamRole;
+use App\Externals\Horizon\Dns\Resolver;
 use App\Jobs\SendAlertEmail;
 use App\Jobs\SendAlertWebhook;
 use App\Models\Alert;
@@ -30,8 +33,10 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Tests\Fixtures\Horizon\FakeResolver;
 use Tests\Support\AlertTeam;
 use Tests\Support\TraceArguments;
 
@@ -59,7 +64,7 @@ test('the delivery contract is bound to the real implementation', function () {
 test('an alert email reaches a member in the given language and is logged', function () {
     Notification::fake();
 
-    dispatch_sync(emailJob($this->team, $this->alert->id, SentNotificationKind::CriticalAlert, $this->admin->id, null, ['repeated' => true], 'it'));
+    dispatch_sync(emailJob($this->team, $this->alert->id, SentNotificationKind::CriticalRepeated, $this->admin->id, null, [], 'it'));
 
     Notification::assertSentOnDemand(
         AlertNotification::class,
@@ -73,7 +78,7 @@ test('an alert email reaches a member in the given language and is logged', func
 
     expect($log->team_id)->toBe($this->team->id)
         ->and($log->alert_id)->toBe($this->alert->id)
-        ->and($log->kind)->toBe(SentNotificationKind::CriticalAlert)
+        ->and($log->kind)->toBe(SentNotificationKind::CriticalRepeated)
         ->and($log->channel)->toBe(NotificationChannel::Mail)
         ->and($log->target)->toBe('admin@example.com')
         ->and($log->status)->toBe(DeliveryStatus::Sent)
@@ -83,6 +88,7 @@ test('an alert email reaches a member in the given language and is logged', func
 
 test('an extra address is found again by its key and a removed one is skipped', function () {
     Notification::fake();
+    $this->alert->update(['resolved_at' => now()]);
 
     dispatch_sync(emailJob($this->team, $this->alert->id, SentNotificationKind::Resolved, null, 'OPS@example.com'));
 
@@ -307,3 +313,103 @@ test('a webhook test goes to the saved url only when there is one', function () 
     expect(app(AlertDelivery::class)->sendTest($this->team, NotificationChannel::Webhook, $this->admin))->toBe(0)
         ->and(app(AlertDelivery::class)->sendTest($this->team, NotificationChannel::Mail, $this->admin))->toBe(1);
 });
+
+test('an alert email that is no longer due when the worker picks it up is dropped without a log row', function (SentNotificationKind $kind, array $payload, array $attributes, bool $sent) {
+    Notification::fake();
+    $this->alert->update($attributes);
+
+    dispatch_sync(emailJob($this->team, $this->alert->id, $kind, null, 'ops@example.com', $payload));
+
+    expect(Notification::sentNotifications() !== [])->toBe($sent)
+        ->and(DeliveryLog::query()->count())->toBe($sent ? 1 : 0);
+})->with([
+    'opening of an open alert' => [SentNotificationKind::CriticalAlert, [], [], true],
+    'opening muted meanwhile' => [SentNotificationKind::CriticalAlert, [], ['muted_until' => '2026-09-17 13:00:00'], false],
+    'opening muted until resolved' => [SentNotificationKind::CriticalAlert, [], ['muted_indefinitely' => true], false],
+    'opening after an expired mute' => [SentNotificationKind::CriticalAlert, [], ['muted_until' => '2026-09-17 11:59:00'], true],
+    'opening superseded by the resolution' => [SentNotificationKind::CriticalAlert, [], ['resolved_at' => '2026-09-17 11:59:00'], false],
+    'opening of a handled alert' => [SentNotificationKind::CriticalAlert, [], ['handled_at' => '2026-09-17 11:59:00'], true],
+    'repetition of a handled alert' => [SentNotificationKind::CriticalRepeated, [], ['handled_at' => '2026-09-17 11:59:00'], false],
+    'repetition superseded by the resolution' => [SentNotificationKind::CriticalRepeated, [], ['resolved_at' => '2026-09-17 11:59:00'], false],
+    'resolution' => [SentNotificationKind::Resolved, [], ['resolved_at' => '2026-09-17 11:59:00'], true],
+    'resolution of an alert muted at the time' => [SentNotificationKind::Resolved, [], ['resolved_at' => '2026-09-17 11:59:00', 'muted_until' => '2026-09-17 13:00:00'], false],
+    'resolution after the mute expired' => [SentNotificationKind::Resolved, [], ['resolved_at' => '2026-09-17 11:59:00', 'muted_until' => '2026-09-17 11:58:00'], true],
+    'resolution muted until resolved' => [SentNotificationKind::Resolved, [], ['resolved_at' => '2026-09-17 11:59:00', 'muted_indefinitely' => true], false],
+    'resolution of an alert still open' => [SentNotificationKind::Resolved, [], [], false],
+]);
+
+test('an alert email skips a member who no longer sees the environment, silently, while an extra address still gets it', function () {
+    Notification::fake();
+    $this->team->members()->updateExistingPivot($this->admin->id, ['visibility' => MemberVisibility::NonProduction->value]);
+
+    dispatch_sync(emailJob($this->team, $this->alert->id, SentNotificationKind::CriticalAlert, $this->admin->id, null));
+    dispatch_sync(emailJob($this->team, $this->alert->id, SentNotificationKind::CriticalAlert, null, 'ops@example.com'));
+
+    Notification::assertSentOnDemandTimes(AlertNotification::class, 1);
+    expect(DeliveryLog::query()->pluck('target')->all())->toBe(['ops@example.com']);
+});
+
+test('the resolution of an alert whose environment is gone reaches only members who see everything', function (MemberVisibility $visibility, bool $sent) {
+    Notification::fake();
+    $this->team->members()->updateExistingPivot($this->admin->id, ['visibility' => $visibility->value]);
+    $this->alert->forceFill(['environment_id' => null, 'resolved_at' => now()])->save();
+
+    dispatch_sync(emailJob($this->team, $this->alert->id, SentNotificationKind::Resolved, $this->admin->id, null));
+
+    expect(DeliveryLog::query()->count())->toBe($sent ? 1 : 0);
+})->with([
+    'all' => [MemberVisibility::All, true],
+    'non production' => [MemberVisibility::NonProduction, false],
+]);
+
+test('a digest email keeps only the warnings its member still sees when it is sent', function () {
+    Notification::fake();
+    $staging = Environment::factory()->for($this->application)->staging()->create();
+    $production = Alert::factory()->for($this->environment)->warning()->create(['metric' => AlertRuleMetric::QueueMaxWait]);
+    $visible = Alert::factory()->for($staging)->warning()->create();
+    $this->team->members()->updateExistingPivot($this->admin->id, ['visibility' => MemberVisibility::NonProduction->value]);
+
+    dispatch_sync(emailJob($this->team, null, SentNotificationKind::WarningDigest, $this->admin->id, null, ['alertIds' => [$production->id, $visible->id], 'environmentCount' => 2]));
+
+    Notification::assertSentOnDemand(
+        WarningDigestNotification::class,
+        fn (WarningDigestNotification $notification) => $notification->alerts->pluck('id')->all() === [$visible->id],
+    );
+
+    dispatch_sync(emailJob($this->team, null, SentNotificationKind::WarningDigest, $this->admin->id, null, ['alertIds' => [$production->id], 'environmentCount' => 1]));
+
+    Notification::assertSentOnDemandTimes(WarningDigestNotification::class, 1);
+    expect(DeliveryLog::query()->count())->toBe(1);
+});
+
+test('an alert webhook that is no longer due when the worker picks it up is dropped without a request or a log row', function (string $event, array $attributes, bool $sent) {
+    $this->app->instance(Resolver::class, new FakeResolver(['hooks.example.com' => ['203.0.113.10']]));
+    Http::preventStrayRequests();
+    Http::fake(['*' => Http::response('', 204)]);
+    $this->alert->update($attributes);
+
+    dispatch_sync(new SendAlertWebhook($this->team->id, $this->alert->id, SentNotificationKind::CriticalAlert, $event, WebhookPayload::forAlert($this->alert, $event)));
+
+    Http::assertSentCount($sent ? 1 : 0);
+    expect(DeliveryLog::query()->count())->toBe($sent ? 1 : 0);
+})->with([
+    'opening' => [WebhookPayload::OPENED, [], true],
+    'opening muted meanwhile' => [WebhookPayload::OPENED, ['muted_indefinitely' => true], false],
+    'opening superseded by the resolution' => [WebhookPayload::OPENED, ['resolved_at' => '2026-09-17 11:59:00'], false],
+    'repetition of a handled alert' => [WebhookPayload::REPEATED, ['handled_at' => '2026-09-17 11:59:00'], false],
+    'resolution' => [WebhookPayload::RESOLVED, ['resolved_at' => '2026-09-17 11:59:00'], true],
+    'resolution of an alert muted at the time' => [WebhookPayload::RESOLVED, ['resolved_at' => '2026-09-17 11:59:00', 'muted_until' => '2026-09-17 13:00:00'], false],
+]);
+
+test('a digest or test webhook does not depend on any alert', function (SentNotificationKind $kind, string $event) {
+    $this->app->instance(Resolver::class, new FakeResolver(['hooks.example.com' => ['203.0.113.10']]));
+    Http::preventStrayRequests();
+    Http::fake(['*' => Http::response('', 204)]);
+
+    dispatch_sync(new SendAlertWebhook($this->team->id, null, $kind, $event, ['event' => $event]));
+
+    Http::assertSentCount(1);
+})->with([
+    'digest' => [SentNotificationKind::WarningDigest, WebhookPayload::DIGEST],
+    'test' => [SentNotificationKind::Test, WebhookPayload::TEST],
+]);

@@ -66,7 +66,15 @@ export function formatWait(seconds: number): string {
     return seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`;
 }
 
-export function waitColor(seconds: number, threshold = 60): string {
+export function exceeds(value: number, threshold: number | null): boolean {
+    return threshold !== null && value > threshold;
+}
+
+export function waitColor(seconds: number, threshold: number | null): string {
+    if (threshold === null) {
+        return 'var(--nc-neutral-400)';
+    }
+
     if (seconds > Math.max(300, threshold)) {
         return 'var(--st-down)';
     }

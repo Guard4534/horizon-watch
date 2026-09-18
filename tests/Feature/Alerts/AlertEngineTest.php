@@ -1,9 +1,12 @@
 <?php
 
+use App\Actions\Environments\UpdateEnvironment;
 use App\Actions\Monitoring\PollEnvironment;
 use App\Alerts\AlertEngine;
+use App\Alerts\DeliveryPolicy;
 use App\Alerts\Events\AlertOpened;
 use App\Alerts\Events\AlertResolved;
+use App\Data\Applications\EnvironmentFormData;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
 use App\Enums\EnvironmentColor;
@@ -21,6 +24,8 @@ use App\Externals\Horizon\HorizonProbe;
 use App\Externals\Horizon\HorizonReader;
 use App\Externals\Horizon\HorizonReading;
 use App\Externals\Horizon\HorizonTarget;
+use App\Jobs\SendAlertEmail;
+use App\Jobs\SendAlertWebhook;
 use App\Models\Alert;
 use App\Models\AlertNotification;
 use App\Models\AlertRule;
@@ -34,7 +39,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Tests\Support\AlertTeam;
 
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:00'));
@@ -69,7 +76,7 @@ beforeEach(function () {
     $this->app->instance(HorizonReader::class, $this->reader);
 
     $this->application = Application::factory()->create(['name' => 'Billing']);
-    $this->environment = Environment::factory()->for($this->application)->production()->create();
+    $this->environment = Environment::factory()->for($this->application)->production()->create(['poll_interval_seconds' => 300]);
     $this->team = $this->application->team;
 
     $this->reading = fn (array $overrides = []): HorizonReading => new HorizonReading(...array_merge([
@@ -348,9 +355,9 @@ test('a disabled rule opens nothing', function (AlertRuleMetric $metric, Closure
     'unreachable' => [AlertRuleMetric::EndpointUnreachable, fn () => ($this->unreachable)()],
 ]);
 
-test('disabling a rule resolves its open alert at the next reading', function (AlertRuleMetric $metric, Closure $reading) {
+test('disabling a rule resolves its open alert quietly at the next reading', function (AlertRuleMetric $metric, Closure $reading) {
     ($this->poll)($reading->call($this));
-    $this->travel(30)->minutes();
+    $this->travel(15)->minutes();
     ($this->poll)($reading->call($this));
 
     expect(Alert::query()->open()->count())->toBe(1);
@@ -359,11 +366,52 @@ test('disabling a rule resolves its open alert at the next reading', function (A
     $this->travel(15)->seconds();
     ($this->poll)($reading->call($this));
 
-    expect(Alert::query()->open()->count())->toBe(0);
-    Event::assertDispatchedTimes(AlertResolved::class, 1);
+    $alert = Alert::query()->sole();
+
+    expect($alert->resolved_at->toDateTimeString())->toBe('2026-09-17 10:15:15')
+        ->and($alert->resolution_notified_at?->toDateTimeString())->toBe('2026-09-17 10:15:15')
+        ->and($alert->digested_at?->toDateTimeString())->toBe('2026-09-17 10:15:15');
+    Event::assertNotDispatched(AlertResolved::class);
 })->with([
     'threshold rule' => [AlertRuleMetric::QueuePending, fn () => ($this->pending)(2500)],
-    'state rule' => [AlertRuleMetric::HorizonMasterInactive, fn () => ($this->inactive)()],
+    'inactive' => [AlertRuleMetric::HorizonMasterInactive, fn () => ($this->inactive)()],
+    'paused' => [AlertRuleMetric::HorizonPaused, fn () => ($this->paused)()],
+    'unreachable' => [AlertRuleMetric::EndpointUnreachable, fn () => ($this->unreachable)()],
+]);
+
+test('a quiet resolution is never told, neither by the catch-up nor by the digest, while a real one is', function (bool $disabled, int $emails, int $webhooks) {
+    Queue::fake();
+    AlertTeam::member($this->team, 'admin@example.com', TeamRole::Admin);
+    NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com']]);
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+
+    ($this->poll)(($this->reading)(['workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 95, processes: 7)]]));
+
+    Alert::query()->where('metric', AlertRuleMetric::QueuePending)->update(['notified' => true, 'last_notified_at' => now()]);
+    Alert::query()->where('metric', AlertRuleMetric::QueueMaxWait)->update(['digested_at' => now()]);
+
+    if ($disabled) {
+        ($this->rule)('production', AlertRuleMetric::QueuePending, ['enabled' => false]);
+        ($this->rule)('production', AlertRuleMetric::QueueMaxWait, ['enabled' => false]);
+    }
+
+    $this->travel(15)->seconds();
+    ($this->poll)($disabled
+        ? ($this->reading)(['workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 95, processes: 7)]])
+        : ($this->reading)());
+
+    expect(Alert::query()->open()->count())->toBe(0);
+
+    $this->travel(1)->minutes();
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->resolutionsDue(CarbonImmutable::now());
+    app(DeliveryPolicy::class)->digestDue(CarbonImmutable::now());
+
+    Queue::assertPushedTimes(SendAlertEmail::class, $emails);
+    Queue::assertPushedTimes(SendAlertWebhook::class, $webhooks);
+})->with([
+    'rules disabled' => [true, 0, 0],
+    'readings healed' => [false, 4, 2],
 ]);
 
 test('a disabled threshold rule keeps its alert open through failed readings', function () {
@@ -524,7 +572,10 @@ test('resolving everything of an environment dispatches nothing and spares the o
 
     expect($open->map(fn (Alert $alert) => $alert->fresh()->resolved_at->toDateTimeString())->all())
         ->toBe(['2026-09-17 10:30:00', '2026-09-17 10:30:00'])
+        ->and($open->map(fn (Alert $alert) => $alert->fresh()->resolution_notified_at?->toDateTimeString())->all())
+        ->toBe(['2026-09-17 10:30:00', '2026-09-17 10:30:00'])
         ->and($resolved->fresh()->resolved_at->toDateTimeString())->toBe('2026-09-16 10:00:00')
+        ->and($resolved->fresh()->resolution_notified_at)->toBeNull()
         ->and($foreign->fresh()->resolved_at)->toBeNull();
     Event::assertNothingDispatched();
 });
@@ -813,3 +864,217 @@ function firstStatementIndex(array $statements, string ...$fragments): int
 
     return PHP_INT_MAX;
 }
+
+test('a new address keeps an open state alert open while the environment stays in that state', function () {
+    ($this->poll)(($this->unreachable)());
+    $this->travel(3)->minutes();
+    ($this->poll)(($this->unreachable)());
+
+    $alert = Alert::query()->sole();
+
+    app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
+        name: 'production',
+        color: EnvironmentColor::Prod,
+        horizonUrl: 'https://horizon.example.net/horizon',
+        pollIntervalSeconds: 300,
+    ));
+
+    expect(EnvironmentState::query()->count())->toBe(0);
+
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->unreachable)());
+
+    $kept = Alert::query()->sole();
+
+    expect($kept->id)->toBe($alert->id)
+        ->and($kept->resolved_at)->toBeNull()
+        ->and($kept->opened_at->toDateTimeString())->toBe('2026-09-17 10:03:00')
+        ->and($kept->last_seen_at->toDateTimeString())->toBe('2026-09-17 10:03:15')
+        ->and($kept->value)->toBe(0.0);
+    Event::assertNotDispatched(AlertResolved::class);
+    Event::assertDispatchedTimes(AlertOpened::class, 1);
+
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->reading)());
+
+    expect(Alert::query()->sole()->resolved_at->toDateTimeString())->toBe('2026-09-17 10:03:30');
+    Event::assertDispatchedTimes(AlertResolved::class, 1);
+});
+
+test('raising the minutes of a state rule mid-run keeps its open alert open', function (AlertRuleMetric $metric, Closure $reading) {
+    ($this->poll)($reading->call($this));
+    $this->travel(15)->minutes();
+    ($this->poll)($reading->call($this));
+
+    expect(Alert::query()->open()->where('metric', $metric)->count())->toBe(1);
+
+    ($this->rule)('organization', $metric, ['threshold' => 120]);
+    $this->travel(15)->seconds();
+    ($this->poll)($reading->call($this));
+
+    $alert = Alert::query()->where('metric', $metric)->sole();
+
+    expect($alert->resolved_at)->toBeNull()
+        ->and($alert->threshold)->toBe(120.0)
+        ->and($alert->value)->toBe(15.0);
+    Event::assertNotDispatched(AlertResolved::class);
+})->with([
+    'unreachable' => [AlertRuleMetric::EndpointUnreachable, fn () => ($this->unreachable)()],
+    'inactive' => [AlertRuleMetric::HorizonMasterInactive, fn () => ($this->inactive)()],
+    'paused' => [AlertRuleMetric::HorizonPaused, fn () => ($this->paused)()],
+]);
+
+test('a gap in the readings longer than the stale window starts a new run', function () {
+    ($this->poll)(($this->unreachable)());
+    $this->travel(15)->minutes();
+    $this->travel(1)->seconds();
+    ($this->poll)(($this->unreachable)());
+
+    expect(Alert::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:15:01');
+
+    $this->travel(2)->minutes();
+    ($this->poll)(($this->unreachable)());
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->opened_at->toDateTimeString())->toBe('2026-09-17 10:17:01')
+        ->and($alert->value)->toBe(2.0);
+});
+
+test('readings within the stale window keep the run going', function () {
+    ($this->poll)(($this->unreachable)());
+    $this->travel(15)->minutes();
+    ($this->poll)(($this->unreachable)());
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and(Alert::query()->sole()->value)->toBe(15.0);
+});
+
+test('the stale window follows the configured intervals and the interval of the environment', function () {
+    config(['horizon-watch.stale_after_intervals' => 1]);
+
+    ($this->poll)(($this->unreachable)());
+    $this->travel(301)->seconds();
+    ($this->poll)(($this->unreachable)());
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:05:01');
+
+    $this->environment->update(['poll_interval_seconds' => 600]);
+    $this->travel(301)->seconds();
+    ($this->poll)(($this->unreachable)());
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:05:01');
+});
+
+test('a collection paused for two days resumes with a new run instead of claiming the whole pause', function () {
+    ($this->poll)(($this->unreachable)());
+
+    $this->environment->update(['polling_enabled' => false]);
+    $this->travel(2)->days();
+    $this->environment->update(['polling_enabled' => true]);
+    ($this->poll)(($this->unreachable)());
+
+    expect(Alert::query()->count())->toBe(0);
+
+    $this->travel(2)->minutes();
+    ($this->poll)(($this->unreachable)());
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->opened_at->toDateTimeString())->toBe('2026-09-19 10:02:00')
+        ->and($alert->value)->toBe(2.0);
+});
+
+test('an alert open before a long pause survives it, with its opening kept and the run measured afresh', function () {
+    ($this->poll)(($this->unreachable)());
+    $this->travel(5)->minutes();
+    ($this->poll)(($this->unreachable)());
+
+    $alert = Alert::query()->sole();
+
+    $this->travel(2)->days();
+    ($this->poll)(($this->unreachable)());
+
+    $kept = Alert::query()->sole();
+
+    expect($kept->id)->toBe($alert->id)
+        ->and($kept->resolved_at)->toBeNull()
+        ->and($kept->opened_at->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and($kept->value)->toBe(0.0);
+    Event::assertDispatchedTimes(AlertOpened::class, 1);
+    Event::assertNotDispatched(AlertResolved::class);
+});
+
+test('resuming the collection starts a new run even within the stale window', function () {
+    $edit = fn (bool $pollingEnabled) => app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
+        name: 'production',
+        color: EnvironmentColor::Prod,
+        horizonUrl: $this->environment->horizon_url,
+        pollIntervalSeconds: 300,
+        basicAuthUser: 'monitor',
+        pollingEnabled: $pollingEnabled,
+    ));
+
+    ($this->poll)(($this->unreachable)());
+    $edit(false);
+    $this->travel(1)->minutes();
+    $edit(true);
+
+    expect(EnvironmentState::query()->sole()->status_since)->toBeNull();
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->unreachable)());
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:02:00')
+        ->and(Alert::query()->count())->toBe(0);
+});
+
+test('saving an environment that keeps collecting leaves its run alone', function () {
+    ($this->poll)(($this->unreachable)());
+    $this->travel(1)->minutes();
+
+    app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
+        name: 'production',
+        color: EnvironmentColor::Prod,
+        horizonUrl: $this->environment->horizon_url,
+        pollIntervalSeconds: 300,
+        basicAuthUser: 'monitor',
+    ));
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00');
+});
+
+test('a reading locks the open alerts of its environment in metric order before it touches any of them', function () {
+    ($this->poll)(($this->reading)(['workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 95, processes: 7)]]));
+    $statements = [];
+
+    DB::listen(function (QueryExecuted $query) use (&$statements) {
+        $statements[] = $query->sql;
+    });
+
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->reading)());
+
+    $lock = firstStatementIndex($statements, 'from "alerts"', 'order by "metric" asc, "id" asc for update');
+
+    expect($lock)->toBeLessThan(PHP_INT_MAX)
+        ->and($lock)->toBeLessThan(firstStatementIndex($statements, 'update "alerts"'))
+        ->and(Alert::query()->open()->count())->toBe(0);
+});
+
+test('a quiet resolution locks its alerts in the order the digest uses before it updates them', function () {
+    Alert::factory()->for($this->environment)->create(['metric' => AlertRuleMetric::QueuePending]);
+    $statements = [];
+
+    DB::listen(function (QueryExecuted $query) use (&$statements) {
+        $statements[] = $query->sql;
+    });
+
+    app(AlertEngine::class)->resolveAllFor($this->environment, CarbonImmutable::now());
+
+    $lock = firstStatementIndex($statements, 'from "alerts"', 'order by "environment_id" asc, "metric" asc, "id" asc for update');
+
+    expect($lock)->toBeLessThan(PHP_INT_MAX)
+        ->and($lock)->toBeLessThan(firstStatementIndex($statements, 'update "alerts"'));
+});

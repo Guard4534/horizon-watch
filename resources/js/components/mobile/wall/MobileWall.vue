@@ -10,6 +10,7 @@ import { thresholdOf } from '@/lib/alertRules';
 import { failedWindowNote, failedWindowShort } from '@/lib/failedWindow';
 import {
     envColor,
+    exceeds,
     formatCount,
     formatWait,
     statusColor,
@@ -199,11 +200,15 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                             failedWindowNote(environment.failedWindowMinutes)
                         "
                         :style="{
-                            color:
-                                environment.failedLastHour >
-                                thresholdOf(environment, 'jobs.failed_per_hour')
-                                    ? 'var(--st-warn)'
-                                    : undefined,
+                            color: exceeds(
+                                environment.failedLastHour,
+                                thresholdOf(
+                                    environment,
+                                    'jobs.failed_per_hour',
+                                ),
+                            )
+                                ? 'var(--st-warn)'
+                                : undefined,
                         }"
                         >{{
                             $t(':count failed', {

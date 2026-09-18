@@ -9,9 +9,9 @@ import {
     ruleIcon,
     ruleLabel,
     ruleValues,
-    severityColor,
-    severityLabel,
+    unitLabel,
 } from '@/lib/alertRules';
+import { severityColor, severityLabel } from '@/lib/alerts';
 
 const {
     rule,
@@ -140,7 +140,7 @@ function readThreshold(event: Event): void {
                     <span
                         class="flex-none"
                         style="font-size: 11px; color: var(--nc-neutral-500)"
-                        >{{ rule.unit }}</span
+                        >{{ unitLabel(rule.unit) }}</span
                     >
                     <InheritToggle
                         v-if="environmentScope"

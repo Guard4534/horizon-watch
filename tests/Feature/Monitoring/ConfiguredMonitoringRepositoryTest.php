@@ -520,7 +520,6 @@ test('open alerts are the unmuted open rows of watched environments, critical fi
         ->and($open[0]->state)->toBe(AlertState::Open)
         ->and($open[0]->severity)->toBe(AlertSeverity::Critical)
         ->and($open[2]->environmentStatus)->toBe(EnvironmentStatus::Degraded)
-        ->and($open[2]->pending)->toBe(2500)
         ->and($open[2]->value)->toBe(2500.0)
         ->and($open[2]->threshold)->toBe(AlertRuleMetric::QueuePending->defaultThreshold())
         ->and($open[2]->applicationName)->toBe('Alpha')
@@ -717,7 +716,7 @@ test('a state whose snapshots were all pruned keeps its status, detail and alert
         ->and($data->lastReadingAt)->toBe(now()->subDays(40)->toIso8601String())
         ->and($this->repository->queues($this->team, $environment->slug))->toHaveCount(3)
         ->and(array_column($this->repository->openAlerts($this->team), 'metric'))->toBe([AlertRuleMetric::QueuePending])
-        ->and($this->repository->openAlerts($this->team)[0]->pending)->toBe(0);
+        ->and($this->repository->openAlerts($this->team)[0]->value)->toBe(4000.0);
 });
 
 test('an alert counts its minutes from its opening, however long ago', function () {
@@ -743,7 +742,7 @@ test('a paused horizon opens its own alert, with the thresholds it still breaks'
 
     expect(array_map(fn ($alert) => $alert->metric, $alerts))->toBe([AlertRuleMetric::HorizonPaused, AlertRuleMetric::QueuePending])
         ->and($alerts[0]->environmentStatus)->toBe(EnvironmentStatus::Paused)
-        ->and($alerts[0]->pending)->toBe(50_000)
+        ->and($alerts[1]->value)->toBe(50_000.0)
         ->and($alerts[0]->severity->value)->toBe('warning');
 });
 

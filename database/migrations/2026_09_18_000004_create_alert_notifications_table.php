@@ -18,6 +18,8 @@ return new class extends Migration
             $table->string('status');
             $table->string('error', 64)->nullable();
             $table->timestampTz('sent_at');
+            $table->unsignedSmallInteger('environment_count')->nullable();
+            $table->uuid('delivery_id')->nullable()->unique();
 
             $table->index(['team_id', 'sent_at']);
         });

@@ -87,7 +87,9 @@ function evaluatorRules(array $changes): RuleSet
 {
     $rules = [];
 
-    foreach (RuleSet::defaults()->rules as $key => $rule) {
+    foreach (AlertRuleMetric::cases() as $metric) {
+        $key = $metric->value;
+        $rule = EffectiveRule::default($metric);
         $rules[$key] = new EffectiveRule(
             metric: $rule->metric,
             threshold: $changes[$key]['threshold'] ?? $rule->threshold,
@@ -115,7 +117,7 @@ function reservedJob(int $secondsAgo, string $status = 'reserved'): HorizonPendi
 }
 
 test('a reading is evaluated in the order of the spec', function (HorizonReading $reading, EnvironmentStatus $status, array $breaches) {
-    $evaluated = (new StatusEvaluator(60))->evaluate($reading, RuleSet::defaults());
+    $evaluated = (new StatusEvaluator(60))->evaluate($reading, new RuleSet([]));
 
     expect($evaluated->status)->toBe($status)
         ->and($evaluated->breaches)->toBe($breaches);
@@ -311,13 +313,13 @@ test('a failed reading is unreachable with the endpoint breach', function () {
 test('the failed jobs of the last hour are counted', function () {
     $evaluated = (new StatusEvaluator(60))->evaluate(evaluatorReading(
         failed: [...failedJobsAgo(7), ...failedJobsAgo(4, secondsAgo: 4000)],
-    ), RuleSet::defaults());
+    ), new RuleSet([]));
 
     expect($evaluated->failedLastHour)->toBe(7);
 });
 
 test('a reading whose failed jobs could not be read counts none', function () {
-    expect((new StatusEvaluator(60))->evaluate(evaluatorReading(failed: null), RuleSet::defaults())->failedLastHour)->toBe(0);
+    expect((new StatusEvaluator(60))->evaluate(evaluatorReading(failed: null), new RuleSet([]))->failedLastHour)->toBe(0);
 });
 
 test('a failed reading counts no failed jobs', function () {

@@ -11,6 +11,7 @@ import { thresholdOf } from '@/lib/alertRules';
 import { failedWindowNote } from '@/lib/failedWindow';
 import {
     envColor,
+    exceeds,
     formatCount,
     formatWait,
     statusColor,
@@ -67,8 +68,10 @@ const trend = computed(() => {
 });
 
 const failedColor = computed(() =>
-    environment.failedLastHour >
-    thresholdOf(environment, 'jobs.failed_per_hour')
+    exceeds(
+        environment.failedLastHour,
+        thresholdOf(environment, 'jobs.failed_per_hour'),
+    )
         ? 'var(--st-warn)'
         : 'var(--nc-neutral-600)',
 );

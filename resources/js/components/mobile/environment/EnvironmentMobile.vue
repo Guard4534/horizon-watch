@@ -16,6 +16,7 @@ import {
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { thresholdOf } from '@/lib/alertRules';
 import { failedLabel } from '@/lib/failedWindow';
 import {
     formatCount,
@@ -39,7 +40,7 @@ const incident = computed(() => {
 });
 
 const threshold = (metric: App.Enums.AlertRuleMetric) =>
-    page.thresholds[metric] ?? 0;
+    thresholdOf(environment.value, metric);
 
 const lastKnown = computed(() => environment.value.readingError !== null);
 

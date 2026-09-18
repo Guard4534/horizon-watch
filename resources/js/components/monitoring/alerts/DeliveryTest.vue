@@ -100,7 +100,7 @@ function send(channel: App.Enums.NotificationChannel): void {
                 @click="send('webhook')"
             >
                 <PhWebhooksLogo :size="13" />
-                {{ $t('Send to the webhook') }}
+                {{ $t('Send to webhook') }}
             </button>
         </div>
         <div

@@ -124,7 +124,7 @@ final class AlertMail
     {
         $timezone = self::timezone($alert->team);
 
-        return __('Detected at :time (:timezone)', [
+        return __('Detected on :time (:timezone)', [
             'time' => self::time($alert->opened_at, $timezone),
             'timezone' => $timezone,
         ]);
@@ -135,10 +135,10 @@ final class AlertMail
         $timezone = self::timezone($alert->team);
         $resolvedAt = $alert->resolved_at ?? $alert->last_seen_at;
 
-        return __('Resolved at :time (:timezone), open for :minutes min', [
+        return __('Resolved on :time (:timezone), open for :duration', [
             'time' => self::time($resolvedAt, $timezone),
             'timezone' => $timezone,
-            'minutes' => self::number(max(0, (int) $alert->opened_at->diffInMinutes($resolvedAt))),
+            'duration' => self::duration($alert->opened_at->diffInMinutes($resolvedAt)),
         ]);
     }
 

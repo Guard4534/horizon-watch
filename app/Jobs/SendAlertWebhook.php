@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Alerts\DeliveryPolicy;
 use App\Alerts\Payloads\WebhookPayload;
 use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
@@ -54,7 +55,7 @@ class SendAlertWebhook implements ShouldQueue
 
     public function handle(WebhookClient $client): void
     {
-        $setting = $this->recorded() ? null : $this->setting();
+        $setting = $this->recorded() || ! $this->stillDue() ? null : $this->setting();
 
         if ($setting === null) {
             return;
@@ -99,6 +100,22 @@ class SendAlertWebhook implements ShouldQueue
                 $failure->getLine(),
             )));
         }
+    }
+
+    private function stillDue(): bool
+    {
+        if ($this->alertId === null) {
+            return true;
+        }
+
+        $alert = Alert::query()->where('team_id', $this->teamId)->find($this->alertId);
+
+        return $alert !== null && DeliveryPolicy::stillDue(
+            $alert,
+            $this->event === WebhookPayload::RESOLVED,
+            $this->event === WebhookPayload::REPEATED,
+            CarbonImmutable::now(),
+        );
     }
 
     private function recorded(): bool

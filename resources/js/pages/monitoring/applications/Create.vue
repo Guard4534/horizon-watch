@@ -719,11 +719,12 @@ const submit = () => {
                     id="wizard-rules"
                     class="nc-input"
                     disabled
-                    :title="$t('Available soon')"
+                    aria-describedby="wizard-rules-hint"
                 >
                     <option>{{ $t('Organization default') }}</option>
                 </select>
                 <div
+                    id="wizard-rules-hint"
                     class="mt-1"
                     style="font-size: 11px; color: var(--nc-neutral-600)"
                 >

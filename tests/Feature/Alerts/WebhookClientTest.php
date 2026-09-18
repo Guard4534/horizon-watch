@@ -99,10 +99,9 @@ test('the signature is an hmac of the timestamp and the body', function () {
     $expected = 'sha256='.hash_hmac('sha256', '1789000000.{"event":"test"}', 'secret');
 
     expect(Signature::sign('secret', 1789000000, '{"event":"test"}'))->toBe($expected)
-        ->and(Signature::verify('secret', 1789000000, '{"event":"test"}', $expected))->toBeTrue()
-        ->and(Signature::verify('secret', 1789000001, '{"event":"test"}', $expected))->toBeFalse()
-        ->and(Signature::verify('other', 1789000000, '{"event":"test"}', $expected))->toBeFalse()
-        ->and(Signature::verify('secret', 1789000000, '{"event":"test" }', $expected))->toBeFalse();
+        ->and(Signature::sign('secret', 1789000001, '{"event":"test"}'))->not->toBe($expected)
+        ->and(Signature::sign('other', 1789000000, '{"event":"test"}'))->not->toBe($expected)
+        ->and(Signature::sign('secret', 1789000000, '{"event":"test" }'))->not->toBe($expected);
 });
 
 test('the payload is posted as json with a signature the receiver can verify', function () {
@@ -125,7 +124,7 @@ test('the payload is posted as json with a signature the receiver can verify', f
         ->and($request['headers']['user-agent'])->toBe('HorizonWatch')
         ->and($request['headers']['x-horizon-watch-timestamp'])->toBe('1789000020')
         ->and($request['body'])->toBe('{"event":"alert.opened","alert":{"url":"https://panel.example.com/acme/environments/production","application":"Città"}}')
-        ->and(Signature::verify(WEBHOOK_TEST_SECRET, 1_789_000_020, $request['body'], $request['headers']['x-horizon-watch-signature']))->toBeTrue()
+        ->and(Signature::sign(WEBHOOK_TEST_SECRET, 1_789_000_020, $request['body']))->toBe($request['headers']['x-horizon-watch-signature'])
         ->and($request['headers'])->not->toHaveKey('authorization');
 });
 
@@ -323,7 +322,7 @@ test('a failing receiver is tried three times with backoff, then logged once as 
         $logged[] = $message->message.' '.json_encode($message->context);
     });
 
-    SendAlertWebhook::dispatch($team->id, $alert->id, SentNotificationKind::WebhookDelivery, 'alert.opened', WebhookPayload::forAlert($alert, 'alert.opened'))
+    SendAlertWebhook::dispatch($team->id, $alert->id, SentNotificationKind::CriticalAlert, 'alert.opened', WebhookPayload::forAlert($alert, 'alert.opened'))
         ->onConnection('database');
 
     runQueuedJob();

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
-import { PhSlidersHorizontal } from '@phosphor-icons/vue';
+import { PhInfo } from '@phosphor-icons/vue';
 import { computed } from 'vue';
-import EmptyState from '@/components/monitoring/EmptyState.vue';
 import NotificationSettings from '@/components/monitoring/rules/NotificationSettings.vue';
 import RulesForm from '@/components/monitoring/rules/RulesForm.vue';
 import ScopeList from '@/components/monitoring/rules/ScopeList.vue';
@@ -37,31 +36,23 @@ const somethingIsHidden = computed(
 <template>
     <Head :title="$t('Alert settings')" />
 
-    <div v-if="nothingVisible" style="padding: var(--nc-space-6)">
-        <EmptyState
-            :icon="PhSlidersHorizontal"
-            :kicker="$t('Nothing to watch')"
-            :title="$t('No thresholds yet')"
-            :body="
-                somethingIsHidden
-                    ? $t(
-                          'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
-                      )
-                    : shared.props.canManageApplications
-                      ? $t(
-                            'Configure an application with at least one environment first: its thresholds can be reviewed here afterwards.',
-                        )
-                      : $t(
-                            'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
-                        )
-            "
-        />
-    </div>
-
-    <div v-else class="rules-grid">
+    <div class="rules-grid">
         <ScopeList :scopes="page.scopes" :current="page.scope" />
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
+            <div v-if="nothingVisible" class="nc-card nothing-visible">
+                <PhInfo :size="15" class="mt-[2px] flex-none" />
+                <span>{{
+                    somethingIsHidden
+                        ? $t(
+                              'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
+                          )
+                        : $t(
+                              'No environment yet: the organization rules below apply to every environment from its first reading.',
+                          )
+                }}</span>
+            </div>
+
             <RulesForm
                 :key="page.scope"
                 :scope="page.scope"
@@ -77,6 +68,7 @@ const somethingIsHidden = computed(
                 :new-webhook-secret="page.newWebhookSecret"
                 :repeat-choices="page.repeatChoices"
                 :max-recipients="page.maxRecipients"
+                :timezones="page.timezones"
             />
         </div>
     </div>
@@ -89,6 +81,14 @@ const somethingIsHidden = computed(
     padding: var(--nc-space-6);
     gap: var(--nc-space-6);
     grid-template-columns: 224px minmax(0, 1fr);
+}
+
+.nothing-visible {
+    display: flex;
+    gap: var(--nc-space-2);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--nc-neutral-400);
 }
 
 @media (max-width: 767px) {

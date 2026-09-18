@@ -4,6 +4,9 @@ namespace App\Actions\Alerts;
 
 use App\Alerts\DeliveryPolicy;
 use Carbon\CarbonImmutable;
+use Closure;
+use RuntimeException;
+use Throwable;
 
 class DispatchDueNotifications
 {
@@ -12,8 +15,8 @@ class DispatchDueNotifications
         $policy = $this->policy();
         $now = CarbonImmutable::now();
 
-        $policy->repeatDue($now);
-        $policy->resolutionsDue($now);
+        $this->guarded('repetitions', fn () => $policy->repeatDue($now));
+        $this->guarded('resolutions', fn () => $policy->resolutionsDue($now));
     }
 
     public function digests(): void
@@ -26,5 +29,23 @@ class DispatchDueNotifications
         app()->forgetScopedInstances();
 
         return app(DeliveryPolicy::class);
+    }
+
+    /**
+     * @param  Closure(): void  $step
+     */
+    private function guarded(string $name, Closure $step): void
+    {
+        try {
+            $step();
+        } catch (Throwable $exception) {
+            report(new RuntimeException(sprintf(
+                'Alert %s threw %s at %s:%d.',
+                $name,
+                $exception::class,
+                $exception->getFile(),
+                $exception->getLine(),
+            )));
+        }
     }
 }

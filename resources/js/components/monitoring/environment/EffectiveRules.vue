@@ -3,13 +3,8 @@ import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import {
-    formatThreshold,
-    ruleIcon,
-    ruleLabel,
-    severityColor,
-    severityLabel,
-} from '@/lib/alertRules';
+import { formatThreshold, ruleIcon, ruleLabel } from '@/lib/alertRules';
+import { severityColor, severityLabel } from '@/lib/alerts';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 
 const { rules, environmentName } = defineProps<{

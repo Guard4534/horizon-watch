@@ -11,5 +11,6 @@ class MePageData extends Data
         public bool $alertEmails,
         public ?string $quietFrom,
         public ?string $quietTo,
+        public string $timezone,
     ) {}
 }

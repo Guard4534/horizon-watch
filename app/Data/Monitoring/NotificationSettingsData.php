@@ -15,7 +15,5 @@ class NotificationSettingsData extends Data
         public ?string $quietTo,
         public string $timezone,
         public ?int $repeatMinutes,
-        /** @var array<int, string> */
-        public array $timezones,
     ) {}
 }

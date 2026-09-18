@@ -15,15 +15,4 @@ final readonly class RuleSet
     {
         return $this->rules[$metric->value] ?? EffectiveRule::default($metric);
     }
-
-    public static function defaults(): self
-    {
-        $rules = [];
-
-        foreach (AlertRuleMetric::cases() as $metric) {
-            $rules[$metric->value] = EffectiveRule::default($metric);
-        }
-
-        return new self($rules);
-    }
 }

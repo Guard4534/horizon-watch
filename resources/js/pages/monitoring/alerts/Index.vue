@@ -113,10 +113,7 @@ const empty = computed(() => {
 });
 
 const previewed = computed(
-    () =>
-        page.alerts.find((alert) => alert.severity === 'critical') ??
-        page.alerts[0] ??
-        null,
+    () => page.alerts.find((alert) => alert.severity === 'critical') ?? null,
 );
 </script>
 
@@ -231,10 +228,7 @@ const previewed = computed(
         </section>
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
-            <EmailPreview
-                v-if="page.notifications && previewed"
-                :alert="previewed"
-            />
+            <EmailPreview v-if="page.notifications" :alert="previewed" />
             <DeliveryTest
                 v-if="page.notifications"
                 :settings="page.notifications"

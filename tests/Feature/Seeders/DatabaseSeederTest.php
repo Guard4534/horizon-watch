@@ -90,7 +90,7 @@ test('the demo organization carries alerts that match its readings, some muted, 
 
     $admin = User::query()->where('email', 'admin@example.com')->sole();
     $open = Alert::query()->open()->with('environment.state')->get();
-    $resolved = Alert::query()->resolved()->get();
+    $resolved = Alert::query()->whereNotNull('resolved_at')->get();
     $latestBreaches = fn (Environment $environment) => $environment->snapshots()->orderByDesc('captured_at')->first()->breaches;
 
     expect($dispatched)->toBe(0)

@@ -48,14 +48,13 @@ function received(): App.Data.Alerts.AlertRulesInputData {
 
 const form = useForm<App.Data.Alerts.AlertRulesInputData>(received());
 
-watch(
-    () => rules,
-    () => {
-        form.defaults(received());
-        form.reset();
-        form.clearErrors();
-    },
-);
+function adoptReceived(): void {
+    form.defaults(received());
+    form.reset();
+    form.clearErrors();
+}
+
+watch(() => JSON.stringify(received()), adoptReceived);
 
 function errorsOf(index: number): Partial<Record<RuleField, string>> {
     const errors = form.errors as Record<string, string | undefined>;
@@ -95,6 +94,7 @@ const pendingOverrides = computed(() =>
 function save(): void {
     form.put(updateRules({ current_team: slug.value, scope }).url, {
         preserveScroll: true,
+        onSuccess: adoptReceived,
     });
 }
 

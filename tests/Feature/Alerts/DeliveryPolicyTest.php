@@ -19,6 +19,7 @@ use App\Models\Alert;
 use App\Models\AlertRule;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Models\Membership;
 use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
@@ -26,6 +27,7 @@ use App\Monitoring\VisibleEnvironments;
 use App\Notifications\Alerts\AlertNotification;
 use App\Notifications\Alerts\ResolvedNotification;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -116,8 +118,8 @@ test('a new critical alert is sent at once by email and webhook', function () {
     deliveryPolicy()->onOpened($alert);
 
     expect(queuedEmails()->map(fn ($email) => [$email['to'], $email['locale'], $email['kind'], $email['alert'], $email['payload']])->all())->toBe([
-        ['admin@example.com', 'it', SentNotificationKind::CriticalAlert, $alert->id, ['repeated' => false]],
-        ['ops@example.com', 'en', SentNotificationKind::CriticalAlert, $alert->id, ['repeated' => false]],
+        ['admin@example.com', 'it', SentNotificationKind::CriticalAlert, $alert->id, []],
+        ['ops@example.com', 'en', SentNotificationKind::CriticalAlert, $alert->id, []],
     ]);
 
     [$webhook] = queuedWebhooks()->all();
@@ -125,7 +127,7 @@ test('a new critical alert is sent at once by email and webhook', function () {
     expect(queuedWebhooks())->toHaveCount(1)
         ->and($webhook->teamId)->toBe($this->team->id)
         ->and($webhook->alertId)->toBe($alert->id)
-        ->and($webhook->kind)->toBe(SentNotificationKind::WebhookDelivery)
+        ->and($webhook->kind)->toBe(SentNotificationKind::CriticalAlert)
         ->and($webhook->event)->toBe('alert.opened')
         ->and($webhook->payload['alert']['id'])->toBe($alert->id)
         ->and($webhook->payload['alert']['rule'])->toBe('horizon.master_inactive')
@@ -228,7 +230,8 @@ test('a critical alert raised by a later reading is announced by the scheduler',
     $alert->update(['severity' => 'critical']);
     deliveryPolicy()->repeatDue($this->now);
 
-    expect(queuedEmails()->pluck('payload')->all())->toBe([['repeated' => false], ['repeated' => false]])
+    expect(queuedEmails()->pluck('kind')->all())->toBe([SentNotificationKind::CriticalAlert, SentNotificationKind::CriticalAlert])
+        ->and(queuedWebhooks()->first()->kind)->toBe(SentNotificationKind::CriticalAlert)
         ->and(queuedWebhooks()->first()->event)->toBe('alert.opened');
 });
 
@@ -269,9 +272,10 @@ test('a repetition says so and moves the clock', function () {
     deliveryPolicy()->repeatDue($this->now);
     deliveryPolicy()->repeatDue($this->now);
 
-    expect(queuedEmails()->pluck('payload')->all())->toBe([['repeated' => true], ['repeated' => true]])
-        ->and(queuedEmails()->pluck('kind')->unique()->all())->toBe([SentNotificationKind::CriticalAlert])
+    expect(queuedEmails()->pluck('payload')->all())->toBe([[], []])
+        ->and(queuedEmails()->pluck('kind')->all())->toBe([SentNotificationKind::CriticalRepeated, SentNotificationKind::CriticalRepeated])
         ->and(queuedWebhooks())->toHaveCount(1)
+        ->and(queuedWebhooks()->first()->kind)->toBe(SentNotificationKind::CriticalRepeated)
         ->and(queuedWebhooks()->first()->event)->toBe('alert.repeated')
         ->and($alert->refresh()->last_notified_at?->equalTo($this->now))->toBeTrue();
 });
@@ -321,7 +325,7 @@ test('a notified critical alert announces its resolution', function () {
         ['ops@example.com', SentNotificationKind::Resolved],
     ])
         ->and(queuedWebhooks())->toHaveCount(1)
-        ->and(queuedWebhooks()->first()->kind)->toBe(SentNotificationKind::WebhookDelivery)
+        ->and(queuedWebhooks()->first()->kind)->toBe(SentNotificationKind::Resolved)
         ->and(queuedWebhooks()->first()->event)->toBe('alert.resolved')
         ->and(queuedWebhooks()->first()->payload['alert']['resolved_at'])->toBe('2026-09-17T12:00:00Z');
 });
@@ -576,6 +580,25 @@ test('an address that is both a restricted member and an extra address gets ever
     expect(queuedEmails()->pluck('to')->all())->toBe(['admin@example.com', 'dev@example.com', 'ops@example.com']);
 });
 
+test('the digest locks the warnings in environment and metric order, as a reading does, and still lists them by opening', function () {
+    $late = warningAlert($this->production, ['metric' => AlertRuleMetric::QueueMaxWait, 'opened_at' => now()->subMinutes(20)]);
+    $early = warningAlert($this->staging, ['opened_at' => now()->subMinutes(40)]);
+    $middle = warningAlert($this->production, ['opened_at' => now()->subMinutes(30)]);
+    $statements = [];
+
+    DB::listen(function (QueryExecuted $query) use (&$statements) {
+        $statements[] = $query->sql;
+    });
+
+    deliveryPolicy()->digestDue($this->now);
+
+    $locks = array_values(array_filter($statements, fn (string $sql) => str_contains($sql, 'from "alerts"') && str_contains($sql, 'for update')));
+
+    expect($locks)->toHaveCount(1)
+        ->and($locks[0])->toContain('order by "environment_id" asc, "metric" asc, "id" asc for update')
+        ->and(array_column(queuedWebhooks()->sole()->payload['alerts'], 'id'))->toBe([$early->id, $middle->id, $late->id]);
+});
+
 test('overlapping digest runs send each warning once', function () {
     warningAlert($this->production);
     $nested = true;
@@ -674,9 +697,9 @@ test('one organization that fails does not stop the others', function () {
 
     $visible = app(VisibleEnvironments::class);
     $failing = Mockery::mock(VisibleEnvironments::class);
-    $failing->shouldReceive('query')->andReturnUsing(fn (Team $team, User $user) => $team->is($this->team)
+    $failing->shouldReceive('idsFor')->andReturnUsing(fn (Team $team, Membership $membership) => $team->is($this->team)
         ? throw new RuntimeException('secret-detail dev@example.com')
-        : $visible->query($team, $user));
+        : $visible->idsFor($team, $membership));
     $this->app->instance(VisibleEnvironments::class, $failing);
 
     deliveryPolicy()->repeatDue($this->now);

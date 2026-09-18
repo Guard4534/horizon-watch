@@ -9,6 +9,7 @@ use App\Models\AlertRule;
 use App\Models\Team;
 use App\Models\User;
 use App\Monitoring\MonitoringRepository;
+use DateTimeZone;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Contracts\Session\Session;
 use Illuminate\Support\Facades\Crypt;
@@ -41,6 +42,7 @@ class AlertRulesQuery
             newWebhookSecret: $canManage ? $this->newWebhookSecret($team, $session) : null,
             repeatChoices: array_values(array_map(intval(...), config()->array('horizon-watch.notifications.repeat_minutes'))),
             maxRecipients: config()->integer('horizon-watch.notifications.max_recipients'),
+            timezones: $canManage ? DateTimeZone::listIdentifiers() : [],
         );
     }
 

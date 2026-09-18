@@ -23,6 +23,12 @@ docker compose -f compose.prod.yaml up -d --build
 Open `http://localhost:8080`. The first visit asks you to create the administrator and
 the first organization. Everyone else joins by invitation.
 
+In production, serve the panel over HTTPS (for example behind a reverse proxy that
+terminates TLS) and set `APP_URL` to the `https://` address. Besides protecting the session,
+this keeps the one-time webhook secret out of the browser history: the page that shows it
+asks the browser to encrypt its history entry, which browsers do only in a secure context.
+Over plain HTTP the secret stays readable in the history of the browser that saved it.
+
 ## Configuration
 
 Everything is set as environment variables (for example in a `.env` file next to
@@ -57,7 +63,8 @@ panel `POST`s JSON with these headers:
 - `X-Horizon-Watch-Signature`: `sha256=` followed by the hex HMAC-SHA256 of
   `<timestamp>.<raw body>`, keyed with the organization's webhook secret
 
-The secret is shown once, when the first URL is saved or when it is regenerated. Put any token
+The secret is shown once, when the first URL is saved or when it is regenerated (serve the
+panel over HTTPS, see [Install](#install)). Put any token
 in the URL path: query strings and credentials in the URL are refused. The receiver has 5
 seconds to answer with a 2xx; redirects are not followed, the response body is ignored, and a
 failed delivery is tried three times (after 10 and 60 seconds) before it is logged as failed.

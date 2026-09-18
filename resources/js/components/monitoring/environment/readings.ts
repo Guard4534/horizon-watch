@@ -1,5 +1,5 @@
 import { trans } from 'laravel-vue-i18n';
-import { statusColor, statusLabel } from '@/lib/monitoring';
+import { exceeds, statusColor, statusLabel } from '@/lib/monitoring';
 
 type Environment = Pick<
     App.Data.Monitoring.EnvironmentData,
@@ -32,8 +32,8 @@ export function hasMeasurement(
     return environment.status !== null && environment.status !== 'unreachable';
 }
 
-export function pendingTone(pending: number, threshold: number): string {
-    return pending > threshold ? 'var(--st-down)' : 'var(--nc-text)';
+export function pendingTone(pending: number, threshold: number | null): string {
+    return exceeds(pending, threshold) ? 'var(--st-down)' : 'var(--nc-text)';
 }
 
 const SEVERITY: Record<App.Enums.EnvironmentStatus, number> = {
@@ -83,9 +83,9 @@ export function secondsSince(iso: string, now: number): number {
 
 export function failedColor(
     failedLastHour: number,
-    perHourThreshold: number,
+    perHourThreshold: number | null,
 ): string {
-    return failedLastHour > perHourThreshold
+    return exceeds(failedLastHour, perHourThreshold)
         ? 'var(--st-warn)'
         : 'var(--nc-text)';
 }

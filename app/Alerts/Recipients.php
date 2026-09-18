@@ -2,7 +2,6 @@
 
 namespace App\Alerts;
 
-use App\Enums\MemberVisibility;
 use App\Models\Alert;
 use App\Models\Membership;
 use App\Models\NotificationSetting;
@@ -20,17 +19,6 @@ final readonly class Recipients
         private VisibleEnvironments $visible,
         private EffectiveRules $rules,
     ) {}
-
-    /**
-     * @return list<array{email: string, locale: string, user: ?User}>
-     */
-    public function forAlert(Alert $alert): array
-    {
-        /** @var Team|null $team */
-        $team = $alert->team;
-
-        return $team === null || ! $this->emailed($alert) ? [] : $this->forAlertIn($alert, $this->forDigest($team));
-    }
 
     /**
      * @param  list<array{email: string, locale: string, user: ?User, environmentIds: list<int>|null, extra: bool}>  $audience
@@ -64,14 +52,7 @@ final readonly class Recipients
         foreach ($this->optedIn($team) as $membership) {
             $member = $this->member($membership->user);
             $extra = isset($extraEmails[$member['email']]);
-            $environmentIds = null;
-
-            if (! $extra && $membership->visibility !== MemberVisibility::All) {
-                $environmentIds = array_values(array_map(
-                    intval(...),
-                    $this->visible->query($team, $membership->user)->pluck('environments.id')->all(),
-                ));
-            }
+            $environmentIds = $extra ? null : $this->visible->idsFor($team, $membership);
 
             $members[] = [...$member, 'environmentIds' => $environmentIds, 'extra' => $extra];
         }

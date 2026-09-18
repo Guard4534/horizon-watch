@@ -83,9 +83,6 @@ test('the open tab lists the open alerts with their details, and the counts of e
             'environmentName' => 'production',
             'color' => 'prod',
             'environmentStatus' => 'degraded',
-            'nodeCount' => 3,
-            'pending' => 2600,
-            'maxWaitSeconds' => 40,
             'minutesAgo' => 0,
             'resolvedMinutesAgo' => null,
             'mutedUntil' => null,
@@ -98,7 +95,8 @@ test('the open tab lists the open alerts with their details, and the counts of e
             'canHandle' => true,
         ])
         ->and((float) $alert['threshold'])->toBe(2000.0)
-        ->and((float) $alert['value'])->toBe(2600.0);
+        ->and((float) $alert['value'])->toBe(2600.0)
+        ->and($alert)->not->toHaveKeys(['nodeCount', 'pending', 'maxWaitSeconds']);
 });
 
 test('the muted tab says until when and who muted', function () {
@@ -236,7 +234,7 @@ test('the resolved alerts of a deleted environment are kept for those who see ev
             'applicationName' => 'Legacy',
             'environmentName' => 'old-production',
             'environmentStatus' => null,
-            'pending' => 0,
+            'collectionPaused' => false,
         ])
         ->and($admin['counts']['resolved'])->toBe(1)
         ->and($limited['alerts'])->toBe([])

@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\TeamRole;
+use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -19,13 +20,32 @@ test('every role opens the profile page, with the organization member count', fu
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('monitoring/Me')
-            ->where('page', ['memberCount' => $expected, 'alertEmails' => false, 'quietFrom' => null, 'quietTo' => null]));
+            ->where('page', ['memberCount' => $expected, 'alertEmails' => false, 'quietFrom' => null, 'quietTo' => null, 'timezone' => 'Europe/Rome']));
 })->with([
     'owner' => TeamRole::Owner,
     'admin' => TeamRole::Admin,
     'member' => TeamRole::Member,
     'viewer' => TeamRole::Viewer,
 ]);
+
+test('the profile page shows the quiet hours of the organization in its own time zone', function () {
+    config(['horizon-watch.notifications.default_timezone' => 'Europe/Lisbon']);
+    $team = Team::factory()->create();
+    $user = User::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Viewer->value]);
+    $user->switchTeam($team);
+
+    $page = fn () => $this->actingAs($user)->get(route('me', ['current_team' => $team->slug]));
+
+    $page()->assertInertia(fn (Assert $page) => $page->where('page.timezone', 'Europe/Lisbon'));
+
+    NotificationSetting::factory()->for($team)->create(['quiet_from' => '22:00', 'quiet_to' => '06:30', 'timezone' => 'America/New_York']);
+
+    $page()->assertInertia(fn (Assert $page) => $page
+        ->where('page.quietFrom', '22:00')
+        ->where('page.quietTo', '06:30')
+        ->where('page.timezone', 'America/New_York'));
+});
 
 test('another organization shows up only as its name and the viewer\'s role in it', function () {
     $user = User::factory()->create(['name' => 'Ada Viewer']);

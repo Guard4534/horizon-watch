@@ -152,15 +152,6 @@ class Alert extends Model
      * @param  Builder<Alert>  $query
      * @return Builder<Alert>
      */
-    public function scopeResolved(Builder $query): Builder
-    {
-        return $query->whereNotNull($this->qualifyColumn('resolved_at'));
-    }
-
-    /**
-     * @param  Builder<Alert>  $query
-     * @return Builder<Alert>
-     */
     public function scopeMutedAt(Builder $query, CarbonImmutable $now): Builder
     {
         return $query->where(fn (Builder $query) => $query

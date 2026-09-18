@@ -33,7 +33,5 @@ class EnvironmentDetailPageData extends Data
         /** @var array<int, AlertRuleData> */
         public array $rules,
         public bool $canTestConnection,
-        /** @var array<string, float> */
-        public array $thresholds,
     ) {}
 }
