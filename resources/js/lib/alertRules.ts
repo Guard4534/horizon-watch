@@ -11,7 +11,12 @@ import {
 import { trans } from 'laravel-vue-i18n';
 import type { Component } from 'vue';
 
-export const DEFAULT_PENDING_THRESHOLD = 2000;
+export function thresholdOf(
+    environment: App.Data.Monitoring.EnvironmentData,
+    metric: App.Enums.AlertRuleMetric,
+): number | null {
+    return environment.thresholds[metric] ?? null;
+}
 
 const ICONS: Record<App.Enums.AlertRuleMetric, Component> = {
     'horizon.master_inactive': PhPower,
@@ -84,6 +89,19 @@ export function isStateMetric(metric: App.Enums.AlertRuleMetric): boolean {
     return STATE_METRICS.has(metric);
 }
 
+export function unitLabel(unit: string): string {
+    switch (unit) {
+        case 'min':
+            return trans('min');
+        case 's':
+            return trans('s');
+        case 'job':
+            return trans('jobs');
+        default:
+            return unit;
+    }
+}
+
 export function formatThreshold(threshold: number, unit: string): string {
     const value = Number.isInteger(threshold)
         ? String(threshold)
@@ -91,12 +109,12 @@ export function formatThreshold(threshold: number, unit: string): string {
 
     switch (unit) {
         case 's':
-            return `${value}s`;
+            return `${value}${unitLabel(unit)}`;
         case 'job':
         case '':
             return value;
         default:
-            return `${value} ${unit}`;
+            return `${value} ${unitLabel(unit)}`;
     }
 }
 
@@ -109,4 +127,63 @@ export function formatRule(
         isStateMetric(metric) || metric === 'workers.missing' ? '≥' : '>';
 
     return `${metric} ${comparison} ${formatThreshold(threshold, unit)}`;
+}
+
+export type RuleField = 'threshold' | 'severity' | 'notifyByEmail' | 'enabled';
+
+export const RULE_FIELDS: readonly RuleField[] = [
+    'threshold',
+    'severity',
+    'notifyByEmail',
+    'enabled',
+];
+
+export function ruleFields(
+    rule: App.Data.Monitoring.AlertRuleData,
+    organizationScope: boolean,
+): App.Data.Alerts.AlertRuleInputData {
+    if (organizationScope) {
+        return {
+            metric: rule.metric,
+            threshold: Math.round(rule.threshold),
+            severity: rule.severity,
+            notifyByEmail: rule.notifyByEmail,
+            enabled: rule.enabled,
+        };
+    }
+
+    return {
+        metric: rule.metric,
+        threshold:
+            rule.overrideThreshold === null
+                ? null
+                : Math.round(rule.overrideThreshold),
+        severity: rule.overrideSeverity,
+        notifyByEmail: rule.overrideNotifyByEmail,
+        enabled: rule.overrideEnabled,
+    };
+}
+
+export type RuleValues = {
+    threshold: number;
+    severity: App.Enums.AlertSeverity;
+    notifyByEmail: boolean;
+    enabled: boolean;
+};
+
+export function ruleValues(
+    rule: App.Data.Monitoring.AlertRuleData,
+): RuleValues {
+    return {
+        threshold: Math.round(rule.threshold),
+        severity: rule.severity,
+        notifyByEmail: rule.notifyByEmail,
+        enabled: rule.enabled,
+    };
+}
+
+export function overriddenFieldCount(
+    fields: App.Data.Alerts.AlertRuleInputData,
+): number {
+    return RULE_FIELDS.filter((field) => fields[field] !== null).length;
 }

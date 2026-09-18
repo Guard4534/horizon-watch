@@ -3,10 +3,8 @@
 namespace App\Queries;
 
 use App\Data\Monitoring\AlertData;
-use App\Data\Monitoring\AlertRuleData;
 use App\Data\Monitoring\EnvironmentData;
 use App\Data\Pages\ApplicationDetailPageData;
-use App\Enums\AlertState;
 use App\Models\Team;
 use App\Monitoring\MonitoringRepository;
 
@@ -24,10 +22,11 @@ class ApplicationDetailQuery
         ));
         $environmentIds = array_map(fn (EnvironmentData $environment) => $environment->id, $environments);
 
-        $alerts = array_filter(
-            [...$this->monitoring->alerts($team, AlertState::Open), ...$this->monitoring->alerts($team, AlertState::Resolved)],
+        $open = array_filter(
+            $this->monitoring->openAlerts($team),
             fn (AlertData $alert) => in_array($alert->environmentId, $environmentIds, true),
         );
+        $resolved = $this->monitoring->latestResolvedAlerts($team, $application->id, config()->integer('horizon-watch.pages.resolved_alerts'));
 
         $worstEnvironments = array_values(array_filter(
             $environments,
@@ -38,22 +37,8 @@ class ApplicationDetailQuery
         return new ApplicationDetailPageData(
             application: $application,
             environments: $environments,
-            recentAlerts: array_slice(array_values($alerts), 0, 3),
+            recentAlerts: [...array_values($open), ...$resolved],
             worstStatus: $worstEnvironments[0]->status ?? null,
-            thresholds: $this->thresholds($team),
-        );
-    }
-
-    /**
-     * @return array<string, float>
-     */
-    private function thresholds(Team $team): array
-    {
-        $rules = $this->monitoring->alertRules($team, 'organization');
-
-        return array_combine(
-            array_map(fn (AlertRuleData $rule) => $rule->metric->value, $rules),
-            array_map(fn (AlertRuleData $rule) => $rule->threshold, $rules),
         );
     }
 }

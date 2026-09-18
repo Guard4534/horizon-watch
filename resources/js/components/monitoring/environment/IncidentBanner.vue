@@ -20,9 +20,7 @@ const {
 const color = computed(() => statusColor(status));
 const icon = computed(() => statusIcon(status));
 
-const since = computed(() =>
-    alert ? formatElapsed(alert.minutesAgo, alert.sinceTruncated) : null,
-);
+const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
 </script>
 
 <template>
@@ -113,7 +111,7 @@ const since = computed(() =>
                 }}</template>
                 <template v-else>{{
                     $t(
-                        'Jobs are being consumed, but at least one default threshold is exceeded.',
+                        'Jobs are being consumed, but at least one threshold is exceeded.',
                     )
                 }}</template>
             </div>

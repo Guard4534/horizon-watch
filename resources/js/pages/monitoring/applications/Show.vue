@@ -199,7 +199,6 @@ const stats = computed(() => [
                     v-for="environment in page.environments"
                     :key="environment.id"
                     :environment="environment"
-                    :thresholds="page.thresholds"
                 />
             </div>
         </div>
@@ -208,7 +207,6 @@ const stats = computed(() => [
             <EnvironmentComparison
                 v-if="page.environments.length"
                 :environments="page.environments"
-                :thresholds="page.thresholds"
             />
             <RecentAlerts :alerts="page.recentAlerts" />
         </div>

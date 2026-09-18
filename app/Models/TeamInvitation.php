@@ -50,6 +50,11 @@ class TeamInvitation extends Model
         });
     }
 
+    public static function lifetimeDays(): int
+    {
+        return config()->integer('horizon-watch.invitations.expires_days');
+    }
+
     /**
      * @return BelongsTo<Team, $this>
      */

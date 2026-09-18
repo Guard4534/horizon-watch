@@ -66,7 +66,15 @@ export function formatWait(seconds: number): string {
     return seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`;
 }
 
-export function waitColor(seconds: number, threshold = 60): string {
+export function exceeds(value: number, threshold: number | null): boolean {
+    return threshold !== null && value > threshold;
+}
+
+export function waitColor(seconds: number, threshold: number | null): string {
+    if (threshold === null) {
+        return 'var(--nc-neutral-400)';
+    }
+
     if (seconds > Math.max(300, threshold)) {
         return 'var(--st-down)';
     }
@@ -74,11 +82,7 @@ export function waitColor(seconds: number, threshold = 60): string {
     return seconds > threshold ? 'var(--st-warn)' : 'var(--nc-neutral-400)';
 }
 
-export function formatElapsed(minutes: number, capped = false): string {
-    if (capped) {
-        return trans('more than 24 h ago');
-    }
-
+export function formatElapsed(minutes: number): string {
     if (minutes < 1) {
         return trans('less than a minute ago');
     }
@@ -87,7 +91,13 @@ export function formatElapsed(minutes: number, capped = false): string {
         return trans(':minutes min ago', { minutes: String(minutes) });
     }
 
-    return trans(':hours h ago', { hours: String(Math.floor(minutes / 60)) });
+    if (minutes < 1440) {
+        return trans(':hours h ago', {
+            hours: String(Math.floor(minutes / 60)),
+        });
+    }
+
+    return trans(':days d ago', { days: String(Math.floor(minutes / 1440)) });
 }
 
 export function formatDuration(seconds: number): string {

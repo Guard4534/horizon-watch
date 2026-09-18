@@ -15,15 +15,17 @@ class PollEnvironmentJob implements ShouldBeUnique, ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 30;
+    public int $timeout;
 
-    public int $uniqueFor = 60;
+    public int $uniqueFor;
 
     public readonly int $dispatchedAt;
 
     public function __construct(public readonly int $environmentId, ?int $dispatchedAt = null)
     {
         $this->dispatchedAt = $dispatchedAt ?? now()->getTimestamp();
+        $this->timeout = config()->integer('horizon-watch.readings.poll_job_timeout_seconds');
+        $this->uniqueFor = config()->integer('horizon-watch.readings.poll_job_unique_seconds');
     }
 
     public function uniqueId(): string

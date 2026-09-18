@@ -2,13 +2,16 @@
 
 namespace Database\Seeders;
 
+use App\Actions\Alerts\RegenerateWebhookSecret;
 use App\Actions\Setup\CompleteSetup;
 use App\Data\Auth\SetupData;
 use App\Enums\EnvironmentColor;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Models\NotificationSetting;
 use App\Models\Team;
 use Carbon\CarbonImmutable;
+use Database\Seeders\Support\SyntheticAlerts;
 use Database\Seeders\Support\SyntheticReadings;
 use Illuminate\Database\Seeder;
 
@@ -42,6 +45,15 @@ class DatabaseSeeder extends Seeder
         'testing' => EnvironmentColor::Testing,
     ];
 
+    /**
+     * @var array<string, array<string, int>>
+     */
+    private const RULE_OVERRIDES = [
+        'production' => ['horizon.master_inactive' => 2, 'queue.pending' => 5000, 'queue.max_wait' => 90],
+        'preprod' => ['horizon.master_inactive' => 10],
+        'worker-batch' => ['job.runtime' => 900, 'workers.missing' => 2],
+    ];
+
     public function run(): void
     {
         $admin = app(CompleteSetup::class)->handle(new SetupData(
@@ -53,6 +65,7 @@ class DatabaseSeeder extends Seeder
 
         $team = $admin->currentTeam;
         $this->seedDemoReadings($this->seedMockupOrganization($team, polled: false));
+        (new SyntheticAlerts)->seed($team, $admin);
         $this->seedLocalHorizon($team);
     }
 
@@ -115,6 +128,33 @@ class DatabaseSeeder extends Seeder
             }
         }
 
+        $this->seedAlertSettings($team);
+
         return $environments;
+    }
+
+    private function seedAlertSettings(Team $team): void
+    {
+        foreach (self::RULE_OVERRIDES as $scope => $thresholds) {
+            foreach ($thresholds as $metric => $threshold) {
+                $team->alertRules()->create([
+                    'scope' => $scope,
+                    'metric' => $metric,
+                    'threshold' => $threshold,
+                ]);
+            }
+        }
+
+        $team->notificationSetting()->create([
+            'recipients' => ['ops@example.com', 'oncall@example.com'],
+            'webhook_url' => 'https://hooks.example.com/horizon',
+            'webhook_secret' => RegenerateWebhookSecret::newSecret(),
+            'quiet_from' => '23:00',
+            'quiet_to' => '07:00',
+            'timezone' => NotificationSetting::defaultTimezone(),
+            'repeat_minutes' => 30,
+        ]);
+
+        app()->forgetScopedInstances();
     }
 }

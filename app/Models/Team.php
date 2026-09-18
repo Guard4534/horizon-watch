@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
@@ -26,6 +27,10 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, TeamInvitation> $invitations
  * @property-read Collection<int, Membership> $memberships
  * @property-read Collection<int, User> $members
+ * @property-read Collection<int, AlertRule> $alertRules
+ * @property-read NotificationSetting|null $notificationSetting
+ * @property-read Collection<int, Alert> $alerts
+ * @property-read Collection<int, AlertNotification> $alertNotifications
  */
 #[Fillable(['name', 'slug', 'is_personal'])]
 class Team extends Model
@@ -98,6 +103,38 @@ class Team extends Model
     public function environments(): HasManyThrough
     {
         return $this->hasManyThrough(Environment::class, Application::class);
+    }
+
+    /**
+     * @return HasMany<AlertRule, $this>
+     */
+    public function alertRules(): HasMany
+    {
+        return $this->hasMany(AlertRule::class);
+    }
+
+    /**
+     * @return HasOne<NotificationSetting, $this>
+     */
+    public function notificationSetting(): HasOne
+    {
+        return $this->hasOne(NotificationSetting::class);
+    }
+
+    /**
+     * @return HasMany<Alert, $this>
+     */
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(Alert::class);
+    }
+
+    /**
+     * @return HasMany<AlertNotification, $this>
+     */
+    public function alertNotifications(): HasMany
+    {
+        return $this->hasMany(AlertNotification::class);
     }
 
     /**

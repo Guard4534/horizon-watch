@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import {
-    PhArrowSquareOut,
-    PhBellSlash,
-    PhCaretLeft,
-} from '@phosphor-icons/vue';
+import { PhArrowSquareOut, PhCaretLeft } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
+import MuteMenu from '@/components/monitoring/alerts/MuteMenu.vue';
 import IncidentBanner from '@/components/monitoring/environment/IncidentBanner.vue';
 import {
     failedColor,
@@ -19,6 +16,7 @@ import {
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { thresholdOf } from '@/lib/alertRules';
 import { failedLabel } from '@/lib/failedWindow';
 import {
     formatCount,
@@ -42,7 +40,7 @@ const incident = computed(() => {
 });
 
 const threshold = (metric: App.Enums.AlertRuleMetric) =>
-    page.thresholds[metric] ?? 0;
+    thresholdOf(environment.value, metric);
 
 const lastKnown = computed(() => environment.value.readingError !== null);
 
@@ -315,15 +313,12 @@ const tiles = computed(() => [
             </div>
 
             <div class="flex" style="gap: var(--nc-space-2)">
-                <button
-                    type="button"
-                    class="nc-btn nc-btn-secondary flex-1 justify-center"
-                    style="font-size: 12px"
-                    disabled
-                    :title="$t('Available soon')"
-                >
-                    <PhBellSlash :size="13" />{{ $t('Mute') }}
-                </button>
+                <MuteMenu
+                    v-if="page.openAlert?.canMute"
+                    :alert="page.openAlert"
+                    block
+                    large
+                />
                 <a
                     :href="environment.horizonUrl"
                     target="_blank"

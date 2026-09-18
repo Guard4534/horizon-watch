@@ -6,7 +6,6 @@ use App\Data\Monitoring\EnvironmentData;
 use App\Data\Pages\WallKpisData;
 use App\Data\Pages\WallPageData;
 use App\Enums\AlertRuleMetric;
-use App\Enums\AlertState;
 use App\Enums\EnvironmentStatus;
 use App\Enums\SeriesRange;
 use App\Models\Team;
@@ -21,9 +20,8 @@ class WallQuery
         $environments = $this->monitoring->environments($team);
         usort($environments, EnvironmentData::compareBySeverityThenPending(...));
 
-        $anomalies = $this->monitoring->alerts($team, AlertState::Open);
+        $anomalies = $this->monitoring->openAlerts($team);
         $sum = fn (callable $value) => array_sum(array_map($value, $environments));
-        $threshold = AlertRuleMetric::JobsFailedPerHour->defaultThreshold();
 
         return new WallPageData(
             kpis: new WallKpisData(
@@ -36,16 +34,15 @@ class WallQuery
                 failedWindowMinutes: $this->commonFailedWindow($environments),
                 environmentsOverFailedRate: count(array_filter(
                     $environments,
-                    fn (EnvironmentData $environment) => $environment->failedLastHour > $threshold,
+                    fn (EnvironmentData $environment) => $environment->failedLastHour > ($environment->thresholds[AlertRuleMetric::JobsFailedPerHour->value] ?? INF),
                 )),
             ),
             environments: $environments,
-            anomalies: array_slice($anomalies, 0, 5),
+            anomalies: array_slice($anomalies, 0, config()->integer('horizon-watch.pages.wall_anomalies')),
             throughput: $this->monitoring->throughputSeries($team, null, SeriesRange::ThreeHours),
             jobsPerMinute: $sum(fn (EnvironmentData $environment) => $environment->jobsPerMinute),
             notifications: $this->monitoring->sentNotifications($team),
             applicationCount: count($this->monitoring->applications($team)),
-            failedPerHourThreshold: $threshold,
         );
     }
 

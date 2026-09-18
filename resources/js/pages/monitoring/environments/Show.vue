@@ -27,6 +27,7 @@ import StatusPill from '@/components/nocturne/StatusPill.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { thresholdOf } from '@/lib/alertRules';
 import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
 import { envColor, formatCount, formatWait, waitColor } from '@/lib/monitoring';
 import {
@@ -50,7 +51,7 @@ const isMobile = useIsMobile();
 const environment = computed(() => page.environment);
 
 const threshold = (metric: App.Enums.AlertRuleMetric) =>
-    page.thresholds[metric] ?? 0;
+    thresholdOf(environment.value, metric);
 
 const longRunningUnknown = computed(
     () =>
@@ -81,6 +82,14 @@ const lastKnown = computed(() => {
 });
 
 type Tile = { label: string; value: string; color: string; note: string };
+
+const maxWaitNote = computed(() => {
+    const seconds = threshold('queue.max_wait');
+
+    return seconds === null
+        ? trans('rule disabled')
+        : trans('threshold :value', { value: `${seconds}s` });
+});
 
 const tiles = computed<Tile[]>(() => [
     {
@@ -116,9 +125,7 @@ const tiles = computed<Tile[]>(() => [
             environment.value.maxWaitSeconds,
             threshold('queue.max_wait'),
         ),
-        note: trans('threshold :value', {
-            value: `${threshold('queue.max_wait')}s`,
-        }),
+        note: maxWaitNote.value,
     },
     {
         label: trans('Workers'),
@@ -349,7 +356,10 @@ const tiles = computed<Tile[]>(() => [
                     :threshold-seconds="threshold('job.runtime')"
                     :unknown="longRunningUnknown"
                 />
-                <EffectiveRules :rules="page.rules" />
+                <EffectiveRules
+                    :rules="page.rules"
+                    :environment-name="page.environment.name"
+                />
                 <ConnectionCard :environment="environment" />
             </div>
         </div>

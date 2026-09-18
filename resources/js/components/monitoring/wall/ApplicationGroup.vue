@@ -13,13 +13,11 @@ import {
 } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
-const { applicationId, applicationName, environments, failedPerHourThreshold } =
-    defineProps<{
-        applicationId: string;
-        applicationName: string;
-        environments: App.Data.Monitoring.EnvironmentData[];
-        failedPerHourThreshold: number;
-    }>();
+const { applicationId, applicationName, environments } = defineProps<{
+    applicationId: string;
+    applicationName: string;
+    environments: App.Data.Monitoring.EnvironmentData[];
+}>();
 
 const forced = defineModel<boolean | undefined>('expanded');
 
@@ -157,7 +155,6 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
                 v-for="environment in environments"
                 :key="environment.id"
                 :environment="environment"
-                :failed-per-hour-threshold="failedPerHourThreshold"
             />
         </div>
     </div>

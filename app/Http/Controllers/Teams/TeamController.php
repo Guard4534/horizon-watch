@@ -4,13 +4,16 @@ namespace App\Http\Controllers\Teams;
 
 use App\Actions\Teams\CreateTeam;
 use App\Actions\Teams\RemoveMember;
+use App\Alerts\AlertEngine;
 use App\Enums\TeamRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Teams\DeleteTeamRequest;
 use App\Http\Requests\Teams\SaveTeamRequest;
+use App\Models\Environment;
 use App\Models\Membership;
 use App\Models\Team;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -116,20 +119,27 @@ class TeamController extends Controller
         return to_route('teams.index');
     }
 
-    public function destroy(DeleteTeamRequest $request, Team $team): RedirectResponse
+    public function destroy(DeleteTeamRequest $request, Team $team, AlertEngine $alerts): RedirectResponse
     {
         $user = $request->user();
         $fallbackTeam = $user->isCurrentTeam($team)
             ? $user->fallbackTeam($team)
             : null;
 
-        DB::transaction(function () use ($user, $team) {
+        DB::transaction(function () use ($user, $team, $alerts) {
+            $alerts->resolveAllIn(Environment::query()->where('team_id', $team->id), CarbonImmutable::now());
+
             User::where('current_team_id', $team->id)
                 ->where('id', '!=', $user->id)
                 ->each(fn (User $affectedUser) => $affectedUser->switchTeam($affectedUser->personalTeam()));
 
             $team->invitations()->delete();
             $team->memberships()->delete();
+
+            $team->alertNotifications()->delete();
+            $team->alerts()->delete();
+            $team->alertRules()->delete();
+            $team->notificationSetting()->delete();
 
             $team->applications()->delete();
 

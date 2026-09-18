@@ -7,10 +7,11 @@ import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
 import { pendingTone } from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { DEFAULT_PENDING_THRESHOLD } from '@/lib/alertRules';
+import { thresholdOf } from '@/lib/alertRules';
 import { failedWindowNote } from '@/lib/failedWindow';
 import {
     envColor,
+    exceeds,
     formatCount,
     formatWait,
     statusColor,
@@ -18,9 +19,8 @@ import {
 } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
-const { environment, failedPerHourThreshold } = defineProps<{
+const { environment } = defineProps<{
     environment: App.Data.Monitoring.EnvironmentData;
-    failedPerHourThreshold: number;
 }>();
 
 const slug = useTeamSlug();
@@ -68,7 +68,10 @@ const trend = computed(() => {
 });
 
 const failedColor = computed(() =>
-    environment.failedLastHour > failedPerHourThreshold
+    exceeds(
+        environment.failedLastHour,
+        thresholdOf(environment, 'jobs.failed_per_hour'),
+    )
         ? 'var(--st-warn)'
         : 'var(--nc-neutral-600)',
 );
@@ -110,7 +113,7 @@ const silence = computed<string | null>(() => {
                 :style="{
                     color: pendingTone(
                         environment.pending,
-                        DEFAULT_PENDING_THRESHOLD,
+                        thresholdOf(environment, 'queue.pending'),
                     ),
                 }"
                 >{{ formatCount(environment.pending) }}</span
@@ -127,7 +130,12 @@ const silence = computed<string | null>(() => {
             <span
                 class="ml-auto"
                 style="font-size: 11px"
-                :style="{ color: waitColor(environment.maxWaitSeconds) }"
+                :style="{
+                    color: waitColor(
+                        environment.maxWaitSeconds,
+                        thresholdOf(environment, 'queue.max_wait'),
+                    ),
+                }"
                 >{{ formatWait(environment.maxWaitSeconds) }}</span
             >
         </span>

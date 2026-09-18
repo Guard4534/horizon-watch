@@ -5,6 +5,7 @@ namespace App\Providers;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Mail\Markdown;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
@@ -26,6 +27,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('test-connection', fn (Request $request): Limit => Limit::perMinute(
             (int) config('horizon-watch.test_connection_per_minute'),
         )->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
+
+        RateLimiter::for('test-notification', fn (Request $request): Limit => Limit::perMinute(
+            (int) config('horizon-watch.test_notification_per_minute'),
+        )->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
     }
 
     protected function configureDefaults(): void
@@ -37,5 +42,7 @@ class AppServiceProvider extends ServiceProvider
         );
 
         Password::defaults(fn (): Password => Password::min(10)->letters()->numbers());
+
+        Markdown::withSecuredEncoding();
     }
 }

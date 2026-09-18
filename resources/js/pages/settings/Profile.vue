@@ -9,6 +9,7 @@ import LocaleSwitch from '@/components/LocaleSwitch.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import AlertEmailsToggle from '@/components/settings/AlertEmailsToggle.vue';
 import { edit } from '@/routes/profile';
 
 defineOptions({
@@ -21,6 +22,12 @@ defineOptions({
         ],
     },
 });
+
+defineProps<{
+    mustVerifyEmail: boolean;
+    status?: string | null;
+    alertEmails: boolean;
+}>();
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
@@ -99,6 +106,21 @@ const user = computed(() => page.props.auth.user);
             long
             class="self-start"
         />
+    </div>
+
+    <div class="flex flex-col space-y-6">
+        <Heading
+            variant="small"
+            :title="$t('Alert emails')"
+            :description="
+                $t(
+                    'Receive the alert emails of the environments you can see, in every organization you belong to.',
+                )
+            "
+        />
+        <AlertEmailsToggle :enabled="alertEmails" class="self-start">
+            {{ $t('Send me alert emails') }}
+        </AlertEmailsToggle>
     </div>
 
     <DeleteUser />

@@ -2,8 +2,6 @@
 
 namespace App\Monitoring;
 
-use App\Enums\AlertRuleMetric;
-use App\Enums\AlertSeverity;
 use App\Enums\SeriesRange;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
@@ -14,26 +12,6 @@ use Illuminate\Support\Facades\DB;
 
 class StoredReadings
 {
-    public const SERIES_POINTS = 48;
-
-    public const TREND_POINTS = 12;
-
-    private const TREND_STEP_SECONDS = 300;
-
-    private const TREND_SPAN = 3;
-
-    public const LOOKBACK_HOURS = 24;
-
-    private const POLL_TICK_SECONDS = 15;
-
-    private const POLL_SLACK_SECONDS = 15;
-
-    private const STATUS_METRICS = [
-        'unreachable' => AlertRuleMetric::EndpointUnreachable,
-        'inactive' => AlertRuleMetric::HorizonMasterInactive,
-        'paused' => AlertRuleMetric::HorizonPaused,
-    ];
-
     private const SERIES_ORIGIN = '1970-01-01 00:00:00+00';
 
     /**
@@ -118,7 +96,10 @@ class StoredReadings
      */
     private function series(array $environmentIds, SeriesRange $range, string $aggregate): array
     {
-        $values = array_fill(0, self::SERIES_POINTS, 0.0);
+        $points = self::seriesPoints();
+        $tick = config()->integer('horizon-watch.readings.poll_tick_seconds');
+        $slack = config()->integer('horizon-watch.readings.poll_slack_seconds');
+        $values = array_fill(0, $points, 0.0);
 
         if ($environmentIds === []) {
             return array_map(fn () => 0, $values);
@@ -148,9 +129,9 @@ class StoredReadings
         foreach ($rows as $row) {
             $index = intdiv((int) $row->bucket - $from->getTimestamp(), $step);
 
-            if ($index >= 0 && $index < self::SERIES_POINTS) {
+            if ($index >= 0 && $index < $points) {
                 $buckets[(int) $row->environment_id][$index] = $row->value === null ? null : (float) $row->value;
-                $gap = (int) ceil((int) $row->poll_interval / self::POLL_TICK_SECONDS) * self::POLL_TICK_SECONDS + self::POLL_SLACK_SECONDS;
+                $gap = (int) ceil((int) $row->poll_interval / $tick) * $tick + $slack;
                 $reach[(int) $row->environment_id] = (int) ceil($gap / $step) - 1;
             }
         }
@@ -159,7 +140,7 @@ class StoredReadings
             $last = null;
             $lastIndex = 0;
 
-            for ($index = 0; $index < self::SERIES_POINTS; $index++) {
+            for ($index = 0; $index < $points; $index++) {
                 if (array_key_exists($index, $own)) {
                     [$last, $lastIndex] = [$own[$index], $index];
                     $values[$index] += $last ?? 0.0;
@@ -188,7 +169,9 @@ class StoredReadings
             return [];
         }
 
-        [$from, $until] = $this->window(self::TREND_STEP_SECONDS, self::TREND_POINTS);
+        $step = config()->integer('horizon-watch.readings.trend_step_seconds');
+        $points = self::trendPoints();
+        [$from, $until] = $this->window($step, $points);
         $placeholders = implode(', ', array_fill(0, count($averages), '?'));
 
         $rows = DB::select(
@@ -202,27 +185,27 @@ class StoredReadings
                   and error is null
                 group by environment_id, bucket
                 SQL,
-            [self::TREND_STEP_SECONDS, self::SERIES_ORIGIN, ...array_keys($averages), $from->toIso8601String(), $until->toIso8601String()],
+            [$step, self::SERIES_ORIGIN, ...array_keys($averages), $from->toIso8601String(), $until->toIso8601String()],
         );
 
         foreach ($rows as $row) {
-            $index = intdiv((int) $row->bucket - $from->getTimestamp(), self::TREND_STEP_SECONDS);
+            $index = intdiv((int) $row->bucket - $from->getTimestamp(), $step);
 
-            if ($index >= 0 && $index < self::TREND_POINTS) {
+            if ($index >= 0 && $index < $points) {
                 $averages[(int) $row->environment_id][$index] = (float) $row->value;
             }
         }
 
-        return array_map(function (array $buckets): array {
+        return array_map(function (array $buckets) use ($points): array {
             ksort($buckets);
 
-            $points = array_fill(0, self::TREND_POINTS, 0);
+            $values = array_fill(0, $points, 0);
 
             foreach ($buckets as $index => $value) {
-                $points[$index] = (int) round($value);
+                $values[$index] = (int) round($value);
             }
 
-            return ['points' => $points, 'percent' => $this->variation(array_values($buckets))];
+            return ['points' => array_values($values), 'percent' => $this->variation(array_values($buckets))];
         }, $averages);
     }
 
@@ -231,12 +214,14 @@ class StoredReadings
      */
     private function variation(array $buckets): ?int
     {
-        if (count($buckets) < 2 * self::TREND_SPAN) {
+        $span = config()->integer('horizon-watch.readings.trend_span');
+
+        if ($span < 1 || count($buckets) < 2 * $span) {
             return null;
         }
 
-        $recent = array_sum(array_slice($buckets, -self::TREND_SPAN)) / self::TREND_SPAN;
-        $base = array_sum(array_slice($buckets, -2 * self::TREND_SPAN, self::TREND_SPAN)) / self::TREND_SPAN;
+        $recent = array_sum(array_slice($buckets, -$span)) / $span;
+        $base = array_sum(array_slice($buckets, -2 * $span, $span)) / $span;
 
         if ($base == 0.0) {
             return null;
@@ -246,160 +231,28 @@ class StoredReadings
     }
 
     /**
-     * @param  array<int, Environment>  $environments
-     * @return array<int, list<array{metric: AlertRuleMetric, since: CarbonImmutable, truncated: bool}>>
-     */
-    public function openAnomalies(array $environments): array
-    {
-        $ids = array_values(array_unique(array_map(fn (Environment $environment) => $environment->id, $environments)));
-
-        if ($ids === []) {
-            return [];
-        }
-
-        $carries = fn (string $row) => $this->carries($row);
-        $fromStatus = $this->metricOfStatus('latest.status');
-        $statuses = $this->quotedList(array_keys(self::STATUS_METRICS));
-        $lookback = self::LOOKBACK_HOURS;
-
-        $rows = DB::select(
-            <<<SQL
-                with latest as (
-                    select s.environment_id, s.id, s.captured_at, s.status, s.breaches
-                    from unnest(?::bigint[]) as e(id)
-                    cross join lateral (
-                        select environment_id, id, captured_at, status, breaches
-                        from environment_snapshots
-                        where environment_id = e.id
-                          and (environment_id, captured_at) <= (e.id, 'infinity'::timestamptz)
-                        order by environment_id desc, captured_at desc, id desc
-                        limit 1
-                    ) s
-                ), anomaly as (
-                    select latest.environment_id, latest.id, latest.captured_at, breach.metric
-                    from latest, jsonb_array_elements_text(latest.breaches::jsonb) as breach(metric)
-                    union
-                    select latest.environment_id, latest.id, latest.captured_at, {$fromStatus}
-                    from latest
-                    where latest.status in ({$statuses})
-                )
-                select anomaly.environment_id,
-                       anomaly.metric,
-                       coalesce(run.captured_at, anomaly.captured_at) as since,
-                       (gap.id is null and coalesce(older.carries, false)) as truncated
-                from anomaly
-                left join lateral (
-                    select gap.id, gap.captured_at
-                    from environment_snapshots gap
-                    where gap.environment_id = anomaly.environment_id
-                      and (gap.environment_id, gap.captured_at) <= (anomaly.environment_id, anomaly.captured_at)
-                      and gap.captured_at >= anomaly.captured_at - interval '{$lookback} hours'
-                      and (gap.captured_at < anomaly.captured_at or gap.id < anomaly.id)
-                      and not {$carries('gap')}
-                    order by gap.environment_id desc, gap.captured_at desc, gap.id desc
-                    limit 1
-                ) gap on true
-                left join lateral (
-                    select run.captured_at
-                    from environment_snapshots run
-                    where run.environment_id = anomaly.environment_id
-                      and run.captured_at >= coalesce(gap.captured_at, anomaly.captured_at - interval '{$lookback} hours')
-                      and (gap.id is null or run.captured_at > gap.captured_at or run.id > gap.id)
-                    order by run.environment_id, run.captured_at, run.id
-                    limit 1
-                ) run on true
-                left join lateral (
-                    select {$carries('older')} as carries
-                    from environment_snapshots older
-                    where older.environment_id = anomaly.environment_id
-                      and (older.environment_id, older.captured_at)
-                          < (anomaly.environment_id, anomaly.captured_at - interval '{$lookback} hours')
-                    order by older.environment_id desc, older.captured_at desc, older.id desc
-                    limit 1
-                ) older on gap.id is null
-                SQL,
-            ['{'.implode(',', $ids).'}'],
-        );
-
-        $anomalies = [];
-        $now = Date::now()->getTimestamp();
-
-        foreach ($rows as $row) {
-            $metric = AlertRuleMetric::tryFrom($row->metric);
-
-            if ($metric === null) {
-                continue;
-            }
-
-            $since = Date::parse($row->since)->toImmutable();
-            $truncated = (bool) $row->truncated;
-
-            if (! $truncated
-                && in_array($metric, self::STATUS_METRICS, true)
-                && $now - $since->getTimestamp() < $metric->defaultThreshold() * 60) {
-                continue;
-            }
-
-            $anomalies[(int) $row->environment_id][] = [
-                'metric' => $metric,
-                'since' => $since,
-                'truncated' => $truncated,
-            ];
-        }
-
-        $order = array_flip(array_map(fn (AlertRuleMetric $metric) => $metric->value, AlertRuleMetric::cases()));
-
-        $rank = fn (AlertRuleMetric $metric) => [$metric->defaultSeverity() === AlertSeverity::Critical ? 0 : 1, $order[$metric->value]];
-
-        return array_map(function (array $list) use ($rank) {
-            usort($list, fn (array $a, array $b) => $rank($a['metric']) <=> $rank($b['metric']));
-
-            return $list;
-        }, $anomalies);
-    }
-
-    private function carries(string $row): string
-    {
-        $arms = '';
-
-        foreach (self::STATUS_METRICS as $status => $metric) {
-            $arms .= " when '{$metric->value}' then {$row}.status = '{$status}'";
-        }
-
-        return "(case anomaly.metric{$arms} else strpos({$row}.breaches::text, '\"' || anomaly.metric || '\"') > 0 end)";
-    }
-
-    private function metricOfStatus(string $column): string
-    {
-        $arms = '';
-
-        foreach (self::STATUS_METRICS as $status => $metric) {
-            $arms .= " when '{$status}' then '{$metric->value}'";
-        }
-
-        return "(case {$column}{$arms} end)";
-    }
-
-    /**
-     * @param  list<string>  $values
-     */
-    private function quotedList(array $values): string
-    {
-        return implode(', ', array_map(fn (string $value) => "'{$value}'", $values));
-    }
-
-    /**
      * @return array{0: CarbonImmutable, 1: CarbonImmutable, 2: int}
      */
     private function grid(SeriesRange $range): array
     {
+        $points = self::seriesPoints();
         $step = intdiv(match ($range) {
             SeriesRange::ThreeHours => 3 * 3600,
             SeriesRange::Day => 24 * 3600,
             SeriesRange::Week => 7 * 24 * 3600,
-        }, self::SERIES_POINTS);
+        }, $points);
 
-        return [...$this->window($step, self::SERIES_POINTS), $step];
+        return [...$this->window($step, $points), $step];
+    }
+
+    public static function seriesPoints(): int
+    {
+        return config()->integer('horizon-watch.readings.series_points');
+    }
+
+    public static function trendPoints(): int
+    {
+        return config()->integer('horizon-watch.readings.trend_points');
     }
 
     /**

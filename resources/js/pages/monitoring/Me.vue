@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
-    PhBellRinging,
     PhCaretRight,
     PhEnvelopeSimple,
     PhMoon,
@@ -12,11 +11,13 @@ import {
 } from '@phosphor-icons/vue';
 import { computed, onMounted, watch } from 'vue';
 import LocaleSwitch from '@/components/LocaleSwitch.vue';
+import AlertEmailsToggle from '@/components/settings/AlertEmailsToggle.vue';
 import TeamSwitcher from '@/components/TeamSwitcher.vue';
 import { useInitials } from '@/composables/useInitials';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { logout } from '@/routes';
+import { index as alertRulesIndex } from '@/routes/alert-rules';
 import { index as membersIndex } from '@/routes/members';
 import { edit as profileEdit } from '@/routes/profile';
 import { edit as securityEdit } from '@/routes/security';
@@ -76,36 +77,29 @@ watch(isMobile, leaveIfWide);
             class="flex flex-col"
             style="padding: var(--nc-space-3) var(--nc-space-4) 0"
         >
-            <button
-                type="button"
-                class="row"
-                disabled
-                :title="$t('Available soon')"
-            >
-                <PhBellRinging :size="16" class="icon" />
-                <span class="label">{{ $t('Push notifications') }}</span>
-                <span class="value">{{ $t('Available soon') }}</span>
-            </button>
-            <button
-                type="button"
-                class="row"
-                disabled
-                :title="$t('Available soon')"
-            >
+            <div class="row">
                 <PhEnvelopeSimple :size="16" class="icon" />
-                <span class="label">{{ $t('Alert emails') }}</span>
-                <span class="value">{{ $t('Available soon') }}</span>
-            </button>
-            <button
-                type="button"
-                class="row"
-                disabled
-                :title="$t('Available soon')"
-            >
+                <span class="label-stack">
+                    <span class="label">{{ $t('Alert emails') }}</span>
+                    <span class="sub">{{
+                        $t('for the environments you can see')
+                    }}</span>
+                </span>
+                <AlertEmailsToggle
+                    :enabled="page.alertEmails"
+                    class="ml-auto"
+                />
+            </div>
+            <Link :href="alertRulesIndex({ current_team: slug })" class="row">
                 <PhMoon :size="16" class="icon" />
                 <span class="label">{{ $t('Quiet hours') }}</span>
-                <span class="value">{{ $t('Available soon') }}</span>
-            </button>
+                <span class="value nc-num">{{
+                    page.quietFrom && page.quietTo
+                        ? `${page.quietFrom} → ${page.quietTo} (${page.timezone})`
+                        : $t('None')
+                }}</span>
+                <PhCaretRight :size="13" class="caret" />
+            </Link>
             <div class="row">
                 <PhTranslate :size="16" class="icon" />
                 <span class="label">{{ $t('Language') }}</span>
@@ -165,9 +159,19 @@ watch(isMobile, leaveIfWide);
     cursor: pointer;
 }
 
-.row:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
+div.row {
+    cursor: default;
+}
+
+.label-stack {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.sub {
+    font-size: 11px;
+    color: var(--nc-neutral-500);
 }
 
 .icon {

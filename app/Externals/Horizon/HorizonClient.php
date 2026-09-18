@@ -29,26 +29,28 @@ final readonly class HorizonClient implements HorizonReader
 {
     private const array MASTER_STATUSES = ['running', 'paused', 'inactive'];
 
-    private const int MAX_BODY_BYTES = 2 * 1024 * 1024;
-
     private const int MAX_NUMBER = 2_147_483_647;
 
     private const int MAX_NAME_LENGTH = 255;
-
-    private const int MAX_MASTERS = 200;
-
-    private const int MAX_SUPERVISORS = 200;
-
-    private const int MAX_JOBS = 200;
-
-    private const int MAX_METRIC_QUEUES = 100;
-
-    private const int METRICS_CONCURRENCY = 10;
 
     private const int MAX_TIMESTAMP = 253_402_300_799;
 
     public function __construct(
         private SafeUrlGuard $guard,
+        #[Config('horizon-watch.horizon.max_body_bytes')]
+        private int $maxBodyBytes,
+        #[Config('horizon-watch.horizon.max_masters')]
+        private int $maxMasters,
+        #[Config('horizon-watch.horizon.max_supervisors')]
+        private int $maxSupervisors,
+        #[Config('horizon-watch.horizon.max_jobs')]
+        private int $maxJobs,
+        #[Config('horizon-watch.horizon.max_metric_queues')]
+        private int $maxMetricQueues,
+        #[Config('horizon-watch.horizon.metrics_concurrency')]
+        private int $metricsConcurrency,
+        #[Config('horizon-watch.horizon.exception_length')]
+        private int $exceptionLength,
         #[Config('horizon-watch.http_timeout_seconds', 5)]
         private int $timeoutSeconds = 5,
         #[Config('horizon-watch.read_budget_seconds', 20)]
@@ -108,7 +110,7 @@ final readonly class HorizonClient implements HorizonReader
      */
     private function pool(HorizonTarget $target, ResolvedTarget $resolved, array $paths, int $concurrency, ?int $deadline = null): array
     {
-        $watches = array_map(fn () => new TransferWatch(self::MAX_BODY_BYTES), $paths);
+        $watches = array_map(fn () => new TransferWatch($this->maxBodyBytes), $paths);
 
         try {
             $responses = Http::pool(function (Pool $pool) use ($target, $resolved, $paths, $watches, $deadline) {
@@ -183,7 +185,7 @@ final readonly class HorizonClient implements HorizonReader
 
         $size = $response->toPsrResponse()->getBody()->getSize();
 
-        if ($status !== 200 || $size === null || $size > self::MAX_BODY_BYTES) {
+        if ($status !== 200 || $size === null || $size > $this->maxBodyBytes) {
             throw new HorizonReadFailed(ReadingError::NotHorizon);
         }
 
@@ -271,13 +273,13 @@ final readonly class HorizonClient implements HorizonReader
                 throw new HorizonReadFailed(ReadingError::NotHorizon);
             }
 
-            if (count($masters) < self::MAX_MASTERS) {
+            if (count($masters) < $this->maxMasters) {
                 $masters[] = new HorizonMaster(
                     name: $this->name($master['name']),
                     status: $this->name($master['status']),
                     supervisors: array_map(
                         $this->supervisor(...),
-                        array_slice($master['supervisors'], 0, self::MAX_SUPERVISORS),
+                        array_slice($master['supervisors'], 0, $this->maxSupervisors),
                     ),
                 );
             }
@@ -350,7 +352,7 @@ final readonly class HorizonClient implements HorizonReader
         $kept = [];
 
         foreach ($jobs as $job) {
-            if (count($kept) < self::MAX_JOBS && is_array($job) && is_string($job['name'] ?? null) && is_string($job['queue'] ?? null)) {
+            if (count($kept) < $this->maxJobs && is_array($job) && is_string($job['name'] ?? null) && is_string($job['queue'] ?? null)) {
                 $kept[] = ['name' => $this->name($job['name']), 'queue' => $this->name($job['queue']), 'job' => $job];
             }
         }
@@ -378,7 +380,7 @@ final readonly class HorizonClient implements HorizonReader
             $jobs[] = new HorizonFailedJob(
                 name: $name,
                 queue: $queue,
-                exception: Str::limit(trim(Str::before(is_string($job['exception'] ?? null) ? $job['exception'] : '', "\n")), 200, ''),
+                exception: Str::limit(trim(Str::before(is_string($job['exception'] ?? null) ? $job['exception'] : '', "\n")), $this->exceptionLength, ''),
                 attempts: $attempts ?? 0,
                 failedAt: $failedAt,
             );
@@ -424,7 +426,7 @@ final readonly class HorizonClient implements HorizonReader
         $queues = array_slice(array_values(array_unique(array_map(
             fn (HorizonQueueLoad $queue): string => $queue->name,
             $workload,
-        ))), 0, self::MAX_METRIC_QUEUES);
+        ))), 0, $this->maxMetricQueues);
 
         if ($queues === [] || $this->millisecondsLeft($deadline) < 1) {
             return [];
@@ -436,7 +438,7 @@ final readonly class HorizonClient implements HorizonReader
             $paths['q'.$index] = 'metrics/queues/'.rawurlencode($queue);
         }
 
-        $answers = $this->pool($target, $resolved, $paths, self::METRICS_CONCURRENCY, $deadline);
+        $answers = $this->pool($target, $resolved, $paths, max(1, $this->metricsConcurrency), $deadline);
         $runtimes = [];
 
         foreach ($queues as $index => $queue) {

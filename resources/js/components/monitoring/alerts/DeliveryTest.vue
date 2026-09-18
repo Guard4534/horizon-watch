@@ -1,11 +1,39 @@
 <script setup lang="ts">
+import { router } from '@inertiajs/vue3';
 import { PhEnvelopeSimple, PhWebhooksLogo } from '@phosphor-icons/vue';
+import { ref } from 'vue';
+import { toast } from 'vue-sonner';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
+import { useTeamSlug } from '@/composables/useTeamSlug';
+import { test as sendTest } from '@/routes/alert-settings';
 
-defineProps<{
-    summary: App.Data.Pages.NotificationSummaryData;
-    settings: App.Data.Monitoring.NotificationSettingsData | null;
+const { settings } = defineProps<{
+    settings: App.Data.Monitoring.NotificationSettingsData;
 }>();
+
+const slug = useTeamSlug();
+
+const sending = ref<App.Enums.NotificationChannel | null>(null);
+
+function send(channel: App.Enums.NotificationChannel): void {
+    router.post(
+        sendTest(slug.value).url,
+        { channel },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onStart: () => (sending.value = channel),
+            onFinish: () => (sending.value = null),
+            onError: (errors) => {
+                const message = Object.values(errors)[0];
+
+                if (message) {
+                    toast.error(message);
+                }
+            },
+        },
+    );
+}
 </script>
 
 <template>
@@ -20,7 +48,7 @@ defineProps<{
         >
             {{
                 $t(
-                    'Sends a sample alert to the configured targets, so you know email and the webhook work before you actually need them.',
+                    'Sends a sample alert to the saved targets, so you know email and the webhook work before you actually need them.',
                 )
             }}
         </div>
@@ -36,12 +64,9 @@ defineProps<{
             <div class="flex items-center gap-2">
                 <PhEnvelopeSimple :size="14" class="flex-none" />
                 <span class="min-w-0 truncate" style="color: var(--nc-text)">{{
-                    settings
-                        ? settings.recipients.join(', ') || '—'
-                        : $tChoice(
-                              ':count recipient|:count recipients',
-                              summary.recipientCount,
-                          )
+                    settings.recipients.length
+                        ? settings.recipients.join(', ')
+                        : $t('Only you')
                 }}</span>
             </div>
             <div class="flex items-center gap-2">
@@ -49,13 +74,7 @@ defineProps<{
                 <span
                     class="min-w-0 truncate"
                     style="color: var(--nc-text); letter-spacing: 0.01em"
-                    >{{
-                        settings
-                            ? settings.webhookUrl || '—'
-                            : summary.webhookConfigured
-                              ? $t('Webhook configured')
-                              : $t('No webhook')
-                    }}</span
+                    >{{ settings.webhookUrl || $t('No webhook') }}</span
                 >
             </div>
         </div>
@@ -64,8 +83,8 @@ defineProps<{
                 type="button"
                 class="nc-btn nc-btn-secondary"
                 style="font-size: 12px"
-                disabled
-                :title="$t('Available soon')"
+                :disabled="sending !== null"
+                @click="send('mail')"
             >
                 <PhEnvelopeSimple :size="13" />
                 {{ $t('Send a test email') }}
@@ -74,11 +93,14 @@ defineProps<{
                 type="button"
                 class="nc-btn nc-btn-secondary"
                 style="font-size: 12px"
-                disabled
-                :title="$t('Available soon')"
+                :disabled="sending !== null || !settings.webhookUrl"
+                :title="
+                    settings.webhookUrl ? undefined : $t('No webhook is saved.')
+                "
+                @click="send('webhook')"
             >
                 <PhWebhooksLogo :size="13" />
-                {{ $t('Send to the webhook') }}
+                {{ $t('Send to webhook') }}
             </button>
         </div>
         <div
@@ -86,11 +108,12 @@ defineProps<{
                 font-size: 11px;
                 color: var(--nc-neutral-600);
                 margin-top: var(--nc-space-3);
+                line-height: 1.5;
             "
         >
             {{
                 $t(
-                    'A test delivery does not open an alert and stays out of the log.',
+                    'The test email also goes to you. A test opens no alert and shows up among the notifications sent on the status wall.',
                 )
             }}
         </div>

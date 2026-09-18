@@ -60,13 +60,13 @@ class FortifyServiceProvider extends ServiceProvider
     private function configureRateLimiting(): void
     {
         RateLimiter::for('two-factor', function (Request $request) {
-            return Limit::perMinute(5)->by($request->session()->get('login.id'));
+            return Limit::perMinute(config()->integer('horizon-watch.rate_limits.two_factor_per_minute'))->by($request->session()->get('login.id'));
         });
 
         RateLimiter::for('login', function (Request $request) {
             $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());
 
-            return Limit::perMinute(5)->by($throttleKey);
+            return Limit::perMinute(config()->integer('horizon-watch.rate_limits.login_per_minute'))->by($throttleKey);
         });
     }
 }

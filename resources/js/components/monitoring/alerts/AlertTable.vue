@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import {
-    PhBellSlash,
-    PhCheck,
-    PhWarning,
-    PhWarningOctagon,
-} from '@phosphor-icons/vue';
+import AlertActions from '@/components/monitoring/alerts/AlertActions.vue';
 import AlertDetail from '@/components/monitoring/alerts/AlertDetail.vue';
+import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import AlertOpened from '@/components/monitoring/alerts/AlertOpened.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatRule } from '@/lib/alertRules';
+import {
+    channelIcon,
+    channelLabel,
+    severityColor,
+    severityIcon,
+    severityLabel,
+} from '@/lib/alerts';
+import { formatElapsed } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
 defineProps<{
@@ -31,7 +35,10 @@ function openRow(
     alert: App.Data.Monitoring.AlertData,
     event: MouseEvent,
 ): void {
-    if ((event.target as HTMLElement).closest('a, button')) {
+    if (
+        alert.environmentId === null ||
+        (event.target as HTMLElement).closest('a, button, [role="menu"]')
+    ) {
         return;
     }
 
@@ -65,36 +72,26 @@ function openRow(
                 <tr
                     v-for="alert in alerts"
                     :key="alert.id"
-                    class="row-link"
+                    :class="{ 'row-link': alert.environmentId !== null }"
                     @click="openRow(alert, $event)"
                 >
                     <td>
                         <span
-                            class="inline-flex items-center gap-[6px]"
+                            class="inline-flex items-center gap-[6px] whitespace-nowrap"
                             style="font-size: 12px"
-                            :style="{
-                                color:
-                                    alert.severity === 'critical'
-                                        ? 'var(--st-down)'
-                                        : 'var(--st-warn)',
-                            }"
+                            :style="{ color: severityColor(alert.severity) }"
                         >
                             <component
-                                :is="
-                                    alert.severity === 'critical'
-                                        ? PhWarningOctagon
-                                        : PhWarning
-                                "
+                                :is="severityIcon(alert.severity)"
                                 :size="14"
                             />
-                            {{
-                                alert.severity === 'critical'
-                                    ? $t('Critical')
-                                    : $t('Warning')
-                            }}
+                            {{ severityLabel(alert.severity) }}
                         </span>
                     </td>
-                    <td style="font-size: 12px; letter-spacing: 0.01em">
+                    <td
+                        class="whitespace-nowrap"
+                        style="font-size: 12px; letter-spacing: 0.01em"
+                    >
                         {{
                             formatRule(
                                 alert.metric,
@@ -105,6 +102,7 @@ function openRow(
                     </td>
                     <td>
                         <Link
+                            v-if="alert.environmentId !== null"
                             :href="environmentHref(alert.environmentId)"
                             class="env-link inline-flex items-center gap-[7px]"
                             style="font-size: 12px"
@@ -117,44 +115,75 @@ function openRow(
                             {{ alert.applicationName }} /
                             {{ alert.environmentName }}
                         </Link>
+                        <span
+                            v-else
+                            class="inline-flex items-center gap-[7px]"
+                            style="
+                                font-size: 12px;
+                                color: var(--nc-neutral-400);
+                            "
+                            :title="$t('This environment has been deleted')"
+                        >
+                            <EnvSwatch
+                                :color="alert.color"
+                                shape="bar"
+                                :size="14"
+                            />
+                            {{ alert.applicationName }} /
+                            {{ alert.environmentName }}
+                        </span>
                     </td>
                     <td
-                        class="max-w-[250px]"
+                        class="max-w-[260px]"
                         style="font-size: 12px; color: var(--nc-neutral-400)"
                     >
                         <AlertDetail :alert="alert" />
+                        <AlertMarks :alert="alert" class="mt-[4px]" />
                     </td>
                     <td
-                        class="whitespace-nowrap"
+                        class="nc-num whitespace-nowrap"
                         style="font-size: 12px; color: var(--nc-neutral-600)"
                     >
                         <AlertOpened :alert="alert" />
+                        <div
+                            v-if="alert.resolvedMinutesAgo !== null"
+                            style="font-size: 11px; color: var(--st-ok)"
+                        >
+                            {{
+                                $t('resolved :elapsed', {
+                                    elapsed: formatElapsed(
+                                        alert.resolvedMinutesAgo,
+                                    ),
+                                })
+                            }}
+                        </div>
                     </td>
                     <td
                         class="whitespace-nowrap"
                         style="font-size: 12px; color: var(--nc-neutral-500)"
                     >
-                        {{ $t('not sent yet') }}
+                        <span
+                            v-if="alert.channels.length"
+                            class="inline-flex items-center gap-[8px]"
+                        >
+                            <span
+                                v-for="channel in alert.channels"
+                                :key="channel"
+                                class="inline-flex"
+                                role="img"
+                                :title="channelLabel(channel)"
+                                :aria-label="channelLabel(channel)"
+                            >
+                                <component
+                                    :is="channelIcon(channel)"
+                                    :size="14"
+                                />
+                            </span>
+                        </span>
+                        <span v-else>—</span>
                     </td>
                     <td class="whitespace-nowrap" style="text-align: right">
-                        <button
-                            type="button"
-                            class="nc-btn nc-btn-ghost row-action"
-                            disabled
-                            :title="$t('Available soon')"
-                            :aria-label="$t('Mute')"
-                        >
-                            <PhBellSlash :size="14" />
-                        </button>
-                        <button
-                            type="button"
-                            class="nc-btn nc-btn-ghost row-action"
-                            disabled
-                            :title="$t('Available soon')"
-                            :aria-label="$t('Handled')"
-                        >
-                            <PhCheck :size="14" />
-                        </button>
+                        <AlertActions :alert="alert" layout="icons" />
                     </td>
                 </tr>
             </tbody>
@@ -174,10 +203,5 @@ function openRow(
 
 .env-link:hover {
     color: var(--nc-accent);
-}
-
-.row-action {
-    font-size: 11px;
-    padding: 2px 7px;
 }
 </style>

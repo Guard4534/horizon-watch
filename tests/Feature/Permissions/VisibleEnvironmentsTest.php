@@ -136,3 +136,42 @@ test('ofTeam returns the whole organization, and nothing outside it', function (
     ])
         ->and($ids)->not->toContain($this->foreignEnvironment->id);
 });
+
+test('only a member who sees everything sees the alerts of a deleted environment', function () {
+    $stranger = User::factory()->create();
+
+    expect($this->filter->seesEverything($this->team, $this->userAll))->toBeTrue()
+        ->and($this->filter->seesEverything($this->team, $this->userNonProduction))->toBeFalse()
+        ->and($this->filter->seesEverything($this->team, $this->userManual))->toBeFalse()
+        ->and($this->filter->seesEverything($this->team, $stranger))->toBeFalse()
+        ->and($this->filter->sees($this->team, $this->userAll, null))->toBeTrue()
+        ->and($this->filter->sees($this->team, $this->userNonProduction, null))->toBeFalse()
+        ->and($this->filter->sees($this->team, $stranger, null))->toBeFalse();
+});
+
+test('sees decides one environment as the query does', function (string $user, string $environment, bool $sees) {
+    expect($this->filter->sees($this->team, $this->{$user}, $this->{$environment}->id))->toBe($sees);
+})->with([
+    'all, production' => ['userAll', 'alphaProduction', true],
+    'all, another organization' => ['userAll', 'foreignEnvironment', false],
+    'non production, production' => ['userNonProduction', 'bravoProduction', false],
+    'non production, staging' => ['userNonProduction', 'alphaStaging', true],
+    'manual, granted' => ['userManual', 'charlieTesting', true],
+    'manual, not granted' => ['userManual', 'alphaStaging', false],
+]);
+
+test('the ids of a membership are null for everything, or the environments it sees', function () {
+    $membership = fn (User $user) => $user->teamMemberships()->where('team_id', $this->team->id)->sole();
+
+    expect($this->filter->idsFor($this->team, $membership($this->userAll)))->toBeNull()
+        ->and($this->filter->idsFor($this->team, $membership($this->userNonProduction)))->toEqualCanonicalizing([
+            $this->alphaStaging->id,
+            $this->bravoPreprod->id,
+            $this->charlieStaging->id,
+            $this->charlieTesting->id,
+        ])
+        ->and($this->filter->idsFor($this->team, $membership($this->userManual)))->toEqualCanonicalizing([
+            $this->alphaProduction->id,
+            $this->charlieTesting->id,
+        ]);
+});

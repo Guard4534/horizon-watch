@@ -2,6 +2,8 @@
 
 namespace Database\Seeders\Support;
 
+use App\Alerts\EffectiveRules;
+use App\Alerts\RuleSet;
 use App\Enums\EnvironmentStatus;
 use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
@@ -45,19 +47,23 @@ final class SyntheticReadings
 
     private const RESERVED_JOBS = ['App\\Jobs\\RebuildIndex', 'App\\Jobs\\ExportLedger', 'App\\Jobs\\TranscodeVideo'];
 
-    public function __construct(
-        private readonly StatusEvaluator $evaluator = new StatusEvaluator,
-    ) {}
+    private readonly StatusEvaluator $evaluator;
+
+    public function __construct(?StatusEvaluator $evaluator = null)
+    {
+        $this->evaluator = $evaluator ?? app(StatusEvaluator::class);
+    }
 
     public function seed(Environment $environment, CarbonImmutable $until, int $hours = 24, int $stepMinutes = 5): void
     {
         $count = intdiv($hours * 60, $stepMinutes);
+        $rules = app(EffectiveRules::class)->forEnvironment($environment);
         $model = new EnvironmentSnapshot;
         $rows = [];
 
         for ($index = $count - 1; $index >= 0; $index--) {
             $capturedAt = $until->subMinutes($index * $stepMinutes);
-            $rows[] = ['captured_at' => $model->fromDateTime($capturedAt)] + $this->snapshotRow($environment, $capturedAt);
+            $rows[] = ['captured_at' => $model->fromDateTime($capturedAt)] + $this->snapshotRow($environment, $capturedAt, $rules);
 
             if (count($rows) === self::CHUNK) {
                 EnvironmentSnapshot::query()->insert($rows);
@@ -69,13 +75,13 @@ final class SyntheticReadings
             EnvironmentSnapshot::query()->insert($rows);
         }
 
-        $this->writeState($environment, $until, $until->subMinutes($count * $stepMinutes));
+        $this->writeState($environment, $until, $until->subMinutes($count * $stepMinutes), $until->subMinutes(max(0, $count - 1) * $stepMinutes), $rules);
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function snapshotRow(Environment $environment, CarbonImmutable $capturedAt): array
+    private function snapshotRow(Environment $environment, CarbonImmutable $capturedAt, RuleSet $rules): array
     {
         $row = ['environment_id' => $environment->id];
 
@@ -97,7 +103,7 @@ final class SyntheticReadings
         }
 
         $reading = $this->reading($environment, $capturedAt, $this->incident($environment));
-        $evaluated = $this->evaluator->evaluate($reading['horizon']);
+        $evaluated = $this->evaluator->evaluate($reading['horizon'], $rules);
 
         return $row + [
             'status' => $evaluated->status->value,
@@ -115,7 +121,7 @@ final class SyntheticReadings
         ];
     }
 
-    private function writeState(Environment $environment, CarbonImmutable $until, CarbonImmutable $beforeWindow): void
+    private function writeState(Environment $environment, CarbonImmutable $until, CarbonImmutable $beforeWindow, CarbonImmutable $statusSince, RuleSet $rules): void
     {
         $incident = $this->incident($environment);
         $unreachable = $incident === EnvironmentStatus::Unreachable;
@@ -125,13 +131,14 @@ final class SyntheticReadings
             : $this->reading($environment, $detailAt, $incident);
         $evaluated = $unreachable
             ? $this->evaluator->failed()
-            : $this->evaluator->evaluate($reading['horizon']);
+            : $this->evaluator->evaluate($reading['horizon'], $rules);
 
         EnvironmentState::query()->updateOrCreate(
             ['environment_id' => $environment->id],
             [
                 'captured_at' => $until,
                 'status' => $evaluated->status,
+                'status_since' => $statusSince,
                 'error' => $unreachable ? ReadingError::Unreachable : null,
                 'horizon_status' => HorizonStatus::from($reading['horizon']->stats->status),
                 'nodes' => $reading['nodes'],

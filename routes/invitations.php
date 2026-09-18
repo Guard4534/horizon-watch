@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('invitations/{code}', [InvitationController::class, 'show'])->name('invitations.show');
 
-Route::middleware('throttle:6,1')->group(function () {
+Route::middleware('throttle:'.config()->integer('horizon-watch.rate_limits.invitations_per_minute').',1')->group(function () {
     Route::post('invitations/{code}/register', [InvitationController::class, 'register'])
         ->middleware('guest')
         ->name('invitations.register');

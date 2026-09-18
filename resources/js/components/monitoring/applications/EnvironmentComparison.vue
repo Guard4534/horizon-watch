@@ -10,16 +10,13 @@ import {
 } from '@/components/monitoring/environment/readings';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
+import { thresholdOf } from '@/lib/alertRules';
 import { failedLabel, failedWindowShort } from '@/lib/failedWindow';
 import { formatCount, formatWait, waitColor } from '@/lib/monitoring';
 
-const { environments, thresholds } = defineProps<{
+const { environments } = defineProps<{
     environments: App.Data.Monitoring.EnvironmentData[];
-    thresholds: Record<string, number>;
 }>();
-
-const threshold = (metric: App.Enums.AlertRuleMetric) =>
-    thresholds[metric] ?? 0;
 
 const windows = computed(
     () =>
@@ -92,7 +89,10 @@ const header = computed(() => {
                                 :style="{
                                     color: pendingTone(
                                         environment.pending,
-                                        threshold('queue.pending'),
+                                        thresholdOf(
+                                            environment,
+                                            'queue.pending',
+                                        ),
                                     ),
                                 }"
                             >
@@ -103,7 +103,10 @@ const header = computed(() => {
                                 :style="{
                                     color: waitColor(
                                         environment.maxWaitSeconds,
-                                        threshold('queue.max_wait'),
+                                        thresholdOf(
+                                            environment,
+                                            'queue.max_wait',
+                                        ),
                                     ),
                                 }"
                             >
@@ -114,7 +117,10 @@ const header = computed(() => {
                                 :style="{
                                     color: failedColor(
                                         environment.failedLastHour,
-                                        threshold('jobs.failed_per_hour'),
+                                        thresholdOf(
+                                            environment,
+                                            'jobs.failed_per_hour',
+                                        ),
                                     ),
                                 }"
                             >

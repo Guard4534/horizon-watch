@@ -15,7 +15,16 @@ class AlertRulesPageData extends Data
         public string $scope,
         /** @var array<int, AlertRuleData> */
         public array $rules,
+        /** @var array<int, AlertRuleData> */
+        public array $organizationRules,
         public NotificationSummaryData $notificationSummary,
         public ?NotificationSettingsData $notifications,
+        public bool $canManage,
+        public ?string $newWebhookSecret,
+        /** @var array<int, int> */
+        public array $repeatChoices,
+        public int $maxRecipients,
+        /** @var array<int, string> */
+        public array $timezones,
     ) {}
 }

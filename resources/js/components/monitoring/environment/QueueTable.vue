@@ -11,7 +11,7 @@ import {
 const { waitThreshold } = defineProps<{
     queues: App.Data.Monitoring.QueueData[];
     note?: string | null;
-    waitThreshold: number;
+    waitThreshold: number | null;
 }>();
 </script>
 

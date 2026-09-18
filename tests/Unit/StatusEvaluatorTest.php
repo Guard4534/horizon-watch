@@ -1,7 +1,11 @@
 <?php
 
+use App\Alerts\EffectiveRule;
+use App\Alerts\RuleSet;
 use App\Enums\AlertRuleMetric;
+use App\Enums\AlertSeverity;
 use App\Enums\EnvironmentStatus;
+use App\Enums\RuleOrigin;
 use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
 use App\Externals\Horizon\Data\HorizonPendingJob;
@@ -76,6 +80,32 @@ function failedJobsAgo(int $count, int $secondsAgo = 60): array
     ), range(1, $count));
 }
 
+/**
+ * @param  array<string, array{threshold?: float, enabled?: bool}>  $changes
+ */
+function evaluatorRules(array $changes): RuleSet
+{
+    $rules = [];
+
+    foreach (AlertRuleMetric::cases() as $metric) {
+        $key = $metric->value;
+        $rule = EffectiveRule::default($metric);
+        $rules[$key] = new EffectiveRule(
+            metric: $rule->metric,
+            threshold: $changes[$key]['threshold'] ?? $rule->threshold,
+            severity: AlertSeverity::Critical,
+            notifyByEmail: false,
+            enabled: $changes[$key]['enabled'] ?? $rule->enabled,
+            thresholdOrigin: RuleOrigin::Override,
+            severityOrigin: RuleOrigin::Override,
+            notifyOrigin: RuleOrigin::Override,
+            enabledOrigin: RuleOrigin::Override,
+        );
+    }
+
+    return new RuleSet($rules);
+}
+
 function reservedJob(int $secondsAgo, string $status = 'reserved'): HorizonPendingJob
 {
     return new HorizonPendingJob(
@@ -87,7 +117,7 @@ function reservedJob(int $secondsAgo, string $status = 'reserved'): HorizonPendi
 }
 
 test('a reading is evaluated in the order of the spec', function (HorizonReading $reading, EnvironmentStatus $status, array $breaches) {
-    $evaluated = (new StatusEvaluator)->evaluate($reading);
+    $evaluated = (new StatusEvaluator(60))->evaluate($reading, new RuleSet([]));
 
     expect($evaluated->status)->toBe($status)
         ->and($evaluated->breaches)->toBe($breaches);
@@ -274,24 +304,106 @@ test('a reading is evaluated in the order of the spec', function (HorizonReading
 ]);
 
 test('a failed reading is unreachable with the endpoint breach', function () {
-    $evaluated = (new StatusEvaluator)->failed();
+    $evaluated = (new StatusEvaluator(60))->failed();
 
     expect($evaluated->status)->toBe(EnvironmentStatus::Unreachable)
         ->and($evaluated->breaches)->toBe([AlertRuleMetric::EndpointUnreachable]);
 });
 
 test('the failed jobs of the last hour are counted', function () {
-    $evaluated = (new StatusEvaluator)->evaluate(evaluatorReading(
+    $evaluated = (new StatusEvaluator(60))->evaluate(evaluatorReading(
         failed: [...failedJobsAgo(7), ...failedJobsAgo(4, secondsAgo: 4000)],
-    ));
+    ), new RuleSet([]));
 
     expect($evaluated->failedLastHour)->toBe(7);
 });
 
 test('a reading whose failed jobs could not be read counts none', function () {
-    expect((new StatusEvaluator)->evaluate(evaluatorReading(failed: null))->failedLastHour)->toBe(0);
+    expect((new StatusEvaluator(60))->evaluate(evaluatorReading(failed: null), new RuleSet([]))->failedLastHour)->toBe(0);
 });
 
 test('a failed reading counts no failed jobs', function () {
-    expect((new StatusEvaluator)->failed()->failedLastHour)->toBe(0);
+    expect((new StatusEvaluator(60))->failed()->failedLastHour)->toBe(0);
+});
+
+test('a reading is evaluated against the rules it is given', function (HorizonReading $reading, array $changes, EnvironmentStatus $status, array $breaches) {
+    $evaluated = (new StatusEvaluator(60))->evaluate($reading, evaluatorRules($changes));
+
+    expect($evaluated->status)->toBe($status)
+        ->and($evaluated->breaches)->toBe($breaches);
+})->with([
+    'a lower pending threshold' => fn () => [
+        evaluatorReading(workload: [new HorizonQueueLoad(name: 'default', length: 11, wait: 1, processes: 3)]),
+        ['queue.pending' => ['threshold' => 10.0]],
+        EnvironmentStatus::Degraded,
+        [AlertRuleMetric::QueuePending],
+    ],
+    'a higher pending threshold' => fn () => [
+        evaluatorReading(workload: [new HorizonQueueLoad(name: 'default', length: 4000, wait: 1, processes: 3)]),
+        ['queue.pending' => ['threshold' => 5000.0]],
+        EnvironmentStatus::Active,
+        [],
+    ],
+    'a lower max wait threshold' => fn () => [
+        evaluatorReading(workload: [new HorizonQueueLoad(name: 'default', length: 1, wait: 31, processes: 3)]),
+        ['queue.max_wait' => ['threshold' => 30.0]],
+        EnvironmentStatus::Degraded,
+        [AlertRuleMetric::QueueMaxWait],
+    ],
+    'a lower failed-rate threshold' => fn () => [
+        evaluatorReading(failed: failedJobsAgo(3)),
+        ['jobs.failed_per_hour' => ['threshold' => 2.0]],
+        EnvironmentStatus::Degraded,
+        [AlertRuleMetric::JobsFailedPerHour],
+    ],
+    'a lower workers threshold' => fn () => [
+        evaluatorReading(workload: [new HorizonQueueLoad(name: 'default', length: 1, wait: 1, processes: 0)]),
+        ['workers.missing' => ['threshold' => 1.0]],
+        EnvironmentStatus::Degraded,
+        [AlertRuleMetric::WorkersMissing],
+    ],
+    'a higher runtime threshold' => fn () => [
+        evaluatorReading(pendingJobs: [reservedJob(600)]),
+        ['job.runtime' => ['threshold' => 900.0]],
+        EnvironmentStatus::Active,
+        [],
+    ],
+    'a disabled threshold rule never breaches' => fn () => [
+        evaluatorReading(failed: failedJobsAgo(50), workload: [new HorizonQueueLoad(name: 'default', length: 50_000, wait: 1, processes: 3)]),
+        ['queue.pending' => ['enabled' => false]],
+        EnvironmentStatus::Degraded,
+        [AlertRuleMetric::JobsFailedPerHour],
+    ],
+    'every breached rule disabled leaves the environment active' => fn () => [
+        evaluatorReading(pendingJobs: [reservedJob(600)], workload: [new HorizonQueueLoad(name: 'default', length: 1, wait: 900, processes: 3)]),
+        ['queue.max_wait' => ['enabled' => false], 'job.runtime' => ['enabled' => false]],
+        EnvironmentStatus::Active,
+        [],
+    ],
+    'a disabled inactive rule keeps the status and drops the breach' => fn () => [
+        evaluatorReading(status: 'inactive'),
+        ['horizon.master_inactive' => ['enabled' => false]],
+        EnvironmentStatus::Inactive,
+        [],
+    ],
+    'a disabled paused rule keeps the status and the other breaches' => fn () => [
+        evaluatorReading(status: 'paused', failed: failedJobsAgo(50)),
+        ['horizon.paused' => ['enabled' => false]],
+        EnvironmentStatus::Paused,
+        [AlertRuleMetric::JobsFailedPerHour],
+    ],
+    'the state rule thresholds do not decide the status' => fn () => [
+        evaluatorReading(status: 'paused'),
+        ['horizon.paused' => ['threshold' => 1440.0], 'horizon.master_inactive' => ['threshold' => 1440.0]],
+        EnvironmentStatus::Paused,
+        [AlertRuleMetric::HorizonPaused],
+    ],
+]);
+
+test('a failed reading is unreachable with the endpoint breach and nothing else', function () {
+    $failed = (new StatusEvaluator(60))->failed();
+
+    expect($failed->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($failed->breaches)->toBe([AlertRuleMetric::EndpointUnreachable])
+        ->and($failed->failedLastHour)->toBe(0);
 });

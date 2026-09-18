@@ -45,6 +45,8 @@ class UpdateEnvironment
 
             if ($moved) {
                 EnvironmentState::query()->where('environment_id', $environment->id)->delete();
+            } elseif ($resumed) {
+                EnvironmentState::query()->where('environment_id', $environment->id)->update(['status_since' => null]);
             }
 
             $now = CarbonImmutable::now()->startOfSecond();

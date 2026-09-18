@@ -2,16 +2,20 @@
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { PhBellSimpleSlash } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import AlertCards from '@/components/mobile/alerts/AlertCards.vue';
 import EmptyState from '@/components/monitoring/EmptyState.vue';
+import AlertPagination from '@/components/monitoring/alerts/AlertPagination.vue';
 import AlertTable from '@/components/monitoring/alerts/AlertTable.vue';
+import DeliveryPolicy from '@/components/monitoring/alerts/DeliveryPolicy.vue';
 import DeliveryTest from '@/components/monitoring/alerts/DeliveryTest.vue';
-import SectionCard from '@/components/nocturne/SectionCard.vue';
+import EmailPreview from '@/components/monitoring/alerts/EmailPreview.vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
-import { ruleLabel } from '@/lib/alertRules';
+import { useTeamSlug } from '@/composables/useTeamSlug';
+import { pageCount } from '@/lib/alerts';
+import { index as alertsIndex } from '@/routes/alerts';
 
 defineOptions({
     layout: { title: 'Alerts', live: true },
@@ -24,7 +28,7 @@ const { page } = defineProps<{
 useLivePoll(['page', 'openAlertCount']);
 
 const isMobile = useIsMobile();
-
+const slug = useTeamSlug();
 const shared = usePage();
 
 const nothingVisible = computed(() => page.environmentCount === 0);
@@ -35,49 +39,81 @@ const somethingIsHidden = computed(
         shared.props.organizationHasEnvironments,
 );
 
-function switchState(next: App.Enums.AlertState): void {
+function visit(next: {
+    state?: App.Enums.AlertState;
+    application?: string | null;
+    number?: number;
+}): void {
     router.cancelAll({ sync: false, prefetch: false });
 
-    const url = new URL(window.location.href);
-    url.searchParams.set('state', next);
-    window.history.replaceState(window.history.state, '', url);
+    const state = next.state ?? page.state;
+    const application =
+        next.application === undefined ? page.application : next.application;
+    const number = next.number ?? 1;
+    const query: Record<string, string | number> = {};
 
-    router.reload({ data: { state: next }, only: ['page'] });
+    if (state !== 'open') query.state = state;
+    if (application) query.application = application;
+    if (number > 1) query.page = number;
+
+    router.get(
+        alertsIndex(slug.value, { query }).url,
+        {},
+        {
+            only: ['page'],
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        },
+    );
 }
 
 const state = computed({
     get: () => page.state,
-    set: switchState,
+    set: (next: App.Enums.AlertState) => visit({ state: next }),
 });
 
-const notYet = computed(() => page.state !== 'open');
-
-const search = ref('');
-
-const alerts = computed(() => {
-    const needle = search.value.trim().toLowerCase();
-
-    return needle
-        ? page.alerts.filter((alert) =>
-              [
-                  alert.applicationName,
-                  alert.environmentName,
-                  alert.metric,
-                  ruleLabel(alert.metric),
-              ]
-                  .join(' ')
-                  .toLowerCase()
-                  .includes(needle),
-          )
-        : page.alerts;
+const application = computed({
+    get: () => page.application ?? '',
+    set: (next: string) => visit({ application: next || null }),
 });
 
-const empty = computed(() =>
-    search.value.trim() && page.alerts.length
-        ? trans('No open anomaly matches this filter.')
-        : trans(
-              'No open anomalies: every watched environment is within its thresholds.',
-          ),
+const pages = computed(() => pageCount(page.total, page.perPage));
+
+const tabs = computed(() => [
+    {
+        value: 'open' as const,
+        label: `${trans('Open alerts')} ${page.counts.open}`,
+    },
+    {
+        value: 'muted' as const,
+        label: `${trans('Muted alerts')} ${page.counts.muted}`,
+    },
+    {
+        value: 'resolved' as const,
+        label: `${trans('Resolved alerts')} ${page.counts.resolved}`,
+    },
+]);
+
+const empty = computed(() => {
+    if (page.application) {
+        return trans('No alert of this application in this tab.');
+    }
+
+    switch (page.state) {
+        case 'muted':
+            return trans('No muted alerts.');
+        case 'resolved':
+            return trans('No resolved alerts.');
+        default:
+            return trans(
+                'No open anomalies: every watched environment is within its thresholds.',
+            );
+    }
+});
+
+const previewed = computed(
+    () => page.alerts.find((alert) => alert.severity === 'critical') ?? null,
 );
 </script>
 
@@ -106,39 +142,55 @@ const empty = computed(() =>
     </div>
 
     <div v-else-if="isMobile" class="flex flex-col">
-        <div style="padding: var(--nc-space-3) var(--nc-space-4) 0">
+        <div
+            class="flex flex-col"
+            style="
+                gap: var(--nc-space-2);
+                padding: var(--nc-space-3) var(--nc-space-4) 0;
+            "
+        >
             <SegmentedControl
                 v-model="state"
                 name="alert-state-mobile"
                 class="mobile-seg"
-                :options="[
-                    {
-                        value: 'open',
-                        label: `${$t('Open alerts')} ${page.counts.open}`,
-                    },
-                    { value: 'muted', label: $t('Muted alerts') },
-                    { value: 'resolved', label: $t('Resolved alerts') },
-                ]"
+                :options="tabs"
             />
+            <select
+                v-if="page.applications.length > 1 || page.application"
+                v-model="application"
+                class="nc-input"
+                style="font-size: 12px"
+                :aria-label="$t('Filter by application')"
+            >
+                <option value="">{{ $t('All applications') }}</option>
+                <option
+                    v-for="option in page.applications"
+                    :key="option.id"
+                    :value="option.id"
+                >
+                    {{ option.name }}
+                </option>
+            </select>
         </div>
         <div
+            class="flex flex-col"
             style="
+                gap: var(--nc-space-3);
                 padding: var(--nc-space-3) var(--nc-space-4) var(--nc-space-4);
             "
         >
-            <div
-                v-if="notYet"
-                class="nc-card"
-                style="font-size: 12px; color: var(--nc-neutral-400)"
-            >
-                {{ $t('Muting and resolving arrive with the next release.') }}
-            </div>
-            <AlertCards v-else :alerts="page.alerts" :empty="empty" />
+            <AlertCards :alerts="page.alerts" :empty="empty" />
+            <AlertPagination
+                v-if="pages > 1 || page.page > 1"
+                :page="page.page"
+                :pages="pages"
+                @go="(number) => visit({ number })"
+            />
         </div>
     </div>
 
     <div v-else class="page-pad alerts-grid">
-        <section class="nc-card">
+        <section class="nc-card min-w-0">
             <div
                 class="mb-[var(--nc-space-3)] flex flex-wrap items-center"
                 style="gap: var(--nc-space-3)"
@@ -146,63 +198,45 @@ const empty = computed(() =>
                 <SegmentedControl
                     v-model="state"
                     name="alert-state"
-                    :options="[
-                        {
-                            value: 'open',
-                            label: `${$t('Open alerts')} ${page.counts.open}`,
-                        },
-                        {
-                            value: 'muted',
-                            label: `${$t('Muted alerts')} ${page.counts.muted}`,
-                        },
-                        {
-                            value: 'resolved',
-                            label: `${$t('Resolved alerts')} ${page.counts.resolved}`,
-                        },
-                    ]"
+                    :options="tabs"
                 />
-                <input
-                    v-if="!notYet"
-                    v-model="search"
+                <select
+                    v-if="page.applications.length > 1 || page.application"
+                    v-model="application"
                     class="nc-input ml-auto"
-                    style="max-width: 230px"
-                    :placeholder="$t('Filter by application')"
-                />
+                    style="max-width: 230px; font-size: 12px"
+                    :aria-label="$t('Filter by application')"
+                >
+                    <option value="">{{ $t('All applications') }}</option>
+                    <option
+                        v-for="option in page.applications"
+                        :key="option.id"
+                        :value="option.id"
+                    >
+                        {{ option.name }}
+                    </option>
+                </select>
             </div>
-            <div
-                v-if="notYet"
-                style="
-                    font-size: 12px;
-                    color: var(--nc-neutral-400);
-                    padding: var(--nc-space-3) 0;
-                "
-            >
-                {{ $t('Muting and resolving arrive with the next release.') }}
-            </div>
-            <AlertTable v-else :alerts="alerts" :empty="empty" />
+            <AlertTable :alerts="page.alerts" :empty="empty" />
+            <AlertPagination
+                v-if="pages > 1 || page.page > 1"
+                class="mt-[var(--nc-space-3)]"
+                :page="page.page"
+                :pages="pages"
+                @go="(number) => visit({ number })"
+            />
         </section>
 
-        <div class="flex flex-col" style="gap: var(--nc-space-4)">
+        <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
+            <EmailPreview v-if="page.notifications" :alert="previewed" />
             <DeliveryTest
-                :summary="page.notificationSummary"
+                v-if="page.notifications"
                 :settings="page.notifications"
             />
-            <SectionCard :title="$t('Delivery policy')">
-                <div style="font-size: 12px; color: var(--nc-neutral-400)">
-                    <p style="margin: 0 0 var(--nc-space-2)">
-                        {{
-                            $t(
-                                'Nothing is sent yet: this is the policy that applies from the next release.',
-                            )
-                        }}
-                    </p>
-                    {{
-                        $t(
-                            'A critical alert repeats every 30 minutes until it clears or gets muted. Warnings are grouped into a digest every 15 minutes. During quiet hours only criticals get through.',
-                        )
-                    }}
-                </div>
-            </SectionCard>
+            <DeliveryPolicy
+                :summary="page.notificationSummary"
+                :manages="page.notifications !== null"
+            />
         </div>
     </div>
 </template>
@@ -232,6 +266,8 @@ const empty = computed(() =>
 .mobile-seg :deep(.nc-seg-opt) {
     flex: 1;
     justify-content: center;
+    padding-inline: 4px;
     font-size: 12px;
+    white-space: nowrap;
 }
 </style>

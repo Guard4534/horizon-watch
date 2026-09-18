@@ -3,6 +3,7 @@
 namespace App\Monitoring;
 
 use App\Data\Monitoring\AlertData;
+use App\Data\Monitoring\AlertPageData;
 use App\Data\Monitoring\AlertRuleData;
 use App\Data\Monitoring\ApplicationData;
 use App\Data\Monitoring\EnvironmentData;
@@ -13,6 +14,7 @@ use App\Data\Monitoring\NotificationSettingsData;
 use App\Data\Monitoring\QueueData;
 use App\Data\Monitoring\RuleScopeData;
 use App\Data\Monitoring\SentNotificationData;
+use App\Data\Pages\AlertCountsData;
 use App\Enums\AlertState;
 use App\Enums\SeriesRange;
 use App\Models\Team;
@@ -65,8 +67,15 @@ interface MonitoringRepository
     /** @return array<int, int> */
     public function maxWaitSeries(Team $team, string $environmentId, SeriesRange $range): array;
 
+    public function alerts(Team $team, AlertState $state, ?string $application = null, int $page = 1): AlertPageData;
+
     /** @return array<int, AlertData> */
-    public function alerts(Team $team, AlertState $state): array;
+    public function openAlerts(Team $team): array;
+
+    /** @return array<int, AlertData> */
+    public function latestResolvedAlerts(Team $team, string $application, int $limit): array;
+
+    public function alertCounts(Team $team): AlertCountsData;
 
     /** @return array<int, SentNotificationData> */
     public function sentNotifications(Team $team): array;

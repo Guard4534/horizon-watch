@@ -4,6 +4,7 @@ import { PhCheckCircle } from '@phosphor-icons/vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { ruleIcon, ruleLabel } from '@/lib/alertRules';
+import { severityColor } from '@/lib/alerts';
 import { formatElapsed, statusColor } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 
@@ -56,7 +57,9 @@ const slug = useTeamSlug();
                         color:
                             alert.state === 'resolved'
                                 ? 'var(--st-ok)'
-                                : statusColor(alert.environmentStatus),
+                                : alert.environmentStatus
+                                  ? statusColor(alert.environmentStatus)
+                                  : severityColor(alert.severity),
                     }"
                 />
                 <div class="min-w-0">
@@ -74,12 +77,15 @@ const slug = useTeamSlug();
                         style="font-size: 11px; color: var(--nc-neutral-600)"
                     >
                         {{
-                            $t('opened :elapsed', {
-                                elapsed: formatElapsed(
-                                    alert.minutesAgo,
-                                    alert.sinceTruncated,
-                                ),
-                            })
+                            alert.resolvedMinutesAgo !== null
+                                ? $t('resolved :elapsed', {
+                                      elapsed: formatElapsed(
+                                          alert.resolvedMinutesAgo,
+                                      ),
+                                  })
+                                : $t('opened :elapsed', {
+                                      elapsed: formatElapsed(alert.minutesAgo),
+                                  })
                         }}
                     </div>
                 </div>

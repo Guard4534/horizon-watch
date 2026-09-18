@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { PhBellSlash, PhCheck } from '@phosphor-icons/vue';
+import { PhCheckCircle } from '@phosphor-icons/vue';
+import AlertActions from '@/components/monitoring/alerts/AlertActions.vue';
+import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatRule, ruleIcon, ruleLabel } from '@/lib/alertRules';
+import { channelIcon, channelLabel } from '@/lib/alerts';
 import { formatElapsed } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 import { show as showEnvironment } from '@/routes/environments';
@@ -31,7 +34,23 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                 $t('Full log')
             }}</Link>
         </template>
-        <div class="flex flex-col" style="gap: var(--nc-space-3)">
+        <div
+            v-if="anomalies.length === 0"
+            class="flex items-center gap-[9px]"
+            style="font-size: 12px; color: var(--nc-neutral-500)"
+        >
+            <PhCheckCircle
+                :size="14"
+                class="flex-none"
+                style="color: var(--st-ok)"
+            />
+            {{
+                $t(
+                    'No open anomalies: every watched environment is within its thresholds.',
+                )
+            }}
+        </div>
+        <div v-else class="flex flex-col" style="gap: var(--nc-space-3)">
             <div v-for="alert in anomalies" :key="alert.id" class="anomaly">
                 <div class="flex items-start gap-[9px]">
                     <component
@@ -42,6 +61,7 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                     />
                     <div class="min-w-0 flex-1">
                         <Link
+                            v-if="alert.environmentId !== null"
                             :href="
                                 showEnvironment({
                                     current_team: slug,
@@ -51,6 +71,9 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                             class="title block"
                             >{{ ruleLabel(alert.metric) }}</Link
                         >
+                        <span v-else class="title block">{{
+                            ruleLabel(alert.metric)
+                        }}</span>
                         <div
                             class="mt-[3px] flex items-center gap-[6px]"
                             style="
@@ -66,12 +89,7 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                             <span class="min-w-0 truncate"
                                 >{{ alert.applicationName }} /
                                 {{ alert.environmentName }} ·
-                                <template v-if="alert.sinceTruncated">{{
-                                    $t('more than 24 h')
-                                }}</template>
-                                <template v-else>{{
-                                    formatElapsed(alert.minutesAgo)
-                                }}</template></span
+                                {{ formatElapsed(alert.minutesAgo) }}</span
                             >
                         </div>
                         <div
@@ -90,31 +108,31 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                             }}
                         </div>
                         <div
-                            class="flex flex-wrap"
+                            class="mt-[3px] flex items-center gap-[6px]"
                             style="
-                                gap: var(--nc-space-2);
-                                margin-top: var(--nc-space-2);
+                                font-size: 11px;
+                                color: var(--nc-neutral-600);
                             "
                         >
-                            <button
-                                type="button"
-                                class="nc-btn nc-btn-secondary"
-                                style="font-size: 11px; padding: 2px 8px"
-                                disabled
-                                :title="$t('Available soon')"
-                            >
-                                <PhBellSlash :size="12" />{{ $t('Mute 1h') }}
-                            </button>
-                            <button
-                                type="button"
-                                class="nc-btn nc-btn-ghost"
-                                style="font-size: 11px; padding: 2px 8px"
-                                disabled
-                                :title="$t('Available soon')"
-                            >
-                                <PhCheck :size="12" />{{ $t('Handled') }}
-                            </button>
+                            <template v-if="alert.channels.length">
+                                <span
+                                    v-for="channel in alert.channels"
+                                    :key="channel"
+                                    class="inline-flex items-center gap-[4px]"
+                                >
+                                    <component
+                                        :is="channelIcon(channel)"
+                                        :size="12"
+                                    />{{ channelLabel(channel) }}
+                                </span>
+                            </template>
+                            <span v-else>{{ $t('not sent yet') }}</span>
                         </div>
+                        <AlertMarks :alert="alert" class="mt-[4px]" />
+                        <AlertActions
+                            :alert="alert"
+                            class="mt-[var(--nc-space-2)]"
+                        />
                     </div>
                 </div>
             </div>
@@ -126,6 +144,11 @@ function color(alert: App.Data.Monitoring.AlertData): string {
 .anomaly {
     padding: 0 0 var(--nc-space-3);
     border-bottom: 1px solid color-mix(in srgb, var(--nc-text) 7%, transparent);
+}
+
+.anomaly:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
 }
 
 .title {

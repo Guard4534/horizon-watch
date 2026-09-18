@@ -2,7 +2,9 @@
 
 use App\Enums\EnvironmentStatus;
 use App\Enums\MemberVisibility;
+use App\Enums\SentNotificationKind;
 use App\Enums\TeamRole;
+use App\Models\AlertNotification;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
@@ -58,6 +60,14 @@ test('unknown applications, environments and scopes are not found', function (st
 ]);
 
 test('the wall carries every environment and the key numbers', function () {
+    AlertNotification::factory()->create([
+        'team_id' => $this->user->currentTeam->id,
+        'alert_id' => null,
+        'kind' => SentNotificationKind::WarningDigest,
+        'environment_count' => 2,
+        'sent_at' => now()->subMinutes(3),
+    ]);
+
     $this->actingAs($this->user)
         ->get(route('wall', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page
@@ -68,7 +78,10 @@ test('the wall carries every environment and the key numbers', function () {
             ->where('page.kpis.environmentsUp', 26)
             ->has('page.anomalies', 5)
             ->has('page.throughput', 48)
-            ->has('page.notifications', 4)
+            ->has('page.notifications', 1)
+            ->where('page.notifications.0.kind', 'warning_digest')
+            ->where('page.notifications.0.subject', '2')
+            ->where('page.notifications.0.minutesAgo', 3)
             ->where('page.applicationCount', 9)
             ->where('openAlertCount', 6));
 });

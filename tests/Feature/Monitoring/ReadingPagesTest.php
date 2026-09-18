@@ -6,6 +6,7 @@ use App\Enums\HorizonStatus;
 use App\Enums\MemberVisibility;
 use App\Enums\ReadingError;
 use App\Enums\TeamRole;
+use App\Models\Alert;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\User;
@@ -77,7 +78,8 @@ test('a fresh reading reaches the environment page with its age, interval and no
             ->missing('page.nodes.0.jobsPerMinute')
             ->missing('page.environment.redisMemoryGb')
             ->where('page.queues.2.runtimeSeconds', null)
-            ->where('page.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
+            ->missing('page.thresholds')
+            ->where('page.environment.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
                 && (float) $thresholds['job.runtime'] === AlertRuleMetric::JobRuntime->defaultThreshold())
             ->where('page.canTestConnection', true));
 });
@@ -94,7 +96,7 @@ test('the environment page lists the rules its thresholds come from, and only th
                 fn ($rule) => $rule['origin'] === 'organization'
                     && (float) $rule['threshold'] === AlertRuleMetric::from($rule['metric'])->defaultThreshold(),
             ))
-            ->where('page.thresholds', fn ($thresholds) => $thresholds->map(fn ($value) => (float) $value)->all()
+            ->where('page.environment.thresholds', fn ($thresholds) => $thresholds->map(fn ($value) => (float) $value)->all()
                 === collect(AlertRuleMetric::cases())->mapWithKeys(fn ($metric) => [$metric->value => $metric->defaultThreshold()])->all()));
 });
 
@@ -104,7 +106,7 @@ test('the rules and thresholds of the environment page agree', function () {
     $this->get(readingEnvironmentUrl($this->environment))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page', fn ($page) => collect($page['rules'])->mapWithKeys(fn ($rule) => [$rule['metric'] => (float) $rule['threshold']])->all()
-                === collect($page['thresholds'])->map(fn ($value) => (float) $value)->all()));
+                === collect($page['environment']['thresholds'])->map(fn ($value) => (float) $value)->all()));
 });
 
 test('an old reading is flagged as not updated', function () {
@@ -189,7 +191,7 @@ test('a seven-day failed window is carried to every page that shows the count', 
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environments.0.failedInWindow', 300)
             ->where('page.environments.0.failedWindowMinutes', 10080)
-            ->where('page.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
+            ->where('page.environments.0.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
                 && (float) $thresholds['queue.pending'] === AlertRuleMetric::QueuePending->defaultThreshold()));
 
     $this->get(route('applications.index', ['current_team' => $this->team->slug]))
@@ -197,15 +199,15 @@ test('a seven-day failed window is carried to every page that shows the count', 
             ->where('page.groups.0.environments.0.failedWindowMinutes', 10080));
 });
 
-test('the application page carries the recent anomalies with their start', function () {
+test('the application page carries the open alerts with the minutes since they opened', function () {
     Readings::record($this->environment, EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused]);
+    Alert::query()->update(['opened_at' => now()->subMinutes(Readings::STATE_RUN_MINUTES)]);
 
     $this->get(readingApplicationUrl($this->application))
         ->assertInertia(fn (Assert $page) => $page
             ->missing('page.cards')
             ->where('page.worstStatus', 'paused')
             ->where('page.recentAlerts.0.metric', 'horizon.paused')
-            ->where('page.recentAlerts.0.sinceTruncated', false)
             ->where('page.recentAlerts.0.minutesAgo', Readings::STATE_RUN_MINUTES));
 });
 

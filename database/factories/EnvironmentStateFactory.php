@@ -23,6 +23,7 @@ class EnvironmentStateFactory extends Factory
             'environment_id' => Environment::factory(),
             'captured_at' => now(),
             'status' => EnvironmentStatus::Active,
+            'status_since' => fn (array $attributes) => $attributes['captured_at'],
             'error' => null,
             'horizon_status' => HorizonStatus::Running,
             'nodes' => [

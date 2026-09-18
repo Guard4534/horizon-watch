@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $id
  * @property int $environment_id
  * @property CarbonImmutable $captured_at
+ * @property CarbonImmutable|null $status_since
  * @property EnvironmentStatus $status
  * @property ReadingError|null $error
  * @property HorizonStatus|null $horizon_status
@@ -32,6 +33,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'environment_id',
     'captured_at',
     'status',
+    'status_since',
     'error',
     'horizon_status',
     'nodes',
@@ -60,6 +62,7 @@ class EnvironmentState extends Model
     {
         return [
             'captured_at' => 'immutable_datetime',
+            'status_since' => 'immutable_datetime',
             'status' => EnvironmentStatus::class,
             'error' => ReadingError::class,
             'horizon_status' => HorizonStatus::class,

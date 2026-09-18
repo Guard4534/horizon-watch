@@ -719,17 +719,18 @@ const submit = () => {
                     id="wizard-rules"
                     class="nc-input"
                     disabled
-                    :title="$t('Available soon')"
+                    aria-describedby="wizard-rules-hint"
                 >
                     <option>{{ $t('Organization default') }}</option>
                 </select>
                 <div
+                    id="wizard-rules-hint"
                     class="mt-1"
                     style="font-size: 11px; color: var(--nc-neutral-600)"
                 >
                     {{
                         $t(
-                            'The organization defaults apply from the first reading; rules per environment arrive with the next release.',
+                            'The organization defaults apply from the first reading; thresholds per environment name are set on the Alert settings page.',
                         )
                     }}
                 </div>

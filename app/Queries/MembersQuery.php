@@ -42,6 +42,7 @@ class MembersQuery
                 canManageMembers: $canManageMembers,
             ),
             matrix: $this->matrix(),
+            invitationExpiresDays: TeamInvitation::lifetimeDays(),
         );
     }
 

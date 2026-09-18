@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
+import { useId } from 'vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { envColor } from '@/lib/monitoring';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
@@ -10,10 +11,37 @@ defineProps<{
 }>();
 
 const slug = useTeamSlug();
+const id = useId();
+
+function pick(scope: string): void {
+    router.visit(alertRulesIndex({ current_team: slug.value, scope }), {
+        preserveScroll: true,
+    });
+}
 </script>
 
 <template>
-    <section class="nc-card" style="padding: var(--nc-space-3)">
+    <div class="nc-field scope-picker">
+        <label :for="id">{{ $t('Scope') }}</label>
+        <select
+            :id="id"
+            class="nc-input"
+            :value="current"
+            @change="pick(($event.target as HTMLSelectElement).value)"
+        >
+            <option v-for="scope in scopes" :key="scope.id" :value="scope.id">
+                {{
+                    scope.id === 'organization'
+                        ? $t('Organization default')
+                        : scope.overrideCount
+                          ? `${scope.id} · ${$tChoice(':count override|:count overrides', scope.overrideCount)}`
+                          : scope.id
+                }}
+            </option>
+        </select>
+    </div>
+
+    <section class="nc-card scope-list" style="padding: var(--nc-space-3)">
         <div
             class="nc-label"
             style="padding: 0 var(--nc-space-2) var(--nc-space-2)"
@@ -73,6 +101,20 @@ const slug = useTeamSlug();
 </template>
 
 <style scoped>
+.scope-picker {
+    display: none;
+}
+
+@media (max-width: 767px) {
+    .scope-picker {
+        display: block;
+    }
+
+    .scope-list {
+        display: none;
+    }
+}
+
 .scope {
     display: block;
     width: 100%;

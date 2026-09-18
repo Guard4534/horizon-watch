@@ -2,6 +2,10 @@
 
 namespace Tests\Support;
 
+use App\Alerts\AlertEngine;
+use App\Alerts\EffectiveRules;
+use App\Alerts\Events\AlertOpened;
+use App\Alerts\Events\AlertResolved;
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
 use App\Enums\HorizonStatus;
@@ -11,6 +15,7 @@ use App\Models\EnvironmentState;
 use App\Models\Team;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Support\SyntheticReadings;
+use Illuminate\Support\Facades\Event;
 
 final class Readings
 {
@@ -59,22 +64,27 @@ final class Readings
             ...$snapshot,
         ];
 
-        if (in_array($status, [EnvironmentStatus::Unreachable, EnvironmentStatus::Inactive, EnvironmentStatus::Paused], true)
-            && ! EnvironmentSnapshot::query()->where('environment_id', $environment->id)->exists()) {
-            $snapshots->create([...$row, 'captured_at' => CarbonImmutable::parse($capturedAt)->subMinutes(self::STATE_RUN_MINUTES)]);
-        }
+        $stored = $snapshots->create([...$row, 'captured_at' => $capturedAt]);
 
-        $snapshots->create([...$row, 'captured_at' => $capturedAt]);
-
-        return $states->create([
+        $recorded = $states->create([
             'status' => $status,
             'horizon_status' => match ($status) {
                 EnvironmentStatus::Inactive => HorizonStatus::Inactive,
                 EnvironmentStatus::Paused => HorizonStatus::Paused,
                 default => HorizonStatus::Running,
             },
+            'status_since' => CarbonImmutable::parse($capturedAt)->subMinutes(
+                in_array($status, [EnvironmentStatus::Unreachable, EnvironmentStatus::Inactive, EnvironmentStatus::Paused], true) ? self::STATE_RUN_MINUTES : 0,
+            ),
             ...$state,
             'captured_at' => $state['captured_at'] ?? $capturedAt,
         ]);
+
+        Event::fakeFor(
+            fn () => (new AlertEngine(new EffectiveRules))->afterReading($environment, $stored->fresh(), $recorded->fresh()),
+            [AlertOpened::class, AlertResolved::class],
+        );
+
+        return $recorded;
     }
 }

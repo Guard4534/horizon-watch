@@ -2,6 +2,7 @@
 
 namespace App\Monitoring;
 
+use App\Alerts\RuleSet;
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
 use App\Externals\Horizon\Data\HorizonFailedJob;
@@ -10,26 +11,40 @@ use App\Externals\Horizon\Data\HorizonPendingJob;
 use App\Externals\Horizon\Data\HorizonQueueLoad;
 use App\Externals\Horizon\HorizonReading;
 use Carbon\CarbonImmutable;
+use Illuminate\Container\Attributes\Config;
 
 final class StatusEvaluator
 {
-    public const int FAILED_RATE_MINUTES = 60;
+    public function __construct(
+        #[Config('horizon-watch.readings.failed_rate_minutes')]
+        private readonly int $failedRateMinutes,
+    ) {}
 
-    public function evaluate(HorizonReading $reading): EvaluatedStatus
+    public function evaluate(HorizonReading $reading, RuleSet $rules, ?CarbonImmutable $at = null): EvaluatedStatus
     {
-        $failedLastHour = $this->failedLastHour($reading->failedJobs ?? []);
+        $at ??= CarbonImmutable::now();
+        $failedLastHour = $this->failedLastHour($reading->failedJobs ?? [], $at);
 
         if ($reading->stats->status === 'inactive' || $reading->masters === []) {
-            return new EvaluatedStatus(EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive], $failedLastHour);
+            return new EvaluatedStatus(
+                EnvironmentStatus::Inactive,
+                $this->enabled([AlertRuleMetric::HorizonMasterInactive], $rules),
+                $failedLastHour,
+            );
         }
 
         $breaches = array_values(array_filter(
             AlertRuleMetric::cases(),
-            fn (AlertRuleMetric $metric) => $this->breached($metric, $reading, $failedLastHour),
+            fn (AlertRuleMetric $metric) => $rules->for($metric)->enabled
+                && $this->breached($metric, $reading, $failedLastHour, $rules->for($metric)->threshold, $at),
         ));
 
         if ($reading->stats->status === 'paused' || $this->everyMasterPaused($reading->masters)) {
-            return new EvaluatedStatus(EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused, ...$breaches], $failedLastHour);
+            return new EvaluatedStatus(
+                EnvironmentStatus::Paused,
+                [...$this->enabled([AlertRuleMetric::HorizonPaused], $rules), ...$breaches],
+                $failedLastHour,
+            );
         }
 
         return new EvaluatedStatus(
@@ -40,11 +55,20 @@ final class StatusEvaluator
     }
 
     /**
+     * @param  list<AlertRuleMetric>  $metrics
+     * @return list<AlertRuleMetric>
+     */
+    private function enabled(array $metrics, RuleSet $rules): array
+    {
+        return array_values(array_filter($metrics, fn (AlertRuleMetric $metric) => $rules->for($metric)->enabled));
+    }
+
+    /**
      * @param  list<HorizonFailedJob>  $jobs
      */
-    public function failedLastHour(array $jobs): int
+    public function failedLastHour(array $jobs, ?CarbonImmutable $at = null): int
     {
-        $since = CarbonImmutable::now()->subMinutes(self::FAILED_RATE_MINUTES);
+        $since = ($at ?? CarbonImmutable::now())->subMinutes($this->failedRateMinutes);
 
         return count(array_filter($jobs, fn (HorizonFailedJob $job) => $job->failedAt->gte($since)));
     }
@@ -68,9 +92,8 @@ final class StatusEvaluator
         return true;
     }
 
-    private function breached(AlertRuleMetric $metric, HorizonReading $reading, int $failedLastHour): bool
+    private function breached(AlertRuleMetric $metric, HorizonReading $reading, int $failedLastHour, float $threshold, CarbonImmutable $at): bool
     {
-        $threshold = $metric->defaultThreshold();
         $workload = $reading->workload;
 
         return match ($metric) {
@@ -81,7 +104,7 @@ final class StatusEvaluator
                 $workload,
                 fn (HorizonQueueLoad $queue) => $queue->processes === 0 && $queue->length > 0,
             )) >= $threshold,
-            AlertRuleMetric::JobRuntime => $this->hasLongReservedJob($reading->pendingJobs ?? [], $threshold),
+            AlertRuleMetric::JobRuntime => $this->hasLongReservedJob($reading->pendingJobs ?? [], $threshold, $at),
             AlertRuleMetric::HorizonMasterInactive, AlertRuleMetric::EndpointUnreachable, AlertRuleMetric::HorizonPaused => false,
         };
     }
@@ -89,14 +112,12 @@ final class StatusEvaluator
     /**
      * @param  list<HorizonPendingJob>  $jobs
      */
-    private function hasLongReservedJob(array $jobs, float $thresholdSeconds): bool
+    private function hasLongReservedJob(array $jobs, float $thresholdSeconds, CarbonImmutable $at): bool
     {
-        $now = CarbonImmutable::now();
-
         foreach ($jobs as $job) {
             if ($job->status === 'reserved'
                 && $job->reservedAt !== null
-                && $job->reservedAt->diffInSeconds($now) > $thresholdSeconds) {
+                && $job->reservedAt->diffInSeconds($at) > $thresholdSeconds) {
                 return true;
             }
         }
