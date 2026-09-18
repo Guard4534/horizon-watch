@@ -70,15 +70,37 @@ final class AlertMail
         $value = self::number($alert->value ?? 0);
 
         return match ($alert->metric) {
-            AlertRuleMetric::HorizonMasterInactive => __('Horizon inactive for :minutes min', ['minutes' => $value]),
-            AlertRuleMetric::EndpointUnreachable => __('Endpoint unreachable for :minutes min', ['minutes' => $value]),
-            AlertRuleMetric::HorizonPaused => __('Horizon paused for :minutes min', ['minutes' => $value]),
+            AlertRuleMetric::HorizonMasterInactive => __('Horizon inactive for :duration', ['duration' => self::duration($alert->value ?? 0)]),
+            AlertRuleMetric::EndpointUnreachable => __('Endpoint unreachable for :duration', ['duration' => self::duration($alert->value ?? 0)]),
+            AlertRuleMetric::HorizonPaused => __('Horizon paused for :duration', ['duration' => self::duration($alert->value ?? 0)]),
             AlertRuleMetric::QueuePending => __(':count jobs pending', ['count' => $value]),
             AlertRuleMetric::QueueMaxWait => __('Oldest job waiting :seconds s', ['seconds' => $value]),
             AlertRuleMetric::JobRuntime => __('A job has been running for :seconds s', ['seconds' => $value]),
             AlertRuleMetric::JobsFailedPerHour => __(':count jobs failed in the last hour', ['count' => $value]),
             AlertRuleMetric::WorkersMissing => __(':count queues with waiting jobs and no worker', ['count' => $value]),
         };
+    }
+
+    public static function duration(float|int $minutes): string
+    {
+        $total = max(0, (int) round($minutes));
+        $days = intdiv($total, 1440);
+        $hours = intdiv($total % 1440, 60);
+        $rest = $total % 60;
+
+        if ($days > 0) {
+            return $hours === 0
+                ? __(':days d', ['days' => self::number($days)])
+                : __(':days d :hours h', ['days' => self::number($days), 'hours' => (string) $hours]);
+        }
+
+        if ($hours > 0) {
+            return $rest === 0
+                ? __(':hours h', ['hours' => (string) $hours])
+                : __(':hours h :minutes min', ['hours' => (string) $hours, 'minutes' => (string) $rest]);
+        }
+
+        return __(':minutes min', ['minutes' => (string) $rest]);
     }
 
     public static function detail(Alert $alert): ?string

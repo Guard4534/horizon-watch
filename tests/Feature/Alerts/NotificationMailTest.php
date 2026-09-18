@@ -121,6 +121,21 @@ test('every rule has its own headline and detail', function (AlertRuleMetric $me
     'workers' => [AlertRuleMetric::WorkersMissing, 5, ['queues' => ['default', 'emails']], '5 queues with waiting jobs and no worker', 'Queues: default, emails'],
 ]);
 
+test('a state rule headline reads its duration in minutes, hours and days', function (AlertRuleMetric $metric, float $minutes, string $english, string $italian) {
+    $this->alert->update(['metric' => $metric, 'value' => $minutes, 'detail' => [], 'unit' => $metric->unit()]);
+    $notification = new AlertNotification($this->alert);
+
+    expect(mailHtml($notification))->toContain($english)
+        ->and(mailHtml($notification, 'it'))->toContain($italian)
+        ->and(app(EmailPreview::class)->render($this->alert, 'en'))->toContain($english);
+})->with([
+    'minutes' => [AlertRuleMetric::HorizonMasterInactive, 59, 'Horizon inactive for 59 min', 'Horizon inattivo da 59 min'],
+    'whole hours' => [AlertRuleMetric::HorizonPaused, 120, 'Horizon paused for 2 h<', 'Horizon in pausa da 2 h<'],
+    'hours and minutes' => [AlertRuleMetric::HorizonMasterInactive, 1437, 'Horizon inactive for 23 h 57 min', 'Horizon inattivo da 23 h 57 min'],
+    'whole days' => [AlertRuleMetric::EndpointUnreachable, 2880, 'Endpoint unreachable for 2 d<', 'Endpoint non raggiungibile da 2 g<'],
+    'days and hours' => [AlertRuleMetric::EndpointUnreachable, 3000, 'Endpoint unreachable for 2 d 2 h', 'Endpoint non raggiungibile da 2 g 2 h'],
+]);
+
 test('an alert of a deleted environment has no panel link and no nodes', function () {
     $alert = Alert::factory()->critical()->create([
         'environment_id' => null,
