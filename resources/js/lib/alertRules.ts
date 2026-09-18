@@ -11,7 +11,12 @@ import {
 import { trans } from 'laravel-vue-i18n';
 import type { Component } from 'vue';
 
-export const DEFAULT_PENDING_THRESHOLD = 2000;
+export function thresholdOf(
+    environment: App.Data.Monitoring.EnvironmentData,
+    metric: App.Enums.AlertRuleMetric,
+): number {
+    return environment.thresholds[metric] ?? 0;
+}
 
 const ICONS: Record<App.Enums.AlertRuleMetric, Component> = {
     'horizon.master_inactive': PhPower,

@@ -23,10 +23,9 @@ class DeleteApplication
         }
 
         DB::transaction(function () use ($application) {
-            $now = CarbonImmutable::now();
-
-            $application->environments()->each(
-                fn (Environment $environment) => $this->alerts->resolveAllFor($environment, $now),
+            $this->alerts->resolveAllIn(
+                Environment::query()->where('application_id', $application->id),
+                CarbonImmutable::now(),
             );
 
             $application->delete();

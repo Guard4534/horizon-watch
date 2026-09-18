@@ -190,7 +190,7 @@ test('a seven-day failed window is carried to every page that shows the count', 
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environments.0.failedInWindow', 300)
             ->where('page.environments.0.failedWindowMinutes', 10080)
-            ->where('page.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
+            ->where('page.environments.0.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
                 && (float) $thresholds['queue.pending'] === AlertRuleMetric::QueuePending->defaultThreshold()));
 
     $this->get(route('applications.index', ['current_team' => $this->team->slug]))

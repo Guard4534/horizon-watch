@@ -22,7 +22,6 @@ class WallQuery
 
         $anomalies = $this->monitoring->openAlerts($team);
         $sum = fn (callable $value) => array_sum(array_map($value, $environments));
-        $threshold = AlertRuleMetric::JobsFailedPerHour->defaultThreshold();
 
         return new WallPageData(
             kpis: new WallKpisData(
@@ -35,7 +34,7 @@ class WallQuery
                 failedWindowMinutes: $this->commonFailedWindow($environments),
                 environmentsOverFailedRate: count(array_filter(
                     $environments,
-                    fn (EnvironmentData $environment) => $environment->failedLastHour > $threshold,
+                    fn (EnvironmentData $environment) => $environment->failedLastHour > $environment->thresholds[AlertRuleMetric::JobsFailedPerHour->value],
                 )),
             ),
             environments: $environments,
@@ -44,7 +43,6 @@ class WallQuery
             jobsPerMinute: $sum(fn (EnvironmentData $environment) => $environment->jobsPerMinute),
             notifications: $this->monitoring->sentNotifications($team),
             applicationCount: count($this->monitoring->applications($team)),
-            failedPerHourThreshold: $threshold,
         );
     }
 

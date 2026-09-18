@@ -747,7 +747,7 @@ test('a paused horizon opens its own alert, with the thresholds it still breaks'
         ->and($alerts[0]->severity->value)->toBe('warning');
 });
 
-test('the wall and its sidebar badge share one repository, so the open alerts are read once', function () {
+test('the wall reads its open alerts once, and the sidebar badge counts them in one aggregate', function () {
     $application = Application::factory()->for($this->team)->create();
     $environment = Environment::factory()->for($application)->production()->create();
     Readings::record($environment, EnvironmentStatus::Unreachable);
@@ -759,7 +759,10 @@ test('the wall and its sidebar badge share one repository, so the open alerts ar
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('openAlertCount', 1)->has('page.anomalies', 1));
 
-    expect(collect(DB::getQueryLog())->filter(fn (array $query) => str_contains($query['query'], 'from "alerts"')))->toHaveCount(1);
+    $reads = collect(DB::getQueryLog())->filter(fn (array $query) => str_contains($query['query'], 'from "alerts"'))->pluck('query');
+
+    expect($reads)->toHaveCount(2)
+        ->and($reads->filter(fn (string $sql) => str_contains($sql, 'count(*) filter')))->toHaveCount(1);
 });
 
 test('the scoped repository does not carry one request into the next', function () {

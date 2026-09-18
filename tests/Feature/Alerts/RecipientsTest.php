@@ -12,6 +12,9 @@ use App\Models\Application;
 use App\Models\Environment;
 use App\Models\NotificationSetting;
 use App\Models\Team;
+use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Validator;
 use Tests\Support\AlertTeam;
 
 beforeEach(function () {
@@ -95,7 +98,7 @@ test('an alert of a deleted environment goes only to the extra addresses', funct
         'metric' => AlertRuleMetric::QueuePending,
     ]);
 
-    expect(recipientEmails(app(Recipients::class)->forAlert($alert)))->toBe(['ops@example.com', 'admin@example.com', 'oncall@example.com']);
+    expect(recipientEmails(app(Recipients::class)->forAlert($alert)))->toBe(['admin@example.com', 'ops@example.com', 'oncall@example.com']);
 });
 
 test('without settings only members are recipients', function () {
@@ -130,4 +133,43 @@ test('a manual member with no grant gets an empty list, not every environment', 
     $recipients = collect(app(Recipients::class)->forDigest($this->team))->keyBy('email');
 
     expect($recipients['nothing@example.com']['environmentIds'])->toBe([]);
+});
+
+test('an address that is also an extra address reaches every environment, as a member in their language', function () {
+    NotificationSetting::query()->whereKey($this->team->id)->update(['recipients' => json_encode(['ops@example.com', 'DEV@example.com'])]);
+    $production = Alert::factory()->for($this->production)->create(['metric' => AlertRuleMetric::QueuePending]);
+    $gone = Alert::factory()->create([
+        'environment_id' => null,
+        'team_id' => $this->team->id,
+        'application_name' => 'Shop',
+        'environment_name' => 'gone',
+        'environment_color' => EnvironmentColor::Staging,
+        'metric' => AlertRuleMetric::QueuePending,
+    ]);
+
+    $digest = collect(app(Recipients::class)->forDigest($this->team))->keyBy('email');
+    $alert = collect(app(Recipients::class)->forAlert($production))->keyBy('email');
+
+    expect($digest['dev@example.com']['environmentIds'])->toBeNull()
+        ->and($digest['dev@example.com']['user']?->is($this->nonProduction))->toBeTrue()
+        ->and($digest['viewer@example.com']['environmentIds'])->toBe([$this->production->id])
+        ->and($alert->keys()->all())->toBe(['admin@example.com', 'dev@example.com', 'viewer@example.com', 'ops@example.com'])
+        ->and($alert['dev@example.com']['user']?->is($this->nonProduction))->toBeTrue()
+        ->and(recipientEmails(app(Recipients::class)->forAlert($gone)))->toBe(['dev@example.com', 'ops@example.com']);
+});
+
+test('extra addresses are checked at send time with the rule that saved them, and a skipped one is logged by count only', function () {
+    $logged = [];
+    Event::listen(MessageLogged::class, function (MessageLogged $message) use (&$logged) {
+        $logged[] = [$message->level, $message->message, $message->context];
+    });
+    NotificationSetting::query()->whereKey($this->team->id)->update(['recipients' => json_encode(['josé@example.com', 'not-an-address', 'ops@example.com'])]);
+
+    expect(Validator::make(['address' => 'josé@example.com'], ['address' => 'email:rfc'])->passes())->toBeTrue()
+        ->and(recipientEmails(app(Recipients::class)->forDigest($this->team)))->toBe(['admin@example.com', 'dev@example.com', 'viewer@example.com', 'josé@example.com', 'ops@example.com'])
+        ->and(app(Recipients::class)->extraAddress($this->team, Recipients::addressKey('josé@example.com')))->toBe('josé@example.com')
+        ->and(app(Recipients::class)->extraAddress($this->team, Recipients::addressKey('not-an-address')))->toBeNull()
+        ->and($logged)->not->toBeEmpty()
+        ->and($logged[0])->toBe(['warning', 'Invalid extra alert addresses skipped.', ['team' => $this->team->id, 'count' => 1]])
+        ->and(json_encode($logged))->not->toContain('not-an-address');
 });

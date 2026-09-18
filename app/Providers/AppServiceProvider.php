@@ -5,6 +5,7 @@ namespace App\Providers;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Mail\Markdown;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
@@ -41,5 +42,7 @@ class AppServiceProvider extends ServiceProvider
         );
 
         Password::defaults(fn (): Password => Password::min(10)->letters()->numbers());
+
+        Markdown::withSecuredEncoding();
     }
 }

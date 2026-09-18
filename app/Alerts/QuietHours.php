@@ -9,6 +9,10 @@ use Throwable;
 
 final class QuietHours
 {
+    public const int DIGEST_TICK_SECONDS = 900;
+
+    private const int DAY_SECONDS = 86400;
+
     public static function contains(?string $from, ?string $to, string $timezone, CarbonImmutable $at): bool
     {
         $start = self::seconds($from);
@@ -19,17 +23,46 @@ final class QuietHours
         }
 
         $local = $at->setTimezone(self::zone($timezone));
-        $now = $local->hour * 3600 + $local->minute * 60 + $local->second;
 
-        return $start < $end
-            ? $now >= $start && $now < $end
-            : $now >= $start || $now < $end;
+        return self::inside($start, $end, $local->hour * 3600 + $local->minute * 60 + $local->second);
     }
 
     public static function forSetting(?NotificationSetting $setting, CarbonImmutable $at): bool
     {
         return $setting !== null
             && self::contains($setting->quiet_from, $setting->quiet_to, $setting->timezone, $at);
+    }
+
+    public static function holdsDigest(?NotificationSetting $setting, CarbonImmutable $at): bool
+    {
+        return $setting !== null
+            && self::forSetting($setting, $at)
+            && ! self::coversEveryTick($setting->quiet_from, $setting->quiet_to);
+    }
+
+    public static function coversEveryTick(?string $from, ?string $to): bool
+    {
+        $start = self::seconds($from);
+        $end = self::seconds($to);
+
+        if ($start === null || $end === null || $start === $end) {
+            return false;
+        }
+
+        for ($tick = 0; $tick < self::DAY_SECONDS; $tick += self::DIGEST_TICK_SECONDS) {
+            if (! self::inside($start, $end, $tick)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function inside(int $start, int $end, int $now): bool
+    {
+        return $start < $end
+            ? $now >= $start && $now < $end
+            : $now >= $start || $now < $end;
     }
 
     private static function seconds(?string $time): ?int

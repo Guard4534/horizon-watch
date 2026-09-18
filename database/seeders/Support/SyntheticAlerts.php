@@ -138,6 +138,7 @@ final class SyntheticAlerts
                 'notified' => $critical,
                 'last_notified_at' => $critical ? $openedAt : null,
                 'digested_at' => $critical ? null : $openedAt->addMinutes(15),
+                'resolution_notified_at' => $critical ? $openedAt->addMinutes(6 + $index * 3) : null,
             ]);
 
             if ($critical) {

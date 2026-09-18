@@ -20,6 +20,11 @@ final class EffectiveRules
      */
     private array $rowsByTeam = [];
 
+    /**
+     * @var array<int, array<string, RuleSet>>
+     */
+    private array $resolvedByTeam = [];
+
     public function forEnvironment(Environment $environment): RuleSet
     {
         return $this->resolve($environment->team_id, Str::lower($environment->name));
@@ -58,6 +63,11 @@ final class EffectiveRules
     }
 
     private function resolve(int $teamId, string $scope): RuleSet
+    {
+        return $this->resolvedByTeam[$teamId][$scope] ??= $this->merged($teamId, $scope);
+    }
+
+    private function merged(int $teamId, string $scope): RuleSet
     {
         $rows = $this->rows($teamId);
         $organization = $rows[AlertRule::ORGANIZATION] ?? [];

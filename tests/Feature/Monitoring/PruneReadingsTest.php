@@ -143,3 +143,19 @@ test('old alerts are deleted in chunks, and the alert retention is not the readi
     expect($deletes)->toBe(4)
         ->and(Alert::query()->pluck('id')->all())->toBe([$recent->id]);
 });
+
+test('an open alert left without its environment is resolved, and the others stay as they are', function () {
+    $orphan = Alert::factory()->for(Environment::factory())->create(['metric' => AlertRuleMetric::QueuePending]);
+    $open = Alert::factory()->for($this->environment)->create();
+    $orphan->forceFill(['environment_id' => null])->save();
+    $resolved = Alert::factory()->for(Environment::factory())->create(['resolved_at' => '2026-09-16 10:00:00']);
+    $resolved->forceFill(['environment_id' => null])->save();
+
+    $this->artisan('monitoring:prune')
+        ->expectsOutput('Resolved 1 orphaned alert.')
+        ->assertSuccessful();
+
+    expect($orphan->fresh()->resolved_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and($open->fresh()->resolved_at)->toBeNull()
+        ->and($resolved->fresh()->resolved_at->toDateTimeString())->toBe('2026-09-16 10:00:00');
+});

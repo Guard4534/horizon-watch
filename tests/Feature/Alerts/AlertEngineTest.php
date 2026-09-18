@@ -621,3 +621,195 @@ test('deleting an organization removes its alerts, rules, settings and log, and 
         ->and(AlertRule::query()->pluck('team_id')->all())->toBe([$survivor->team_id])
         ->and(NotificationSetting::query()->pluck('team_id')->all())->toBe([$survivor->team_id]);
 });
+
+test('an inactive reading leaves the open threshold alerts as they are, since it judges no threshold', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->reading)([
+        'stats' => new HorizonStats(status: 'inactive', jobsPerMinute: 0, failedJobs: 0, processes: 0, pausedMasters: 0, wait: [], failedJobsPeriodMinutes: 1440),
+        'masters' => [],
+        'workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 2, processes: 0)],
+    ]));
+
+    $alert = Alert::query()->where('metric', AlertRuleMetric::QueuePending)->sole();
+
+    expect($alert->resolved_at)->toBeNull()
+        ->and($alert->last_seen_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and($alert->severity)->toBe(AlertSeverity::Critical);
+    Event::assertNotDispatched(AlertResolved::class);
+});
+
+test('an inactive reading opens no threshold alert', function () {
+    ($this->poll)(($this->reading)([
+        'stats' => new HorizonStats(status: 'inactive', jobsPerMinute: 0, failedJobs: 0, processes: 0, pausedMasters: 0, wait: [], failedJobsPeriodMinutes: 1440),
+        'masters' => [],
+        'workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 200, processes: 0)],
+    ]));
+
+    expect(Alert::query()->count())->toBe(0);
+});
+
+test('the first active reading after an inactive one judges the thresholds again', function () {
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->inactive)());
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(10));
+
+    expect(Alert::query()->where('metric', AlertRuleMetric::QueuePending)->sole()->resolved_at->toDateTimeString())
+        ->toBe('2026-09-17 10:00:30');
+    Event::assertDispatchedTimes(AlertResolved::class, 1);
+});
+
+test('a notified alert keeps its severity when the rule is lowered, so its resolution is still told', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+    ($this->poll)(($this->pending)(2500));
+    Alert::query()->update(['notified' => true]);
+
+    AlertRule::query()->update(['severity' => AlertSeverity::Warning]);
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->severity)->toBe(AlertSeverity::Critical)
+        ->and($alert->value)->toBe(2600.0)
+        ->and($alert->last_seen_at->toDateTimeString())->toBe('2026-09-17 10:00:15');
+});
+
+test('an alert not notified yet follows a lowered severity', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+    ($this->poll)(($this->pending)(2500));
+
+    AlertRule::query()->update(['severity' => AlertSeverity::Warning]);
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    expect(Alert::query()->sole()->severity)->toBe(AlertSeverity::Warning);
+});
+
+test('a notified warning is still raised to critical', function () {
+    ($this->poll)(($this->pending)(2500));
+    Alert::query()->update(['notified' => true]);
+
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    expect(Alert::query()->sole()->severity)->toBe(AlertSeverity::Critical);
+});
+
+test('the long job of a reading is judged at the instant the reading was taken', function (string $reservedAt, ?float $value) {
+    $job = new HorizonPendingJob(name: 'App\\Jobs\\BuildReport', queue: 'reports', status: 'reserved', reservedAt: CarbonImmutable::parse($reservedAt));
+
+    ($this->poll)(function () use ($job) {
+        $this->travel(4)->seconds();
+
+        return ($this->reading)(['pendingJobs' => [$job]]);
+    });
+
+    $alert = Alert::query()->where('metric', AlertRuleMetric::JobRuntime)->first();
+
+    expect($alert?->value)->toBe($value);
+
+    if ($alert !== null) {
+        expect($alert->value)->toBeGreaterThan($alert->threshold);
+    }
+})->with([
+    'under the threshold when the reading was taken' => ['2026-09-17 09:58:02', null],
+    'over the threshold when the reading was taken' => ['2026-09-17 09:57:58', 122.0],
+]);
+
+test('the failed jobs of the last hour are counted from the instant the reading was taken', function () {
+    $failedAt = CarbonImmutable::parse('2026-09-17 09:00:02');
+
+    ($this->poll)(function () use ($failedAt) {
+        $this->travel(4)->seconds();
+
+        return ($this->reading)(['failedJobs' => [new HorizonFailedJob(
+            name: 'App\\Jobs\\SendInvoiceEmail',
+            queue: 'emails',
+            exception: 'RuntimeException',
+            attempts: 1,
+            failedAt: $failedAt,
+        )]]);
+    });
+
+    expect(EnvironmentSnapshot::query()->sole()->failed_last_hour)->toBe(1);
+});
+
+test('deleting an environment locks its row before it touches the alerts', function () {
+    $owner = User::factory()->create();
+    $this->team->members()->attach($owner, ['role' => TeamRole::Owner->value, 'visibility' => MemberVisibility::All->value]);
+    Alert::factory()->for($this->environment)->create();
+    $statements = [];
+
+    DB::listen(function (QueryExecuted $query) use (&$statements) {
+        $statements[] = $query->sql;
+    });
+
+    $this->actingAs($owner)
+        ->delete(route('environments.destroy', ['current_team' => $this->team->slug, 'environment' => $this->environment->slug]), [
+            'name' => $this->environment->name,
+        ])
+        ->assertRedirect();
+
+    expect(firstStatementIndex($statements, 'from "environments"', 'for update'))
+        ->toBeLessThan(firstStatementIndex($statements, 'update "alerts"'));
+});
+
+test('deleting an application locks the rows of its environments, in id order, before it touches the alerts', function () {
+    $owner = User::factory()->create();
+    $this->team->members()->attach($owner, ['role' => TeamRole::Owner->value, 'visibility' => MemberVisibility::All->value]);
+    Environment::factory()->for($this->application)->staging()->create();
+    Alert::factory()->for($this->environment)->create();
+    $statements = [];
+
+    DB::listen(function (QueryExecuted $query) use (&$statements) {
+        $statements[] = $query->sql;
+    });
+
+    $this->actingAs($owner)
+        ->delete(route('applications.destroy', ['current_team' => $this->team->slug, 'application' => $this->application->slug]), [
+            'name' => $this->application->name,
+        ])
+        ->assertRedirect();
+
+    $lock = firstStatementIndex($statements, 'from "environments"', 'for update');
+
+    expect($lock)->toBeLessThan(firstStatementIndex($statements, 'update "alerts"'))
+        ->and($statements[$lock])->toContain('order by "environments"."id" asc');
+});
+
+test('deleting an organization locks the rows of its environments before it touches the alerts', function () {
+    $owner = User::factory()->create();
+    $this->team->members()->attach($owner, ['role' => TeamRole::Owner->value, 'visibility' => MemberVisibility::All->value]);
+    Alert::factory()->for($this->environment)->create();
+    $statements = [];
+
+    DB::listen(function (QueryExecuted $query) use (&$statements) {
+        $statements[] = $query->sql;
+    });
+
+    $this->actingAs($owner)
+        ->delete(route('teams.destroy', $this->team), ['name' => $this->team->name])
+        ->assertRedirect();
+
+    expect(firstStatementIndex($statements, 'from "environments"', 'for update'))
+        ->toBeLessThan(firstStatementIndex($statements, 'delete from "alerts"'));
+});
+
+/**
+ * @param  list<string>  $statements
+ */
+function firstStatementIndex(array $statements, string ...$fragments): int
+{
+    foreach ($statements as $index => $sql) {
+        if (array_all($fragments, fn (string $fragment) => str_contains($sql, $fragment))) {
+            return $index;
+        }
+    }
+
+    return PHP_INT_MAX;
+}

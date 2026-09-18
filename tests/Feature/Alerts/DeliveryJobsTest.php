@@ -23,9 +23,13 @@ use App\Notifications\Alerts\ResolvedNotification;
 use App\Notifications\Alerts\TestNotification;
 use App\Notifications\Alerts\WarningDigestNotification;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\AlertTeam;
@@ -149,7 +153,8 @@ test('a digest email renders only the alerts it names, of its organization', fun
     Notification::assertSentOnDemandTimes(WarningDigestNotification::class, 1);
 });
 
-test('a mail failure is retried and logged as a bare code, never with the address', function () {
+function closedSmtpPort(): void
+{
     $socket = stream_socket_server('tcp://127.0.0.1:0');
     $port = (int) substr((string) strrchr((string) stream_socket_get_name($socket, false), ':'), 1);
     fclose($socket);
@@ -159,36 +164,103 @@ test('a mail failure is retried and logged as a bare code, never with the addres
         'mail.mailers.smtp.port' => $port,
         'mail.mailers.smtp.timeout' => 1,
     ]);
+}
+
+function workOneEmail(): void
+{
+    Artisan::call('queue:work', ['connection' => 'database', '--once' => true, '--queue' => 'default', '--sleep' => 0]);
+}
+
+test('a mail failure is retried by the worker with its backoff, then logged once as failed without the address', function () {
+    closedSmtpPort();
     $logged = [];
     Event::listen(MessageLogged::class, function (MessageLogged $message) use (&$logged) {
         $logged[] = $message->message.json_encode($message->context);
     });
 
-    $job = emailJob($this->team, $this->alert->id, SentNotificationKind::CriticalAlert, null, 'ops@example.com');
+    dispatch(emailJob($this->team, $this->alert->id, SentNotificationKind::CriticalAlert, null, 'ops@example.com')->onConnection('database'));
 
-    try {
-        app()->call([$job, 'handle']);
-        $failure = null;
-    } catch (Throwable $exception) {
-        $failure = $exception;
-    }
+    workOneEmail();
+    workOneEmail();
 
-    expect($failure)->not->toBeNull()
-        ->and($failure->getMessage())->toBe('mail')
-        ->and($failure->getPrevious())->toBeNull()
-        ->and($failure->getTraceAsString().TraceArguments::ofAppFrames($failure))->not->toContain('ops@example.com')
-        ->and(DeliveryLog::query()->count())->toBe(0)
-        ->and($job->tries)->toBe(3)
-        ->and($job->backoff)->toBe([10, 60]);
+    expect(DeliveryLog::query()->count())->toBe(0)
+        ->and(DB::table('jobs')->value('attempts'))->toBe(1);
 
-    $job->failed($failure);
+    $this->travel(10)->seconds();
+    workOneEmail();
+
+    expect(DeliveryLog::query()->count())->toBe(0)
+        ->and(DB::table('jobs')->value('attempts'))->toBe(2);
+
+    $this->travel(59)->seconds();
+    workOneEmail();
+
+    expect(DB::table('jobs')->value('attempts'))->toBe(2);
+
+    $this->travel(1)->seconds();
+    workOneEmail();
 
     $log = DeliveryLog::query()->sole();
+    $failedJob = DB::table('failed_jobs')->sole();
 
     expect($log->status)->toBe(DeliveryStatus::Failed)
         ->and($log->error)->toBe(DeliveryError::Mail->value)
         ->and($log->target)->toBe('ops@example.com')
+        ->and($log->delivery_id)->not->toBeNull()
+        ->and(DB::table('jobs')->count())->toBe(0)
+        ->and((string) $failedJob->exception)->toStartWith('RuntimeException: mail')
+        ->and(json_encode($failedJob))->not->toContain('ops@example.com')
         ->and(implode("\n", $logged))->not->toContain('ops@example.com');
+});
+
+test('a failing delivery log leaks no address and sends nothing, and a delivered email is never sent twice', function () {
+    Notification::fake();
+    Exceptions::fake();
+    $broken = true;
+    DeliveryLog::creating(function (DeliveryLog $log) use (&$broken) {
+        if ($broken) {
+            throw new QueryException('pgsql', 'insert into "alert_notifications" ("target") values (?)', [$log->target], new PDOException('connection lost'));
+        }
+    });
+
+    dispatch(emailJob($this->team, $this->alert->id, SentNotificationKind::CriticalAlert, null, 'ops@example.com')->onConnection('database'));
+
+    workOneEmail();
+    $this->travel(10)->seconds();
+    workOneEmail();
+    $this->travel(60)->seconds();
+    workOneEmail();
+
+    Notification::assertNothingSent();
+
+    $reported = collect(Exceptions::reported())->map(fn (Throwable $exception) => $exception::class.' '.$exception->getMessage().' '.$exception->getTraceAsString().' '.TraceArguments::ofAppFrames($exception))->implode("\n");
+
+    expect(DeliveryLog::query()->count())->toBe(0)
+        ->and(DB::table('failed_jobs')->count())->toBe(1)
+        ->and(json_encode(DB::table('failed_jobs')->get()))->not->toContain('ops@example.com')
+        ->and($reported)->not->toBe('')
+        ->not->toContain('ops@example.com');
+
+    $broken = false;
+    $job = emailJob($this->team, $this->alert->id, SentNotificationKind::CriticalAlert, null, 'ops@example.com');
+
+    dispatch_sync($job);
+    dispatch_sync($job);
+    $job->failed(new RuntimeException('mail'));
+
+    Notification::assertSentOnDemandTimes(AlertNotification::class, 1);
+
+    expect(DeliveryLog::query()->sole()->delivery_id)->toBe($job->deliveryId)
+        ->and(DeliveryLog::query()->sole()->status)->toBe(DeliveryStatus::Sent);
+});
+
+test('every email job carries its own delivery id', function () {
+    $first = emailJob($this->team, $this->alert->id, SentNotificationKind::CriticalAlert, null, 'ops@example.com');
+    $second = emailJob($this->team, $this->alert->id, SentNotificationKind::CriticalAlert, null, 'ops@example.com');
+
+    expect($first->deliveryId)->toMatch('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/')
+        ->and($first->deliveryId)->not->toBe($second->deliveryId)
+        ->and(unserialize(serialize($first))->deliveryId)->toBe($first->deliveryId);
 });
 
 test('a mail test goes to the saved addresses and to whoever asked, in their language', function () {

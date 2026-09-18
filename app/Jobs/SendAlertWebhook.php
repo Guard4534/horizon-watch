@@ -16,6 +16,8 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 class SendAlertWebhook implements ShouldQueue
@@ -31,6 +33,8 @@ class SendAlertWebhook implements ShouldQueue
 
     public int $timeout;
 
+    public readonly string $deliveryId;
+
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -45,11 +49,12 @@ class SendAlertWebhook implements ShouldQueue
         $this->tries = config()->integer('horizon-watch.notifications.delivery_tries');
         $this->backoff = array_values(array_map(intval(...), config()->array('horizon-watch.notifications.delivery_backoff_seconds')));
         $this->timeout = config()->integer('horizon-watch.notifications.delivery_timeout_seconds');
+        $this->deliveryId = (string) Str::uuid();
     }
 
     public function handle(WebhookClient $client): void
     {
-        $setting = $this->setting();
+        $setting = $this->recorded() ? null : $this->setting();
 
         if ($setting === null) {
             return;
@@ -59,7 +64,7 @@ class SendAlertWebhook implements ShouldQueue
             $client->post(
                 (string) $setting->webhook_url,
                 (string) $setting->webhook_secret,
-                WebhookPayload::stamped($this->payload, CarbonImmutable::now()),
+                WebhookPayload::stamped($this->payload, CarbonImmutable::now(), $this->deliveryId),
             );
         } catch (WebhookFailed $exception) {
             if ($exception->reason === DeliveryError::Blocked) {
@@ -76,15 +81,29 @@ class SendAlertWebhook implements ShouldQueue
 
     public function failed(?Throwable $exception): void
     {
-        $setting = $this->setting();
+        try {
+            $setting = $this->recorded() ? null : $this->setting();
 
-        if ($setting !== null) {
-            $this->log(
-                DeliveryStatus::Failed,
-                $exception instanceof WebhookFailed ? $exception->reason : DeliveryError::Unreachable,
-                $setting,
-            );
+            if ($setting !== null) {
+                $this->log(
+                    DeliveryStatus::Failed,
+                    $exception instanceof WebhookFailed ? $exception->reason : DeliveryError::Unreachable,
+                    $setting,
+                );
+            }
+        } catch (Throwable $failure) {
+            report(new RuntimeException(sprintf(
+                'Recording a failed alert webhook threw %s at %s:%d.',
+                $failure::class,
+                $failure->getFile(),
+                $failure->getLine(),
+            )));
         }
+    }
+
+    private function recorded(): bool
+    {
+        return DeliveryLog::query()->where('delivery_id', $this->deliveryId)->exists();
     }
 
     private function setting(): ?NotificationSetting
@@ -108,6 +127,7 @@ class SendAlertWebhook implements ShouldQueue
             'error' => $error?->value,
             'sent_at' => Date::now(),
             'environment_count' => $this->environmentCount,
+            'delivery_id' => $this->deliveryId,
         ]);
     }
 

@@ -17,7 +17,5 @@ class ApplicationDetailPageData extends Data
         /** @var array<int, AlertData> */
         public array $recentAlerts,
         public ?EnvironmentStatus $worstStatus,
-        /** @var array<string, float> */
-        public array $thresholds,
     ) {}
 }

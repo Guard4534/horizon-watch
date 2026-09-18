@@ -13,12 +13,12 @@ import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { thresholdOf } from '@/lib/alertRules';
 import { formatCount, formatWait, waitColor } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
-const { environment, thresholds } = defineProps<{
+const { environment } = defineProps<{
     environment: App.Data.Monitoring.EnvironmentData;
-    thresholds: Record<string, number>;
 }>();
 
 const slug = useTeamSlug();
@@ -120,7 +120,7 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                         color: hasNumbers
                             ? pendingTone(
                                   environment.pending,
-                                  thresholds['queue.pending'] ?? 0,
+                                  thresholdOf(environment, 'queue.pending'),
                               )
                             : undefined,
                     }"
@@ -138,7 +138,7 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                         color: hasNumbers
                             ? waitColor(
                                   environment.maxWaitSeconds,
-                                  thresholds['queue.max_wait'],
+                                  thresholdOf(environment, 'queue.max_wait'),
                               )
                             : undefined,
                     }"

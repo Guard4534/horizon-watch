@@ -9,8 +9,9 @@ import { useTeamSlug } from '@/composables/useTeamSlug';
 import { ASSIGNABLE_ROLES, VISIBILITIES, visibilityLabel } from '@/lib/members';
 import { store as storeInvitation } from '@/routes/members/invitations';
 
-const { environments } = defineProps<{
+const { environments, expiresDays } = defineProps<{
     environments: App.Data.Pages.EnvironmentOptionData[];
+    expiresDays: number;
 }>();
 
 const slug = useTeamSlug();
@@ -142,7 +143,10 @@ function reset() {
 
             <div style="font-size: 11px; color: var(--nc-neutral-600)">
                 {{
-                    $t('The invitation expires after 7 days and can be resent.')
+                    $t(
+                        'The invitation expires after :days days and can be resent.',
+                        { days: String(expiresDays) },
+                    )
                 }}
             </div>
         </Form>

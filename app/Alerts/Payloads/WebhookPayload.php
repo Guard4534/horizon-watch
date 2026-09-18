@@ -26,6 +26,7 @@ final class WebhookPayload
     {
         return [
             'event' => $event,
+            'delivery_id' => null,
             'alert' => self::alert($alert),
             'organization' => self::organization($alert->team),
             'sent_at' => null,
@@ -40,6 +41,7 @@ final class WebhookPayload
     {
         return [
             'event' => self::DIGEST,
+            'delivery_id' => null,
             'alerts' => $alerts->map(self::alert(...))->values()->all(),
             'organization' => self::organization($team),
             'sent_at' => null,
@@ -53,6 +55,7 @@ final class WebhookPayload
     {
         return [
             'event' => self::TEST,
+            'delivery_id' => null,
             'alert' => null,
             'organization' => self::organization($team),
             'sent_at' => null,
@@ -63,8 +66,9 @@ final class WebhookPayload
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    public static function stamped(array $payload, CarbonImmutable $at): array
+    public static function stamped(array $payload, CarbonImmutable $at, string $deliveryId): array
     {
+        $payload['delivery_id'] = $deliveryId;
         $payload['sent_at'] = $at->utc()->toIso8601ZuluString();
 
         return $payload;

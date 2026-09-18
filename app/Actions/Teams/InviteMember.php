@@ -21,7 +21,7 @@ class InviteMember
                 'role' => $data->role,
                 'visibility' => $data->visibility,
                 'invited_by' => $inviter->id,
-                'expires_at' => now()->addDays(7),
+                'expires_at' => now()->addDays(TeamInvitation::lifetimeDays()),
             ]);
 
             if ($data->visibility === MemberVisibility::Manual) {

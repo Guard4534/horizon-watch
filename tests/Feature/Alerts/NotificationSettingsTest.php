@@ -1,5 +1,7 @@
 <?php
 
+use App\Actions\Alerts\UpdateNotificationSettings;
+use App\Data\Alerts\NotificationSettingsInputData;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Externals\Horizon\Dns\Resolver;
@@ -8,6 +10,7 @@ use App\Models\Environment;
 use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -214,7 +217,7 @@ test('regenerating without an address is refused', function (bool $withRow) {
 
 test('a session value that is not a sealed secret is ignored', function () {
     $this->actingAs($this->admin)
-        ->withSession(['alert-settings.new-webhook-secret' => 'plain-text'])
+        ->withSession(['alert-settings.new-webhook-secret.'.$this->team->id => 'plain-text'])
         ->get(route('alert-rules.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', null));
 });
@@ -371,3 +374,69 @@ test('the settings of another organization never leak into the page', function (
         ->where('page.notifications.recipients', [])
         ->where('page.notifications.webhookUrl', null));
 });
+
+test('the one-time secret shows only on the rules page of the organization it belongs to', function () {
+    $other = Team::factory()->create();
+    Environment::factory()->for(Application::factory()->for($other))->production()->create();
+    $other->members()->attach($this->admin, ['role' => TeamRole::Admin->value, 'visibility' => MemberVisibility::All->value]);
+
+    $this->actingAs($this->admin);
+    ($this->save)();
+    $secret = NotificationSetting::query()->sole()->webhook_secret;
+
+    $elsewhere = $this->get(route('alert-rules.index', ['current_team' => $other->slug]));
+
+    $elsewhere->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', null));
+    expect($elsewhere->getContent())->not->toContain($secret);
+});
+
+test('the page that shows the secret is encrypted in the browser history, and the next page clears that history', function () {
+    $this->actingAs($this->admin);
+
+    ($this->page)()->assertInertia(fn (Assert $page) => expect($page->toArray())->not->toHaveKeys(['encryptHistory', 'clearHistory']));
+
+    ($this->save)();
+
+    ($this->page)()->assertInertia(fn (Assert $page) => expect($page->toArray())
+        ->toHaveKey('encryptHistory', true)
+        ->not->toHaveKey('clearHistory')
+        ->and($page->toArray()['props']['page']['newWebhookSecret'])->toBeString());
+
+    $this->get(route('wall', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => expect($page->toArray())->toHaveKey('clearHistory', true)->not->toHaveKey('encryptHistory'));
+
+    ($this->page)()->assertInertia(fn (Assert $page) => expect($page->toArray())->not->toHaveKeys(['encryptHistory', 'clearHistory']));
+});
+
+test('saving the same settings twice keeps one row and the first secret', function () {
+    $this->actingAs($this->admin);
+
+    ($this->save)()->assertSessionHasNoErrors();
+    $secret = NotificationSetting::query()->sole()->webhook_secret;
+    ($this->save)()->assertSessionHasNoErrors();
+
+    expect(NotificationSetting::query()->sole()->webhook_secret)->toBe($secret);
+});
+
+test('a first save that loses the race for the row updates it instead of failing', function (bool $competitorHasAddress) {
+    $raced = false;
+
+    DB::beforeExecuting(function (string $sql) use (&$raced, $competitorHasAddress) {
+        if (! $raced && str_starts_with($sql, 'insert into "notification_settings"')) {
+            $raced = true;
+            NotificationSetting::factory()->for($this->team)->create([
+                'webhook_url' => $competitorHasAddress ? 'https://hooks.example.org/first' : null,
+                'webhook_secret' => $competitorHasAddress ? str_repeat('s', 40) : null,
+            ]);
+        }
+    });
+
+    $secret = app(UpdateNotificationSettings::class)->handle($this->team, NotificationSettingsInputData::from(($this->payload)()));
+
+    $settings = NotificationSetting::query()->sole();
+
+    expect($settings->webhook_url)->toBe('https://hooks.example.com/horizon/t0ken-in-path')
+        ->and($settings->recipients)->toBe(['ops@example.com', 'oncall@example.com'])
+        ->and($settings->webhook_secret)->toBe($competitorHasAddress ? str_repeat('s', 40) : $secret)
+        ->and($secret)->toBe($competitorHasAddress ? null : $settings->webhook_secret);
+})->with(['the competitor has no address' => false, 'the competitor already has an address' => true]);

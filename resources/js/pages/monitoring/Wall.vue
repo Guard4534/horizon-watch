@@ -241,7 +241,6 @@ const kpis = computed(() => [
             :environment-name="environmentName"
             :search="search"
             :kpis="page.kpis"
-            :failed-per-hour-threshold="page.failedPerHourThreshold"
             @clear="clearNarrowing"
         />
     </div>
@@ -280,7 +279,6 @@ const kpis = computed(() => [
                 :application-id="group.id"
                 :application-name="group.name"
                 :environments="group.environments"
-                :failed-per-hour-threshold="page.failedPerHourThreshold"
             />
             <p
                 v-if="groups.length === 0"

@@ -72,7 +72,7 @@ test('each watched environment carries what its group and tile draw', function (
             ->where('page.environments.1.pending', 200)
             ->where('page.environments.1.trend', [0, 0, 0, 0, 0, 0, 100, 100, 100, 200, 200, 200])
             ->where('page.environments.1.trendPercent', 100)
-            ->where('page.failedPerHourThreshold', fn ($threshold) => (float) $threshold === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()));
+            ->where('page.environments.1.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()));
 });
 
 test('an environment hidden from the viewer is not on the wall at all', function () {

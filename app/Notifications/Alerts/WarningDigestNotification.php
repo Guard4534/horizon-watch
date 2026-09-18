@@ -34,7 +34,7 @@ class WarningDigestNotification extends Notification
                 'rows' => $this->alerts->map(fn (Alert $alert) => [
                     'state' => $alert->resolved_at === null ? $this->stillOpen() : $this->resolved(),
                     'color' => $alert->resolved_at === null ? AlertMail::WARNING_COLOR : AlertMail::RESOLVED_COLOR,
-                    'where' => $alert->application_name.' · '.$alert->environment_name,
+                    'where' => AlertMail::where($alert),
                     'rule' => AlertMail::ruleLabel($alert->metric),
                     'value' => AlertMail::withUnit($alert->value ?? 0, $alert->unit),
                 ])->values()->all(),
@@ -53,7 +53,7 @@ class WarningDigestNotification extends Notification
 
     private function subject(): string
     {
-        return __('[:digest] :organization — warnings', ['digest' => __('DIGEST'), 'organization' => $this->team->name]);
+        return __('[:digest] :organization — warnings', ['digest' => __('DIGEST'), 'organization' => AlertMail::organization($this->team)]);
     }
 
     private function headline(): string

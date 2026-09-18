@@ -36,18 +36,23 @@ class AlertRulesQuery
             notificationSummary: NotificationSummaryData::of($settings),
             notifications: $canManage ? $settings : null,
             canManage: $canManage,
-            newWebhookSecret: $canManage ? $this->newWebhookSecret($session) : null,
+            newWebhookSecret: $canManage ? $this->newWebhookSecret($team, $session) : null,
         );
     }
 
-    public static function flashNewWebhookSecret(Session $session, #[SensitiveParameter] string $secret): void
+    public static function flashNewWebhookSecret(Team $team, Session $session, #[SensitiveParameter] string $secret): void
     {
-        $session->flash(self::NEW_WEBHOOK_SECRET, Crypt::encryptString($secret));
+        $session->flash(self::newWebhookSecretKey($team), Crypt::encryptString($secret));
     }
 
-    private function newWebhookSecret(Session $session): ?string
+    private static function newWebhookSecretKey(Team $team): string
     {
-        $sealed = $session->get(self::NEW_WEBHOOK_SECRET);
+        return self::NEW_WEBHOOK_SECRET.'.'.$team->id;
+    }
+
+    private function newWebhookSecret(Team $team, Session $session): ?string
+    {
+        $sealed = $session->get(self::newWebhookSecretKey($team));
 
         if (! is_string($sealed)) {
             return null;

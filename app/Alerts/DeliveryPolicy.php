@@ -9,10 +9,14 @@ use App\Enums\SentNotificationKind;
 use App\Models\Alert;
 use App\Models\NotificationSetting;
 use App\Models\Team;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as BaseCollection;
+use Illuminate\Support\Facades\DB;
+use RuntimeException;
+use Throwable;
 
 final readonly class DeliveryPolicy
 {
@@ -34,7 +38,7 @@ final readonly class DeliveryPolicy
             return;
         }
 
-        $this->announce($alert, $now, null);
+        $this->announce($alert, $now, null, $this->reach($alert->team));
     }
 
     public function onResolved(Alert $alert): void
@@ -45,20 +49,20 @@ final readonly class DeliveryPolicy
 
         if ($team === null
             || $resolvedAt === null
-            || $alert->severity !== AlertSeverity::Critical
             || ! $alert->notified
+            || $alert->resolution_notified_at !== null
             || $alert->muted_indefinitely
             || $alert->muted_until?->gt($resolvedAt) === true) {
             return;
         }
 
-        $this->delivery->queueEmails($team, $alert->id, SentNotificationKind::Resolved, $this->recipients->forAlert($alert));
-        $this->delivery->queueWebhook($team, $alert->id, SentNotificationKind::WebhookDelivery, WebhookPayload::forAlert($alert, WebhookPayload::RESOLVED));
+        $this->announceResolution($alert, CarbonImmutable::now()->utc(), $this->reach($team));
     }
 
     public function repeatDue(CarbonImmutable $now): void
     {
         $now = $now->utc();
+        $minute = $now->startOfMinute()->toIso8601String();
 
         $alerts = $this->deliverable($now)
             ->where('alerts.severity', AlertSeverity::Critical)
@@ -69,15 +73,35 @@ final readonly class DeliveryPolicy
                 ->whereNull('alerts.last_notified_at')
                 ->orWhere(fn (Builder $default) => $default
                     ->whereNull('notification_settings.team_id')
-                    ->where('alerts.last_notified_at', '<=', $now->subMinutes(NotificationSetting::defaultRepeatMinutes())))
+                    ->whereRaw("date_trunc('minute', alerts.last_notified_at) <= ?::timestamptz - make_interval(mins => ?)", [$minute, NotificationSetting::defaultRepeatMinutes()]))
                 ->orWhere(fn (Builder $configured) => $configured
                     ->whereNotNull('notification_settings.repeat_minutes')
-                    ->whereRaw('alerts.last_notified_at <= ?::timestamptz - make_interval(mins => notification_settings.repeat_minutes)', [$now->toIso8601String()])))
+                    ->whereRaw("date_trunc('minute', alerts.last_notified_at) <= ?::timestamptz - make_interval(mins => notification_settings.repeat_minutes)", [$minute])))
             ->get();
 
-        foreach ($alerts as $alert) {
-            $this->announce($alert, $now, $alert->last_notified_at);
-        }
+        $this->eachByTeam($alerts, 'repetitions', function (Alert $alert, array $reach) use ($now): void {
+            $this->announce($alert, $now, $alert->last_notified_at, $reach);
+        });
+    }
+
+    public function resolutionsDue(CarbonImmutable $now): void
+    {
+        $now = $now->utc();
+
+        $alerts = $this->deliverable($now)
+            ->whereNotNull('alerts.resolved_at')
+            ->where('alerts.resolved_at', '>=', $now->subMinutes(config()->integer('horizon-watch.notifications.resolution_catch_up_minutes')))
+            ->where('alerts.notified', true)
+            ->whereNull('alerts.resolution_notified_at')
+            ->where('alerts.muted_indefinitely', false)
+            ->where(fn (Builder $unmuted) => $unmuted
+                ->whereNull('alerts.muted_until')
+                ->orWhereColumn('alerts.muted_until', '<=', 'alerts.resolved_at'))
+            ->get();
+
+        $this->eachByTeam($alerts, 'resolutions', function (Alert $alert, array $reach) use ($now): void {
+            $this->announceResolution($alert, $now, $reach);
+        });
     }
 
     public function digestDue(CarbonImmutable $now): void
@@ -85,25 +109,15 @@ final readonly class DeliveryPolicy
         $now = $now->utc();
 
         $alerts = $this->deliverable($now)
-            ->where('alerts.severity', AlertSeverity::Warning)
-            ->where(fn (Builder $pending) => $pending
-                ->where(fn (Builder $open) => $open
-                    ->whereNull('alerts.resolved_at')
-                    ->whereNull('alerts.digested_at')
-                    ->unmutedAt($now))
-                ->orWhere(fn (Builder $resolved) => $resolved
-                    ->where('alerts.resolved_at', '>=', $now->subHours(config()->integer('horizon-watch.notifications.digest_look_back_hours')))
-                    ->where(fn (Builder $undigested) => $undigested
-                        ->whereNull('alerts.digested_at')
-                        ->orWhereColumn('alerts.digested_at', '<', 'alerts.resolved_at'))
-                    ->where('alerts.muted_indefinitely', false)
-                    ->where(fn (Builder $unmuted) => $unmuted
-                        ->whereNull('alerts.muted_until')
-                        ->orWhereColumn('alerts.muted_until', '<=', 'alerts.resolved_at'))))
+            ->where(fn (Builder $pending) => $this->pendingDigest($pending, $now))
             ->get();
 
-        foreach ($alerts->groupBy('team_id') as $teamAlerts) {
-            $this->digest($teamAlerts, $now);
+        foreach ($alerts->groupBy('team_id') as $teamId => $teamAlerts) {
+            try {
+                $this->digest($teamAlerts, $now);
+            } catch (Throwable $exception) {
+                $this->reportFailure('digest', (int) $teamId, $exception);
+            }
         }
     }
 
@@ -114,14 +128,43 @@ final readonly class DeliveryPolicy
     {
         $team = $alerts->first()?->team;
 
-        if ($team === null || QuietHours::forSetting(NotificationSetting::query()->find($team->id), $now)) {
+        if ($team === null || QuietHours::holdsDigest(NotificationSetting::query()->find($team->id), $now)) {
             return;
         }
 
+        [$audience, $hasWebhook] = $this->reach($team);
+
+        DB::transaction(function () use ($alerts, $now, $team, $audience, $hasWebhook): void {
+            $claimed = Alert::query()
+                ->whereKey($alerts->modelKeys())
+                ->where(fn (Builder $pending) => $this->pendingDigest($pending, $now))
+                ->orderBy('opened_at')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($claimed->isEmpty()) {
+                return;
+            }
+
+            Alert::query()->whereKey($claimed->modelKeys())->update(['digested_at' => DB::raw('coalesce(resolved_at, last_seen_at)')]);
+
+            $claimed->load(['team', 'environment']);
+
+            $this->queueDigest($team, $claimed, $audience, $hasWebhook);
+        });
+    }
+
+    /**
+     * @param  Collection<int, Alert>  $alerts
+     * @param  list<array{email: string, locale: string, user: ?User, environmentIds: list<int>|null, extra: bool}>  $audience
+     */
+    private function queueDigest(Team $team, Collection $alerts, array $audience, bool $hasWebhook): void
+    {
         $emailable = $alerts->filter(fn (Alert $alert) => $alert->environment !== null
             && $this->rules->forEnvironment($alert->environment)->for($alert->metric)->notifyByEmail);
 
-        foreach ($this->recipients->forDigest($team) as $recipient) {
+        foreach ($audience as $recipient) {
             $environmentIds = $recipient['environmentIds'];
             $visible = $environmentIds === null
                 ? $emailable
@@ -137,48 +180,161 @@ final readonly class DeliveryPolicy
             ]);
         }
 
-        $this->delivery->queueWebhook(
-            $team,
-            null,
-            SentNotificationKind::WarningDigest,
-            WebhookPayload::forDigest($team, $alerts->toBase()),
-            $this->environmentCount($alerts),
-        );
-
-        Alert::query()->whereKey($alerts->modelKeys())->update(['digested_at' => $now]);
+        if ($hasWebhook) {
+            $this->delivery->dispatchWebhook(
+                $team,
+                null,
+                SentNotificationKind::WarningDigest,
+                WebhookPayload::forDigest($team, $alerts->toBase()),
+                $this->environmentCount($alerts),
+            );
+        }
     }
 
-    private function announce(Alert $alert, CarbonImmutable $now, ?CarbonImmutable $previous): void
+    /**
+     * @param  Builder<Alert>  $query
+     * @return Builder<Alert>
+     */
+    private function pendingDigest(Builder $query, CarbonImmutable $now): Builder
+    {
+        return $query
+            ->where('alerts.severity', AlertSeverity::Warning)
+            ->where(fn (Builder $pending) => $pending
+                ->where(fn (Builder $open) => $open
+                    ->whereNull('alerts.resolved_at')
+                    ->whereNull('alerts.digested_at')
+                    ->unmutedAt($now))
+                ->orWhere(fn (Builder $resolved) => $resolved
+                    ->whereNotNull('alerts.resolved_at')
+                    ->where(fn (Builder $undigested) => $undigested
+                        ->whereNull('alerts.digested_at')
+                        ->orWhereColumn('alerts.digested_at', '<', 'alerts.resolved_at'))
+                    ->where('alerts.muted_indefinitely', false)
+                    ->where(fn (Builder $unmuted) => $unmuted
+                        ->whereNull('alerts.muted_until')
+                        ->orWhereColumn('alerts.muted_until', '<=', 'alerts.resolved_at'))));
+    }
+
+    /**
+     * @param  array{0: list<array{email: string, locale: string, user: ?User, environmentIds: list<int>|null, extra: bool}>, 1: bool}  $reach
+     */
+    private function announce(Alert $alert, CarbonImmutable $now, ?CarbonImmutable $previous, array $reach): void
     {
         /** @var Team|null $team */
         $team = $alert->team;
+        [$audience, $hasWebhook] = $reach;
 
         if ($team === null) {
             return;
         }
 
-        $recipients = $this->recipients->forAlert($alert);
+        $recipients = $this->recipients->forAlertIn($alert, $audience);
 
-        if ($recipients === [] && ! $this->delivery->hasWebhook($team)) {
+        if ($recipients === [] && ! $hasWebhook) {
             return;
         }
 
-        $claimed = Alert::query()
-            ->whereKey($alert->id)
-            ->whereNull('resolved_at')
-            ->where(fn (Builder $query) => $previous === null
-                ? $query->whereNull('last_notified_at')
-                : $query->where('last_notified_at', '<=', $previous))
-            ->update(['notified' => true, 'last_notified_at' => $now]);
+        DB::transaction(function () use ($alert, $now, $previous, $team, $recipients, $hasWebhook): void {
+            $claimed = Alert::query()
+                ->whereKey($alert->id)
+                ->whereNull('resolved_at')
+                ->where(fn (Builder $query) => $previous === null
+                    ? $query->whereNull('last_notified_at')
+                    : $query->where('last_notified_at', '<=', $previous))
+                ->update(['notified' => true, 'last_notified_at' => $now]);
 
-        if ($claimed === 0) {
+            if ($claimed === 0) {
+                return;
+            }
+
+            $event = $previous === null ? WebhookPayload::OPENED : WebhookPayload::REPEATED;
+
+            $this->delivery->queueEmails($team, $alert->id, SentNotificationKind::CriticalAlert, $recipients, ['repeated' => $previous !== null]);
+
+            if ($hasWebhook) {
+                $this->delivery->dispatchWebhook($team, $alert->id, SentNotificationKind::WebhookDelivery, WebhookPayload::forAlert($alert, $event));
+            }
+        });
+    }
+
+    /**
+     * @param  array{0: list<array{email: string, locale: string, user: ?User, environmentIds: list<int>|null, extra: bool}>, 1: bool}  $reach
+     */
+    private function announceResolution(Alert $alert, CarbonImmutable $now, array $reach): void
+    {
+        /** @var Team|null $team */
+        $team = $alert->team;
+        [$audience, $hasWebhook] = $reach;
+
+        if ($team === null) {
             return;
         }
 
-        $event = $previous === null ? WebhookPayload::OPENED : WebhookPayload::REPEATED;
+        $recipients = $this->recipients->forAlertIn($alert, $audience);
 
-        $this->delivery->queueEmails($team, $alert->id, SentNotificationKind::CriticalAlert, $recipients, ['repeated' => $previous !== null]);
-        $this->delivery->queueWebhook($team, $alert->id, SentNotificationKind::WebhookDelivery, WebhookPayload::forAlert($alert, $event));
+        DB::transaction(function () use ($alert, $now, $team, $recipients, $hasWebhook): void {
+            $claimed = Alert::query()
+                ->whereKey($alert->id)
+                ->whereNotNull('resolved_at')
+                ->where('notified', true)
+                ->whereNull('resolution_notified_at')
+                ->update(['resolution_notified_at' => $now]);
+
+            if ($claimed === 0) {
+                return;
+            }
+
+            $this->delivery->queueEmails($team, $alert->id, SentNotificationKind::Resolved, $recipients);
+
+            if ($hasWebhook) {
+                $this->delivery->dispatchWebhook($team, $alert->id, SentNotificationKind::WebhookDelivery, WebhookPayload::forAlert($alert, WebhookPayload::RESOLVED));
+            }
+        });
+    }
+
+    /**
+     * @param  Collection<int, Alert>  $alerts
+     * @param  callable(Alert, array{0: list<array{email: string, locale: string, user: ?User, environmentIds: list<int>|null, extra: bool}>, 1: bool}): void  $send
+     */
+    private function eachByTeam(Collection $alerts, string $step, callable $send): void
+    {
+        foreach ($alerts->groupBy('team_id') as $teamId => $teamAlerts) {
+            try {
+                $reach = $this->reach($teamAlerts->first()?->team);
+            } catch (Throwable $exception) {
+                $this->reportFailure($step, (int) $teamId, $exception);
+
+                continue;
+            }
+
+            foreach ($teamAlerts as $alert) {
+                try {
+                    $send($alert, $reach);
+                } catch (Throwable $exception) {
+                    $this->reportFailure($step, (int) $teamId, $exception);
+                }
+            }
+        }
+    }
+
+    /**
+     * @return array{0: list<array{email: string, locale: string, user: ?User, environmentIds: list<int>|null, extra: bool}>, 1: bool}
+     */
+    private function reach(?Team $team): array
+    {
+        return $team === null ? [[], false] : [$this->recipients->forDigest($team), $this->delivery->hasWebhook($team)];
+    }
+
+    private function reportFailure(string $step, int $teamId, Throwable $exception): void
+    {
+        report(new RuntimeException(sprintf(
+            'Alert %s of team %d threw %s at %s:%d.',
+            $step,
+            $teamId,
+            $exception::class,
+            $exception->getFile(),
+            $exception->getLine(),
+        )));
     }
 
     /**

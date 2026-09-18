@@ -9,7 +9,11 @@ class DispatchDueNotifications
 {
     public function repeats(): void
     {
-        $this->policy()->repeatDue(CarbonImmutable::now());
+        $policy = $this->policy();
+        $now = CarbonImmutable::now();
+
+        $policy->repeatDue($now);
+        $policy->resolutionsDue($now);
     }
 
     public function digests(): void

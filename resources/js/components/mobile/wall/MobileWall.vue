@@ -6,7 +6,7 @@ import EnvPill from '@/components/nocturne/EnvPill.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { pendingTone } from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { DEFAULT_PENDING_THRESHOLD } from '@/lib/alertRules';
+import { thresholdOf } from '@/lib/alertRules';
 import { failedWindowNote, failedWindowShort } from '@/lib/failedWindow';
 import {
     envColor,
@@ -26,7 +26,6 @@ const {
     environmentName,
     search,
     kpis,
-    failedPerHourThreshold,
 } = defineProps<{
     rows: App.Data.Monitoring.EnvironmentData[];
     totalCount: number;
@@ -35,7 +34,6 @@ const {
     environmentName: string;
     search: string;
     kpis: App.Data.Pages.WallKpisData;
-    failedPerHourThreshold: number;
 }>();
 
 const emit = defineEmits<{ clear: [] }>();
@@ -164,7 +162,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                             :style="{
                                 color: pendingTone(
                                     environment.pending,
-                                    DEFAULT_PENDING_THRESHOLD,
+                                    thresholdOf(environment, 'queue.pending'),
                                 ),
                             }"
                             >{{ formatCount(environment.pending) }}</span
@@ -185,7 +183,10 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                     <span
                         class="ml-auto"
                         :style="{
-                            color: waitColor(environment.maxWaitSeconds),
+                            color: waitColor(
+                                environment.maxWaitSeconds,
+                                thresholdOf(environment, 'queue.max_wait'),
+                            ),
                         }"
                         >{{
                             $t(':wait wait', {
@@ -200,7 +201,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                         :style="{
                             color:
                                 environment.failedLastHour >
-                                failedPerHourThreshold
+                                thresholdOf(environment, 'jobs.failed_per_hour')
                                     ? 'var(--st-warn)'
                                     : undefined,
                         }"

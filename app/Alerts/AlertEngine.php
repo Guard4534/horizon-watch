@@ -5,6 +5,7 @@ namespace App\Alerts;
 use App\Alerts\Events\AlertOpened;
 use App\Alerts\Events\AlertResolved;
 use App\Enums\AlertRuleMetric;
+use App\Enums\AlertSeverity;
 use App\Enums\EnvironmentStatus;
 use App\Models\Alert;
 use App\Models\Environment;
@@ -12,6 +13,7 @@ use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
 use Carbon\CarbonImmutable;
 use Illuminate\Container\Attributes\Bind;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 #[Bind(AlertEngine::class)]
@@ -33,7 +35,7 @@ final class AlertEngine
             $rule = $rules->for($metric);
             $violating = $metric->isStateRule()
                 ? $rule->enabled && $this->stateLasts($metric, $state, $at, $rule->threshold)
-                : ($snapshot->error === null ? $rule->enabled && $snapshot->breaches->contains($metric) : null);
+                : ($this->judgesThresholds($snapshot) ? $rule->enabled && $snapshot->breaches->contains($metric) : null);
 
             if ($violating === null) {
                 continue;
@@ -55,10 +57,37 @@ final class AlertEngine
 
     public function resolveAllFor(Environment $environment, CarbonImmutable $at): void
     {
+        $this->resolveAllIn(Environment::query()->whereKey($environment->id), $at);
+    }
+
+    /**
+     * @param  Builder<Environment>  $environments
+     */
+    public function resolveAllIn(Builder $environments, CarbonImmutable $at): void
+    {
+        $ids = $environments
+            ->reorder()
+            ->orderBy('environments.id')
+            ->lockForUpdate()
+            ->pluck('environments.id');
+
         Alert::query()
             ->open()
-            ->where('environment_id', $environment->id)
+            ->whereIn('environment_id', $ids)
             ->update(['resolved_at' => $at]);
+    }
+
+    public function resolveOrphans(CarbonImmutable $at): int
+    {
+        return Alert::query()
+            ->open()
+            ->whereNull('environment_id')
+            ->update(['resolved_at' => $at]);
+    }
+
+    private function judgesThresholds(EnvironmentSnapshot $snapshot): bool
+    {
+        return $snapshot->error === null && $snapshot->status !== EnvironmentStatus::Inactive;
     }
 
     private function stateLasts(AlertRuleMetric $metric, EnvironmentState $state, CarbonImmutable $at, float $minutes): bool
@@ -174,7 +203,7 @@ final class AlertEngine
             'last_seen_at' => $at,
             'value' => $value,
             'detail' => $detail,
-            'severity' => $rule->severity,
+            'severity' => $alert->notified && $alert->severity === AlertSeverity::Critical ? $alert->severity : $rule->severity,
             'threshold' => $rule->threshold,
         ])->save();
     }

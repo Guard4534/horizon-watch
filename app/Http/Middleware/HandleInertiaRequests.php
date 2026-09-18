@@ -38,7 +38,7 @@ class HandleInertiaRequests extends Middleware
             'currentTeam' => fn () => $user?->currentTeam ? $user->toUserTeam($user->currentTeam) : null,
             'teams' => fn () => $user?->toUserTeams(includeCurrent: true) ?? [],
             'openAlertCount' => fn () => $user?->currentTeam
-                ? count(app(MonitoringRepository::class)->openAlerts($user->currentTeam))
+                ? app(MonitoringRepository::class)->alertCounts($user->currentTeam)->open
                 : null,
             'canManageApplications' => fn () => $user?->currentTeam
                 ? $user->can('create', [Application::class, $user->currentTeam])

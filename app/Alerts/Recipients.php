@@ -10,6 +10,8 @@ use App\Models\Team;
 use App\Models\User;
 use App\Monitoring\VisibleEnvironments;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 final readonly class Recipients
@@ -27,53 +29,54 @@ final readonly class Recipients
         /** @var Team|null $team */
         $team = $alert->team;
 
-        if ($team === null) {
-            return [];
-        }
-
-        $environment = $alert->environment;
-        $rules = $environment !== null
-            ? $this->rules->forEnvironment($environment)
-            : $this->rules->forScope($team, $alert->environment_name);
-
-        if (! $rules->for($alert->metric)->notifyByEmail) {
-            return [];
-        }
-
-        $members = [];
-
-        if ($environment !== null) {
-            foreach ($this->optedIn($team) as $membership) {
-                if ($this->visible->query($team, $membership->user)->whereKey($environment->id)->exists()) {
-                    $members[] = $this->member($membership->user);
-                }
-            }
-        }
-
-        return $this->withoutScope($this->unique([...$members, ...$this->extras($team)]));
+        return $team === null || ! $this->emailed($alert) ? [] : $this->forAlertIn($alert, $this->forDigest($team));
     }
 
     /**
-     * @return list<array{email: string, locale: string, user: ?User, environmentIds: list<int>|null}>
+     * @param  list<array{email: string, locale: string, user: ?User, environmentIds: list<int>|null, extra: bool}>  $audience
+     * @return list<array{email: string, locale: string, user: ?User}>
+     */
+    public function forAlertIn(Alert $alert, array $audience): array
+    {
+        /** @var Team|null $team */
+        $team = $alert->team;
+
+        if ($team === null || ! $this->emailed($alert)) {
+            return [];
+        }
+
+        $environmentId = $alert->environment?->id;
+
+        return $this->withoutScope(array_values(array_filter($audience, fn (array $recipient) => $environmentId === null
+            ? $recipient['extra']
+            : $recipient['environmentIds'] === null || in_array($environmentId, $recipient['environmentIds'], true))));
+    }
+
+    /**
+     * @return list<array{email: string, locale: string, user: ?User, environmentIds: list<int>|null, extra: bool}>
      */
     public function forDigest(Team $team): array
     {
+        $extras = $this->extras($team);
+        $extraEmails = array_flip(array_column($extras, 'email'));
         $members = [];
 
         foreach ($this->optedIn($team) as $membership) {
+            $member = $this->member($membership->user);
+            $extra = isset($extraEmails[$member['email']]);
             $environmentIds = null;
 
-            if ($membership->visibility !== MemberVisibility::All) {
+            if (! $extra && $membership->visibility !== MemberVisibility::All) {
                 $environmentIds = array_values(array_map(
                     intval(...),
                     $this->visible->query($team, $membership->user)->pluck('environments.id')->all(),
                 ));
             }
 
-            $members[] = [...$this->member($membership->user), 'environmentIds' => $environmentIds];
+            $members[] = [...$member, 'environmentIds' => $environmentIds, 'extra' => $extra];
         }
 
-        return $this->unique([...$members, ...$this->extras($team)]);
+        return $this->unique([...$members, ...$extras]);
     }
 
     /**
@@ -126,20 +129,39 @@ final readonly class Recipients
         ];
     }
 
+    private function emailed(Alert $alert): bool
+    {
+        $environment = $alert->environment;
+        $rules = $environment !== null
+            ? $this->rules->forEnvironment($environment)
+            : $this->rules->forScope($alert->team, $alert->environment_name);
+
+        return $rules->for($alert->metric)->notifyByEmail;
+    }
+
     /**
-     * @return list<array{email: string, locale: string, user: null, environmentIds: null}>
+     * @return list<array{email: string, locale: string, user: null, environmentIds: null, extra: true}>
      */
     private function extras(Team $team): array
     {
         $setting = NotificationSetting::query()->find($team->id);
         $extras = [];
+        $skipped = 0;
 
         foreach ($setting === null ? [] : $setting->recipients as $address) {
             $email = Str::lower(trim((string) $address));
 
-            if (filter_var($email, FILTER_VALIDATE_EMAIL) !== false) {
-                $extras[] = ['email' => $email, 'locale' => $this->defaultLocale(), 'user' => null, 'environmentIds' => null];
+            if (! Validator::make(['address' => $email], ['address' => 'email:rfc'])->passes()) {
+                $skipped++;
+
+                continue;
             }
+
+            $extras[] = ['email' => $email, 'locale' => $this->defaultLocale(), 'user' => null, 'environmentIds' => null, 'extra' => true];
+        }
+
+        if ($skipped > 0) {
+            Log::warning('Invalid extra alert addresses skipped.', ['team' => $team->id, 'count' => $skipped]);
         }
 
         return $extras;
@@ -163,7 +185,7 @@ final readonly class Recipients
     }
 
     /**
-     * @param  list<array{email: string, locale: string, user: ?User, environmentIds: null}>  $recipients
+     * @param  list<array{email: string, locale: string, user: ?User}>  $recipients
      * @return list<array{email: string, locale: string, user: ?User}>
      */
     private function withoutScope(array $recipients): array

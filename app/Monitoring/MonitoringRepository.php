@@ -72,6 +72,9 @@ interface MonitoringRepository
     /** @return array<int, AlertData> */
     public function openAlerts(Team $team): array;
 
+    /** @return array<int, AlertData> */
+    public function latestResolvedAlerts(Team $team, string $application, int $limit): array;
+
     public function alertCounts(Team $team): AlertCountsData;
 
     /** @return array<int, SentNotificationData> */

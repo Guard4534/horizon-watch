@@ -1,5 +1,7 @@
 <?php
 
+use App\Actions\Alerts\UpdateAlertRules;
+use App\Data\Alerts\AlertRulesInputData;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
 use App\Enums\MemberVisibility;
@@ -9,6 +11,8 @@ use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -338,4 +342,136 @@ test('the environment page shows the rules of its name, and its thresholds follo
             ->where('page.thresholds', fn ($thresholds) => (float) $thresholds['queue.pending'] === 7000.0
                 && (float) $thresholds['queue.max_wait'] === 45.0
                 && (float) $thresholds['job.runtime'] === AlertRuleMetric::JobRuntime->defaultThreshold()));
+});
+
+test('an unknown scope answers 404 before its payload is validated', function () {
+    $this->actingAs($this->admin);
+
+    ($this->put)('nope', [['metric' => 'nope', 'threshold' => -1]])->assertNotFound();
+    ($this->put)('nope', [])->assertNotFound();
+});
+
+test('a manager who does not see an environment gets 404 for its scope whatever the payload', function () {
+    $this->actingAs(($this->memberOf)(TeamRole::Admin, MemberVisibility::NonProduction));
+
+    ($this->put)('production', [['metric' => 'nope']])->assertNotFound();
+});
+
+test('the checks run in order: permission, then scope, then payload', function () {
+    $this->actingAs(($this->memberOf)(TeamRole::Member));
+    ($this->put)('nope', [['metric' => 'nope']])->assertForbidden();
+
+    $this->actingAs($this->admin);
+    ($this->put)('nope', [['metric' => 'nope']])->assertNotFound();
+    ($this->put)('organization', [['metric' => 'nope']])->assertInvalid(['rules.0.metric']);
+});
+
+test('the scope reaches the rules through the validation context, not through the current route', function (?string $scope, bool $valid) {
+    $payload = [
+        ...($scope === null ? [] : ['scope' => $scope]),
+        'rules' => [['metric' => 'queue.pending', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]],
+    ];
+
+    $attempt = fn () => AlertRulesInputData::validateAndCreate($payload);
+
+    $valid ? expect($attempt())->toBeInstanceOf(AlertRulesInputData::class) : expect($attempt)->toThrow(ValidationException::class);
+})->with([
+    'an environment name inherits every field' => ['staging', true],
+    'the organization needs every field' => ['organization', false],
+    'the organization in any case' => ['Organization', false],
+    'no scope at all is held to the organization' => [null, false],
+]);
+
+test('a scope sent in the body never replaces the scope of the route', function () {
+    $this->actingAs($this->admin);
+
+    $this->put(route('alert-rules.update', ['current_team' => $this->team->slug, 'scope' => 'organization']), [
+        'scope' => 'staging',
+        'rules' => [['metric' => 'queue.pending', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]],
+    ])->assertInvalid(['rules.0.threshold']);
+
+    expect(AlertRule::query()->count())->toBe(0);
+});
+
+test('a scope written in capitals answers 404 like any unknown scope', function () {
+    $this->actingAs($this->admin);
+
+    ($this->put)('Organization', [['metric' => 'queue.pending', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]])
+        ->assertNotFound();
+
+    expect(AlertRule::query()->count())->toBe(0);
+});
+
+test('saving the same rules twice leaves one row per metric with the last values', function () {
+    $this->actingAs($this->admin);
+
+    ($this->put)('staging', [['metric' => 'queue.pending', 'threshold' => 50, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]])
+        ->assertSessionHasNoErrors();
+    ($this->put)('staging', [['metric' => 'queue.pending', 'threshold' => 70, 'severity' => 'critical', 'notifyByEmail' => null, 'enabled' => null]])
+        ->assertSessionHasNoErrors();
+    ($this->put)('organization', [($this->organizationRule)()])->assertSessionHasNoErrors();
+    ($this->put)('organization', [($this->organizationRule)(['threshold' => 4000])])->assertSessionHasNoErrors();
+
+    $rows = AlertRule::query()->orderBy('scope')->get();
+
+    expect($rows->map(fn (AlertRule $row) => [$row->scope, $row->metric, $row->threshold, $row->severity])->all())->toBe([
+        ['organization', AlertRuleMetric::QueuePending, 4000.0, AlertSeverity::Critical],
+        ['staging', AlertRuleMetric::QueuePending, 70.0, AlertSeverity::Critical],
+    ]);
+});
+
+test('a save that loses the race for the first row updates it instead of failing', function () {
+    $competitor = null;
+    $raced = false;
+
+    DB::beforeExecuting(function (string $sql) use (&$competitor, &$raced) {
+        if (! $raced && str_starts_with($sql, 'insert into "alert_rules"')) {
+            $raced = true;
+            $competitor = AlertRule::factory()->for($this->team)->forScope('staging')->create([
+                'metric' => AlertRuleMetric::QueuePending,
+                'threshold' => 10,
+            ]);
+        }
+    });
+
+    app(UpdateAlertRules::class)->handle($this->team, 'staging', AlertRulesInputData::from([
+        'rules' => [['metric' => 'queue.pending', 'threshold' => 80, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]],
+    ]));
+
+    expect(AlertRule::query()->sole()->only(['id', 'threshold']))->toBe(['id' => $competitor->id, 'threshold' => 80.0]);
+});
+
+test('override rows of a name no environment carries any more stay listed, so they can be reset', function () {
+    AlertRule::factory()->for($this->team)->forScope('legacy')->create(['metric' => AlertRuleMetric::QueuePending, 'threshold' => 10]);
+    AlertRule::factory()->for($this->team)->forScope('legacy')->create(['metric' => AlertRuleMetric::QueueMaxWait, 'threshold' => 10]);
+
+    $this->actingAs($this->admin);
+
+    $this->get(route('alert-rules.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.scopes', fn ($scopes) => collect($scopes)->last() == ['id' => 'legacy', 'color' => null, 'environmentCount' => 0, 'overrideCount' => 2]));
+
+    $this->get(route('alert-rules.index', ['current_team' => $this->team->slug, 'scope' => 'legacy']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('page.rules', fn ($rules) => (float) collect($rules)->firstWhere('metric', 'queue.pending')['overrideThreshold'] === 10.0));
+
+    $this->delete(route('alert-rules.reset', ['current_team' => $this->team->slug, 'scope' => 'legacy']))
+        ->assertRedirect();
+
+    expect(AlertRule::query()->count())->toBe(0);
+
+    $this->get(route('alert-rules.index', ['current_team' => $this->team->slug, 'scope' => 'legacy']))->assertNotFound();
+});
+
+test('override rows without environments stay hidden from a manager with narrowed visibility', function () {
+    AlertRule::factory()->for($this->team)->forScope('legacy')->create(['metric' => AlertRuleMetric::QueuePending, 'threshold' => 10]);
+    AlertRule::factory()->for($this->team)->forScope('production')->create(['metric' => AlertRuleMetric::QueuePending, 'threshold' => 10]);
+
+    $this->actingAs(($this->memberOf)(TeamRole::Admin, MemberVisibility::NonProduction));
+
+    $this->get(route('alert-rules.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.scopes', fn ($scopes) => collect($scopes)->pluck('id')->all() === ['organization', 'staging']));
+
+    $this->delete(route('alert-rules.reset', ['current_team' => $this->team->slug, 'scope' => 'legacy']))->assertNotFound();
 });

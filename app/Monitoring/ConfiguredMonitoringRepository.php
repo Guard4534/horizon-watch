@@ -3,6 +3,7 @@
 namespace App\Monitoring;
 
 use App\Alerts\EffectiveRules;
+use App\Alerts\RuleSet;
 use App\Data\Applications\EnvironmentFormData;
 use App\Data\Monitoring\AlertActorData;
 use App\Data\Monitoring\AlertData;
@@ -88,6 +89,11 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
      * @var array<int, array<int, AlertData>>
      */
     private array $openAlertsByTeam = [];
+
+    /**
+     * @var array<int, AlertCountsData>
+     */
+    private array $alertCountsByTeam = [];
 
     /**
      * @var array<int, array{mute: bool, handle: bool, all: bool}>
@@ -203,6 +209,8 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             return [];
         }
 
+        $rules = $this->effectiveRules->forEnvironment($environment);
+
         return array_map(fn (array $queue) => new QueueData(
             name: $queue['name'],
             supervisor: $queue['supervisor'],
@@ -210,7 +218,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             pending: $queue['pending'],
             waitSeconds: $queue['waitSeconds'],
             runtimeSeconds: $queue['runtimeSeconds'] === null ? null : (float) $queue['runtimeSeconds'],
-            status: $this->queueStatus($state, $queue),
+            status: $this->queueStatus($state, $queue, $rules),
         ), $state->queues);
     }
 
@@ -244,7 +252,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         }
 
         $now = $this->now();
-        $threshold = AlertRuleMetric::JobRuntime->defaultThreshold();
+        $threshold = $this->effectiveRules->forEnvironment($environment)->for(AlertRuleMetric::JobRuntime)->threshold;
         $jobs = [];
 
         foreach ($state->pending_jobs as $job) {
@@ -310,7 +318,17 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             ??= $this->toAlertData($team, $this->alertsIn($team, AlertState::Open)->get());
     }
 
+    public function latestResolvedAlerts(Team $team, string $application, int $limit): array
+    {
+        return $this->toAlertData($team, $this->alertsIn($team, AlertState::Resolved, $application)->limit($limit)->get());
+    }
+
     public function alertCounts(Team $team): AlertCountsData
+    {
+        return $this->alertCountsByTeam[$team->id] ??= $this->countAlerts($team);
+    }
+
+    private function countAlerts(Team $team): AlertCountsData
     {
         $now = $this->now()->utc();
         $muted = '(alerts.muted_indefinitely or coalesce(alerts.muted_until > ?, false))';
@@ -391,6 +409,16 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
                 environmentCount: count(array_filter($environments, fn (EnvironmentData $item) => Str::lower($item->name) === $scope)),
                 overrideCount: $overrideCounts[$scope] ?? 0,
             );
+        }
+
+        if (! $this->alertAbilities($team)['all']) {
+            return $scopes;
+        }
+
+        foreach ($overrideCounts as $scope => $count) {
+            if (! isset($names[$scope])) {
+                $scopes[] = new RuleScopeData(id: $scope, color: null, environmentCount: 0, overrideCount: $count);
+            }
         }
 
         return $scopes;
@@ -551,15 +579,31 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     /**
      * @param  array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}  $queue
      */
-    private function queueStatus(EnvironmentState $state, array $queue): EnvironmentStatus
+    private function queueStatus(EnvironmentState $state, array $queue, RuleSet $rules): EnvironmentStatus
     {
+        $breaks = fn (AlertRuleMetric $metric, bool $breached) => $breached && $rules->for($metric)->enabled;
+
         return match (true) {
             $state->status->isDown(), $state->status === EnvironmentStatus::Paused => $state->status,
-            $queue['waitSeconds'] > AlertRuleMetric::QueueMaxWait->defaultThreshold(),
-            $queue['pending'] > AlertRuleMetric::QueuePending->defaultThreshold(),
-            $queue['workers'] === 0 && $queue['pending'] > 0 => EnvironmentStatus::Degraded,
+            $breaks(AlertRuleMetric::QueueMaxWait, $queue['waitSeconds'] > $rules->for(AlertRuleMetric::QueueMaxWait)->threshold),
+            $breaks(AlertRuleMetric::QueuePending, $queue['pending'] > $rules->for(AlertRuleMetric::QueuePending)->threshold),
+            $breaks(AlertRuleMetric::WorkersMissing, $queue['workers'] === 0 && $queue['pending'] > 0) => EnvironmentStatus::Degraded,
             default => EnvironmentStatus::Active,
         };
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    private function thresholdsOf(Environment $environment): array
+    {
+        $thresholds = [];
+
+        foreach ($this->effectiveRules->forEnvironment($environment)->rules as $metric => $rule) {
+            $thresholds[$metric] = $rule->threshold;
+        }
+
+        return $thresholds;
     }
 
     private function now(): CarbonImmutable
@@ -620,6 +664,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             pollIntervalSeconds: $environment->poll_interval_seconds,
             readingError: $state?->error,
             horizonStatus: $state?->horizon_status,
+            thresholds: $this->thresholdsOf($environment),
         );
     }
 

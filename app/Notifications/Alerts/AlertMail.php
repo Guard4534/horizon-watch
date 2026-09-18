@@ -32,8 +32,8 @@ final class AlertMail
     {
         return __('[:severity] :application · :environment — :rule', [
             'severity' => $tag,
-            'application' => $alert->application_name,
-            'environment' => $alert->environment_name,
+            'application' => self::plain($alert->application_name),
+            'environment' => self::plain($alert->environment_name),
             'rule' => self::ruleLabel($alert->metric),
         ]);
     }
@@ -90,7 +90,7 @@ final class AlertMail
         }
 
         if ($alert->metric === AlertRuleMetric::WorkersMissing && is_array($detail['queues'] ?? null)) {
-            $queues = array_slice(array_values(array_filter($detail['queues'], is_string(...))), 0, config()->integer('horizon-watch.alerts.listed_queues'));
+            $queues = array_map(self::plain(...), array_slice(array_values(array_filter($detail['queues'], is_string(...))), 0, config()->integer('horizon-watch.alerts.listed_queues')));
 
             return $queues === [] ? null : self::queues($queues);
         }
@@ -126,11 +126,29 @@ final class AlertMail
     public static function rows(Alert $alert): array
     {
         return [
-            ['label' => __('Environment'), 'value' => $alert->application_name.' · '.$alert->environment_name],
+            ['label' => __('Environment'), 'value' => self::where($alert)],
             ['label' => __('Nodes'), 'value' => self::nodes($alert)],
             ['label' => __('Rule'), 'value' => $alert->metric->value.' > '.self::withUnit($alert->threshold, $alert->unit)],
             ['label' => __('Value'), 'value' => self::withUnit($alert->value ?? 0, $alert->unit)],
         ];
+    }
+
+    public static function where(Alert $alert): string
+    {
+        return self::plain($alert->application_name).' · '.self::plain($alert->environment_name);
+    }
+
+    public static function organization(Team $team): string
+    {
+        return self::plain($team->name);
+    }
+
+    public static function plain(string $value): string
+    {
+        $line = trim((string) preg_replace('/[\p{C}\p{Z}\s]+/u', ' ', mb_scrub($value, 'UTF-8')));
+        $limit = max(1, config()->integer('horizon-watch.notifications.mail_value_length'));
+
+        return mb_strlen($line) > $limit ? rtrim(mb_substr($line, 0, $limit - 1)).'…' : $line;
     }
 
     public static function url(Alert $alert): ?string
@@ -155,7 +173,7 @@ final class AlertMail
 
     private static function runningJob(string $job, string $queue): string
     {
-        return __(':job on queue :queue', ['job' => $job, 'queue' => $queue]);
+        return __(':job on queue :queue', ['job' => self::plain($job), 'queue' => self::plain($queue)]);
     }
 
     /**
@@ -168,7 +186,7 @@ final class AlertMail
 
     private static function nodes(Alert $alert): string
     {
-        $names = array_column($alert->environment->state->nodes ?? [], 'hostname');
+        $names = array_map(self::plain(...), array_column($alert->environment->state->nodes ?? [], 'hostname'));
 
         if ($names === []) {
             return '—';

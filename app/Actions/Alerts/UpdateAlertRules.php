@@ -2,6 +2,7 @@
 
 namespace App\Actions\Alerts;
 
+use App\Data\Alerts\AlertRuleInputData;
 use App\Data\Alerts\AlertRulesInputData;
 use App\Models\AlertRule;
 use App\Models\Team;
@@ -24,13 +25,29 @@ class UpdateAlertRules
                     continue;
                 }
 
-                $team->alertRules()->updateOrCreate($key, [
-                    'threshold' => $rule->threshold,
-                    'severity' => $rule->severity,
-                    'notify_email' => $rule->notifyByEmail,
-                    'enabled' => $rule->enabled,
-                ]);
+                $this->upsert($team, $scope, $rule);
             }
         });
+    }
+
+    private function upsert(Team $team, string $scope, AlertRuleInputData $rule): void
+    {
+        $model = new AlertRule;
+        $timestamp = $model->freshTimestamp();
+        $values = ['threshold', 'severity', 'notify_email', 'enabled'];
+
+        $row = $model->forceFill([
+            'team_id' => $team->id,
+            'scope' => $scope,
+            'metric' => $rule->metric,
+            'threshold' => $rule->threshold,
+            'severity' => $rule->severity,
+            'notify_email' => $rule->notifyByEmail,
+            'enabled' => $rule->enabled,
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+        ])->getAttributes();
+
+        DB::table($model->getTable())->upsert([$row], ['team_id', 'scope', 'metric'], [...$values, 'updated_at']);
     }
 }

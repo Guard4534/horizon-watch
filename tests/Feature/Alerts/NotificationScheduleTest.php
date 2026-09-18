@@ -3,6 +3,7 @@
 use App\Actions\Alerts\DispatchDueNotifications;
 use App\Alerts\EffectiveRules;
 use App\Enums\AlertRuleMetric;
+use App\Enums\SentNotificationKind;
 use App\Jobs\SendAlertEmail;
 use App\Jobs\SendAlertWebhook;
 use App\Models\Alert;
@@ -102,4 +103,19 @@ test('each scheduled repetition reads the rules afresh too', function () {
 
     Queue::assertNotPushed(SendAlertEmail::class);
     Queue::assertPushed(SendAlertWebhook::class, 1);
+});
+
+test('the scheduled repetition also catches up a resolution whose notice was lost', function () {
+    $alert = Alert::factory()->for($this->environment)->critical()->create([
+        'notified' => true,
+        'last_notified_at' => now()->subMinutes(20),
+        'resolved_at' => now()->subMinutes(2),
+    ]);
+
+    $this->artisan('schedule:test', ['--name' => 'alert-repeats'])->assertSuccessful();
+
+    Queue::assertPushed(SendAlertEmail::class, fn (SendAlertEmail $job) => $job->kind === SentNotificationKind::Resolved && $job->alertId === $alert->id);
+    Queue::assertPushed(SendAlertWebhook::class, fn (SendAlertWebhook $job) => $job->event === 'alert.resolved');
+
+    expect($alert->refresh()->resolution_notified_at)->not->toBeNull();
 });

@@ -235,6 +235,26 @@ test('the request is pinned to the checked address, without redirects or proxy',
     Http::assertSent(fn (Request $request) => $request->method() === 'POST' && $request->url() === 'https://hooks.example.com/services/tok');
 });
 
+test('real curl reaches a name only through the address the guard pinned', function () {
+    $port = $GLOBALS['webhookReceiver']['port'];
+    $resolver = new FakeResolver(['receiver.internal' => ['127.0.0.1']]);
+    $this->app->instance(Resolver::class, $resolver);
+
+    app(WebhookClient::class)->post("http://receiver.internal:{$port}/ok/tok-path-secret", WEBHOOK_TEST_SECRET, ['event' => 'test']);
+
+    [$request] = receivedRequests();
+
+    expect($resolver->asked)->toBe(['receiver.internal'])
+        ->and($request['headers']['host'])->toBe("receiver.internal:{$port}")
+        ->and($request['path'])->toBe('/ok/tok-path-secret');
+
+    $this->app->instance(Resolver::class, new FakeResolver(['receiver.internal' => ['127.0.0.2']]));
+
+    expect(webhookFailure(fn () => app(WebhookClient::class)->post("http://receiver.internal:{$port}/ok/tok-path-secret", WEBHOOK_TEST_SECRET, ['event' => 'test']))?->reason)
+        ->toBe(DeliveryError::Unreachable)
+        ->and(receivedRequests())->toHaveCount(1);
+});
+
 test('a failure never carries the url, the secret or the response body', function (string $scenario) {
     $failure = webhookFailure(fn () => app(WebhookClient::class)->post(receiverUrl($scenario), WEBHOOK_TEST_SECRET, ['event' => 'test']));
 
@@ -267,18 +287,24 @@ test('the webhook job stamps the send time and logs the host only', function () 
     $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00', 'UTC'));
     $team = webhookJobTeam(receiverUrl('accepted'));
 
-    dispatch_sync(new SendAlertWebhook($team->id, null, SentNotificationKind::Test, 'test', WebhookPayload::forTest($team)));
+    $job = new SendAlertWebhook($team->id, null, SentNotificationKind::Test, 'test', WebhookPayload::forTest($team));
+
+    dispatch_sync($job);
+    dispatch_sync($job);
 
     [$request] = receivedRequests();
     $body = json_decode($request['body'], true);
     $log = DeliveryLog::query()->sole();
 
-    expect($body)->toBe([
-        'event' => 'test',
-        'alert' => null,
-        'organization' => ['name' => 'Acme', 'slug' => $team->slug],
-        'sent_at' => '2026-09-17T12:00:00Z',
-    ])
+    expect(receivedRequests())->toHaveCount(1)
+        ->and($log->delivery_id)->toBe($job->deliveryId)
+        ->and($body)->toBe([
+            'event' => 'test',
+            'delivery_id' => $job->deliveryId,
+            'alert' => null,
+            'organization' => ['name' => 'Acme', 'slug' => $team->slug],
+            'sent_at' => '2026-09-17T12:00:00Z',
+        ])
         ->and($log->channel)->toBe(NotificationChannel::Webhook)
         ->and($log->kind)->toBe(SentNotificationKind::Test)
         ->and($log->status)->toBe(DeliveryStatus::Sent)
@@ -320,7 +346,12 @@ test('a failing receiver is tried three times with backoff, then logged once as 
     $this->travel(1)->seconds();
     runQueuedJob();
 
-    expect(receivedRequests())->toHaveCount(3);
+    $bodies = array_map(fn (array $request) => json_decode($request['body'], true), receivedRequests());
+
+    expect($bodies)->toHaveCount(3)
+        ->and(array_unique(array_column($bodies, 'delivery_id')))->toHaveCount(1)
+        ->and($bodies[0]['delivery_id'])->toMatch('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/')
+        ->and(array_column($bodies, 'sent_at'))->toBe(['2026-09-17T12:00:00Z', '2026-09-17T12:00:10Z', '2026-09-17T12:01:10Z']);
 
     $log = DeliveryLog::query()->sole();
 
@@ -328,6 +359,7 @@ test('a failing receiver is tried three times with backoff, then logged once as 
         ->and($log->error)->toBe('http_5xx')
         ->and($log->target)->toBe('127.0.0.1')
         ->and($log->alert_id)->toBe($alert->id)
+        ->and($log->delivery_id)->toBe($bodies[0]['delivery_id'])
         ->and(DB::table('jobs')->count())->toBe(0);
 
     $failedJobs = json_encode(DB::table('failed_jobs')->get());

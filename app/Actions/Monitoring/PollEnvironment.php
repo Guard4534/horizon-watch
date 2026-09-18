@@ -74,7 +74,7 @@ class PollEnvironment
                 queueRuntimes: $reading->queueRuntimes,
                 latencyMs: $reading->latencyMs,
             )
-            : $reading, $this->rules->forEnvironment($environment));
+            : $reading, $this->rules->forEnvironment($environment), $capturedAt);
 
         $state = [
             'status' => $evaluated->status,

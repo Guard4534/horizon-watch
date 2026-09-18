@@ -19,7 +19,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification as Notifications;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 
@@ -36,6 +38,8 @@ class SendAlertEmail implements ShouldQueue
 
     public int $timeout;
 
+    public readonly string $deliveryId;
+
     /**
      * @param  array{repeated?: bool, alertIds?: list<string>, environmentCount?: int}  $payload
      */
@@ -51,10 +55,15 @@ class SendAlertEmail implements ShouldQueue
         $this->tries = config()->integer('horizon-watch.notifications.delivery_tries');
         $this->backoff = array_values(array_map(intval(...), config()->array('horizon-watch.notifications.delivery_backoff_seconds')));
         $this->timeout = config()->integer('horizon-watch.notifications.delivery_timeout_seconds');
+        $this->deliveryId = (string) Str::uuid();
     }
 
     public function handle(Recipients $recipients): void
     {
+        if ($this->recorded()) {
+            return;
+        }
+
         $team = Team::query()->find($this->teamId);
         $email = $team === null ? null : $this->address($team, $recipients);
         $notification = $team === null || $email === null ? null : $this->notification($team);
@@ -64,22 +73,38 @@ class SendAlertEmail implements ShouldQueue
         }
 
         try {
-            Notifications::route('mail', $email)->notifyNow($notification->locale($this->locale));
+            DB::transaction(function () use ($email, $notification): void {
+                $this->log(DeliveryStatus::Sent, null, $email);
+
+                Notifications::route('mail', $email)->notifyNow($notification->locale($this->locale));
+            });
         } catch (Throwable) {
             throw new RuntimeException(DeliveryError::Mail->value);
         }
-
-        $this->log(DeliveryStatus::Sent, null, $email);
     }
 
     public function failed(?Throwable $exception): void
     {
-        $team = Team::query()->find($this->teamId);
-        $email = $team === null ? null : $this->address($team, app(Recipients::class));
+        try {
+            $team = $this->recorded() ? null : Team::query()->find($this->teamId);
+            $email = $team === null ? null : $this->address($team, app(Recipients::class));
 
-        if ($email !== null) {
-            $this->log(DeliveryStatus::Failed, DeliveryError::Mail, $email);
+            if ($email !== null) {
+                $this->log(DeliveryStatus::Failed, DeliveryError::Mail, $email);
+            }
+        } catch (Throwable $failure) {
+            report(new RuntimeException(sprintf(
+                'Recording a failed alert email threw %s at %s:%d.',
+                $failure::class,
+                $failure->getFile(),
+                $failure->getLine(),
+            )));
         }
+    }
+
+    private function recorded(): bool
+    {
+        return DeliveryLog::query()->where('delivery_id', $this->deliveryId)->exists();
     }
 
     private function address(Team $team, Recipients $recipients): ?string
@@ -135,6 +160,7 @@ class SendAlertEmail implements ShouldQueue
             'error' => $error?->value,
             'sent_at' => Date::now(),
             'environment_count' => $this->kind === SentNotificationKind::WarningDigest ? ($this->payload['environmentCount'] ?? null) : null,
+            'delivery_id' => $this->deliveryId,
         ]);
     }
 }

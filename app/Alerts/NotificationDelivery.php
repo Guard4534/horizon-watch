@@ -53,9 +53,17 @@ final readonly class NotificationDelivery implements AlertDelivery
             return false;
         }
 
-        SendAlertWebhook::dispatch($team->id, $alertId, $kind, (string) $payload['event'], $payload, $environmentCount);
+        $this->dispatchWebhook($team, $alertId, $kind, $payload, $environmentCount);
 
         return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function dispatchWebhook(Team $team, ?string $alertId, SentNotificationKind $kind, array $payload, ?int $environmentCount = null): void
+    {
+        SendAlertWebhook::dispatch($team->id, $alertId, $kind, (string) $payload['event'], $payload, $environmentCount);
     }
 
     public function hasWebhook(Team $team): bool

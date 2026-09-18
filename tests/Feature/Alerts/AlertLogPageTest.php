@@ -382,3 +382,54 @@ test('the sidebar badge counts the open alerts the viewer sees, muted ones aside
         ->get(route('wall', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page->where('openAlertCount', 1));
 });
+
+test('the sidebar badge always equals the open tab, whoever looks', function () {
+    Alert::factory()->for($this->production)->create();
+    Alert::factory()->for($this->staging)->create(['muted_until' => now()->subMinute()]);
+    Alert::factory()->for($this->staging)->create(['metric' => AlertRuleMetric::QueueMaxWait, 'muted_until' => now()]);
+    Alert::factory()->for($this->shopProduction)->create(['muted_until' => now()->addHour()]);
+    Alert::factory()->for($this->shopProduction)->create(['metric' => AlertRuleMetric::QueueMaxWait, 'muted_indefinitely' => true]);
+    Alert::factory()->for($this->production)->resolved()->create(['metric' => AlertRuleMetric::QueueMaxWait]);
+    $orphan = Alert::factory()->for($this->production)->create(['metric' => AlertRuleMetric::JobRuntime]);
+    $orphan->forceFill(['environment_id' => null])->save();
+    Alert::factory()->for(Environment::factory())->create();
+
+    foreach ([$this->admin, ($this->memberAs)(TeamRole::Viewer, MemberVisibility::NonProduction)] as $viewer) {
+        $this->actingAs($viewer)
+            ->get(route('alerts.index', ['current_team' => $this->team->slug]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('openAlertCount', fn (int $count) => $count === count($page->toArray()['props']['page']['alerts'])
+                    && $count === $page->toArray()['props']['page']['counts']['open']));
+    }
+
+    expect(($this->page)()['counts']['open'])->toBe(3);
+});
+
+test('the sidebar badge is one count, with no alert built for it', function () {
+    $queries = function (int $open): array {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this->actingAs($this->admin)
+            ->get(route('members.index', ['current_team' => $this->team->slug]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('openAlertCount', $open));
+
+        return array_column(DB::getQueryLog(), 'query');
+    };
+
+    $none = $queries(0);
+
+    Alert::factory()->for($this->staging)->count(3)->sequence(
+        ['metric' => AlertRuleMetric::QueuePending, 'muted_by' => $this->admin->id],
+        ['metric' => AlertRuleMetric::QueueMaxWait, 'handled_by' => $this->admin->id],
+        ['metric' => AlertRuleMetric::JobRuntime],
+    )->create();
+    AlertNotification::factory()->for(Alert::query()->first())->create();
+
+    $some = $queries(3);
+
+    expect(count($some))->toBe(count($none))
+        ->and(array_filter($some, fn (string $sql) => str_contains($sql, 'alert_notifications') || str_contains($sql, 'environment_states')))->toBe([])
+        ->and(array_filter($some, fn (string $sql) => str_contains($sql, 'from "alerts"')))->toHaveCount(1);
+});

@@ -21,7 +21,7 @@ class AlertSettingsController extends Controller
         $secret = $updateNotificationSettings->handle($current_team, $data);
 
         if ($secret !== null) {
-            AlertRulesQuery::flashNewWebhookSecret($request->session(), $secret);
+            AlertRulesQuery::flashNewWebhookSecret($current_team, $request->session(), $secret);
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Notification settings saved.')]);
@@ -31,7 +31,7 @@ class AlertSettingsController extends Controller
 
     public function regenerateSecret(Request $request, Team $current_team, RegenerateWebhookSecret $regenerateWebhookSecret): RedirectResponse
     {
-        AlertRulesQuery::flashNewWebhookSecret($request->session(), $regenerateWebhookSecret->handle($current_team));
+        AlertRulesQuery::flashNewWebhookSecret($current_team, $request->session(), $regenerateWebhookSecret->handle($current_team));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('New webhook secret generated.')]);
 

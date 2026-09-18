@@ -33,7 +33,7 @@ class TestNotification extends Notification
 
     private function subject(): string
     {
-        return __('[:test] :organization — test notification', ['test' => __('TEST'), 'organization' => $this->team->name]);
+        return __('[:test] :organization — test notification', ['test' => __('TEST'), 'organization' => AlertMail::organization($this->team)]);
     }
 
     private function headline(): string
@@ -43,7 +43,7 @@ class TestNotification extends Notification
 
     private function body(): string
     {
-        return __('Alerts of :organization will reach this address.', ['organization' => $this->team->name]);
+        return __('Alerts of :organization will reach this address.', ['organization' => AlertMail::organization($this->team)]);
     }
 
     private function openPanel(): string

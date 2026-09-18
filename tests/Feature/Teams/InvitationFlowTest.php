@@ -641,3 +641,51 @@ test('the invitation throttle reaches an Inertia visit as a redirect carrying a 
             'message' => 'Too many attempts. Wait a minute and try again.',
         ]);
 });
+
+test('the invitation lifetime comes from the configuration, for the invitation, its resend, its email and the invite form', function () {
+    config(['horizon-watch.invitations.expires_days' => 3]);
+    Notification::fake();
+    $this->travelTo(now());
+
+    $this->actingAs($this->owner)
+        ->post(route('members.invitations.store', ['current_team' => $this->team->slug]), [
+            'email' => 'invited@example.com',
+            'role' => TeamRole::Member->value,
+            'visibility' => MemberVisibility::All->value,
+        ])
+        ->assertRedirect();
+
+    $invitation = TeamInvitation::where('email', 'invited@example.com')->firstOrFail();
+
+    expect($invitation->expires_at->timestamp)->toBe(now()->addDays(3)->timestamp);
+
+    Notification::assertSentOnDemand(
+        TeamInvitationNotification::class,
+        fn ($notification, $channels, $notifiable) => in_array('This invitation expires in 3 days.', $notification->toMail($notifiable)->outroLines, true),
+    );
+
+    $this->travelTo(now()->addHour());
+
+    $this->actingAs($this->owner)
+        ->post(route('members.invitations.resend', ['current_team' => $this->team->slug, 'invitation' => $invitation->id]))
+        ->assertRedirect();
+
+    expect($invitation->fresh()->expires_at->timestamp)->toBe(now()->addDays(3)->timestamp);
+
+    $this->actingAs($this->owner)
+        ->get(route('members.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page->where('page.invitationExpiresDays', 3));
+});
+
+test('the invitation email tells its lifetime in the language of the app', function () {
+    config(['horizon-watch.invitations.expires_days' => 5]);
+    app()->setLocale('it');
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'invited_by' => $this->owner->id,
+    ]);
+
+    expect((new TeamInvitationNotification($invitation))->toMail((object) [])->outroLines)
+        ->toContain('Questo invito scade tra 5 giorni.');
+});

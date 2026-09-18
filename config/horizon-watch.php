@@ -60,8 +60,9 @@ return [
         'default_repeat_minutes' => 30,
         'repeat_minutes' => [15, 30, 60],
         'max_recipients' => 20,
-        'digest_look_back_hours' => 24,
         'mail_nodes' => 5,
+        'mail_value_length' => 150,
+        'resolution_catch_up_minutes' => 60,
         'delivery_tries' => 3,
         'delivery_backoff_seconds' => [10, 60],
         'delivery_timeout_seconds' => 30,
@@ -72,6 +73,10 @@ return [
         'resolved_alerts' => 5,
         'sent_notifications' => 6,
         'wall_anomalies' => 5,
+    ],
+
+    'invitations' => [
+        'expires_days' => 7,
     ],
 
     'rate_limits' => [

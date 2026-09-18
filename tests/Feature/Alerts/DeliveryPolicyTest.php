@@ -22,12 +22,15 @@ use App\Models\Environment;
 use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
+use App\Monitoring\VisibleEnvironments;
 use App\Notifications\Alerts\AlertNotification;
 use App\Notifications\Alerts\ResolvedNotification;
 use Carbon\CarbonImmutable;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\AlertTeam;
@@ -338,8 +341,9 @@ test('a resolution is announced only for a notified, unmuted critical alert', fu
 })->with([
     'handled' => [['handled_at' => now()], true],
     'mute expired before the resolution' => [['muted_until' => CarbonImmutable::parse('2026-09-17 11:58:00', 'UTC')], true],
+    'lowered to warning after the notice' => [['severity' => 'warning'], true],
     'never notified' => [['notified' => false, 'last_notified_at' => null], false],
-    'warning' => [['severity' => 'warning'], false],
+    'warning never notified' => [['severity' => 'warning', 'notified' => false, 'last_notified_at' => null], false],
     'muted at the resolution' => [['muted_until' => CarbonImmutable::parse('2026-09-17 11:59:30', 'UTC')], false],
     'muted until resolved' => [['muted_indefinitely' => true], false],
     'still open' => [['resolved_at' => null], false],
@@ -380,7 +384,7 @@ test('the digest sends each recipient the warnings they see and the webhook all 
 
 test('an empty period sends no digest', function () {
     warningAlert($this->production, ['digested_at' => $this->now->subMinutes(10)]);
-    warningAlert($this->production, ['metric' => AlertRuleMetric::JobRuntime, 'resolved_at' => $this->now->subDays(2)]);
+    warningAlert($this->production, ['metric' => AlertRuleMetric::JobRuntime, 'resolved_at' => $this->now->subDays(2), 'digested_at' => $this->now->subDays(2)]);
     criticalAlert($this->production);
     warningAlert($this->production, ['metric' => AlertRuleMetric::QueueMaxWait, 'muted_until' => $this->now->addHour()]);
     warningAlert($this->production, ['metric' => AlertRuleMetric::WorkersMissing, 'muted_indefinitely' => true, 'resolved_at' => $this->now->subMinute()]);
@@ -472,4 +476,281 @@ test('the events reach the recipients through the listeners and the jobs', funct
     AlertOpened::dispatch('00000000-0000-0000-0000-000000000000');
 
     Notification::assertSentOnDemandTimes(AlertNotification::class, 2);
+});
+
+test('a resolution is announced once, whether the listener or the catch-up gets there first', function () {
+    $alert = criticalAlert($this->production, ['notified' => true, 'last_notified_at' => $this->now->subMinutes(5), 'resolved_at' => $this->now->subMinute()]);
+
+    deliveryPolicy()->onResolved($alert);
+    deliveryPolicy()->onResolved($alert);
+    deliveryPolicy()->resolutionsDue($this->now);
+
+    expect(queuedWebhooks())->toHaveCount(1)
+        ->and(queuedEmails())->toHaveCount(2)
+        ->and($alert->refresh()->resolution_notified_at?->equalTo($this->now))->toBeTrue();
+
+    $other = criticalAlert($this->staging, ['notified' => true, 'last_notified_at' => $this->now->subMinutes(5), 'resolved_at' => $this->now->subMinute()]);
+    Queue::fake();
+
+    deliveryPolicy()->resolutionsDue($this->now);
+    deliveryPolicy()->onResolved($other->fresh());
+
+    expect(queuedWebhooks())->toHaveCount(1)
+        ->and(queuedWebhooks()->first()->event)->toBe('alert.resolved')
+        ->and(queuedWebhooks()->first()->alertId)->toBe($other->id)
+        ->and(queuedEmails()->pluck('kind')->unique()->all())->toBe([SentNotificationKind::Resolved]);
+});
+
+test('a lost resolution is caught up by the per-minute run within the configured window', function (array $attributes, bool $caughtUp) {
+    config(['horizon-watch.notifications.resolution_catch_up_minutes' => 60]);
+
+    if (($attributes['paused'] ?? false) === true) {
+        $this->production->update(['polling_enabled' => false]);
+    }
+
+    unset($attributes['paused']);
+
+    criticalAlert($this->production, [
+        'notified' => true,
+        'last_notified_at' => $this->now->subMinutes(70),
+        'resolved_at' => $this->now->subMinutes(5),
+        ...$attributes,
+    ]);
+
+    deliveryPolicy()->resolutionsDue($this->now);
+
+    expect(queuedWebhooks()->count())->toBe($caughtUp ? 1 : 0)
+        ->and(queuedEmails()->count())->toBe($caughtUp ? 2 : 0);
+
+    if ($caughtUp) {
+        expect(queuedWebhooks()->first()->event)->toBe('alert.resolved');
+    }
+})->with([
+    'resolved five minutes ago' => [[], true],
+    'resolved at the edge of the window' => [['resolved_at' => CarbonImmutable::parse('2026-09-17 11:00:00', 'UTC')], true],
+    'lowered to warning after the notice' => [['severity' => 'warning'], true],
+    'handled' => [['handled_at' => CarbonImmutable::parse('2026-09-17 11:40:00', 'UTC')], true],
+    'resolved before the window' => [['resolved_at' => CarbonImmutable::parse('2026-09-17 10:59:59', 'UTC')], false],
+    'already announced' => [['resolution_notified_at' => CarbonImmutable::parse('2026-09-17 11:55:01', 'UTC')], false],
+    'never notified' => [['notified' => false, 'last_notified_at' => null], false],
+    'muted at the resolution' => [['muted_until' => CarbonImmutable::parse('2026-09-17 11:56:00', 'UTC')], false],
+    'muted until resolved' => [['muted_indefinitely' => true], false],
+    'still open' => [['resolved_at' => null], false],
+    'collection paused' => [['paused' => true], false],
+]);
+
+test('a repetition is due on the minute even when the previous run started late', function (?int $repeatMinutes, string $notifiedAt, string $at, bool $due) {
+    if ($repeatMinutes === null) {
+        $this->setting->delete();
+    } else {
+        $this->setting->update(['repeat_minutes' => $repeatMinutes]);
+    }
+
+    criticalAlert($this->production, ['notified' => true, 'last_notified_at' => CarbonImmutable::parse($notifiedAt, 'UTC')]);
+
+    deliveryPolicy()->repeatDue(CarbonImmutable::parse($at, 'UTC'));
+
+    expect(Queue::pushed(SendAlertEmail::class)->count() + Queue::pushed(SendAlertWebhook::class)->count() > 0)->toBe($due);
+})->with([
+    '30 minutes to the second' => [30, '2026-09-17 11:30:00', '2026-09-17 12:00:00', true],
+    'previous run 59 seconds late' => [30, '2026-09-17 11:30:59', '2026-09-17 12:00:00', true],
+    'one minute early' => [30, '2026-09-17 11:30:00', '2026-09-17 11:59:59', false],
+    'no settings, previous run late' => [null, '2026-09-17 11:30:59', '2026-09-17 12:00:00', true],
+    'no settings, one minute early' => [null, '2026-09-17 11:30:00', '2026-09-17 11:59:59', false],
+]);
+
+test('an address that is both a restricted member and an extra address gets every warning in the digest', function () {
+    $this->setting->update(['recipients' => ['ops@example.com', 'dev@example.com']]);
+    $production = warningAlert($this->production);
+    $staging = warningAlert($this->staging, ['metric' => AlertRuleMetric::QueueMaxWait]);
+
+    deliveryPolicy()->digestDue($this->now);
+
+    $emails = queuedEmails()->keyBy('to');
+
+    expect($emails['dev@example.com']['payload']['alertIds'])->toBe([$production->id, $staging->id]);
+
+    Queue::fake();
+    deliveryPolicy()->onOpened(criticalAlert($this->production));
+
+    expect(queuedEmails()->pluck('to')->all())->toBe(['admin@example.com', 'dev@example.com', 'ops@example.com']);
+});
+
+test('overlapping digest runs send each warning once', function () {
+    warningAlert($this->production);
+    $nested = true;
+    Alert::retrieved(function () use (&$nested) {
+        if ($nested) {
+            $nested = false;
+            deliveryPolicy()->digestDue($this->now);
+        }
+    });
+
+    deliveryPolicy()->digestDue($this->now);
+
+    expect(queuedWebhooks())->toHaveCount(1)
+        ->and(queuedEmails()->pluck('to')->all())->toBe(['admin@example.com', 'ops@example.com']);
+});
+
+test('a warning resolved while the digest runs is reported as resolved, once', function () {
+    $alert = warningAlert($this->production, ['last_seen_at' => $this->now->subMinute()]);
+    $resolving = true;
+    Alert::retrieved(function (Alert $retrieved) use (&$resolving) {
+        if ($resolving) {
+            $resolving = false;
+            Alert::query()->whereKey($retrieved->id)->update(['resolved_at' => $this->now->subSeconds(10)]);
+        }
+    });
+
+    deliveryPolicy()->digestDue($this->now);
+
+    expect(queuedWebhooks())->toHaveCount(1)
+        ->and(queuedWebhooks()->first()->payload['alerts'][0]['resolved_at'])->toBe('2026-09-17T11:59:50Z');
+
+    Queue::fake();
+    deliveryPolicy()->digestDue($this->now->addMinutes(15));
+
+    expect(Queue::pushedJobs())->toBe([])
+        ->and($alert->refresh()->digested_at?->equalTo($this->now->subSeconds(10)))->toBeTrue();
+});
+
+test('a warning resolved by a reading taken before the digest but saved after it still comes back resolved', function () {
+    $alert = warningAlert($this->production, ['last_seen_at' => $this->now->subSeconds(30)]);
+
+    deliveryPolicy()->digestDue($this->now);
+
+    expect(queuedWebhooks()->first()->payload['alerts'][0]['resolved_at'])->toBeNull();
+
+    $alert->update(['resolved_at' => $this->now->subSeconds(10)]);
+    Queue::fake();
+    deliveryPolicy()->digestDue($this->now->addMinutes(15));
+
+    expect(queuedWebhooks())->toHaveCount(1)
+        ->and(queuedWebhooks()->first()->payload['alerts'][0]['resolved_at'])->toBe('2026-09-17T11:59:50Z');
+});
+
+test('quiet hours that leave no quarter of an hour free do not hold the digest', function (string $from, string $to, string $at, bool $held) {
+    $this->setting->update(['quiet_from' => $from, 'quiet_to' => $to, 'timezone' => 'UTC']);
+    warningAlert($this->production, ['opened_at' => CarbonImmutable::parse($at, 'UTC')->subHour()]);
+
+    deliveryPolicy()->digestDue(CarbonImmutable::parse($at, 'UTC'));
+
+    expect(queuedWebhooks()->count())->toBe($held ? 0 : 1);
+})->with([
+    'all day but a minute' => ['00:00', '23:59', '2026-09-17 12:00:00', false],
+    'all day but the last tick, inside' => ['00:00', '23:45', '2026-09-17 23:30:00', true],
+    'all day but the last tick, on it' => ['00:00', '23:45', '2026-09-17 23:45:00', false],
+    'across midnight leaving five minutes' => ['00:10', '00:05', '2026-09-17 00:00:00', false],
+]);
+
+test('a warning resolved long before a paused collection resumes still reaches the next digest', function () {
+    $this->production->update(['polling_enabled' => false]);
+    $alert = warningAlert($this->production, ['opened_at' => $this->now->subDays(3), 'resolved_at' => $this->now->subDays(2)]);
+
+    deliveryPolicy()->digestDue($this->now);
+
+    expect(Queue::pushedJobs())->toBe([]);
+
+    $this->production->update(['polling_enabled' => true]);
+    deliveryPolicy()->digestDue($this->now->addMinutes(15));
+
+    expect(queuedWebhooks())->toHaveCount(1)
+        ->and(array_column(queuedWebhooks()->first()->payload['alerts'], 'id'))->toBe([$alert->id]);
+});
+
+test('one organization that fails does not stop the others', function () {
+    Exceptions::fake();
+    $other = Team::factory()->create();
+    $otherEnvironment = Environment::factory()->for(Application::factory()->for($other))->create();
+    NotificationSetting::factory()->for($other)->withWebhook('https://hooks.example.net/other')->create();
+    $overdue = ['notified' => true, 'last_notified_at' => $this->now->subHour()];
+
+    criticalAlert($this->production, [...$overdue, 'opened_at' => $this->now->subHours(2)]);
+    criticalAlert($otherEnvironment, $overdue);
+    criticalAlert($this->production, [...$overdue, 'metric' => AlertRuleMetric::EndpointUnreachable, 'resolved_at' => $this->now->subMinute(), 'opened_at' => $this->now->subHours(2)]);
+    criticalAlert($otherEnvironment, [...$overdue, 'metric' => AlertRuleMetric::EndpointUnreachable, 'resolved_at' => $this->now->subMinute()]);
+    warningAlert($this->production, ['opened_at' => $this->now->subHours(2)]);
+    warningAlert($otherEnvironment);
+
+    $visible = app(VisibleEnvironments::class);
+    $failing = Mockery::mock(VisibleEnvironments::class);
+    $failing->shouldReceive('query')->andReturnUsing(fn (Team $team, User $user) => $team->is($this->team)
+        ? throw new RuntimeException('secret-detail dev@example.com')
+        : $visible->query($team, $user));
+    $this->app->instance(VisibleEnvironments::class, $failing);
+
+    deliveryPolicy()->repeatDue($this->now);
+    deliveryPolicy()->resolutionsDue($this->now);
+    deliveryPolicy()->digestDue($this->now);
+
+    expect(queuedWebhooks()->pluck('teamId')->unique()->all())->toBe([$other->id])
+        ->and(queuedWebhooks()->pluck('event')->all())->toBe(['alert.repeated', 'alert.resolved', 'alert.digest']);
+
+    $reported = collect(Exceptions::reported());
+
+    expect($reported)->toHaveCount(3)
+        ->and($reported->first()->getMessage())->toStartWith('Alert repetitions of team '.$this->team->id.' threw RuntimeException at ')
+        ->and($reported->map(fn (Throwable $exception) => $exception->getMessage())->implode("\n"))
+        ->toContain('RuntimeException')
+        ->not->toContain('secret-detail')
+        ->not->toContain('dev@example.com');
+});
+
+test('the catch-up of alerts without any target costs the same for one alert or twenty', function () {
+    $this->setting->update(['recipients' => [], 'webhook_url' => null, 'webhook_secret' => null]);
+    $this->admin->update(['alert_emails' => false]);
+    $this->dev->update(['alert_emails' => false]);
+
+    $created = 0;
+    $count = function (int $alerts) use (&$created): int {
+        Alert::query()->delete();
+
+        for ($index = 0; $index < $alerts; $index++) {
+            criticalAlert(Environment::factory()->for($this->production->application)->create(['name' => 'node-'.++$created]));
+        }
+
+        $policy = deliveryPolicy();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $policy->repeatDue($this->now);
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    $one = $count(1);
+
+    expect($count(20))->toBe($one)
+        ->and(Queue::pushedJobs())->toBe([]);
+
+    $this->setting->update(['webhook_url' => 'https://hooks.example.com/horizon', 'webhook_secret' => 'a-secret']);
+
+    $withTargetOne = $count(1);
+
+    expect($count(20) - $withTargetOne)->toBeLessThanOrEqual(19);
+});
+
+test('one alert that fails does not stop the next one of the same organization', function () {
+    Exceptions::fake();
+    $overdue = ['notified' => true, 'last_notified_at' => $this->now->subHour()];
+    $broken = criticalAlert($this->staging, [...$overdue, 'opened_at' => $this->now->subHours(2)]);
+    $healthy = criticalAlert($this->production, $overdue);
+    DB::table('environments')->where('id', $this->staging->id)->update(['slug' => '']);
+
+    deliveryPolicy()->repeatDue($this->now);
+
+    expect(queuedWebhooks()->pluck('alertId')->all())->toBe([$healthy->id])
+        ->and($broken->refresh()->last_notified_at?->equalTo($this->now->subHour()))->toBeTrue()
+        ->and(Exceptions::reported())->toHaveCount(1);
+});
+
+test('the catch-up window of lost resolutions comes from the configuration', function () {
+    config(['horizon-watch.notifications.resolution_catch_up_minutes' => 10]);
+    $notified = ['notified' => true, 'last_notified_at' => $this->now->subHour()];
+    criticalAlert($this->production, [...$notified, 'resolved_at' => $this->now->subMinutes(11)]);
+    $recent = criticalAlert($this->staging, [...$notified, 'resolved_at' => $this->now->subMinutes(10)]);
+
+    deliveryPolicy()->resolutionsDue($this->now);
+
+    expect(queuedWebhooks()->pluck('alertId')->all())->toBe([$recent->id]);
 });

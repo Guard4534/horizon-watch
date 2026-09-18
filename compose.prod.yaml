@@ -18,7 +18,7 @@ x-app: &app
         SESSION_DRIVER: database
         CACHE_STORE: database
         QUEUE_CONNECTION: database
-        MAIL_MAILER: ${MAIL_MAILER:-log}
+        MAIL_MAILER: ${MAIL_MAILER:-smtp}
         MAIL_HOST: ${MAIL_HOST:-}
         MAIL_PORT: ${MAIL_PORT:-587}
         MAIL_USERNAME: ${MAIL_USERNAME:-}

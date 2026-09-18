@@ -22,5 +22,6 @@ class MembersPageData extends Data
         public MembersPermissionsData $permissions,
         /** @var array<int, PermissionMatrixRowData> */
         public array $matrix,
+        public int $invitationExpiresDays,
     ) {}
 }

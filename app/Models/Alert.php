@@ -42,6 +42,7 @@ use Illuminate\Support\Carbon;
  * @property CarbonImmutable|null $last_notified_at
  * @property bool $notified
  * @property CarbonImmutable|null $digested_at
+ * @property CarbonImmutable|null $resolution_notified_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Team $team
@@ -73,6 +74,7 @@ use Illuminate\Support\Carbon;
     'last_notified_at',
     'notified',
     'digested_at',
+    'resolution_notified_at',
 ])]
 class Alert extends Model
 {
@@ -200,6 +202,7 @@ class Alert extends Model
             'last_notified_at' => 'immutable_datetime',
             'notified' => 'boolean',
             'digested_at' => 'immutable_datetime',
+            'resolution_notified_at' => 'immutable_datetime',
         ];
     }
 }

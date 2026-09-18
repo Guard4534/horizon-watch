@@ -10,6 +10,7 @@ use App\Models\Environment;
 use App\Models\EnvironmentState;
 use App\Models\NotificationSetting;
 use App\Models\Team;
+use App\Notifications\Alerts\AlertMail;
 use App\Notifications\Alerts\AlertNotification;
 use App\Notifications\Alerts\ResolvedNotification;
 use App\Notifications\Alerts\TestNotification;
@@ -197,4 +198,93 @@ test('the preview renders the opening email in the requested language', function
         ->and($preview->render($this->alert, 'it'))->toContain('Ambiente')
         ->and($preview->subject($this->alert, 'it'))->toStartWith('[CRITICO] ')
         ->and(app()->getLocale())->toBe('en');
+});
+
+const HOSTILE_MARKDOWN = "\n\n![p](https://evil.example.com/p.png) [x](https://evil.example.com)\n\n";
+
+function expectNoInjectedMarkup(string $html): void
+{
+    expect($html)->not->toContain('<img')
+        ->not->toMatch('/href\s*=\s*["\']?https?:\/\/evil\.example\.com/i')
+        ->not->toContain('src="https://evil');
+}
+
+test('horizon names cannot inject markdown into an alert email or its preview', function () {
+    EnvironmentState::query()->where('environment_id', $this->environment->id)->update(['nodes' => json_encode([
+        ['hostname' => 'queue-01'.HOSTILE_MARKDOWN, 'status' => 'running', 'workers' => 1, 'supervisors' => 1, 'queues' => 1],
+    ])]);
+    $this->alert->update([
+        'metric' => AlertRuleMetric::JobRuntime,
+        'unit' => 's',
+        'value' => 300,
+        'detail' => ['job' => 'App\Jobs\BuildReport'.HOSTILE_MARKDOWN, 'queue' => 'reports'.HOSTILE_MARKDOWN, 'seconds' => 300],
+    ]);
+    $alert = $this->alert->fresh();
+
+    foreach ([mailHtml(new AlertNotification($alert)), app(EmailPreview::class)->render($alert, 'en')] as $html) {
+        expectNoInjectedMarkup($html);
+
+        expect($html)->toContain('App\Jobs\BuildReport ![p](https://evil.example.com/p.png) [x](https://evil.example.com) on queue reports ![p](https://evil.example.com/p.png) [x](https://evil.example.com)')
+            ->and($html)->toContain('queue-01 ![p](https://evil.example.com/p.png) [x](https://evil.example.com)');
+    }
+});
+
+test('the queues without workers cannot inject markdown either', function () {
+    $this->alert->update([
+        'metric' => AlertRuleMetric::WorkersMissing,
+        'detail' => ['queues' => ['default'.HOSTILE_MARKDOWN, 'emails']],
+    ]);
+
+    $html = mailHtml(new AlertNotification($this->alert->fresh()));
+
+    expectNoInjectedMarkup($html);
+    expect($html)->toContain('Queues: default ![p](https://evil.example.com/p.png) [x](https://evil.example.com), emails');
+});
+
+test('names typed in the panel cannot inject markdown into any alert email', function () {
+    $this->team->update(['name' => 'Acme'.HOSTILE_MARKDOWN]);
+    $this->alert->update(['application_name' => 'Shop'.HOSTILE_MARKDOWN, 'environment_name' => 'production'.HOSTILE_MARKDOWN]);
+    $alert = $this->alert->fresh();
+    $this->alert->update(['resolved_at' => now()]);
+    $resolved = $this->alert->fresh();
+
+    foreach ([
+        new AlertNotification($alert),
+        new ResolvedNotification($resolved),
+        new WarningDigestNotification($this->team->fresh(), collect([$alert])),
+        new TestNotification($this->team->fresh()),
+    ] as $notification) {
+        expectNoInjectedMarkup(mailHtml($notification));
+        expect(mailSubject($notification))->not->toContain("\n");
+    }
+
+    $where = 'Shop ![p](https://evil.example.com/p.png) [x](https://evil.example.com) · production ![p](https://evil.example.com/p.png) [x](https://evil.example.com)';
+
+    expect(mailHtml(new AlertNotification($alert)))->toContain($where)
+        ->and(mailHtml(new WarningDigestNotification($this->team->fresh(), collect([$alert]))))->toContain($where)
+        ->and(mailHtml(new TestNotification($this->team->fresh())))->toContain('Alerts of Acme ![p](https://evil.example.com/p.png) [x](https://evil.example.com) will reach this address.');
+
+    expect(mailSubject(new AlertNotification($alert)))->toBe('[CRITICAL] Shop ![p](https://evil.example.com/p.png) [x](https://evil.example.com) · production ![p](https://evil.example.com/p.png) [x](https://evil.example.com) — Pending jobs');
+});
+
+test('markdown in a mail value stays text even without the sanitiser', function () {
+    $html = (string) AlertMail::message()->markdown('mail.alerts.test', [
+        'color' => AlertMail::RESOLVED_COLOR,
+        'headline' => 'Test'.HOSTILE_MARKDOWN,
+        'body' => 'Body'.HOSTILE_MARKDOWN,
+        'url' => 'https://panel.example.com/acme/wall',
+        'action' => 'Open the panel',
+    ])->render();
+
+    expectNoInjectedMarkup($html);
+});
+
+test('a value placed in a mail is one trimmed line capped at the configured length', function () {
+    config(['horizon-watch.notifications.mail_value_length' => 10]);
+
+    expect(AlertMail::plain("  a\r\n\tb\u{0000}c\u{202E}d\u{200B}e  "))->toBe('a b c d e')
+        ->and(AlertMail::plain('0123456789'))->toBe('0123456789')
+        ->and(AlertMail::plain('0123456789ABC'))->toBe('012345678…')
+        ->and(AlertMail::plain("caf\xC3"))->toBe('caf?')
+        ->and(AlertMail::plain("\n\n"))->toBe('');
 });

@@ -8,6 +8,8 @@ use Spatie\LaravelData\Data;
 
 class AlertRulesInputData extends Data
 {
+    public const string SCOPE = 'scope';
+
     public function __construct(
         /** @var array<int, AlertRuleInputData> */
         #[DataCollectionOf(AlertRuleInputData::class)]

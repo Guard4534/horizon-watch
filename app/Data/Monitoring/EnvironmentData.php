@@ -38,6 +38,8 @@ class EnvironmentData extends Data
         public int $pollIntervalSeconds,
         public ?ReadingError $readingError,
         public ?HorizonStatus $horizonStatus,
+        /** @var array<string, float> */
+        public array $thresholds,
     ) {}
 
     public static function compareBySeverityThenPending(self $a, self $b): int

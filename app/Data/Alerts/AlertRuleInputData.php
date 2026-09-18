@@ -26,7 +26,7 @@ class AlertRuleInputData extends Data
      */
     public static function rules(ValidationContext $context): array
     {
-        $presence = self::organizationScope() ? 'required' : 'nullable';
+        $presence = self::organizationScope($context) ? 'required' : 'nullable';
         $metric = is_array($context->payload) && is_string($context->payload['metric'] ?? null)
             ? AlertRuleMetric::tryFrom($context->payload['metric'])
             : null;
@@ -56,10 +56,10 @@ class AlertRuleInputData extends Data
             && $this->enabled === null;
     }
 
-    private static function organizationScope(): bool
+    private static function organizationScope(ValidationContext $context): bool
     {
-        $scope = request()->route()?->parameter('scope');
+        $scope = $context->fullPayload[AlertRulesInputData::SCOPE] ?? null;
 
-        return is_string($scope) && Str::lower($scope) === AlertRule::ORGANIZATION;
+        return ! is_string($scope) || Str::lower($scope) === AlertRule::ORGANIZATION;
     }
 }

@@ -2,9 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Alerts\AlertEngine;
 use App\Models\Alert;
 use App\Models\AlertNotification;
 use App\Models\EnvironmentSnapshot;
+use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -16,11 +18,14 @@ use Illuminate\Support\Str;
 #[Description('Delete the readings and the resolved alerts older than their retention periods')]
 class PruneReadings extends Command
 {
-    public function handle(): int
+    public function handle(AlertEngine $alerts): int
     {
         $chunk = max(1, (int) ($this->option('chunk') ?? config()->integer('horizon-watch.readings.prune_chunk')));
         $readingCutoff = now()->subDays((int) config('horizon-watch.retention_days'));
         $alertCutoff = now()->subDays((int) config('horizon-watch.alert_retention_days'));
+
+        $orphans = $alerts->resolveOrphans(CarbonImmutable::now());
+        $this->info("Resolved {$orphans} orphaned ".Str::plural('alert', $orphans).'.');
 
         $this->report('reading', $this->prune(
             EnvironmentSnapshot::query()->where('captured_at', '<', $readingCutoff),

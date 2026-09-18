@@ -45,6 +45,7 @@ const { page } = defineProps<{
             <InviteForm
                 v-if="page.permissions.canInvite"
                 :environments="page.environments"
+                :expires-days="page.invitationExpiresDays"
             />
 
             <SectionCard :title="$t('How access works')">

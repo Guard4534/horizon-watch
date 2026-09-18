@@ -53,3 +53,31 @@ test('an unknown time zone falls back to the default one', function () {
     expect(QuietHours::contains('23:00', '23:45', 'Mars/Olympus', $at))->toBeTrue()
         ->and(QuietHours::contains('23:00', '23:45', 'UTC', $at))->toBeFalse();
 });
+
+test('the window follows the wall clock across the daylight saving changes of Rome', function (string $from, string $to, string $utc, bool $quiet) {
+    expect(QuietHours::contains($from, $to, 'Europe/Rome', CarbonImmutable::parse($utc, 'UTC')))->toBe($quiet);
+})->with([
+    'march, 01:59 local before the jump' => ['01:00', '03:00', '2026-03-29 00:59:00', true],
+    'march, 03:00 local right after the jump' => ['01:00', '03:00', '2026-03-29 01:00:00', false],
+    'march, a window inside the skipped hour never holds, before' => ['02:00', '02:30', '2026-03-29 00:59:59', false],
+    'march, a window inside the skipped hour never holds, after' => ['02:00', '02:30', '2026-03-29 01:00:00', false],
+    'march, 23:00 local is 21:00 utc after the jump' => ['23:00', '07:00', '2026-03-29 21:00:00', true],
+    'october, first 02:30 local' => ['02:00', '03:00', '2026-10-25 00:30:00', true],
+    'october, second 02:30 local' => ['02:00', '03:00', '2026-10-25 01:30:00', true],
+    'october, 03:00 local after the repeated hour' => ['02:00', '03:00', '2026-10-25 02:00:00', false],
+    'october, 23:00 local is 22:00 utc after the change' => ['23:00', '07:00', '2026-10-25 22:00:00', true],
+    'october, 22:59 local' => ['23:00', '07:00', '2026-10-25 21:59:00', false],
+]);
+
+test('a window covers every digest tick only when no quarter of an hour is left outside it', function (?string $from, ?string $to, bool $covers) {
+    expect(QuietHours::coversEveryTick($from, $to))->toBe($covers);
+})->with([
+    'all day but a minute' => ['00:00', '23:59', true],
+    'all day but the last quarter' => ['00:00', '23:45', false],
+    'across midnight leaving five minutes' => ['00:10', '00:05', true],
+    'across midnight leaving midnight' => ['00:01', '00:00', false],
+    'across midnight leaving 23:45' => ['23:50', '23:40', false],
+    'a night' => ['23:00', '07:00', false],
+    'no window' => [null, '07:00', false],
+    'equal ends' => ['07:00', '07:00', false],
+]);

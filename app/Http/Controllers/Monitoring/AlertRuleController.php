@@ -19,16 +19,30 @@ class AlertRuleController extends Controller
 {
     public function index(Request $request, Team $current_team, AlertRulesQuery $query, string $scope = 'organization'): Response
     {
-        return Inertia::render('monitoring/alert-rules/Index', [
-            'page' => $query->handle($current_team, $request->user(), $scope, $request->session()),
-        ]);
+        $page = $query->handle($current_team, $request->user(), $scope, $request->session());
+
+        if ($page->newWebhookSecret === null) {
+            return Inertia::render('monitoring/alert-rules/Index', ['page' => $page]);
+        }
+
+        Inertia::encryptHistory();
+
+        $response = Inertia::render('monitoring/alert-rules/Index', ['page' => $page]);
+
+        Inertia::encryptHistory((bool) config('inertia.history.encrypt', false));
+        Inertia::clearHistory();
+
+        return $response;
     }
 
-    public function update(Team $current_team, string $scope, AlertRulesInputData $data, MonitoringRepository $monitoring, UpdateAlertRules $updateAlertRules): RedirectResponse
+    public function update(Request $request, Team $current_team, string $scope, MonitoringRepository $monitoring, UpdateAlertRules $updateAlertRules): RedirectResponse
     {
         $this->ensureScopeExists($monitoring, $current_team, $scope);
 
-        $updateAlertRules->handle($current_team, $scope, $data);
+        $updateAlertRules->handle($current_team, $scope, AlertRulesInputData::validateAndCreate([
+            ...$request->all(),
+            AlertRulesInputData::SCOPE => $scope,
+        ]));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Alert rules saved.')]);
 

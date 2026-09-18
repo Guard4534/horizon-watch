@@ -25,8 +25,8 @@ the first organization. Everyone else joins by invitation.
 
 ## Configuration
 
-Everything is optional and set as environment variables (for example in a `.env` file
-next to `compose.prod.yaml`):
+Everything is set as environment variables (for example in a `.env` file next to
+`compose.prod.yaml`) and has a default, except the mail server:
 
 | Variable                                                                                       | Default                 | Purpose                                      |
 | ---------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------- |
@@ -38,8 +38,14 @@ next to `compose.prod.yaml`):
 | `APP_URL`                                                                                      | `http://localhost:8080` | Public URL, used in links and emails         |
 | `APP_LOCALE`                                                                                   | `en`                    | Default language (`en` or `it`)              |
 | `DB_PASSWORD`                                                                                  | `horizon_watch`         | PostgreSQL password; change it               |
-| `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS` | log only                | SMTP for invitations and alerts              |
+| `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS` | `smtp`, no host         | SMTP for invitations and alerts              |
 | `APP_KEY`                                                                                      | generated               | Leave empty to generate one on first start   |
+
+Email goes out only through the SMTP server you configure: set `MAIL_HOST`, `MAIL_PORT` and,
+when the server asks for them, `MAIL_USERNAME` and `MAIL_PASSWORD`. Until then every email —
+invitations and alerts — fails: the panel lists alert emails as not delivered, and invitations
+stay in the queue's failed jobs. There is no fallback that writes emails to the log, because
+the log would then hold recipients and links.
 
 ## Webhook
 
@@ -59,6 +65,7 @@ failed delivery is tried three times (after 10 and 60 seconds) before it is logg
 ```json
 {
     "event": "alert.opened",
+    "delivery_id": "0f6d2c1e-8a4b-4c3d-9e2f-1a2b3c4d5e6f",
     "alert": {
         "id": "01992f3c-5a4e-7b1d-9c2a-6d3e4f5a6b7c",
         "rule": "horizon.master_inactive",
@@ -80,6 +87,10 @@ failed delivery is tried three times (after 10 and 60 seconds) before it is logg
 `event` is `alert.opened`, `alert.repeated` or `alert.resolved` (critical alerts),
 `alert.digest` (warnings, every 15 minutes, with an `alerts` list instead of `alert`) or
 `test` (with `"alert": null`). `url` is `null` once the environment is deleted.
+
+`delivery_id` names one delivery and stays the same when a failed delivery is tried again,
+while `sent_at` is the time of each attempt. A receiver that answered too slowly may get the
+same delivery twice: deduplicate on `delivery_id`.
 
 Verify the signature before trusting the body, and reject old timestamps:
 
