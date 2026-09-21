@@ -6,7 +6,6 @@ import { computed } from 'vue';
 import EnvironmentMobile from '@/components/mobile/environment/EnvironmentMobile.vue';
 import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
-import ConnectionCard from '@/components/monitoring/environment/ConnectionCard.vue';
 import EffectiveRules from '@/components/monitoring/environment/EffectiveRules.vue';
 import FailedJobTable from '@/components/monitoring/environment/FailedJobTable.vue';
 import IncidentBanner from '@/components/monitoring/environment/IncidentBanner.vue';
@@ -360,7 +359,6 @@ const tiles = computed<Tile[]>(() => [
                     :rules="page.rules"
                     :environment-name="page.environment.name"
                 />
-                <ConnectionCard :environment="environment" />
             </div>
         </div>
     </div>

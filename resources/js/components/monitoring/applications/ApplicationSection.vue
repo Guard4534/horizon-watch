@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
-import {
-    PhGearSix,
-    PhLockSimple,
-    PhLockSimpleOpen,
-    PhPencilSimple,
-    PhPlus,
-} from '@phosphor-icons/vue';
+import { PhGearSix, PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import {
     statusText,
@@ -146,9 +140,7 @@ function openRow(
                     <tr>
                         <th>{{ $t('Environment') }}</th>
                         <th>{{ $t('Horizon URL') }}</th>
-                        <th>{{ $t('Collection') }}</th>
                         <th>{{ $t('Nodes') }}</th>
-                        <th>{{ $t('Rules') }}</th>
                         <th style="text-align: right">{{ $t('Pending') }}</th>
                         <th>{{ $t('Status') }}</th>
                         <th />
@@ -192,26 +184,6 @@ function openRow(
                                 )
                             }}
                         </td>
-                        <td style="font-size: 12px">
-                            <span
-                                class="inline-flex items-center gap-[5px]"
-                                style="color: var(--nc-neutral-300)"
-                            >
-                                <component
-                                    :is="
-                                        environment.basicAuthUser
-                                            ? PhLockSimple
-                                            : PhLockSimpleOpen
-                                    "
-                                    :size="13"
-                                />
-                                {{
-                                    environment.basicAuthUser
-                                        ? `Basic · ${environment.basicAuthUser}`
-                                        : $t('none')
-                                }}
-                            </span>
-                        </td>
                         <td
                             style="
                                 font-size: 12px;
@@ -223,13 +195,6 @@ function openRow(
                                     ? '—'
                                     : environment.nodeCount
                             }}
-                        </td>
-                        <td>
-                            <span class="nc-tag nc-tag-neutral">{{
-                                environment.name === 'production'
-                                    ? $t('Prod override')
-                                    : $t('Org default')
-                            }}</span>
                         </td>
                         <td class="nc-num" style="text-align: right">
                             {{
