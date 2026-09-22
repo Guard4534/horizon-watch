@@ -233,7 +233,7 @@ class StoredReadings
     /**
      * @return array{0: CarbonImmutable, 1: CarbonImmutable, 2: int}
      */
-    private function grid(SeriesRange $range): array
+    public function grid(SeriesRange $range): array
     {
         $points = self::seriesPoints();
         $step = intdiv(match ($range) {

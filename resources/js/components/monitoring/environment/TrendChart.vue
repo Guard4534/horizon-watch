@@ -1,15 +1,32 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
+import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
-import TrendLine from '@/components/nocturne/TrendLine.vue';
+import TimeSeriesChart from '@/components/nocturne/TimeSeriesChart.vue';
+import { formatCount, formatWait } from '@/lib/monitoring';
+import { rangeLabel } from '@/lib/timeSeries';
 
-const { throughput, maxWait, range } = defineProps<{
+const { throughput, maxWait, range, grid } = defineProps<{
     throughput: number[];
     maxWait: number[];
     range: App.Enums.SeriesRange;
+    grid: App.Data.Monitoring.SeriesGridData;
 }>();
+
+const label = computed(() =>
+    trans(':range, peak :count jobs/min, peak max wait :wait', {
+        range: rangeLabel(range),
+        count: formatCount(Math.max(0, ...throughput)),
+        wait: formatWait(Math.max(0, ...maxWait)),
+    }),
+);
+
+const describe = (value: number) =>
+    trans(':count jobs/min', { count: String(value) });
+const describeWait = (value: number) =>
+    trans('max wait :wait', { wait: formatWait(value) });
 
 const selected = computed({
     get: () => range,
@@ -58,16 +75,15 @@ const selected = computed({
                 ]"
             />
         </template>
-        <div class="relative">
-            <TrendLine :values="throughput" :width="520" :height="108" fill />
-            <div class="absolute inset-0">
-                <TrendLine
-                    :values="maxWait"
-                    :width="520"
-                    :height="108"
-                    color="var(--st-warn)"
-                />
-            </div>
-        </div>
+        <TimeSeriesChart
+            :values="throughput"
+            :secondary="maxWait"
+            :starts-at="grid.startsAt"
+            :step-seconds="grid.stepSeconds"
+            :height="150"
+            :label="label"
+            :describe="describe"
+            :describe-secondary="describeWait"
+        />
     </SectionCard>
 </template>

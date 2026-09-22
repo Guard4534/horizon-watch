@@ -40,6 +40,7 @@ class EnvironmentDetailQuery
             range: $range,
             throughput: $this->monitoring->throughputSeries($team, $environment->id, $range),
             maxWait: $this->monitoring->maxWaitSeries($team, $environment->id, $range),
+            grid: $this->monitoring->seriesGrid($range),
             rules: $rules,
             canTestConnection: $this->canTestConnection($team),
         );

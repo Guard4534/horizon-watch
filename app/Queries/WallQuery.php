@@ -40,6 +40,7 @@ class WallQuery
             environments: $environments,
             anomalies: array_slice($anomalies, 0, config()->integer('horizon-watch.pages.wall_anomalies')),
             throughput: $this->monitoring->throughputSeries($team, null, SeriesRange::ThreeHours),
+            grid: $this->monitoring->seriesGrid(SeriesRange::ThreeHours),
             jobsPerMinute: $sum(fn (EnvironmentData $environment) => $environment->jobsPerMinute),
             notifications: $this->monitoring->sentNotifications($team),
             applicationCount: count($this->monitoring->applications($team)),

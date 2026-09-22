@@ -14,6 +14,7 @@ use App\Data\Monitoring\NotificationSettingsData;
 use App\Data\Monitoring\QueueData;
 use App\Data\Monitoring\RuleScopeData;
 use App\Data\Monitoring\SentNotificationData;
+use App\Data\Monitoring\SeriesGridData;
 use App\Data\Pages\AlertCountsData;
 use App\Enums\AlertState;
 use App\Enums\SeriesRange;
@@ -66,6 +67,8 @@ interface MonitoringRepository
 
     /** @return array<int, int> */
     public function maxWaitSeries(Team $team, string $environmentId, SeriesRange $range): array;
+
+    public function seriesGrid(SeriesRange $range): SeriesGridData;
 
     public function alerts(Team $team, AlertState $state, ?string $application = null, int $page = 1): AlertPageData;
 

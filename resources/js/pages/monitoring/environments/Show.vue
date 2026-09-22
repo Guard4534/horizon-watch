@@ -341,6 +341,7 @@ const tiles = computed<Tile[]>(() => [
                     :throughput="page.throughput"
                     :max-wait="page.maxWait"
                     :range="page.range"
+                    :grid="page.grid"
                 />
                 <QueueTable
                     :queues="page.queues"

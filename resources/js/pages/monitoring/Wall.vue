@@ -12,12 +12,13 @@ import SentNotifications from '@/components/monitoring/wall/SentNotifications.vu
 import WallFilters from '@/components/monitoring/wall/WallFilters.vue';
 import KpiCard from '@/components/nocturne/KpiCard.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
-import TrendLine from '@/components/nocturne/TrendLine.vue';
+import TimeSeriesChart from '@/components/nocturne/TimeSeriesChart.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
 import { formatCount } from '@/lib/monitoring';
+import { rangeLabel } from '@/lib/timeSeries';
 import {
     create as createApplication,
     index as applicationsIndex,
@@ -36,6 +37,16 @@ const { page } = defineProps<{
 }>();
 
 useLivePoll(['page', 'openAlertCount']);
+
+const throughputLabel = computed(() =>
+    trans(':range, peak :count jobs/min', {
+        range: rangeLabel('3h'),
+        count: formatCount(Math.max(0, ...page.throughput)),
+    }),
+);
+
+const describeThroughput = (value: number) =>
+    trans(':count jobs/min', { count: String(value) });
 
 const isMobile = useIsMobile();
 
@@ -292,11 +303,13 @@ const kpis = computed(() => [
             <AnomalyList :anomalies="page.anomalies" />
 
             <SectionCard :title="$t('Organization throughput')">
-                <TrendLine
+                <TimeSeriesChart
                     :values="page.throughput"
-                    :width="280"
-                    :height="66"
-                    fill
+                    :starts-at="page.grid.startsAt"
+                    :step-seconds="page.grid.stepSeconds"
+                    :height="110"
+                    :label="throughputLabel"
+                    :describe="describeThroughput"
                 />
                 <div
                     class="mt-[var(--nc-space-2)] flex"

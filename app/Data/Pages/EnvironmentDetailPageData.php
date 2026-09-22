@@ -9,6 +9,7 @@ use App\Data\Monitoring\FailedJobData;
 use App\Data\Monitoring\LongRunningJobData;
 use App\Data\Monitoring\NodeData;
 use App\Data\Monitoring\QueueData;
+use App\Data\Monitoring\SeriesGridData;
 use App\Enums\SeriesRange;
 use Spatie\LaravelData\Data;
 
@@ -30,6 +31,7 @@ class EnvironmentDetailPageData extends Data
         public array $throughput,
         /** @var array<int, int> */
         public array $maxWait,
+        public SeriesGridData $grid,
         /** @var array<int, AlertRuleData> */
         public array $rules,
         public bool $canTestConnection,

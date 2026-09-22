@@ -18,6 +18,7 @@ use App\Data\Monitoring\NotificationSettingsData;
 use App\Data\Monitoring\QueueData;
 use App\Data\Monitoring\RuleScopeData;
 use App\Data\Monitoring\SentNotificationData;
+use App\Data\Monitoring\SeriesGridData;
 use App\Data\Pages\AlertCountsData;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
@@ -299,6 +300,13 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         $environment = $this->findEnvironment($team, $environmentId);
 
         return $environment ? $this->readings->maxWaitSeries($environment->id, $range) : [];
+    }
+
+    public function seriesGrid(SeriesRange $range): SeriesGridData
+    {
+        [$from, , $step] = $this->readings->grid($range);
+
+        return new SeriesGridData(startsAt: $from->toIso8601String(), stepSeconds: $step);
     }
 
     public function alerts(Team $team, AlertState $state, ?string $application = null, int $page = 1): AlertPageData
