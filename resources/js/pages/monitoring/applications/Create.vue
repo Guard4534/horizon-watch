@@ -1,29 +1,16 @@
 <script setup lang="ts">
-import FieldError from '@/components/FieldError.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import {
-    PhArrowClockwise,
-    PhCheckCircle,
-    PhCircleNotch,
-    PhMinusCircle,
-    PhPlus,
-    PhTrashSimple,
-    PhWarning,
-} from '@phosphor-icons/vue';
-import type { Component } from 'vue';
-import { computed, ref, watch, watchEffect } from 'vue';
+import { Head, Link } from '@inertiajs/vue3';
+import { PhArrowClockwise, PhPlus, PhTrashSimple } from '@phosphor-icons/vue';
 import ApplicationForm from '@/components/monitoring/applications/ApplicationForm.vue';
-import ColorPicker from '@/components/monitoring/applications/ColorPicker.vue';
-import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
-import type { ConnectionOutcome } from '@/components/monitoring/applications/ConnectionTest.vue';
+import ConnectionCheckRow from '@/components/monitoring/applications/ConnectionCheckRow.vue';
+import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
 import WizardSteps from '@/components/monitoring/applications/WizardSteps.vue';
-import EnvPill from '@/components/nocturne/EnvPill.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
+import { useApplicationWizard } from '@/composables/useApplicationWizard';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import {
     index as applicationsIndex,
-    store,
     testConnection,
 } from '@/routes/applications';
 
@@ -37,267 +24,24 @@ const { page } = defineProps<{
 
 const slug = useTeamSlug();
 
-const step = ref(1);
-
-const horizonPath = ref('horizon');
-
-const SUGGESTED_NAMES: Array<[string, string]> = [
-    ['production', 'prod'],
-    ['staging', 'staging'],
-    ['preprod', 'preprod'],
-    ['develop', 'develop'],
-    ['demo', 'demo'],
-    ['testing', 'testing'],
-];
-
-type Row = {
-    key: number;
-    auth: boolean;
-    urlEdited: boolean;
-    outcome: ConnectionOutcome;
-    testedSignature: string;
-    autoTest: boolean;
-};
-
-let nextKey = 0;
-
-const blankEnvironment = (
-    index: number,
-    taken: string[],
-): App.Data.Applications.EnvironmentFormData => {
-    const available = page.colors.map((color) => color.value);
-    const suggestion = SUGGESTED_NAMES.find(
-        ([name, color]) => !taken.includes(name) && available.includes(color),
-    );
-
-    return {
-        name: suggestion?.[0] ?? '',
-        color: (suggestion?.[1] ??
-            page.colors[index % page.colors.length]
-                .value) as App.Enums.EnvironmentColor,
-        horizonUrl: '',
-        basicAuthUser: null,
-        basicAuthPassword: null,
-        pollIntervalSeconds: 15,
-        pollingEnabled: true,
-    };
-};
-
-const blankRow = (): Row => ({
-    key: nextKey++,
-    auth: false,
-    urlEdited: false,
-    outcome: { state: 'idle' },
-    testedSignature: '',
-    autoTest: true,
-});
-
-const form = useForm<{
-    application: App.Data.Applications.ApplicationFormData;
-    environments: App.Data.Applications.EnvironmentFormData[];
-}>({
-    application: { name: '', host: '' },
-    environments: [blankEnvironment(0, [])],
-});
-
-const rows = ref<Row[]>([blankRow()]);
-
-const errors = computed(
-    () => form.errors as Record<string, string | undefined>,
-);
-
-const suggestedUrl = (name: string): string => {
-    const domain = form.application.host
-        .trim()
-        .replace(/^https?:\/\//i, '')
-        .replace(/\/+$/, '');
-    const path = horizonPath.value.trim().replace(/^\/+|\/+$/g, '');
-    const environment = name.trim();
-
-    if (domain === '' || environment === '') {
-        return '';
-    }
-
-    const host =
-        environment === 'production' ? domain : `${environment}.${domain}`;
-
-    return `https://${host}${path === '' ? '' : `/${path}`}`;
-};
-
-watchEffect(() => {
-    form.environments.forEach((environment, index) => {
-        if (!rows.value[index]?.urlEdited) {
-            environment.horizonUrl = suggestedUrl(environment.name);
-        }
-    });
-});
-
-const onUrlInput = (index: number) => {
-    const environment = form.environments[index];
-
-    rows.value[index].urlEdited =
-        environment.horizonUrl !== suggestedUrl(environment.name);
-};
-
-const toggleAuth = (index: number) => {
-    const row = rows.value[index];
-    row.auth = !row.auth;
-
-    if (!row.auth) {
-        form.environments[index].basicAuthUser = null;
-        form.environments[index].basicAuthPassword = null;
-    }
-};
-
-const applicationFilled = computed(
-    () =>
-        form.application.name.trim() !== '' &&
-        form.application.host.trim() !== '',
-);
-
-const environmentsFilled = computed(
-    () =>
-        form.environments.length > 0 &&
-        form.environments.every(
-            (environment) =>
-                environment.name.trim() !== '' &&
-                environment.horizonUrl.trim() !== '',
-        ),
-);
-
-const addEnvironment = () => {
-    form.environments.push(
-        blankEnvironment(
-            form.environments.length,
-            form.environments.map((environment) => environment.name.trim()),
-        ),
-    );
-    rows.value.push(blankRow());
-};
-
-const removeEnvironment = (index: number) => {
-    form.environments.splice(index, 1);
-    rows.value.splice(index, 1);
-    form.clearErrors();
-};
-
-const testPayload = (
-    environment: App.Data.Applications.EnvironmentFormData,
-): App.Data.Applications.TestConnectionData => ({
-    horizonUrl: environment.horizonUrl,
-    basicAuthUser: environment.basicAuthUser,
-    basicAuthPassword: environment.basicAuthPassword,
-});
-
-const signatureOf = (environment: App.Data.Applications.EnvironmentFormData) =>
-    JSON.stringify(testPayload(environment));
-
-watch(step, (current) => {
-    if (current !== 3) {
-        return;
-    }
-
-    form.environments.forEach((environment, index) => {
-        const row = rows.value[index];
-        const signature = signatureOf(environment);
-
-        if (row.testedSignature !== signature) {
-            row.outcome = { state: 'idle' };
-            row.testedSignature = signature;
-            row.autoTest = true;
-        } else if (row.outcome.state === 'testing') {
-            row.outcome = { state: 'idle' };
-            row.autoTest = false;
-        }
-    });
-});
-
-const tests = new Map<number, InstanceType<typeof ConnectionTest>>();
-
-const rememberTest = (key: number, instance: unknown) => {
-    if (instance) {
-        tests.set(key, instance as InstanceType<typeof ConnectionTest>);
-    } else {
-        tests.delete(key);
-    }
-};
-
-const reachable = (outcome: ConnectionOutcome): boolean =>
-    outcome.state === 'done' && outcome.result.reachable;
-
-const testAgain = async () => {
-    for (const row of rows.value.slice()) {
-        if (!reachable(row.outcome)) {
-            await tests.get(row.key)?.run();
-        }
-    }
-};
-
-const testing = computed(() =>
-    rows.value.some((row) => row.outcome.state === 'testing'),
-);
-
-const checkIcon = (outcome: ConnectionOutcome): Component => {
-    if (outcome.state === 'testing') {
-        return PhCircleNotch;
-    }
-
-    if (outcome.state !== 'done') {
-        return PhMinusCircle;
-    }
-
-    return outcome.result.reachable ? PhCheckCircle : PhWarning;
-};
-
-const checkColor = (outcome: ConnectionOutcome): string => {
-    if (outcome.state !== 'done') {
-        return 'var(--nc-neutral-500)';
-    }
-
-    return outcome.result.reachable ? 'var(--st-ok)' : 'var(--st-warn)';
-};
-
-const refusedCredentials = (outcome: ConnectionOutcome): boolean =>
-    outcome.state === 'done' && outcome.result.error === 'unauthorized';
-
-const stepOf = (keys: string[]): number => {
-    if (keys.some((key) => key.startsWith('application'))) {
-        return 1;
-    }
-
-    return keys.some((key) => key.startsWith('environments')) ? 2 : 3;
-};
-
-const unplacedErrors = computed(() =>
-    Object.entries(errors.value)
-        .filter(
-            ([key]) =>
-                !key.startsWith('application') &&
-                !key.startsWith('environments'),
-        )
-        .map(([, message]) => message)
-        .filter((message): message is string => Boolean(message)),
-);
-
-const submit = () => {
-    form.post(store(slug.value).url, {
-        onError: (bag) => {
-            const keys = Object.keys(bag);
-
-            rows.value.forEach((row, index) => {
-                if (
-                    keys.some((key) =>
-                        key.startsWith(`environments.${index}.basicAuth`),
-                    )
-                ) {
-                    row.auth = true;
-                }
-            });
-
-            step.value = stepOf(keys);
-        },
-    });
-};
+const {
+    step,
+    horizonPath,
+    form,
+    rows,
+    errors,
+    unplacedErrors,
+    applicationFilled,
+    environmentsFilled,
+    testing,
+    addEnvironment,
+    removeEnvironment,
+    onUrlInput,
+    testPayload,
+    rememberTest,
+    testAgain,
+    submit,
+} = useApplicationWizard(page.colors);
 </script>
 
 <template>
@@ -378,51 +122,16 @@ const submit = () => {
             >
                 <EnvSwatch :color="environment.color" shape="edge" :size="4" />
 
-                <div
-                    class="grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto]"
-                    style="gap: var(--nc-space-3)"
+                <EnvironmentForm
+                    v-model="form.environments[index]"
+                    v-model:auth="rows[index].auth"
+                    :colors="page.colors"
+                    :errors="errors"
+                    :prefix="`environments.${index}.`"
+                    compact
+                    @url-input="onUrlInput(index)"
                 >
-                    <div class="nc-field">
-                        <label :for="`environments-${index}-name`">{{
-                            $t('Environment name')
-                        }}</label>
-                        <input
-                            :id="`environments-${index}-name`"
-                            v-model="environment.name"
-                            class="nc-input"
-                            type="text"
-                            autocomplete="off"
-                            spellcheck="false"
-                            placeholder="production"
-                        />
-                        <FieldError
-                            :message="errors[`environments.${index}.name`]"
-                        />
-                    </div>
-
-                    <div class="nc-field">
-                        <label :for="`environments-${index}-horizonUrl`">{{
-                            $t('Horizon URL')
-                        }}</label>
-                        <input
-                            :id="`environments-${index}-horizonUrl`"
-                            v-model="environment.horizonUrl"
-                            class="nc-input"
-                            style="letter-spacing: 0.01em"
-                            type="url"
-                            autocomplete="off"
-                            spellcheck="false"
-                            placeholder="https://invoicer.example.com/horizon"
-                            @input="onUrlInput(index)"
-                        />
-                        <FieldError
-                            :message="
-                                errors[`environments.${index}.horizonUrl`]
-                            "
-                        />
-                    </div>
-
-                    <div class="flex items-start sm:pt-[22px]">
+                    <template #actions>
                         <button
                             type="button"
                             class="nc-btn nc-btn-ghost nc-t-xs nc-tone-soft"
@@ -433,106 +142,8 @@ const submit = () => {
                         >
                             <PhTrashSimple :size="13" />
                         </button>
-                    </div>
-                </div>
-
-                <div class="nc-field mt-[var(--nc-space-3)]">
-                    <label>{{ $t('Color') }}</label>
-                    <ColorPicker
-                        v-model="environment.color"
-                        :colors="page.colors"
-                        :name="`environments-${index}-color`"
-                    />
-                    <FieldError
-                        :message="errors[`environments.${index}.color`]"
-                    />
-                </div>
-
-                <div
-                    class="mt-[var(--nc-space-3)] flex flex-wrap items-center"
-                    style="gap: var(--nc-space-3)"
-                >
-                    <label class="nc-radio nc-t-xs">
-                        <input
-                            type="checkbox"
-                            :checked="rows[index].auth"
-                            @change="toggleAuth(index)"
-                        />
-                        <span class="nc-dot" />
-                        {{ $t('Basic auth') }}
-                    </label>
-                    <div
-                        v-if="rows[index].auth"
-                        class="flex flex-1 flex-wrap"
-                        style="gap: var(--nc-space-2); min-width: 220px"
-                    >
-                        <input
-                            v-model="environment.basicAuthUser"
-                            class="nc-input min-w-0 flex-1"
-                            type="text"
-                            autocomplete="off"
-                            spellcheck="false"
-                            :placeholder="$t('Basic-auth username')"
-                            :aria-label="$t('Basic-auth username')"
-                        />
-                        <input
-                            v-model="environment.basicAuthPassword"
-                            class="nc-input min-w-0 flex-1"
-                            type="password"
-                            autocomplete="new-password"
-                            :placeholder="$t('Basic-auth password')"
-                            :aria-label="$t('Basic-auth password')"
-                        />
-                    </div>
-                </div>
-                <div
-                    v-for="field in ['basicAuthUser', 'basicAuthPassword']"
-                    :key="field"
-                >
-                    <FieldError
-                        :message="errors[`environments.${index}.${field}`]"
-                    />
-                </div>
-
-                <div
-                    class="mt-[var(--nc-space-3)] flex flex-wrap items-center"
-                    style="gap: var(--nc-space-4)"
-                >
-                    <label
-                        class="nc-t-xs nc-tone-soft flex items-center"
-                        style="gap: var(--nc-space-2)"
-                    >
-                        {{ $t('Poll interval') }}
-                        <input
-                            v-model.number="environment.pollIntervalSeconds"
-                            class="nc-input"
-                            style="max-width: 80px; min-height: 30px"
-                            type="number"
-                            min="15"
-                            max="300"
-                            step="1"
-                        />
-                        {{ $t('seconds') }}
-                    </label>
-                    <label class="nc-radio nc-t-xs">
-                        <input
-                            v-model="environment.pollingEnabled"
-                            type="checkbox"
-                            role="switch"
-                            :aria-checked="environment.pollingEnabled"
-                        />
-                        <span class="nc-dot" />
-                        {{ $t('Collect readings') }}
-                    </label>
-                </div>
-                <div
-                    v-for="field in ['pollIntervalSeconds', 'pollingEnabled']"
-                    :key="field"
-                >
-                    <FieldError
-                        :message="errors[`environments.${index}.${field}`]"
-                    />
-                </div>
+                    </template>
+                </EnvironmentForm>
             </div>
 
             <div>
@@ -575,92 +186,16 @@ const submit = () => {
                 </button>
             </div>
 
-            <div
+            <ConnectionCheckRow
                 v-for="(environment, index) in form.environments"
+                :ref="(instance) => rememberTest(rows[index].key, instance)"
                 :key="rows[index].key"
-                class="nc-card check"
-            >
-                <component
-                    :is="checkIcon(rows[index].outcome)"
-                    :size="16"
-                    class="mt-[2px] flex-none"
-                    :class="{
-                        'animate-spin': rows[index].outcome.state === 'testing',
-                    }"
-                    :style="{ color: checkColor(rows[index].outcome) }"
-                />
-                <div class="min-w-0 flex-1">
-                    <div class="flex items-center" style="gap: 8px">
-                        <EnvPill
-                            :name="environment.name"
-                            :color="environment.color"
-                        />
-                        <span
-                            class="ml-auto flex-none"
-                            :style="{
-                                fontSize: '11px',
-                                color: checkColor(rows[index].outcome),
-                            }"
-                        >
-                            <template
-                                v-if="rows[index].outcome.state === 'testing'"
-                                >{{ $t('Testing…') }}</template
-                            >
-                            <template
-                                v-else-if="
-                                    rows[index].outcome.state === 'done' &&
-                                    rows[index].outcome.result.reachable
-                                "
-                                >{{ $t('Connected') }}</template
-                            >
-                            <template
-                                v-else-if="rows[index].outcome.state === 'done'"
-                                >{{ $t('Not connected') }}</template
-                            >
-                            <template v-else>{{ $t('Not tested') }}</template>
-                        </span>
-                    </div>
-                    <div class="url">{{ environment.horizonUrl }}</div>
-                    <div
-                        class="nc-num nc-t-2xs nc-tone-faint"
-                        style="margin-top: 2px"
-                    >
-                        {{
-                            environment.basicAuthUser
-                                ? `${$t('basic auth')} · ${environment.basicAuthUser}`
-                                : $t('no auth')
-                        }}
-                        · {{ environment.pollIntervalSeconds }}
-                        {{ $t('seconds') }}
-                        <template v-if="!environment.pollingEnabled">
-                            · {{ $t('Collection paused') }}</template
-                        >
-                    </div>
-                    <ConnectionTest
-                        :ref="
-                            (instance) =>
-                                rememberTest(rows[index].key, instance)
-                        "
-                        v-model:outcome="rows[index].outcome"
-                        class="mt-[6px]"
-                        :url="testConnection(slug)"
-                        :payload="testPayload(environment)"
-                        :show-button="false"
-                        :auto="rows[index].autoTest"
-                    />
-                    <div
-                        v-if="refusedCredentials(rows[index].outcome)"
-                        class="nc-t-2xs nc-tone-muted"
-                        style="margin-top: 2px"
-                    >
-                        {{
-                            $t(
-                                'The endpoint asks for credentials: go back and fill them in.',
-                            )
-                        }}
-                    </div>
-                </div>
-            </div>
+                v-model:outcome="rows[index].outcome"
+                :environment="environment"
+                :url="testConnection(slug)"
+                :payload="testPayload(environment)"
+                :auto="rows[index].autoTest"
+            />
 
             <div class="nc-field mt-[var(--nc-space-2)]">
                 <span class="block">{{ $t('Alert rules to apply') }}</span>
@@ -729,22 +264,5 @@ const submit = () => {
     overflow: hidden;
     padding: var(--nc-space-3) var(--nc-space-3) var(--nc-space-3)
         var(--nc-space-4);
-}
-
-.check {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: var(--nc-space-3);
-}
-
-.url {
-    margin-top: 4px;
-    overflow: hidden;
-    font-size: 11px;
-    letter-spacing: 0.01em;
-    color: var(--nc-neutral-500);
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 </style>

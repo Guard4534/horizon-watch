@@ -9,12 +9,12 @@ import {
     PhTranslate,
     PhUsersThree,
 } from '@phosphor-icons/vue';
-import { computed, watchEffect } from 'vue';
+import { computed } from 'vue';
 import LocaleSwitch from '@/components/LocaleSwitch.vue';
 import AlertEmailsToggle from '@/components/settings/AlertEmailsToggle.vue';
 import TeamSwitcher from '@/components/TeamSwitcher.vue';
 import { getInitials } from '@/lib/initials';
-import { useIsMobile } from '@/composables/useIsMobile';
+import { useMobileOnlyPage } from '@/composables/useMobileOnlyPage';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { logout } from '@/routes';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
@@ -34,16 +34,7 @@ const shared = usePage();
 const slug = useTeamSlug();
 const user = computed(() => shared.props.auth.user);
 
-const isMobile = useIsMobile();
-
-watchEffect(
-    () => {
-        if (!isMobile.value) {
-            router.visit(profileEdit(), { replace: true });
-        }
-    },
-    { flush: 'post' },
-);
+const isMobile = useMobileOnlyPage(profileEdit());
 </script>
 
 <template>

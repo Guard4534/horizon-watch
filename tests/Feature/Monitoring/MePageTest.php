@@ -86,3 +86,22 @@ test('a guest is sent to the login page', function () {
     $this->get(route('me', ['current_team' => $team->slug]))
         ->assertRedirect(route('login'));
 });
+
+test('the profile page is for phones only: a wider viewport is replaced with the settings profile', function () {
+    $page = file_get_contents(resource_path('js/pages/monitoring/Me.vue'));
+    $guard = file_get_contents(resource_path('js/composables/useMobileOnlyPage.ts'));
+
+    expect($page)->toContain('useMobileOnlyPage(profileEdit())');
+    expect($guard)->toContain('router.visit(fallback, { replace: true })');
+});
+
+test('the settings profile a wider viewport lands on offers the same alert-email switch', function () {
+    $user = User::factory()->create(['alert_emails' => true]);
+
+    $this->actingAs($user)
+        ->get(route('profile.edit'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('settings/Profile')
+            ->where('alertEmails', true));
+});

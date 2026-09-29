@@ -153,3 +153,13 @@ test('the applications list tells the front end whether the forms are reachable'
             ->assertInertia(fn (Assert $page) => $page->where('canManageApplications', false));
     }
 });
+
+test('the wizard and the environment pages share one environment form', function () {
+    $wizard = file_get_contents(resource_path('js/pages/monitoring/applications/Create.vue'));
+
+    expect($wizard)->toContain('<EnvironmentForm');
+
+    foreach (['basicAuthUser', 'basicAuthPassword', 'pollIntervalSeconds', 'pollingEnabled'] as $field) {
+        expect($wizard)->not->toContain($field);
+    }
+});
