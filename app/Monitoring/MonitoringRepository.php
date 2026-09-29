@@ -86,6 +86,8 @@ interface MonitoringRepository
     /** @return array<int, RuleScopeData> */
     public function ruleScopes(Team $team): array;
 
+    public function hasRuleScope(Team $team, string $scope): bool;
+
     /** @return array<int, AlertRuleData> */
     public function alertRules(Team $team, string $scope): array;
 

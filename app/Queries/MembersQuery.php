@@ -16,13 +16,12 @@ use App\Models\Membership;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
-use App\Monitoring\VisibleEnvironments;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class MembersQuery
 {
-    public function __construct(private VisibleEnvironments $visible) {}
-
     public function handle(Team $team, User $viewer): MembersPageData
     {
         $gate = Gate::forUser($viewer);
@@ -58,15 +57,22 @@ class MembersQuery
             $labels[$option->id] = $option->name;
         }
 
-        return $team->memberships()
+        $memberships = $team->memberships()
             ->with('user')
             ->get()
             ->sortBy([
                 fn (Membership $a, Membership $b) => $b->role->level() <=> $a->role->level(),
                 fn (Membership $a, Membership $b) => strcasecmp($a->user->name, $b->user->name),
-            ])
-            ->map(function (Membership $membership) use ($team, $viewer, $labels) {
-                $grantedIds = $labels === [] ? [] : $this->manualEnvironmentIds($team, $membership);
+            ]);
+
+        $granted = $labels === [] ? [] : $this->grantedEnvironmentIds($memberships, array_keys($labels));
+
+        return $memberships
+            ->map(function (Membership $membership) use ($viewer, $labels, $granted) {
+                $grantedIds = array_values(array_filter(
+                    array_keys($labels),
+                    fn (int $id) => isset($granted[$membership->user_id][$id]),
+                ));
 
                 return new MemberData(
                     id: $membership->user_id,
@@ -74,15 +80,11 @@ class MembersQuery
                     email: $membership->user->email,
                     initials: $this->initials($membership->user->name),
                     role: $membership->role,
-                    roleLabel: User::roleLabel($membership->role),
+                    roleLabel: $membership->role->label(),
                     visibility: $membership->visibility,
                     visibilityLabel: $membership->visibility->label(),
                     visibleEnvironmentIds: $grantedIds,
-                    visibleEnvironmentNames: array_values(array_filter(array_map(
-                        fn (int $id) => $labels[$id] ?? null,
-                        $grantedIds,
-                    ))),
-                    lastSeenAt: null,
+                    visibleEnvironmentNames: array_map(fn (int $id) => $labels[$id], $grantedIds),
                     isOwner: $membership->role === TeamRole::Owner,
                     isSelf: $membership->user_id === $viewer->id,
                 );
@@ -92,18 +94,31 @@ class MembersQuery
     }
 
     /**
-     * @return array<int, int>
+     * @param  Collection<int, Membership>  $memberships
+     * @param  array<int, int>  $environmentIds
+     * @return array<int, array<int, true>>
      */
-    private function manualEnvironmentIds(Team $team, Membership $membership): array
+    private function grantedEnvironmentIds(Collection $memberships, array $environmentIds): array
     {
-        if ($membership->visibility !== MemberVisibility::Manual) {
+        $manualUserIds = $memberships
+            ->filter(fn (Membership $membership) => $membership->visibility === MemberVisibility::Manual)
+            ->map(fn (Membership $membership) => $membership->user_id)
+            ->all();
+
+        if ($manualUserIds === [] || $environmentIds === []) {
             return [];
         }
 
-        return $this->visible->query($team, $membership->user)
-            ->pluck('environments.id')
-            ->map(fn (int $id) => $id)
-            ->all();
+        $granted = [];
+
+        foreach (DB::table('environment_user')
+            ->whereIn('user_id', $manualUserIds)
+            ->whereIn('environment_id', $environmentIds)
+            ->get(['user_id', 'environment_id']) as $row) {
+            $granted[(int) $row->user_id][(int) $row->environment_id] = true;
+        }
+
+        return $granted;
     }
 
     /**
@@ -119,7 +134,7 @@ class MembersQuery
                 id: $invitation->id,
                 email: $invitation->email,
                 role: $invitation->role,
-                roleLabel: User::roleLabel($invitation->role),
+                roleLabel: $invitation->role->label(),
                 visibility: $invitation->visibility,
                 visibilityLabel: $invitation->visibility->label(),
                 invitedAt: $invitation->created_at?->toIso8601String(),
@@ -166,7 +181,6 @@ class MembersQuery
         return match ($permission) {
             TeamPermission::UpdateTeam => __('Rename the organization'),
             TeamPermission::DeleteTeam => __('Delete the organization'),
-            TeamPermission::AddMember => __('Add a member'),
             TeamPermission::UpdateMember => __('Change a role or a visibility'),
             TeamPermission::RemoveMember => __('Remove a member'),
             TeamPermission::CreateInvitation => __('Invite someone'),

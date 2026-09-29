@@ -12,11 +12,9 @@ use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
 use Carbon\CarbonImmutable;
-use Illuminate\Container\Attributes\Bind;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
-#[Bind(AlertEngine::class)]
 final class AlertEngine
 {
     public function __construct(private EffectiveRules $rules) {}

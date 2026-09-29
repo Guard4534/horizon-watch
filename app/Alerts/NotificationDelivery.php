@@ -11,7 +11,7 @@ use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
 
-final readonly class NotificationDelivery implements AlertDelivery
+final readonly class NotificationDelivery
 {
     public function __construct(private Recipients $recipients) {}
 
@@ -47,7 +47,7 @@ final readonly class NotificationDelivery implements AlertDelivery
     /**
      * @param  array<string, mixed>  $payload
      */
-    public function queueWebhook(Team $team, ?string $alertId, SentNotificationKind $kind, array $payload, ?int $environmentCount = null): bool
+    private function queueWebhook(Team $team, ?string $alertId, SentNotificationKind $kind, array $payload, ?int $environmentCount = null): bool
     {
         if (! $this->hasWebhook($team)) {
             return false;

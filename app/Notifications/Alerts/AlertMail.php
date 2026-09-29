@@ -38,6 +38,11 @@ final class AlertMail
         ]);
     }
 
+    public static function openPanel(): string
+    {
+        return __('Open the panel');
+    }
+
     public static function severityTag(AlertSeverity $severity): string
     {
         return match ($severity) {

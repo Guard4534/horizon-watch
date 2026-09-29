@@ -1,5 +1,6 @@
 <?php
 
+use App\Externals\Horizon\Data\HorizonStats;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Schema\Blueprint;
@@ -20,7 +21,7 @@ return new class extends Migration
             $table->unsignedInteger('max_wait_seconds')->default(0);
             $table->unsignedInteger('jobs_per_minute')->default(0);
             $table->unsignedInteger('failed_in_window')->default(0);
-            $table->unsignedInteger('failed_window_minutes')->default(10080);
+            $table->unsignedInteger('failed_window_minutes')->default(HorizonStats::DEFAULT_FAILED_WINDOW_MINUTES);
             $table->unsignedInteger('failed_last_hour')->default(0);
             $table->unsignedInteger('workers')->default(0);
             $table->unsignedInteger('node_count')->default(0);

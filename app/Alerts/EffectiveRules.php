@@ -7,11 +7,9 @@ use App\Enums\RuleOrigin;
 use App\Models\AlertRule;
 use App\Models\Environment;
 use App\Models\Team;
-use Illuminate\Container\Attributes\Bind;
 use Illuminate\Container\Attributes\Scoped;
 use Illuminate\Support\Str;
 
-#[Bind(EffectiveRules::class)]
 #[Scoped]
 final class EffectiveRules
 {

@@ -3,9 +3,9 @@
 namespace App\Rules;
 
 use App\Enums\ReadingError;
-use App\Externals\Horizon\Dns\Resolver;
-use App\Externals\Horizon\Exceptions\HorizonReadFailed;
-use App\Externals\Horizon\SafeUrlGuard;
+use App\Externals\Http\Dns\Resolver;
+use App\Externals\Http\SafeUrlGuard;
+use App\Externals\Http\UrlRefused;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Translation\PotentiallyTranslatedString;
@@ -23,13 +23,13 @@ class WebhookUrl implements ValidationRule
 
         $url = trim($value);
 
-        if (preg_match('#^[^:/?\#]*://[^/?\#]*@#', $url) === 1) {
+        if (UrlWithoutCredentials::carriesCredentials($url)) {
             $fail($this->credentialsMessage());
 
             return;
         }
 
-        if (str_contains($url, '?') || str_contains($url, '#')) {
+        if (UrlWithoutQueryOrFragment::carriesQueryOrFragment($url)) {
             $fail($this->queryMessage());
 
             return;
@@ -50,12 +50,12 @@ class WebhookUrl implements ValidationRule
                     return filter_var($host, FILTER_VALIDATE_IP) === false ? [] : [$host];
                 }
             },
-            (bool) config('horizon-watch.block_private_networks', false),
+            config()->boolean('horizon-watch.block_private_networks', false),
         );
 
         try {
             $guard->check($url);
-        } catch (HorizonReadFailed $exception) {
+        } catch (UrlRefused $exception) {
             return $exception->reason === ReadingError::Blocked;
         }
 

@@ -15,13 +15,9 @@ return [
 
     'stale_after_intervals' => 3,
 
-    'test_connection_per_minute' => 10,
-
     'webhook_timeout_seconds' => 5,
 
     'webhook_response_bytes' => 65536,
-
-    'test_notification_per_minute' => 5,
 
     'horizon' => [
         'max_body_bytes' => 2 * 1024 * 1024,
@@ -56,13 +52,14 @@ return [
     ],
 
     'notifications' => [
-        'default_timezone' => 'Europe/Rome',
+        'default_timezone' => (string) env('HORIZON_WATCH_DEFAULT_TIMEZONE', 'UTC'),
         'default_repeat_minutes' => 30,
         'repeat_minutes' => [15, 30, 60],
         'max_recipients' => 20,
         'mail_nodes' => 5,
         'mail_value_length' => 150,
         'resolution_catch_up_minutes' => 60,
+        'alerts_per_run' => 500,
         'delivery_tries' => 3,
         'delivery_backoff_seconds' => [10, 60],
         'delivery_timeout_seconds' => 30,
@@ -86,5 +83,7 @@ return [
         'setup_per_minute' => 10,
         'invitations_per_minute' => 6,
         'password_update_per_minute' => 6,
+        'test_connection_per_minute' => 10,
+        'test_notification_per_minute' => 5,
     ],
 ];

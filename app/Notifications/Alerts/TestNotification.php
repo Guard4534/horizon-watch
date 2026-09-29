@@ -27,7 +27,7 @@ class TestNotification extends Notification
                 'headline' => $this->headline(),
                 'body' => $this->body(),
                 'url' => AlertMail::wallUrl($this->team),
-                'action' => $this->openPanel(),
+                'action' => AlertMail::openPanel(),
             ]);
     }
 
@@ -44,10 +44,5 @@ class TestNotification extends Notification
     private function body(): string
     {
         return __('Alerts of :organization will reach this address.', ['organization' => AlertMail::organization($this->team)]);
-    }
-
-    private function openPanel(): string
-    {
-        return __('Open the panel');
     }
 }

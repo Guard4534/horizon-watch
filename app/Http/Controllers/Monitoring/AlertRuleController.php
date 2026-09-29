@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Monitoring;
 use App\Actions\Alerts\ResetAlertRules;
 use App\Actions\Alerts\UpdateAlertRules;
 use App\Data\Alerts\AlertRulesInputData;
-use App\Data\Monitoring\RuleScopeData;
 use App\Http\Controllers\Controller;
 use App\Models\Team;
 use App\Monitoring\MonitoringRepository;
@@ -19,25 +18,12 @@ class AlertRuleController extends Controller
 {
     public function index(Request $request, Team $current_team, AlertRulesQuery $query, string $scope = 'organization'): Response
     {
-        $page = $query->handle($current_team, $request->user(), $scope, $request->session());
-
-        if ($page->newWebhookSecret === null) {
-            return Inertia::render('monitoring/alert-rules/Index', ['page' => $page]);
-        }
-
-        Inertia::encryptHistory();
-
-        $response = Inertia::render('monitoring/alert-rules/Index', ['page' => $page]);
-
-        Inertia::encryptHistory((bool) config('inertia.history.encrypt', false));
-        Inertia::clearHistory();
-
-        return $response;
+        return AlertRulesQuery::render($query->handle($current_team, $request->user(), $scope, $request->session()));
     }
 
     public function update(Request $request, Team $current_team, string $scope, MonitoringRepository $monitoring, UpdateAlertRules $updateAlertRules): RedirectResponse
     {
-        $this->ensureScopeExists($monitoring, $current_team, $scope);
+        abort_unless($monitoring->hasRuleScope($current_team, $scope), 404);
 
         $updateAlertRules->handle($current_team, $scope, AlertRulesInputData::validateAndCreate([
             ...$request->all(),
@@ -51,19 +37,12 @@ class AlertRuleController extends Controller
 
     public function reset(Team $current_team, string $scope, MonitoringRepository $monitoring, ResetAlertRules $resetAlertRules): RedirectResponse
     {
-        $this->ensureScopeExists($monitoring, $current_team, $scope);
+        abort_unless($monitoring->hasRuleScope($current_team, $scope), 404);
 
         $resetAlertRules->handle($current_team, $scope);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Recommended rules restored.')]);
 
         return back();
-    }
-
-    private function ensureScopeExists(MonitoringRepository $monitoring, Team $team, string $scope): void
-    {
-        $ids = array_map(fn (RuleScopeData $item) => $item->id, $monitoring->ruleScopes($team));
-
-        abort_unless(in_array($scope, $ids, true), 404);
     }
 }

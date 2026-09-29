@@ -3,9 +3,9 @@
 namespace App\Actions\Alerts;
 
 use App\Alerts\DeliveryPolicy;
+use App\Support\SafeReport;
 use Carbon\CarbonImmutable;
 use Closure;
-use RuntimeException;
 use Throwable;
 
 class DispatchDueNotifications
@@ -39,13 +39,7 @@ class DispatchDueNotifications
         try {
             $step();
         } catch (Throwable $exception) {
-            report(new RuntimeException(sprintf(
-                'Alert %s threw %s at %s:%d.',
-                $name,
-                $exception::class,
-                $exception->getFile(),
-                $exception->getLine(),
-            )));
+            SafeReport::of('Alert '.$name, $exception);
         }
     }
 }

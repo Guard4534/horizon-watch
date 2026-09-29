@@ -10,6 +10,10 @@ use App\Externals\Horizon\Data\HorizonQueueLoad;
 use App\Externals\Horizon\Data\HorizonStats;
 use App\Externals\Horizon\Data\HorizonSupervisor;
 use App\Externals\Horizon\Exceptions\HorizonReadFailed;
+use App\Externals\Http\ResolvedTarget;
+use App\Externals\Http\SafeUrlGuard;
+use App\Externals\Http\TransferWatch;
+use App\Externals\Http\UrlRefused;
 use Carbon\CarbonImmutable;
 use Closure;
 use GuzzleHttp\Exception\ConnectException;
@@ -61,7 +65,7 @@ final readonly class HorizonClient implements HorizonReader
     {
         $deadline = hrtime(true) + (int) ($this->readBudgetSeconds * 1_000_000_000);
 
-        $resolved = $this->guard->check($target->apiUrl('stats'));
+        $resolved = $this->resolve($target);
 
         $paths = ['stats' => 'stats', 'masters' => 'masters', 'workload' => 'workload', 'failed' => 'jobs/failed', 'pending' => 'jobs/pending'];
 
@@ -86,7 +90,7 @@ final readonly class HorizonClient implements HorizonReader
 
     public function probe(HorizonTarget $target): HorizonProbe
     {
-        $resolved = $this->guard->check($target->apiUrl('stats'));
+        $resolved = $this->resolve($target);
 
         $started = hrtime(true);
         $answers = $this->pool($target, $resolved, ['stats' => 'stats', 'masters' => 'masters'], 2);
@@ -99,6 +103,18 @@ final readonly class HorizonClient implements HorizonReader
             masterCount: count($this->masters($answers['masters'])),
             latencyMs: $this->latency($answers['stats'], $elapsed),
         );
+    }
+
+    /**
+     * @throws HorizonReadFailed
+     */
+    private function resolve(HorizonTarget $target): ResolvedTarget
+    {
+        try {
+            return $this->guard->check($target->apiUrl('stats'));
+        } catch (UrlRefused $exception) {
+            throw new HorizonReadFailed($exception->reason);
+        }
     }
 
     /**

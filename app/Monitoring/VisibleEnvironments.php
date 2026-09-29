@@ -8,6 +8,7 @@ use App\Models\Membership;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 class VisibleEnvironments
 {
@@ -50,6 +51,47 @@ class VisibleEnvironments
     }
 
     /**
+     * @param  iterable<Membership>  $memberships
+     * @return array<int, list<int>|null>
+     */
+    public function idsForAllOf(Team $team, iterable $memberships): array
+    {
+        $byKey = [];
+        $manual = [];
+
+        foreach ($memberships as $membership) {
+            $byKey[$membership->id] = $membership;
+
+            if ($membership->visibility === MemberVisibility::Manual) {
+                $manual[] = $membership->user_id;
+            }
+        }
+
+        if ($byKey === []) {
+            return [];
+        }
+
+        $names = [];
+
+        foreach ($this->ofTeam($team)->toBase()->get(['environments.id', 'environments.name']) as $environment) {
+            $names[(int) $environment->id] = (string) $environment->name;
+        }
+
+        $granted = $this->grants(array_keys($names), array_values(array_unique($manual)));
+        $ids = [];
+
+        foreach ($byKey as $key => $membership) {
+            $ids[$key] = match ($membership->visibility) {
+                MemberVisibility::All => null,
+                MemberVisibility::NonProduction => array_keys(array_filter($names, fn (string $name) => $name !== 'production')),
+                MemberVisibility::Manual => array_values(array_filter(array_keys($names), fn (int $id) => isset($granted[$membership->user_id][$id]))),
+            };
+        }
+
+        return $ids;
+    }
+
+    /**
      * @return Builder<Environment>
      */
     public function ofTeam(Team $team): Builder
@@ -61,6 +103,29 @@ class VisibleEnvironments
             ->orderBy('applications.name')
             ->orderBy('environments.name')
             ->select('environments.*');
+    }
+
+    /**
+     * @param  list<int>  $environmentIds
+     * @param  list<int>  $userIds
+     * @return array<int, array<int, true>>
+     */
+    private function grants(array $environmentIds, array $userIds): array
+    {
+        if ($environmentIds === [] || $userIds === []) {
+            return [];
+        }
+
+        $granted = [];
+
+        foreach (DB::table('environment_user')
+            ->whereIn('environment_id', $environmentIds)
+            ->whereIn('user_id', $userIds)
+            ->get(['user_id', 'environment_id']) as $grant) {
+            $granted[(int) $grant->user_id][(int) $grant->environment_id] = true;
+        }
+
+        return $granted;
     }
 
     private function membership(Team $team, User $user): ?Membership

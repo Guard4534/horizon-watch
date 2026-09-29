@@ -49,6 +49,14 @@ use Illuminate\Support\Str;
 
 class ConfiguredMonitoringRepository implements MonitoringRepository
 {
+    private const string MUTED = '(alerts.muted_indefinitely or coalesce(alerts.muted_until > ?, false))';
+
+    private const string LIVE = 'alerts.resolved_at is null and alerts.environment_id is not null';
+
+    private const string ALERT_COUNTS = 'count(*) filter (where '.self::LIVE.' and not '.self::MUTED.') as open, '
+        .'count(*) filter (where '.self::LIVE.' and '.self::MUTED.') as muted, '
+        .'count(*) filter (where alerts.resolved_at >= ?) as resolved';
+
     /**
      * @var array<int, EloquentCollection<int, Environment>>
      */
@@ -272,7 +280,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
                 job: $job['job'],
                 queue: $job['queue'],
                 elapsedSeconds: $elapsed,
-                startedAt: $reservedAt->setTimezone((string) config('app.timezone'))->format('H:i'),
+                startedAt: $reservedAt->setTimezone(config()->string('app.timezone'))->format('H:i'),
             );
         }
 
@@ -343,16 +351,10 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     private function countAlerts(Team $team): AlertCountsData
     {
         $now = $this->now()->utc();
-        $muted = '(alerts.muted_indefinitely or coalesce(alerts.muted_until > ?, false))';
 
         $counts = $this->visibleAlerts($team, null, withDeleted: true)
             ->toBase()
-            ->selectRaw(
-                "count(*) filter (where alerts.resolved_at is null and alerts.environment_id is not null and not {$muted}) as open, "
-                ."count(*) filter (where alerts.resolved_at is null and alerts.environment_id is not null and {$muted}) as muted, "
-                .'count(*) filter (where alerts.resolved_at >= ?) as resolved',
-                [$now, $now, $this->alertRetentionCutoff()],
-            )
+            ->selectRaw(self::ALERT_COUNTS, [$now, $now, $this->alertRetentionCutoff()])
             ->first();
 
         return new AlertCountsData((int) $counts?->open, (int) $counts?->muted, (int) $counts?->resolved);
@@ -381,6 +383,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
                 channel: $notification->channel,
                 kind: $notification->kind,
                 status: $notification->status,
+                error: $notification->error,
                 subject: match (true) {
                     $notification->alert !== null => $notification->alert->application_name.' · '.$notification->alert->environment_name,
                     $notification->kind === SentNotificationKind::WarningDigest => (string) ($notification->environment_count ?? 0),
@@ -436,11 +439,14 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         return $scopes;
     }
 
+    public function hasRuleScope(Team $team, string $scope): bool
+    {
+        return in_array($scope, array_map(fn (RuleScopeData $item) => $item->id, $this->ruleScopes($team)), true);
+    }
+
     public function alertRules(Team $team, string $scope): array
     {
-        $scopeIds = array_map(fn (RuleScopeData $item) => $item->id, $this->ruleScopes($team));
-
-        if (! in_array($scope, $scopeIds, true)) {
+        if (! $this->hasRuleScope($team, $scope)) {
             return [];
         }
 
@@ -745,7 +751,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
     private function alertRetentionCutoff(): CarbonImmutable
     {
-        return $this->now()->utc()->subDays((int) config('horizon-watch.alert_retention_days'));
+        return $this->now()->utc()->subDays(config()->integer('horizon-watch.alert_retention_days'));
     }
 
     /**

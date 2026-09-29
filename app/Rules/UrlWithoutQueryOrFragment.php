@@ -8,6 +8,11 @@ use Illuminate\Translation\PotentiallyTranslatedString;
 
 class UrlWithoutQueryOrFragment implements ValidationRule
 {
+    public static function carriesQueryOrFragment(string $url): bool
+    {
+        return str_contains($url, '?') || str_contains($url, '#');
+    }
+
     /**
      * @param  Closure(string, ?string=): PotentiallyTranslatedString  $fail
      */
@@ -17,7 +22,7 @@ class UrlWithoutQueryOrFragment implements ValidationRule
             return;
         }
 
-        if (str_contains($value, '?') || str_contains($value, '#')) {
+        if (self::carriesQueryOrFragment($value)) {
             $fail(__('Use the address of the Horizon dashboard, without a query string or a fragment.'));
         }
     }

@@ -13,11 +13,16 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
-final readonly class Recipients
+final class Recipients
 {
+    /**
+     * @var array<int, list<array{email: string, locale: string, user: null, environmentIds: null, extra: true}>>
+     */
+    private array $extrasByTeam = [];
+
     public function __construct(
-        private VisibleEnvironments $visible,
-        private EffectiveRules $rules,
+        private readonly VisibleEnvironments $visible,
+        private readonly EffectiveRules $rules,
     ) {}
 
     /**
@@ -47,14 +52,15 @@ final readonly class Recipients
     {
         $extras = $this->extras($team);
         $extraEmails = array_flip(array_column($extras, 'email'));
+        $memberships = $this->optedIn($team);
+        $visible = $this->visible->idsForAllOf($team, $memberships);
         $members = [];
 
-        foreach ($this->optedIn($team) as $membership) {
+        foreach ($memberships as $membership) {
             $member = $this->member($membership->user);
             $extra = isset($extraEmails[$member['email']]);
-            $environmentIds = $extra ? null : $this->visible->idsFor($team, $membership);
 
-            $members[] = [...$member, 'environmentIds' => $environmentIds, 'extra' => $extra];
+            $members[] = [...$member, 'environmentIds' => $extra ? null : $visible[$membership->id] ?? null, 'extra' => $extra];
         }
 
         return $this->unique([...$members, ...$extras]);
@@ -81,7 +87,7 @@ final readonly class Recipients
 
     public static function addressKey(string $email): string
     {
-        return hash_hmac('sha256', Str::lower($email), (string) config('app.key'));
+        return hash_hmac('sha256', Str::lower($email), config()->string('app.key'));
     }
 
     /**
@@ -124,6 +130,14 @@ final readonly class Recipients
      * @return list<array{email: string, locale: string, user: null, environmentIds: null, extra: true}>
      */
     private function extras(Team $team): array
+    {
+        return $this->extrasByTeam[$team->id] ??= $this->readExtras($team);
+    }
+
+    /**
+     * @return list<array{email: string, locale: string, user: null, environmentIds: null, extra: true}>
+     */
+    private function readExtras(Team $team): array
     {
         $setting = NotificationSetting::query()->find($team->id);
         $extras = [];
@@ -180,6 +194,6 @@ final readonly class Recipients
 
     private function defaultLocale(): string
     {
-        return (string) config('app.locale');
+        return config()->string('app.locale');
     }
 }

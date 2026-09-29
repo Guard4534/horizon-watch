@@ -2,7 +2,6 @@
 
 namespace App\Queries;
 
-use App\Data\Monitoring\RuleScopeData;
 use App\Data\Pages\AlertRulesPageData;
 use App\Data\Pages\NotificationSummaryData;
 use App\Models\AlertRule;
@@ -14,20 +13,23 @@ use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Contracts\Session\Session;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Gate;
+use Inertia\Inertia;
+use Inertia\Response;
 use SensitiveParameter;
 
 class AlertRulesQuery
 {
+    private const string PAGE = 'monitoring/alert-rules/Index';
+
     private const string NEW_WEBHOOK_SECRET = 'alert-settings.new-webhook-secret';
 
     public function __construct(private MonitoringRepository $monitoring) {}
 
     public function handle(Team $team, User $viewer, string $scope, Session $session): AlertRulesPageData
     {
+        abort_unless($this->monitoring->hasRuleScope($team, $scope), 404);
+
         $scopes = $this->monitoring->ruleScopes($team);
-
-        abort_unless(in_array($scope, array_map(fn (RuleScopeData $item) => $item->id, $scopes), true), 404);
-
         $settings = $this->monitoring->notificationSettings($team);
         $canManage = Gate::forUser($viewer)->allows('manageAlertRules', $team);
 
@@ -44,6 +46,22 @@ class AlertRulesQuery
             maxRecipients: config()->integer('horizon-watch.notifications.max_recipients'),
             timezones: $canManage ? DateTimeZone::listIdentifiers() : [],
         );
+    }
+
+    public static function render(AlertRulesPageData $page): Response
+    {
+        if ($page->newWebhookSecret === null) {
+            return Inertia::render(self::PAGE, ['page' => $page]);
+        }
+
+        Inertia::encryptHistory();
+        Inertia::clearHistory();
+
+        try {
+            return Inertia::render(self::PAGE, ['page' => $page]);
+        } finally {
+            Inertia::encryptHistory(config()->boolean('inertia.history.encrypt', false));
+        }
     }
 
     public static function flashNewWebhookSecret(Team $team, Session $session, #[SensitiveParameter] string $secret): void

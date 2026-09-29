@@ -20,11 +20,11 @@ use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
 use App\Monitoring\EvaluatedStatus;
 use App\Monitoring\StatusEvaluator;
+use App\Support\SafeReport;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use RuntimeException;
 use Throwable;
 
 class PollEnvironment
@@ -49,12 +49,7 @@ class PollEnvironment
         } catch (HorizonReadFailed $exception) {
             return $this->storeFailure($environment, $capturedAt, $exception->reason);
         } catch (Throwable $exception) {
-            report(new RuntimeException(sprintf(
-                'The Horizon reader threw %s at %s:%d instead of HorizonReadFailed.',
-                $exception::class,
-                $exception->getFile(),
-                $exception->getLine(),
-            )));
+            SafeReport::of('The Horizon reader', $exception, class_basename(HorizonReadFailed::class));
 
             return $this->storeFailure($environment, $capturedAt, ReadingError::Unreachable);
         }

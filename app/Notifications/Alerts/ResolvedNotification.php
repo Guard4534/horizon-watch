@@ -32,7 +32,7 @@ class ResolvedNotification extends Notification
                 'rows' => AlertMail::rows($alert),
                 'note' => null,
                 'url' => AlertMail::url($alert),
-                'action' => $this->openPanel(),
+                'action' => AlertMail::openPanel(),
             ]);
     }
 
@@ -44,10 +44,5 @@ class ResolvedNotification extends Notification
     private function headline(): string
     {
         return __('Back within the threshold: :rule', ['rule' => AlertMail::ruleLabel($this->alert->metric)]);
-    }
-
-    private function openPanel(): string
-    {
-        return __('Open the panel');
     }
 }

@@ -18,8 +18,7 @@ return new class extends Migration
             $table->string('horizon_url');
             $table->string('basic_auth_user')->nullable();
             $table->text('basic_auth_password')->nullable();
-            $table->unsignedSmallInteger('poll_interval_seconds')->default(15);
-            $table->timestamp('muted_until')->nullable();
+            $table->unsignedSmallInteger('poll_interval_seconds');
             $table->timestamps();
 
             $table->unique(['application_id', 'name']);

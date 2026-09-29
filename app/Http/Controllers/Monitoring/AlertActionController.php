@@ -25,8 +25,7 @@ class AlertActionController extends Controller
 
     public function mute(Request $request, Team $current_team, string $alert, MuteAlert $muteAlert): RedirectResponse
     {
-        $found = $this->find($current_team, $request->user(), $alert);
-        Gate::authorize('muteAlert', $current_team);
+        $found = $this->authorized($current_team, $request->user(), $alert, 'muteAlert');
 
         $muteAlert->handle($found, $request->user(), MuteAlertData::from($request)->duration);
 
@@ -35,8 +34,7 @@ class AlertActionController extends Controller
 
     public function unmute(Request $request, Team $current_team, string $alert, UnmuteAlert $unmuteAlert): RedirectResponse
     {
-        $found = $this->find($current_team, $request->user(), $alert);
-        Gate::authorize('muteAlert', $current_team);
+        $found = $this->authorized($current_team, $request->user(), $alert, 'muteAlert');
 
         $unmuteAlert->handle($found);
 
@@ -45,8 +43,7 @@ class AlertActionController extends Controller
 
     public function handle(Request $request, Team $current_team, string $alert, HandleAlert $handleAlert): RedirectResponse
     {
-        $found = $this->find($current_team, $request->user(), $alert);
-        Gate::authorize('handleAnomaly', $current_team);
+        $found = $this->authorized($current_team, $request->user(), $alert, 'handleAnomaly');
 
         $handleAlert->handle($found, $request->user());
 
@@ -55,8 +52,7 @@ class AlertActionController extends Controller
 
     public function preview(Request $request, Team $current_team, string $alert, EmailPreview $emailPreview): Response
     {
-        $found = $this->find($current_team, $request->user(), $alert);
-        Gate::authorize('manageAlertRules', $current_team);
+        $found = $this->authorized($current_team, $request->user(), $alert, 'manageAlertRules');
 
         return response($emailPreview->render($found, app()->getLocale()), 200, [
             'Content-Type' => 'text/html; charset=UTF-8',
@@ -64,7 +60,16 @@ class AlertActionController extends Controller
         ]);
     }
 
-    private function find(Team $team, User $user, string $id): Alert
+    private function authorized(Team $team, User $user, string $id, string $ability): Alert
+    {
+        $alert = $this->visibleAlert($team, $user, $id);
+
+        Gate::authorize($ability, $team);
+
+        return $alert;
+    }
+
+    private function visibleAlert(Team $team, User $user, string $id): Alert
     {
         abort_unless(Str::isUuid($id), 404);
 

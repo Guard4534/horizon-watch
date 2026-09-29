@@ -11,46 +11,24 @@ use App\Enums\SentNotificationKind;
 use App\Externals\Webhook\WebhookClient;
 use App\Externals\Webhook\WebhookFailed;
 use App\Models\Alert;
-use App\Models\AlertNotification as DeliveryLog;
 use App\Models\NotificationSetting;
 use Carbon\CarbonImmutable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\Date;
-use Illuminate\Support\Str;
-use RuntimeException;
 use Throwable;
 
-class SendAlertWebhook implements ShouldQueue
+class SendAlertWebhook extends DeliverAlert
 {
-    use Queueable;
-
-    public int $tries;
-
-    /**
-     * @var list<int>
-     */
-    public array $backoff;
-
-    public int $timeout;
-
-    public readonly string $deliveryId;
-
     /**
      * @param  array<string, mixed>  $payload
      */
     public function __construct(
-        public readonly int $teamId,
-        public readonly ?string $alertId,
-        public readonly SentNotificationKind $kind,
+        int $teamId,
+        ?string $alertId,
+        SentNotificationKind $kind,
         public readonly string $event,
         public readonly array $payload,
         public readonly ?int $environmentCount = null,
     ) {
-        $this->tries = config()->integer('horizon-watch.notifications.delivery_tries');
-        $this->backoff = array_values(array_map(intval(...), config()->array('horizon-watch.notifications.delivery_backoff_seconds')));
-        $this->timeout = config()->integer('horizon-watch.notifications.delivery_timeout_seconds');
-        $this->deliveryId = (string) Str::uuid();
+        parent::__construct($teamId, $alertId, $kind);
     }
 
     public function handle(WebhookClient $client): void
@@ -77,29 +55,29 @@ class SendAlertWebhook implements ShouldQueue
             throw $exception;
         }
 
-        $this->log(DeliveryStatus::Sent, null, $setting);
+        $this->log(DeliveryStatus::Sent, null, self::host((string) $setting->webhook_url), $this->environmentCount);
     }
 
-    public function failed(?Throwable $exception): void
+    protected function channel(): NotificationChannel
     {
-        try {
-            $setting = $this->recorded() ? null : $this->setting();
+        return NotificationChannel::Webhook;
+    }
 
-            if ($setting !== null) {
-                $this->log(
-                    DeliveryStatus::Failed,
-                    $exception instanceof WebhookFailed ? $exception->reason : DeliveryError::Unreachable,
-                    $setting,
-                );
-            }
-        } catch (Throwable $failure) {
-            report(new RuntimeException(sprintf(
-                'Recording a failed alert webhook threw %s at %s:%d.',
-                $failure::class,
-                $failure->getFile(),
-                $failure->getLine(),
-            )));
-        }
+    protected function target(): ?string
+    {
+        $setting = $this->setting();
+
+        return $setting === null ? null : self::host((string) $setting->webhook_url);
+    }
+
+    protected function errorOf(?Throwable $exception): DeliveryError
+    {
+        return $exception instanceof WebhookFailed ? $exception->reason : DeliveryError::Unreachable;
+    }
+
+    protected function loggedEnvironmentCount(): ?int
+    {
+        return $this->environmentCount;
     }
 
     private function stillDue(): bool
@@ -118,11 +96,6 @@ class SendAlertWebhook implements ShouldQueue
         );
     }
 
-    private function recorded(): bool
-    {
-        return DeliveryLog::query()->where('delivery_id', $this->deliveryId)->exists();
-    }
-
     private function setting(): ?NotificationSetting
     {
         $setting = NotificationSetting::query()->find($this->teamId);
@@ -130,22 +103,6 @@ class SendAlertWebhook implements ShouldQueue
         return $setting !== null && $setting->team()->exists() && filled($setting->webhook_url) && filled($setting->webhook_secret)
             ? $setting
             : null;
-    }
-
-    private function log(DeliveryStatus $status, ?DeliveryError $error, NotificationSetting $setting): void
-    {
-        DeliveryLog::query()->create([
-            'team_id' => $this->teamId,
-            'alert_id' => $this->alertId !== null && Alert::query()->whereKey($this->alertId)->exists() ? $this->alertId : null,
-            'kind' => $this->kind,
-            'channel' => NotificationChannel::Webhook,
-            'target' => self::host((string) $setting->webhook_url),
-            'status' => $status,
-            'error' => $error?->value,
-            'sent_at' => Date::now(),
-            'environment_count' => $this->environmentCount,
-            'delivery_id' => $this->deliveryId,
-        ]);
     }
 
     private static function host(string $url): string

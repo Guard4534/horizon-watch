@@ -39,16 +39,24 @@ class WarningDigestNotification extends Notification
                     'value' => AlertMail::withUnit($alert->value ?? 0, $alert->unit),
                 ])->values()->all(),
                 'url' => AlertMail::wallUrl($this->team),
-                'action' => $this->openPanel(),
+                'action' => AlertMail::openPanel(),
             ]);
+    }
+
+    /**
+     * @param  Collection<int, Alert>  $alerts
+     */
+    public static function environmentsIn(Collection $alerts): int
+    {
+        return $alerts
+            ->map(fn (Alert $alert) => $alert->environment_id ?? $alert->application_name."\0".$alert->environment_name)
+            ->unique()
+            ->count();
     }
 
     public function environmentCount(): int
     {
-        return $this->alerts
-            ->map(fn (Alert $alert) => $alert->environment_id ?? $alert->application_name."\0".$alert->environment_name)
-            ->unique()
-            ->count();
+        return self::environmentsIn($this->alerts);
     }
 
     private function subject(): string
@@ -77,10 +85,5 @@ class WarningDigestNotification extends Notification
     private function resolved(): string
     {
         return __('Resolved');
-    }
-
-    private function openPanel(): string
-    {
-        return __('Open the panel');
     }
 }

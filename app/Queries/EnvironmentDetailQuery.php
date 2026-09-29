@@ -9,17 +9,13 @@ use App\Enums\TeamPermission;
 use App\Models\Team;
 use App\Models\User;
 use App\Monitoring\MonitoringRepository;
-use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Support\Str;
 
 class EnvironmentDetailQuery
 {
-    public function __construct(
-        private MonitoringRepository $monitoring,
-        private Guard $auth,
-    ) {}
+    public function __construct(private MonitoringRepository $monitoring) {}
 
-    public function handle(Team $team, string $environmentId, SeriesRange $range): EnvironmentDetailPageData
+    public function handle(Team $team, User $viewer, string $environmentId, SeriesRange $range): EnvironmentDetailPageData
     {
         $environment = $this->monitoring->environment($team, $environmentId) ?? abort(404);
 
@@ -42,14 +38,7 @@ class EnvironmentDetailQuery
             maxWait: $this->monitoring->maxWaitSeries($team, $environment->id, $range),
             grid: $this->monitoring->seriesGrid($range),
             rules: $rules,
-            canTestConnection: $this->canTestConnection($team),
+            canTestConnection: $viewer->hasTeamPermission($team, TeamPermission::TestConnection),
         );
-    }
-
-    private function canTestConnection(Team $team): bool
-    {
-        $user = $this->auth->user();
-
-        return $user instanceof User && $user->hasTeamPermission($team, TeamPermission::TestConnection);
     }
 }

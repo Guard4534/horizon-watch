@@ -8,7 +8,7 @@ use App\Enums\ReadingError;
 use App\Externals\Horizon\Exceptions\HorizonReadFailed;
 use App\Externals\Horizon\HorizonReader;
 use App\Externals\Horizon\HorizonTarget;
-use RuntimeException;
+use App\Support\SafeReport;
 use Throwable;
 
 class TestConnection
@@ -22,12 +22,7 @@ class TestConnection
         } catch (HorizonReadFailed $exception) {
             return ConnectionResultData::failed($exception->reason);
         } catch (Throwable $exception) {
-            report(new RuntimeException(sprintf(
-                'The Horizon reader threw %s at %s:%d instead of HorizonReadFailed.',
-                $exception::class,
-                $exception->getFile(),
-                $exception->getLine(),
-            )));
+            SafeReport::of('The Horizon reader', $exception, class_basename(HorizonReadFailed::class));
 
             return ConnectionResultData::failed(ReadingError::Unreachable);
         }

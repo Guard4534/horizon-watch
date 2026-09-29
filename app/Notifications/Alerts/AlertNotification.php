@@ -32,17 +32,12 @@ class AlertNotification extends Notification
                 'rows' => AlertMail::rows($alert),
                 'note' => $this->repeated ? $this->repeatNote() : null,
                 'url' => AlertMail::url($alert),
-                'action' => $this->openPanel(),
+                'action' => AlertMail::openPanel(),
             ]);
     }
 
     private function repeatNote(): string
     {
         return __('Still open: this email repeats until the alert clears, is muted or is handled.');
-    }
-
-    private function openPanel(): string
-    {
-        return __('Open the panel');
     }
 }

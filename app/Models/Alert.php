@@ -10,12 +10,10 @@ use Carbon\CarbonImmutable;
 use Database\Factories\AlertFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -49,7 +47,6 @@ use Illuminate\Support\Carbon;
  * @property-read Environment|null $environment
  * @property-read User|null $mutedBy
  * @property-read User|null $handledBy
- * @property-read Collection<int, AlertNotification> $notifications
  */
 #[Fillable([
     'team_id',
@@ -129,14 +126,6 @@ class Alert extends Model
     public function handledBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'handled_by');
-    }
-
-    /**
-     * @return HasMany<AlertNotification, $this>
-     */
-    public function notifications(): HasMany
-    {
-        return $this->hasMany(AlertNotification::class);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Data\Monitoring;
 
+use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
 use App\Enums\NotificationChannel;
 use App\Enums\SentNotificationKind;
@@ -13,6 +14,7 @@ class SentNotificationData extends Data
         public NotificationChannel $channel,
         public SentNotificationKind $kind,
         public DeliveryStatus $status,
+        public ?DeliveryError $error,
         public string $subject,
         public ?string $target,
         public int $minutesAgo,

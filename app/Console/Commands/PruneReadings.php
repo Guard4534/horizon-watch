@@ -21,8 +21,8 @@ class PruneReadings extends Command
     public function handle(AlertEngine $alerts): int
     {
         $chunk = max(1, (int) ($this->option('chunk') ?? config()->integer('horizon-watch.readings.prune_chunk')));
-        $readingCutoff = now()->subDays((int) config('horizon-watch.retention_days'));
-        $alertCutoff = now()->subDays((int) config('horizon-watch.alert_retention_days'));
+        $readingCutoff = now()->subDays(config()->integer('horizon-watch.retention_days'));
+        $alertCutoff = now()->subDays(config()->integer('horizon-watch.alert_retention_days'));
 
         $orphans = $alerts->resolveOrphans(CarbonImmutable::now());
         $this->info("Resolved {$orphans} orphaned ".Str::plural('alert', $orphans).'.');

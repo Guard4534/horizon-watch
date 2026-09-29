@@ -10,12 +10,12 @@ use App\Models\Alert;
 use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
+use App\Notifications\Alerts\WarningDigestNotification;
+use App\Support\SafeReport;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Collection as BaseCollection;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 use Throwable;
 
 final readonly class DeliveryPolicy
@@ -191,7 +191,7 @@ final readonly class DeliveryPolicy
 
             $this->delivery->queueEmails($team, null, SentNotificationKind::WarningDigest, [$recipient], [
                 'alertIds' => array_values($visible->modelKeys()),
-                'environmentCount' => $this->environmentCount($visible),
+                'environmentCount' => WarningDigestNotification::environmentsIn($visible),
             ]);
         }
 
@@ -201,7 +201,7 @@ final readonly class DeliveryPolicy
                 null,
                 SentNotificationKind::WarningDigest,
                 WebhookPayload::forDigest($team, $alerts->toBase()),
-                $this->environmentCount($alerts),
+                WarningDigestNotification::environmentsIn($alerts),
             );
         }
     }
@@ -344,14 +344,7 @@ final readonly class DeliveryPolicy
 
     private function reportFailure(string $step, int $teamId, Throwable $exception): void
     {
-        report(new RuntimeException(sprintf(
-            'Alert %s of team %d threw %s at %s:%d.',
-            $step,
-            $teamId,
-            $exception::class,
-            $exception->getFile(),
-            $exception->getLine(),
-        )));
+        SafeReport::of(sprintf('Alert %s of team %d', $step, $teamId), $exception);
     }
 
     /**
@@ -369,7 +362,8 @@ final readonly class DeliveryPolicy
             ->where('alerts.opened_at', '<=', $now)
             ->with(['team', 'environment.state'])
             ->orderBy('alerts.opened_at')
-            ->orderBy('alerts.id');
+            ->orderBy('alerts.id')
+            ->limit(config()->integer('horizon-watch.notifications.alerts_per_run'));
     }
 
     private function watched(Alert $alert): bool
@@ -378,13 +372,5 @@ final readonly class DeliveryPolicy
         $team = $alert->team;
 
         return $team !== null && $alert->environment?->polling_enabled === true;
-    }
-
-    /**
-     * @param  BaseCollection<int, Alert>  $alerts
-     */
-    private function environmentCount(BaseCollection $alerts): int
-    {
-        return $alerts->pluck('environment_id')->unique()->count();
     }
 }

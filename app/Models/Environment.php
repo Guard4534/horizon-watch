@@ -28,7 +28,6 @@ use Illuminate\Support\Str;
  * @property string|null $basic_auth_user
  * @property string|null $basic_auth_password
  * @property int $poll_interval_seconds
- * @property Carbon|null $muted_until
  * @property bool $polling_enabled
  * @property CarbonImmutable|null $last_polled_at
  * @property CarbonImmutable|null $next_poll_at
@@ -46,7 +45,6 @@ use Illuminate\Support\Str;
     'basic_auth_user',
     'basic_auth_password',
     'poll_interval_seconds',
-    'muted_until',
     'polling_enabled',
 ])]
 #[Hidden(['basic_auth_password'])]
@@ -116,7 +114,6 @@ class Environment extends Model
         return [
             'color' => EnvironmentColor::class,
             'basic_auth_password' => 'encrypted',
-            'muted_until' => 'datetime',
             'polling_enabled' => 'boolean',
             'last_polled_at' => 'immutable_datetime',
             'next_poll_at' => 'immutable_datetime',

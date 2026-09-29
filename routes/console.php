@@ -15,7 +15,8 @@ Schedule::call(function () {
 Schedule::call(fn () => app(DispatchDuePolls::class)->handle())
     ->name('dispatch-due-polls')
     ->everyFifteenSeconds()
-    ->withoutOverlapping(1);
+    ->withoutOverlapping(1)
+    ->onOneServer();
 
 Schedule::call(fn () => app(DispatchDueNotifications::class)->repeats())
     ->name('alert-repeats')

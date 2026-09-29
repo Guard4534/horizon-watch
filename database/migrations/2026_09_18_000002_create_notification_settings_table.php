@@ -15,8 +15,8 @@ return new class extends Migration
             $table->text('webhook_secret')->nullable();
             $table->time('quiet_from')->nullable();
             $table->time('quiet_to')->nullable();
-            $table->string('timezone', 64)->default('Europe/Rome');
-            $table->unsignedSmallInteger('repeat_minutes')->nullable()->default(30);
+            $table->string('timezone', 64);
+            $table->unsignedSmallInteger('repeat_minutes')->nullable();
             $table->timestamps();
         });
     }

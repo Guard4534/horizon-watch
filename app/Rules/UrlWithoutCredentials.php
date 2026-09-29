@@ -8,6 +8,11 @@ use Illuminate\Translation\PotentiallyTranslatedString;
 
 class UrlWithoutCredentials implements ValidationRule
 {
+    public static function carriesCredentials(string $url): bool
+    {
+        return preg_match('#^[^:/?\#]*://[^/?\#]*@#', trim($url)) === 1;
+    }
+
     /**
      * @param  Closure(string, ?string=): PotentiallyTranslatedString  $fail
      */
@@ -17,7 +22,7 @@ class UrlWithoutCredentials implements ValidationRule
             return;
         }
 
-        if (preg_match('#^[^:/?\#]*://[^/?\#]*@#', trim($value)) === 1) {
+        if (self::carriesCredentials($value)) {
             $fail(__('Put the credentials in the basic-auth fields, not in the URL.'));
         }
     }

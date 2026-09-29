@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
 use App\Enums\NotificationChannel;
 use App\Enums\SentNotificationKind;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property NotificationChannel $channel
  * @property string $target
  * @property DeliveryStatus $status
- * @property string|null $error
+ * @property DeliveryError|null $error
  * @property int|null $environment_count
  * @property CarbonImmutable $sent_at
  * @property string|null $delivery_id
@@ -62,6 +63,7 @@ class AlertNotification extends Model
             'kind' => SentNotificationKind::class,
             'channel' => NotificationChannel::class,
             'status' => DeliveryStatus::class,
+            'error' => DeliveryError::class,
             'sent_at' => 'immutable_datetime',
             'environment_count' => 'integer',
         ];

@@ -68,7 +68,7 @@ class StoredReadings
             return true;
         }
 
-        $seconds = (int) config('horizon-watch.stale_after_intervals') * $environment->poll_interval_seconds;
+        $seconds = config()->integer('horizon-watch.stale_after_intervals') * $environment->poll_interval_seconds;
 
         return $since->lt($now->subSeconds($seconds));
     }
@@ -79,7 +79,7 @@ class StoredReadings
      */
     public function throughputSeries(array $environmentIds, SeriesRange $range): array
     {
-        return $this->series($environmentIds, $range, 'avg(s.jobs_per_minute)');
+        return $this->series($environmentIds, $range, SeriesAggregate::Throughput);
     }
 
     /**
@@ -87,14 +87,14 @@ class StoredReadings
      */
     public function maxWaitSeries(int $environmentId, SeriesRange $range): array
     {
-        return $this->series([$environmentId], $range, 'max(s.max_wait_seconds)');
+        return $this->series([$environmentId], $range, SeriesAggregate::MaxWait);
     }
 
     /**
      * @param  array<int, int>  $environmentIds
      * @return array<int, int>
      */
-    private function series(array $environmentIds, SeriesRange $range, string $aggregate): array
+    private function series(array $environmentIds, SeriesRange $range, SeriesAggregate $aggregate): array
     {
         $points = self::seriesPoints();
         $tick = config()->integer('horizon-watch.readings.poll_tick_seconds');
@@ -113,7 +113,7 @@ class StoredReadings
                 select s.environment_id,
                        e.poll_interval_seconds as poll_interval,
                        extract(epoch from date_bin(make_interval(secs => ?), s.captured_at, ?::timestamptz))::bigint as bucket,
-                       {$aggregate} filter (where s.error is null) as value
+                       {$aggregate->sql()} filter (where s.error is null) as value
                 from environment_snapshots s
                 join environments e on e.id = s.environment_id
                 where s.environment_id in ({$placeholders})
