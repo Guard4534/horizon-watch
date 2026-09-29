@@ -1,14 +1,25 @@
 x-app: &app
-    image: ${HORIZON_WATCH_IMAGE:-horizon-watch:local}
-    build:
-        context: .
-        dockerfile: Dockerfile
+    image: ${HORIZON_WATCH_IMAGE:-ghcr.io/guard4534/horizon-watch:latest}
     restart: unless-stopped
+    # The container starts as root to own the app-data volume and to let nginx and
+    # php-fpm fork their workers as www-data; everything else runs as www-data.
+    security_opt:
+        - 'no-new-privileges:true'
+    cap_drop:
+        - ALL
+    cap_add:
+        - CHOWN
+        - DAC_OVERRIDE
+        - FOWNER
+        - SETGID
+        - SETUID
     environment:
         APP_NAME: Horizon Watch
         APP_URL: ${APP_URL:-http://localhost:8080}
         APP_LOCALE: ${APP_LOCALE:-en}
         APP_KEY: ${APP_KEY:-}
+        TRUSTED_PROXIES: ${TRUSTED_PROXIES:-private}
+        SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-null}
         DB_CONNECTION: pgsql
         DB_HOST: postgres
         DB_PORT: '5432'
@@ -27,6 +38,7 @@ x-app: &app
         HORIZON_WATCH_RETENTION_DAYS: ${HORIZON_WATCH_RETENTION_DAYS:-30}
         HORIZON_WATCH_ALERT_RETENTION_DAYS: ${HORIZON_WATCH_ALERT_RETENTION_DAYS:-90}
         HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS: ${HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS:-false}
+        HORIZON_WATCH_DEFAULT_TIMEZONE: ${HORIZON_WATCH_DEFAULT_TIMEZONE:-UTC}
     volumes:
         - app-data:/data
 
@@ -52,6 +64,12 @@ services:
         depends_on:
             web:
                 condition: service_healthy
+        healthcheck:
+            test: ['CMD', 'pgrep', '-f', 'artisan schedule:work']
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 60s
 
     worker:
         <<: *app
@@ -61,10 +79,26 @@ services:
         depends_on:
             web:
                 condition: service_healthy
+        healthcheck:
+            test: ['CMD', 'pgrep', '-f', 'artisan queue:work']
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 60s
 
     postgres:
         image: postgres:18-alpine
         restart: unless-stopped
+        security_opt:
+            - 'no-new-privileges:true'
+        cap_drop:
+            - ALL
+        cap_add:
+            - CHOWN
+            - DAC_OVERRIDE
+            - FOWNER
+            - SETGID
+            - SETUID
         environment:
             POSTGRES_DB: horizon_watch
             POSTGRES_USER: horizon_watch

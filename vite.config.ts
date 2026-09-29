@@ -27,13 +27,7 @@ export default defineConfig({
     ]),
     server: {
         watch: {
-            ignored: [
-                '**/.agents/**',
-                '**/.claude/**',
-                '**/.cursor/**',
-                '**/.junie/**',
-                '**/vendor/**',
-            ],
+            ignored: ['**/vendor/**'],
         },
     },
     lint: {
@@ -42,12 +36,10 @@ export default defineConfig({
             'node_modules/**',
             'public/**',
             'bootstrap/ssr/**',
-            'tailwind.config.js',
             'resources/js/actions/**',
             'resources/js/components/ui/*',
             'resources/js/routes/**',
             'resources/js/wayfinder/**',
-            'docs/**',
         ],
         options: {
             denyWarnings: true,
@@ -67,7 +59,6 @@ export default defineConfig({
             'resources/js/components/ui/*',
             'resources/views/mail/*',
             'tests/Fixtures/Horizon/dashboard.html',
-            'docs/**',
         ],
         sortTailwindcss: {
             functions: ['clsx', 'cn', 'cva'],

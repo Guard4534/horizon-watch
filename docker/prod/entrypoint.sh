@@ -5,6 +5,11 @@ cd /var/www/html
 
 export PHP_VERSION="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
 
+# www-data needs a writable home: psysh writes to $HOME/.config when artisan tinker runs.
+export HOME=/var/www
+
+export MIGRATION_LOCK_KEY=4815162343
+
 as_app() {
     setpriv --reuid=www-data --regid=www-data --init-groups "$@"
 }
@@ -45,13 +50,24 @@ load_app_key() {
     export APP_KEY="$(cat "$key_file")"
 }
 
+migrate() {
+    as_app php -r '
+        $dsn = sprintf("pgsql:host=%s;port=%s;dbname=%s", getenv("DB_HOST"), getenv("DB_PORT") ?: "5432", getenv("DB_DATABASE"));
+        $pdo = new PDO($dsn, getenv("DB_USERNAME"), getenv("DB_PASSWORD"), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $lock = $pdo->prepare("select pg_advisory_lock(?)");
+        $lock->execute([(int) getenv("MIGRATION_LOCK_KEY")]);
+        passthru("php artisan migrate --force --no-interaction", $status);
+        exit($status);
+    '
+}
+
 role="${1:-web}"
 
 case "$role" in
     web)
         wait_for_database
         load_app_key
-        as_app php artisan migrate --force --no-interaction
+        migrate
         as_app php artisan optimize
         exec /usr/bin/supervisord -c /etc/supervisor/conf.d/horizon-watch.conf
         ;;
@@ -66,6 +82,12 @@ case "$role" in
         load_app_key
         as_app php artisan optimize
         exec setpriv --reuid=www-data --regid=www-data --init-groups php artisan queue:work --max-time=3600 --tries=3
+        ;;
+    artisan)
+        shift
+        wait_for_database
+        load_app_key
+        exec setpriv --reuid=www-data --regid=www-data --init-groups php artisan "$@"
         ;;
     *)
         load_app_key

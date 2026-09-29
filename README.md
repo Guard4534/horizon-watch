@@ -1,59 +1,147 @@
 # Horizon Watch
 
-A self-hosted control room for several Laravel Horizon installations: one wall for every
-application and environment, with alerts when queues stop draining.
+A self-hosted control room for several Laravel Horizon installations. Horizon Watch polls the
+Horizon HTTP API of every environment you register, stores the readings, evaluates your
+thresholds, opens and resolves alerts, and notifies you by email and by signed webhook. One
+wall shows every application and environment at a glance; one page per environment shows the
+queues, the throughput and the wait times behind it.
 
-> Status: early. Monitoring pages run on generated sample data; real Horizon polling,
-> alerts and notifications are being built.
+It is not a replacement for Horizon: you keep using each application's own dashboard to
+retry or delete jobs. Horizon Watch only ever reads. It never writes to Horizon, and it never
+talks to your Redis — every number it shows comes from Horizon's own JSON API over HTTP.
+
+![The wall](.github/screenshots/wall.png)
+
+![An environment](.github/screenshots/environment.png)
+
+![Alert rules](.github/screenshots/alert-rules.png)
+
+## Requirements
+
+- Docker with Compose v2 on the host that runs the panel.
+- A PostgreSQL 18 database. `compose.prod.yaml` starts one for you; point the panel at your
+  own if you prefer.
+- An SMTP server, if you want invitations and alert emails to arrive. There is no fallback
+  that writes emails to a log file.
+- Network access from the panel to the Horizon dashboard of every monitored application.
+
+The panel itself needs no outbound internet access: there are no CDNs, no remote fonts and no
+external lookups.
 
 ## Install
 
-Requirements: Docker with Compose v2.
-
-Once the image is published on GHCR, installing will be a matter of fetching
-`compose.prod.yaml` and running `docker compose -f compose.prod.yaml up -d` — no clone
-needed. Until then, `compose.prod.yaml` builds the image from a local clone:
+Everything ships in one image, `ghcr.io/guard4534/horizon-watch`. You only need
+`compose.prod.yaml`:
 
 ```bash
-git clone https://github.com/<owner>/horizon-watch.git
-cd horizon-watch
-docker compose -f compose.prod.yaml up -d --build
+curl -fsSLO https://raw.githubusercontent.com/Guard4534/horizon-watch/main/compose.prod.yaml
+docker compose -f compose.prod.yaml up -d
 ```
 
-Open `http://localhost:8080`. The first visit asks you to create the administrator and
-the first organization. Everyone else joins by invitation.
+`compose.prod.yaml` is also attached to every release, if you would rather take it from
+there.
 
-In production, serve the panel over HTTPS (for example behind a reverse proxy that
-terminates TLS) and set `APP_URL` to the `https://` address. Besides protecting the session,
-this keeps the one-time webhook secret out of the browser history: the page that shows it
-asks the browser to encrypt its history entry, which browsers do only in a secure context.
-Over plain HTTP the secret stays readable in the history of the browser that saved it.
+That starts four containers: `web` (nginx and php-fpm), `scheduler`, two `worker`s and
+`postgres`. Settings go in a `.env` file next to `compose.prod.yaml`, or in your shell
+environment; see [Configuration](#configuration). At the very least, change `DB_PASSWORD`
+and set the mail server.
+
+Serve the panel over HTTPS in production, behind a reverse proxy that terminates TLS. Set
+`APP_URL` to the `https://` address and leave `TRUSTED_PROXIES` at its default if the proxy
+is on the same private network. Besides protecting the session cookie, HTTPS keeps the
+one-time webhook secret out of the browser history: the page that shows it asks the browser
+to encrypt its history entry, which browsers only do in a secure context.
+
+## First run
+
+Open the panel — `http://localhost:8080` by default. The first visit lands on `/setup` and
+asks you to create the administrator and the first organization; from then on `/setup` is
+closed and everyone else joins by invitation.
+
+Then, in order:
+
+1. **Applications** → create an application. It is a name, nothing more.
+2. Add an **environment** to it: a label (`production`, `staging`, …), the URL of that
+   installation's Horizon dashboard (for example `https://shop.example.com/horizon`), the
+   basic-auth user and password if the dashboard is behind one, and how often to poll it
+   (15 to 300 seconds). **Test connection** reads the dashboard once and tells you what it
+   found before you save.
+3. **Alert rules** → review the thresholds. Every organization starts with sensible defaults
+   and you can override any rule for a single environment.
+4. **Alert rules → Notifications** → add the email recipients, and the webhook URL if you
+   want one.
+5. **Members** → invite the rest of the team and pick which environments each person sees.
+
+Readings start within a minute of saving an environment; the wall fills itself as they
+arrive.
+
+## What the monitored application needs
+
+Horizon Watch reads `<horizon dashboard URL>/api/stats`, `/api/masters`, `/api/workload`,
+`/api/jobs/failed`, `/api/jobs/pending` and the per-queue metrics. So the monitored
+application needs:
+
+- **Horizon installed and reachable over HTTP.** The default path is `/horizon`; if you moved
+  it with `HORIZON_PATH`, give Horizon Watch the moved URL. Either the dashboard URL or the
+  same URL ending in `/api` is accepted.
+- **A way in.** Horizon's `viewHorizon` gate guards those routes outside the `local`
+  environment. The simplest arrangement that does not open the dashboard to the world is to
+  put HTTP basic auth in front of it at the web-server level and give Horizon Watch the
+  credentials; they are stored encrypted. If you gate it in the application instead, make
+  sure the gate lets a request without a session through, or Horizon Watch will only ever see
+  the login redirect.
+
+Every read is a plain `GET`; nothing Horizon Watch sends changes state. Reads follow no
+redirects, time out after a few seconds, stop at 2 MB per response, ignore any proxy
+configured in the environment and connect to the address the name resolved to, so a name that
+changes between the safety check and the request cannot redirect the read elsewhere.
 
 ## Configuration
 
-Everything is set as environment variables (for example in a `.env` file next to
-`compose.prod.yaml`) and has a default, except the mail server:
+Everything is an environment variable, set in a `.env` file next to `compose.prod.yaml` or in
+the environment of the containers. Everything has a default except the mail server.
 
-| Variable                                                                                       | Default                 | Purpose                                      |
-| ---------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------- |
-| `HORIZON_WATCH_PORT`                                                                           | `8080`                  | Port published on the host                   |
-| `HORIZON_WATCH_WORKERS`                                                                        | `2`                     | Parallel queue workers (readings, email)     |
-| `HORIZON_WATCH_RETENTION_DAYS`                                                                 | `30`                    | Days of readings kept before pruning         |
-| `HORIZON_WATCH_ALERT_RETENTION_DAYS`                                                           | `90`                    | Days resolved alerts are kept before pruning |
-| `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS`                                                         | `false`                 | Refuse Horizon addresses on private networks |
-| `APP_URL`                                                                                      | `http://localhost:8080` | Public URL, used in links and emails         |
-| `APP_LOCALE`                                                                                   | `en`                    | Default language (`en` or `it`)              |
-| `DB_PASSWORD`                                                                                  | `horizon_watch`         | PostgreSQL password; change it               |
-| `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS` | `smtp`, no host         | SMTP for invitations and alerts              |
-| `APP_KEY`                                                                                      | generated               | Leave empty to generate one on first start   |
+| Variable                               | Default                                  | Purpose                                                                                  |
+| -------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `HORIZON_WATCH_IMAGE`                  | `ghcr.io/guard4534/horizon-watch:latest` | Image to run; pin a version tag in production                                            |
+| `HORIZON_WATCH_PORT`                   | `8080`                                   | Port published on the host                                                               |
+| `HORIZON_WATCH_WORKERS`                | `2`                                      | Queue workers (readings, notifications)                                                  |
+| `HORIZON_WATCH_RETENTION_DAYS`         | `30`                                     | Days of readings kept before pruning                                                     |
+| `HORIZON_WATCH_ALERT_RETENTION_DAYS`   | `90`                                     | Days resolved alerts are kept before pruning                                             |
+| `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` | `false`                                  | Refuse Horizon addresses that resolve to a private network                               |
+| `HORIZON_WATCH_DEFAULT_TIMEZONE`       | `UTC`                                    | Time zone new organizations start with                                                   |
+| `APP_URL`                              | `http://localhost:8080`                  | Public URL, used in emails and webhook payloads                                          |
+| `APP_LOCALE`                           | `en`                                     | Default language, `en` or `it`                                                           |
+| `APP_KEY`                              | generated                                | Leave empty: the first start writes one to the `app-data` volume                         |
+| `TRUSTED_PROXIES`                      | `private`                                | `private` (loopback and RFC 1918), `*`, or a comma-separated list of addresses and CIDRs |
+| `SESSION_SECURE_COOKIE`                | `null`                                   | `null` follows the request scheme; force it with `true` or `false`                       |
+| `DB_PASSWORD`                          | `horizon_watch`                          | PostgreSQL password. Change it                                                           |
+| `MAIL_MAILER`                          | `smtp`                                   | Mail transport                                                                           |
+| `MAIL_HOST`                            | _(empty)_                                | SMTP host. Without it every email fails                                                  |
+| `MAIL_PORT`                            | `587`                                    | SMTP port                                                                                |
+| `MAIL_USERNAME`                        | _(empty)_                                | SMTP user, when the server asks for one                                                  |
+| `MAIL_PASSWORD`                        | _(empty)_                                | SMTP password, when the server asks for one                                              |
+| `MAIL_FROM_ADDRESS`                    | `horizon-watch@example.com`              | Sender of invitations and alert emails                                                   |
 
-Email goes out only through the SMTP server you configure: set `MAIL_HOST`, `MAIL_PORT` and,
-when the server asks for them, `MAIL_USERNAME` and `MAIL_PASSWORD`. Until then every email —
-invitations and alerts — fails: the panel lists alert emails as not delivered, and invitations
-stay in the queue's failed jobs. There is no fallback that writes emails to the log, because
-the log would then hold recipients and links.
+`TRUSTED_PROXIES` decides which forwarded headers the panel believes. The default trusts
+loopback and private addresses, which covers a reverse proxy in the same Docker network or on
+the same private network, and ignores forwarded headers from anywhere else. If your proxy
+reaches the panel from a public address, list it explicitly; `*` trusts everyone and should
+only be used when nothing but the proxy can reach the port.
 
-## Webhook
+## Notifications
+
+Critical alerts are sent as they open, repeat while they stay open (every 15, 30 or 60
+minutes, your choice) and are sent again when they resolve. Warnings are collected into a
+digest every 15 minutes. Each organization has its own recipients, its own quiet settings and
+its own webhook.
+
+Email goes out only through the SMTP server you configure. Until `MAIL_HOST` is set, every
+email — invitations and alerts — fails: the panel lists alert emails as not delivered, and
+invitations stay in the failed jobs of the queue. There is deliberately no fallback that
+writes emails to the log, because the log would then hold recipients and links.
+
+### Webhook
 
 An organization can send its alerts to one webhook URL (Alert rules → Notifications). The
 panel `POST`s JSON with these headers:
@@ -64,10 +152,10 @@ panel `POST`s JSON with these headers:
   `<timestamp>.<raw body>`, keyed with the organization's webhook secret
 
 The secret is shown once, when the first URL is saved or when it is regenerated (serve the
-panel over HTTPS, see [Install](#install)). Put any token
-in the URL path: query strings and credentials in the URL are refused. The receiver has 5
-seconds to answer with a 2xx; redirects are not followed, the response body is ignored, and a
-failed delivery is tried three times (after 10 and 60 seconds) before it is logged as failed.
+panel over HTTPS, see [Install](#install)). Put any token in the URL path: query strings and
+credentials in the URL are refused. The receiver has 5 seconds to answer with a 2xx;
+redirects are not followed, the response body is ignored, and a failed delivery is tried
+three times (after 10 and 60 seconds) before it is logged as failed.
 
 ```json
 {
@@ -115,46 +203,115 @@ if (abs(time() - $timestamp) > 300
 
 This is what `App\Externals\Webhook\Signature::sign()` computes.
 
-## Back up the data volume
+## Running commands
 
-The `app-data` volume holds the application key, which encrypts the Horizon credentials
-you store. Losing it makes those credentials unreadable. Back up both volumes:
-`app-data` and `postgres-data`.
+`docker compose exec` bypasses the image's entrypoint, so the command would run as root
+without an application key. Use `run` and the `artisan` role instead, which loads the key and
+drops to the `www-data` user:
 
-## Update
+```bash
+docker compose -f compose.prod.yaml run --rm web artisan about
+docker compose -f compose.prod.yaml run --rm web artisan queue:failed
+docker compose -f compose.prod.yaml run --rm web artisan schedule:list
+```
 
-Once the image is published on GHCR:
+## Logs
+
+Every container logs to standard output, so `docker compose logs` is the whole story:
+
+```bash
+docker compose -f compose.prod.yaml logs -f web
+docker compose -f compose.prod.yaml logs -f worker
+```
+
+`web` carries the nginx access log, the php-fpm log and the application log; `worker` carries
+the queue. Nothing that could be a credential is ever logged: an unexpected failure inside
+the Horizon reader is reported by class, file and line only, because its message could hold a
+URL with credentials or a slice of a response body.
+
+## Upgrading
 
 ```bash
 docker compose -f compose.prod.yaml pull
 docker compose -f compose.prod.yaml up -d
 ```
 
-Until then, pull the latest clone and rebuild instead: `git pull && docker compose -f
-compose.prod.yaml up -d --build`.
+Migrations run when the `web` container starts, under an advisory lock, so several replicas
+can start at once. Read [CHANGELOG.md](CHANGELOG.md) before a major version.
 
-Migrations run automatically when the `web` container starts.
+## Backup and restore
+
+Two volumes hold everything:
+
+- `postgres-data` — every application, environment, reading, rule and alert.
+- `app-data` — the application key. **It decrypts the Horizon basic-auth passwords stored in
+  the database.** Lose it and those passwords are unreadable; you would have to re-enter them
+  on every environment.
+
+Back up both, together:
+
+```bash
+docker run --rm -v horizon-watch_postgres-data:/from -v "$PWD":/to alpine \
+    tar czf /to/postgres-data.tgz -C /from .
+docker run --rm -v horizon-watch_app-data:/from -v "$PWD":/to alpine \
+    tar czf /to/app-data.tgz -C /from .
+```
+
+Both volume names are prefixed with the Compose project name, which is the name of the
+directory holding `compose.prod.yaml` unless you pass `-p`; `docker volume ls` shows the real
+names.
+
+Restore into a stopped stack by untarring each archive back into the matching volume. If you
+would rather keep the key yourself, set `APP_KEY` in the environment: when it is set, the
+entrypoint uses it and never touches `/data/app-key`.
+
+## Troubleshooting
+
+**Every alert email is listed as not delivered, and invitations never arrive.** `MAIL_HOST`
+is empty. Set the SMTP settings and restart the stack; there is no log fallback by design.
+
+**`/setup` keeps appearing.** No user exists yet, so every route redirects there. If you have
+already created the administrator and still land on `/setup`, the panel is talking to an
+empty database — check `DB_*` and that the `postgres` container is the one holding your
+volume.
+
+**The panel answers 502 and the `web` log says `upstream sent too big header`.** nginx's
+FastCGI buffers are too small for the `Link` header that preloads the page's assets.
+`docker/prod/nginx.conf` already raises them; if you replaced that file, raise
+`fastcgi_buffer_size` and `fastcgi_buffers` again.
+
+**The `app-data` volume is gone.** A new key is generated on the next start. Everything still
+works except the stored Horizon basic-auth passwords, which can no longer be decrypted: open
+each environment and enter its password again.
+
+**A Horizon URL is refused when saved.** The panel refuses credentials and query strings in
+the URL, non-HTTP schemes, and — when `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` is `true` —
+addresses that resolve to a private or link-local network. Cloud metadata addresses are
+always refused.
 
 ## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full setup. In short:
 
 ```bash
 composer install
 ./vendor/bin/sail up -d
+./vendor/bin/sail exec pgsql createdb -U sail testing
 ./vendor/bin/sail composer run setup
 ./vendor/bin/sail composer run dev
 ```
 
-`composer run setup` copies `.env.example` to `.env`, generates `APP_KEY`, migrates the
-database and builds the front-end assets — running the commands separately and skipping
-`key:generate` is the most common reason the first request fails.
+`./vendor/bin/sail composer ci:check` runs everything CI runs: Pint, Larastan, the front-end
+lint and type check, and the Pest suite.
 
-Sail also starts Mailpit, a dev-only mail catcher: with the default `.env.example` values
-(`MAIL_MAILER=smtp` to `mailpit:1025`) every email sent by the app — invitations, password
-resets — lands in its UI at `http://localhost:8025` instead of a real inbox.
+`./vendor/bin/sail php artisan migrate:fresh --seed` fills the database with a demo
+organization and a few weeks of readings, and creates an administrator:
+`admin@example.com` / `password`. Never seed a database you care about.
 
-Checks: `./vendor/bin/sail composer check` (Pint, Larastan, Pest) and
-`./vendor/bin/sail npm run types:check`.
+## Security
+
+Please report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

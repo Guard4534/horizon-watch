@@ -1,0 +1,14 @@
+x-build: &build
+    build:
+        context: .
+        dockerfile: Dockerfile
+
+services:
+    web:
+        <<: *build
+
+    scheduler:
+        <<: *build
+
+    worker:
+        <<: *build

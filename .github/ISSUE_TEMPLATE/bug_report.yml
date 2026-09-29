@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in the panel does not work as it should.
+labels: [bug]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report a security problem here. See SECURITY.md for private reporting.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. …
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The image tag you are running, or the commit if you built it yourself.
+      placeholder: ghcr.io/guard4534/horizon-watch:0.1.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >-
+        Output of `docker compose -f compose.prod.yaml logs web`, trimmed to what matters.
+        Remove anything that could be a credential.
+      render: text
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Browser, reverse proxy, how the monitored Horizon is protected, and so on.

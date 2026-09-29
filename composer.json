@@ -3,13 +3,9 @@
     "name": "horizon-watch/horizon-watch",
     "type": "project",
     "description": "Self-hosted control room for several Laravel Horizon installations.",
-    "keywords": [
-        "laravel",
-        "framework"
-    ],
     "license": "MIT",
     "require": {
-        "php": "^8.3",
+        "php": "^8.5",
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/chisel": "^0.1.0",
         "laravel/fortify": "^1.37.2",
@@ -62,26 +58,21 @@
         "lint:check": [
             "pint --parallel --test"
         ],
-        "ci:check": [
-            "Composer\\Config::disableProcessTimeout",
-            "npm run check",
-            "npm run types:check",
-            "@test"
-        ],
         "types:check": [
             "phpstan analyse"
         ],
         "test": [
             "@php artisan config:clear --ansi",
-            "@lint:check",
-            "@types:check",
-            "@php artisan test"
-        ],
-        "check": [
-            "@php artisan config:clear --ansi",
-            "@lint:check",
-            "@types:check",
             "@php artisan test --compact"
+        ],
+        "ci:check": [
+            "Composer\\Config::disableProcessTimeout",
+            "@lint:check",
+            "@types:check",
+            "npm run check",
+            "@php artisan wayfinder:generate --with-form --ansi",
+            "npm run types:check",
+            "@test"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
@@ -93,22 +84,13 @@
         "post-root-package-install": [
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
         ],
-        "post-create-project-cmd": [
-            "@php artisan key:generate --ansi",
-            "@php -r \"file_exists('database/database.sqlite') || touch('database/database.sqlite');\"",
-            "@php artisan migrate --graceful --ansi"
-        ],
         "pre-package-uninstall": [
             "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
         ]
     },
     "extra": {
         "laravel": {
-            "dont-discover": [],
-            "installer": {
-                "post-create-project": [
-                ]
-            }
+            "dont-discover": []
         }
     },
     "config": {

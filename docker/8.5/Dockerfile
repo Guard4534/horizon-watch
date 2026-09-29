@@ -1,7 +1,5 @@
 FROM ubuntu:24.04
 
-LABEL maintainer="Taylor Otwell"
-
 ARG WWWGROUP
 ARG NODE_VERSION=24
 ARG POSTGRES_VERSION=18
