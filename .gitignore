@@ -6,7 +6,8 @@
 /public/hot
 /public/storage
 /resources/js/actions
-/resources/js/generated
+/resources/js/generated/*
+!/resources/js/generated/.gitkeep
 /resources/js/routes
 /resources/js/wayfinder
 /storage/*.key
