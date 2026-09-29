@@ -27,7 +27,13 @@ export default defineConfig({
     ]),
     server: {
         watch: {
-            ignored: ['**/vendor/**'],
+            ignored: [
+                '**/.agents/**',
+                '**/.claude/**',
+                '**/.cursor/**',
+                '**/.junie/**',
+                '**/vendor/**',
+            ],
         },
     },
     lint: {
