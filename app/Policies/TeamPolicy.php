@@ -9,21 +9,6 @@ use App\Models\User;
 
 class TeamPolicy
 {
-    public function viewAny(User $user): bool
-    {
-        return true;
-    }
-
-    public function view(User $user, Team $team): bool
-    {
-        return $user->belongsToTeam($team);
-    }
-
-    public function create(User $user): bool
-    {
-        return true;
-    }
-
     public function update(User $user, Team $team): bool
     {
         return $user->hasTeamPermission($team, TeamPermission::UpdateTeam);
@@ -31,14 +16,7 @@ class TeamPolicy
 
     public function leave(User $user, Team $team): bool
     {
-        return ! $team->is_personal
-            && $user->belongsToTeam($team)
-            && ! $user->ownsTeam($team);
-    }
-
-    public function addMember(User $user, Team $team): bool
-    {
-        return $user->hasTeamPermission($team, TeamPermission::AddMember);
+        return $user->belongsToTeam($team) && ! $user->ownsTeam($team);
     }
 
     public function updateMember(User $user, Team $team, ?User $target = null): bool
@@ -71,7 +49,7 @@ class TeamPolicy
 
     public function delete(User $user, Team $team): bool
     {
-        return ! $team->is_personal && $user->hasTeamPermission($team, TeamPermission::DeleteTeam);
+        return $user->hasTeamPermission($team, TeamPermission::DeleteTeam);
     }
 
     public function manageAlertRules(User $user, Team $team): bool

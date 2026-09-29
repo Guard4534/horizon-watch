@@ -29,7 +29,7 @@ final class SyntheticReadings
     private const FAILED_WINDOW_MINUTES = 1440;
 
     public const INCIDENTS = [
-        'fatturaomatic-production' => EnvironmentStatus::Inactive,
+        'invoice-desk-production' => EnvironmentStatus::Inactive,
         'mailer-service-worker-batch' => EnvironmentStatus::Degraded,
         'logistics-hub-worker-batch' => EnvironmentStatus::Unreachable,
         'acme-shop-staging' => EnvironmentStatus::Paused,

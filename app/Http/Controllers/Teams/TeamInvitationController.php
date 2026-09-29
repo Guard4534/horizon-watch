@@ -12,7 +12,6 @@ use App\Models\TeamInvitation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Inertia\Inertia;
 
 class TeamInvitationController extends Controller
 {
@@ -22,7 +21,7 @@ class TeamInvitationController extends Controller
 
         $inviteMember->handle($current_team, $request->user(), $data);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation sent.')]);
+        $this->success(__('Invitation sent.'));
 
         return back();
     }
@@ -34,7 +33,7 @@ class TeamInvitationController extends Controller
 
         $resendInvitation->handle($invitation);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation resent.')]);
+        $this->success(__('Invitation resent.'));
 
         return back();
     }
@@ -46,7 +45,7 @@ class TeamInvitationController extends Controller
 
         $revokeInvitation->handle($invitation);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation revoked.')]);
+        $this->success(__('Invitation revoked.'));
 
         return back();
     }

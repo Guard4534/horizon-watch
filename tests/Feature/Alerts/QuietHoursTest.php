@@ -48,6 +48,7 @@ test('no window without both ends or with equal ends', function (?string $from, 
 ]);
 
 test('an unknown time zone falls back to the default one', function () {
+    config(['horizon-watch.notifications.default_timezone' => 'Europe/Rome']);
     $at = CarbonImmutable::parse('2026-07-01 21:30:00', 'UTC');
 
     expect(QuietHours::contains('23:00', '23:45', 'Mars/Olympus', $at))->toBeTrue()

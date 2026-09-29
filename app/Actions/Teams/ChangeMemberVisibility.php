@@ -21,17 +21,12 @@ class ChangeMemberVisibility
         return DB::transaction(function () use ($team, $target, $membership, $visibility, $environmentIds) {
             $membership->update(['visibility' => $visibility]);
 
-            $teamEnvironmentIds = $team->environments()->pluck('environments.id');
-
-            DB::table('environment_user')
-                ->where('user_id', $target->id)
-                ->whereIn('environment_id', $teamEnvironmentIds)
-                ->delete();
+            $membership->clearEnvironmentGrants();
 
             if ($visibility === MemberVisibility::Manual) {
                 $rows = collect($environmentIds)
                     ->map(fn (int $id) => (int) $id)
-                    ->intersect($teamEnvironmentIds)
+                    ->intersect($team->environments()->pluck('environments.id'))
                     ->unique()
                     ->map(fn (int $id) => ['user_id' => $target->id, 'environment_id' => $id])
                     ->values()

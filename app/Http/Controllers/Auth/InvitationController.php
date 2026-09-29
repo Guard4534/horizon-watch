@@ -67,7 +67,7 @@ class InvitationController extends Controller
 
         $acceptInvitation->handle($invitation, $user);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation accepted.')]);
+        $this->success(__('Invitation accepted.'));
 
         return to_route('wall', ['current_team' => $user->currentTeam?->slug]);
     }
@@ -84,7 +84,7 @@ class InvitationController extends Controller
 
         $declineInvitation->handle($invitation);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation declined.')]);
+        $this->success(__('Invitation declined.'));
 
         return to_route('wall');
     }

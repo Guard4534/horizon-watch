@@ -30,9 +30,4 @@ class AlertNotificationFactory extends Factory
             'sent_at' => now(),
         ];
     }
-
-    public function failed(string $error = 'timeout'): static
-    {
-        return $this->state(fn () => ['status' => DeliveryStatus::Failed, 'error' => $error]);
-    }
 }

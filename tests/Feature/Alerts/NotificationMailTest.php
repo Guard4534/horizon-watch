@@ -20,6 +20,7 @@ use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\App;
 
 beforeEach(function () {
+    config(['horizon-watch.notifications.default_timezone' => 'Europe/Rome']);
     $this->travelTo(CarbonImmutable::parse('2026-09-17 12:30:00', 'UTC'));
     $this->team = Team::factory()->create(['name' => 'Acme', 'slug' => 'acme']);
     $this->application = Application::factory()->for($this->team)->create(['name' => 'Shop <b>&</b>']);

@@ -41,7 +41,7 @@ test('an admin can still update and remove a regular member', function () {
 
 test('an admin cannot demote the owner over HTTP', function () {
     $response = $this->actingAs($this->admin)
-        ->patch(route('teams.members.update', [$this->team, $this->owner]), [
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->owner->id]), [
             'role' => TeamRole::Admin->value,
         ]);
 
@@ -52,7 +52,7 @@ test('an admin cannot demote the owner over HTTP', function () {
 
 test('an admin cannot remove the owner over HTTP', function () {
     $response = $this->actingAs($this->admin)
-        ->delete(route('teams.members.destroy', [$this->team, $this->owner]));
+        ->delete(route('members.destroy', ['current_team' => $this->team->slug, 'user' => $this->owner->id]));
 
     $response->assertForbidden();
 

@@ -8,25 +8,25 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 test('the slug is composed from the application and the environment name', function () {
-    $application = Application::factory()->create(['name' => 'Fatturaomatic']);
+    $application = Application::factory()->create(['name' => 'Invoice Desk']);
 
     $environment = Environment::factory()->production()->create([
         'application_id' => $application->id,
     ]);
 
-    expect($environment->slug)->toBe('fatturaomatic-production');
+    expect($environment->slug)->toBe('invoice-desk-production');
 });
 
 test('the slug is unique within the organization even across applications with same-named environments', function () {
     $team = Team::factory()->create();
-    $firstApplication = Application::factory()->create(['team_id' => $team->id, 'name' => 'Fatturaomatic']);
-    $secondApplication = Application::factory()->create(['team_id' => $team->id, 'name' => 'Fatturaomatic Two']);
+    $firstApplication = Application::factory()->create(['team_id' => $team->id, 'name' => 'Invoice Desk']);
+    $secondApplication = Application::factory()->create(['team_id' => $team->id, 'name' => 'Invoice Desk Two']);
 
     $first = Environment::factory()->production()->create(['application_id' => $firstApplication->id]);
     $second = Environment::factory()->production()->create(['application_id' => $secondApplication->id]);
 
-    expect($first->slug)->toBe('fatturaomatic-production')
-        ->and($second->slug)->toBe('fatturaomatic-two-production');
+    expect($first->slug)->toBe('invoice-desk-production')
+        ->and($second->slug)->toBe('invoice-desk-two-production');
 });
 
 test('the basic auth password is stored encrypted and hidden from arrays', function () {

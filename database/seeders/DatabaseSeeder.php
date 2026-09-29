@@ -21,7 +21,7 @@ class DatabaseSeeder extends Seeder
      * @var array<string, array{0: string, 1: array<int, string>}>
      */
     private const APPLICATIONS = [
-        'Fatturaomatic' => ['fatturaomatic.example.com', ['production', 'preprod', 'staging', 'develop']],
+        'Invoice Desk' => ['invoice-desk.example.com', ['production', 'preprod', 'staging', 'develop']],
         'Acme Shop' => ['shop.example.com', ['production', 'staging', 'develop', 'demo']],
         'Logistics Hub' => ['logistics.example.com', ['production', 'worker-batch', 'staging']],
         'CRM Bridge' => ['crm-bridge.example.com', ['production', 'preprod', 'testing']],

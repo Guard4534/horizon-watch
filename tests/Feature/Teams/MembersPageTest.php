@@ -8,7 +8,9 @@ use App\Models\Environment;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Grants;
 
 function grantManually(Team $team, User $user, Environment $environment): void
 {
@@ -16,11 +18,7 @@ function grantManually(Team $team, User $user, Environment $environment): void
         ->where('user_id', $user->id)
         ->update(['visibility' => MemberVisibility::Manual->value]);
 
-    $team->memberships()
-        ->where('user_id', $user->id)
-        ->firstOrFail()
-        ->visibleEnvironments()
-        ->attach($environment);
+    Grants::give($user->id, $environment->id);
 }
 
 function otherOrganizationGrant(User $user): Environment
@@ -81,14 +79,6 @@ test('the invite form and the member menu only appear with the permission', func
     ['member', false, false],
     ['viewer', false, false],
 ]);
-
-test('the page keeps the mockup last-seen column empty, because nothing records it', function () {
-    $this->actingAs($this->admin)
-        ->get(route('members.index', ['current_team' => $this->team->slug]))
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('page.members', fn ($members) => collect($members)
-                ->every(fn (array $member) => $member['lastSeenAt'] === null)));
-});
 
 test('the permission matrix comes from the role definitions, one row per permission', function () {
     $this->actingAs($this->viewer)
@@ -382,6 +372,7 @@ test('no invitation prop carries the join code', function () {
 });
 
 test('an admin removes themselves from the members view and lands on the home route', function () {
+    $ownTeam = $this->admin->currentTeam;
     $this->admin->update(['current_team_id' => $this->team->id]);
 
     $this->actingAs($this->admin)
@@ -389,7 +380,7 @@ test('an admin removes themselves from the members view and lands on the home ro
         ->assertRedirect(route('home'));
 
     expect($this->admin->fresh()->belongsToTeam($this->team))->toBeFalse()
-        ->and($this->admin->fresh()->current_team_id)->toEqual($this->admin->personalTeam()->id);
+        ->and($this->admin->fresh()->current_team_id)->toEqual($ownTeam->id);
 });
 
 test('removing a stranger from the members view is a 404, not a false success', function () {
@@ -400,16 +391,37 @@ test('removing a stranger from the members view is a 404, not a false success', 
         ->assertNotFound();
 });
 
-test('a role tag reads the same on the members view and on the team settings page', function () {
+test('every role tag comes from the one role label formula', function () {
     $this->actingAs($this->admin)
         ->get(route('members.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.members.0.roleLabel', 'Owner · admin')
-            ->where('page.members.1.roleLabel', 'admin'));
+            ->where('page.members.1.roleLabel', 'Admin')
+            ->where('page.members.2.roleLabel', 'Member')
+            ->where('page.members.3.roleLabel', 'Viewer'));
+});
 
-    $this->actingAs($this->admin)
-        ->get(route('teams.edit', $this->team))
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('members.0.role_label', 'Owner · admin')
-            ->where('members.1.role_label', 'admin'));
+test('the manual grants of the whole page are read in one query, not one per member', function () {
+    foreach (User::factory()->count(5)->create() as $extra) {
+        $this->team->members()->attach($extra, [
+            'role' => TeamRole::Viewer->value,
+            'visibility' => MemberVisibility::Manual->value,
+        ]);
+
+        Grants::give($extra->id, $this->staging->id);
+    }
+
+    $this->actingAs($this->admin);
+
+    DB::enableQueryLog();
+
+    $this->get(route('members.index', ['current_team' => $this->team->slug]))->assertOk();
+
+    $grantQueries = collect(DB::getQueryLog())
+        ->filter(fn (array $entry) => str_contains($entry['query'], 'environment_user'))
+        ->count();
+
+    DB::disableQueryLog();
+
+    expect($grantQueries)->toBe(1);
 });

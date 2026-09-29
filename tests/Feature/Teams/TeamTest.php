@@ -7,7 +7,7 @@ use App\Models\Environment;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
-use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Grants;
 
 test('the teams index page can be rendered', function () {
     $user = User::factory()->create();
@@ -28,29 +28,9 @@ test('teams can be created', function () {
             'name' => 'Test Team',
         ]);
 
-    $response->assertRedirect();
+    $response->assertRedirect(route('teams.index'));
 
-    $this->assertDatabaseHas('teams', [
-        'name' => 'Test Team',
-        'is_personal' => false,
-    ]);
-});
-
-test('personal team returns the team owned by the user', function () {
-    $otherUser = User::factory()->create();
-    $user = User::factory()->make();
-    $user->save();
-
-    $otherUser->personalTeam()->members()->attach($user, [
-        'role' => TeamRole::Member->value,
-    ]);
-
-    $personalTeam = Team::factory()->personal()->create();
-    $personalTeam->members()->attach($user, [
-        'role' => TeamRole::Owner->value,
-    ]);
-
-    expect($personalTeam->is($user->personalTeam()))->toBeTrue();
+    $this->assertDatabaseHas('teams', ['name' => 'Test Team']);
 });
 
 test('team slug uses next available suffix', function () {
@@ -72,24 +52,16 @@ test('team slug uses next available suffix', function () {
     ]);
 });
 
-test('the team edit page can be rendered', function () {
+test('a trashed team still reserves its slug', function () {
     $user = User::factory()->create();
-    $team = Team::factory()->create();
 
-    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+    Team::factory()->trashed()->create(['name' => 'Acme', 'slug' => 'acme']);
 
-    $response = $this
+    $this
         ->actingAs($user)
-        ->get(route('teams.edit', $team));
+        ->post(route('teams.store'), ['name' => 'Acme']);
 
-    $response
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('teams/Edit')
-            ->where('members.0.role', TeamRole::Owner->value)
-            ->where('members.0.role_label', 'Owner · admin')
-            ->where('availableRoles.0', ['value' => 'admin', 'label' => 'admin']),
-        );
+    $this->assertDatabaseHas('teams', ['name' => 'Acme', 'slug' => 'acme-1']);
 });
 
 test('teams can be updated by owners', function () {
@@ -104,11 +76,12 @@ test('teams can be updated by owners', function () {
             'name' => 'Updated Name',
         ]);
 
-    $response->assertRedirect(route('teams.edit', $team->fresh()));
+    $response->assertRedirect(route('teams.index'));
 
     $this->assertDatabaseHas('teams', [
         'id' => $team->id,
         'name' => 'Updated Name',
+        'slug' => 'updated-name',
     ]);
 });
 
@@ -141,7 +114,7 @@ test('teams can be deleted by owners', function () {
             'name' => $team->name,
         ]);
 
-    $response->assertRedirect();
+    $response->assertRedirect(route('teams.index'));
 
     $this->assertSoftDeleted('teams', [
         'id' => $team->id,
@@ -197,37 +170,12 @@ test('deleting current team switches to alphabetically first remaining team', fu
     expect($user->fresh()->current_team_id)->toEqual($alphaTeam->id);
 });
 
-test('deleting current team falls back to personal team when alphabetically first', function () {
-    $user = User::factory()->create();
-    $personalTeam = $user->personalTeam();
-    $team = Team::factory()->create(['name' => 'Zulu Team']);
-    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
-
-    $user->update(['current_team_id' => $team->id]);
-
-    $response = $this
-        ->actingAs($user)
-        ->delete(route('teams.destroy', $team), [
-            'name' => $team->name,
-        ]);
-
-    $response->assertRedirect();
-
-    $this->assertSoftDeleted('teams', [
-        'id' => $team->id,
-    ]);
-
-    expect($user->fresh()->current_team_id)->toEqual($personalTeam->id);
-});
-
 test('deleting non current team leaves current team unchanged', function () {
     $user = User::factory()->create();
-    $personalTeam = $user->personalTeam();
+    $keptTeam = $user->currentTeam;
     $team = Team::factory()->create();
     $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
 
-    $user->update(['current_team_id' => $personalTeam->id]);
-
     $response = $this
         ->actingAs($user)
         ->delete(route('teams.destroy', $team), [
@@ -240,10 +188,26 @@ test('deleting non current team leaves current team unchanged', function () {
         'id' => $team->id,
     ]);
 
-    expect($user->fresh()->current_team_id)->toEqual($personalTeam->id);
+    expect($user->fresh()->current_team_id)->toEqual($keptTeam->id);
 });
 
-test('members can leave non personal teams', function () {
+test('deleting the only organization leaves the owner without a current one', function () {
+    $user = User::factory()->create();
+    $user->teamMemberships()->delete();
+
+    $team = Team::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+    $user->update(['current_team_id' => $team->id]);
+
+    $this
+        ->actingAs($user)
+        ->delete(route('teams.destroy', $team), ['name' => $team->name])
+        ->assertRedirect();
+
+    expect($user->fresh()->current_team_id)->toBeNull();
+});
+
+test('members can leave an organization', function () {
     $owner = User::factory()->create();
     $member = User::factory()->create();
     $team = Team::factory()->create();
@@ -287,17 +251,22 @@ test('leaving current team switches to alphabetically first remaining team', fun
     expect($member->fresh()->current_team_id)->toEqual($alphaTeam->id);
 });
 
-test('personal teams cannot be left', function () {
-    $user = User::factory()->create();
-    $personalTeam = $user->personalTeam();
+test('leaving the only organization leaves the member without a current one', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $member->teamMemberships()->delete();
 
-    $response = $this
-        ->actingAs($user)
-        ->delete(route('teams.leave', $personalTeam));
+    $team = Team::factory()->create();
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $team->members()->attach($member, ['role' => TeamRole::Member->value]);
+    $member->update(['current_team_id' => $team->id]);
 
-    $response->assertForbidden();
+    $this
+        ->actingAs($member)
+        ->delete(route('teams.leave', $team))
+        ->assertRedirect(route('teams.index'));
 
-    expect($user->fresh()->belongsToTeam($personalTeam))->toBeTrue();
+    expect($member->fresh()->current_team_id)->toBeNull();
 });
 
 test('team owners cannot leave their team', function () {
@@ -326,9 +295,10 @@ test('users cannot leave teams they dont belong to', function () {
     $response->assertForbidden();
 });
 
-test('deleting team switches other affected users to their personal team', function () {
+test('deleting a team moves the other affected users to an organization they still belong to', function () {
     $owner = User::factory()->create();
     $member = User::factory()->create();
+    $memberOwnTeam = $member->currentTeam;
 
     $team = Team::factory()->create();
     $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
@@ -345,26 +315,26 @@ test('deleting team switches other affected users to their personal team', funct
 
     $response->assertRedirect();
 
-    expect($member->fresh()->current_team_id)->toEqual($member->personalTeam()->id);
+    expect($member->fresh()->current_team_id)->toEqual($memberOwnTeam->id);
 });
 
-test('personal teams cannot be deleted', function () {
-    $user = User::factory()->create();
+test('deleting a team clears the current organization of members who have no other', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $member->teamMemberships()->delete();
 
-    $personalTeam = $user->personalTeam();
+    $team = Team::factory()->create();
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $team->members()->attach($member, ['role' => TeamRole::Member->value]);
 
-    $response = $this
-        ->actingAs($user)
-        ->delete(route('teams.destroy', $personalTeam), [
-            'name' => $personalTeam->name,
-        ]);
+    $member->update(['current_team_id' => $team->id]);
 
-    $response->assertForbidden();
+    $this
+        ->actingAs($owner)
+        ->delete(route('teams.destroy', $team), ['name' => $team->name])
+        ->assertRedirect();
 
-    $this->assertDatabaseHas('teams', [
-        'id' => $personalTeam->id,
-        'deleted_at' => null,
-    ]);
+    expect($member->fresh()->current_team_id)->toBeNull();
 });
 
 test('teams cannot be deleted by non owners', function () {
@@ -416,34 +386,7 @@ test('guests cannot access teams', function () {
     $response->assertRedirect(route('login'));
 });
 
-test('the team edit page never carries an invitation code, not even for a viewer', function () {
-    $owner = User::factory()->create();
-    $viewer = User::factory()->create();
-    $team = Team::factory()->create();
-
-    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
-    $team->members()->attach($viewer, ['role' => TeamRole::Viewer->value]);
-
-    $invitation = TeamInvitation::factory()->create([
-        'team_id' => $team->id,
-        'invited_by' => $owner->id,
-        'expires_at' => now()->addDays(7),
-    ]);
-
-    $this->actingAs($viewer)
-        ->get(route('teams.edit', $team))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('pendingInvitationCount', 1)
-            ->missing('invitations'))
-        ->assertDontSee($invitation->code, escape: false);
-
-    $this->actingAs($owner)
-        ->get(route('teams.edit', $team))
-        ->assertDontSee($invitation->code, escape: false);
-});
-
-test('the team edit page counts the pending invitations without naming who they went to', function () {
+test('the organizations page carries no invitation detail at all', function () {
     $owner = User::factory()->create();
     $viewer = User::factory()->create();
     $team = Team::factory()->create();
@@ -459,55 +402,10 @@ test('the team edit page counts the pending invitations without naming who they 
     ]);
 
     $this->actingAs($viewer)
-        ->get(route('teams.edit', $team))
+        ->get(route('teams.index'))
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('pendingInvitationCount', 1)
-            ->missing('invitations'))
-        ->assertDontSee($invitation->email);
-});
-
-test('the pending invitation count on the team edit page matches the members view', function () {
-    $owner = User::factory()->create();
-    $team = Team::factory()->create();
-
-    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
-
-    $invitations = TeamInvitation::factory()->count(3)->create([
-        'team_id' => $team->id,
-        'invited_by' => $owner->id,
-        'expires_at' => now()->addDays(7),
-    ]);
-
-    $invitations[0]->update(['revoked_at' => now()]);
-    $invitations[1]->update(['expires_at' => now()->subDay()]);
-
-    $this->actingAs($owner)
-        ->get(route('teams.edit', $team))
-        ->assertInertia(fn (Assert $page) => $page->where('pendingInvitationCount', 1));
-
-    $this->actingAs($owner)
-        ->get(route('members.index', ['current_team' => $team->slug]))
-        ->assertInertia(fn (Assert $page) => $page->has('page.invitations', 1));
-});
-
-test('the team edit permission flags come from the policies, not from the role table', function () {
-    $user = User::factory()->create();
-    $personalTeam = $user->personalTeam();
-
-    $this->actingAs($user)
-        ->get(route('teams.edit', $personalTeam))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('permissions.canDeleteTeam', false)
-            ->where('permissions.canUpdateTeam', true));
-
-    $team = Team::factory()->create();
-    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
-
-    $this->actingAs($user)
-        ->get(route('teams.edit', $team))
-        ->assertInertia(fn (Assert $page) => $page->where('permissions.canDeleteTeam', true));
+        ->assertDontSee($invitation->email)
+        ->assertDontSee($invitation->code, escape: false);
 });
 
 test('deleting an organization deletes its applications, environments and environment grants', function () {
@@ -528,11 +426,7 @@ test('deleting an organization deletes its applications, environments and enviro
 
     expect($environment->basic_auth_password)->not->toBeNull();
 
-    $team->memberships()
-        ->where('user_id', $member->id)
-        ->firstOrFail()
-        ->visibleEnvironments()
-        ->attach($environment);
+    Grants::give($member->id, $environment->id);
 
     $this->actingAs($owner)
         ->delete(route('teams.destroy', $team), ['name' => $team->name])
@@ -561,11 +455,7 @@ test('leaving a team clears the environment grants it carried', function () {
         'application_id' => Application::factory()->create(['team_id' => $team->id])->id,
     ]);
 
-    $team->memberships()
-        ->where('user_id', $member->id)
-        ->firstOrFail()
-        ->visibleEnvironments()
-        ->attach($environment);
+    Grants::give($member->id, $environment->id);
 
     $this->actingAs($member)
         ->delete(route('teams.leave', $team))

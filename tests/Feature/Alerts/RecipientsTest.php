@@ -14,6 +14,7 @@ use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Validator;
 use Tests\Support\AlertTeam;
@@ -183,4 +184,42 @@ test('extra addresses are checked at send time with the rule that saved them, an
         ->and($logged)->not->toBeEmpty()
         ->and($logged[0])->toBe(['warning', 'Invalid extra alert addresses skipped.', ['team' => $this->team->id, 'count' => 1]])
         ->and(json_encode($logged))->not->toContain('not-an-address');
+});
+
+test('the digest audience is read with a fixed number of queries, however many members there are', function () {
+    $count = function (): int {
+        $queries = 0;
+        DB::listen(function () use (&$queries) {
+            $queries++;
+        });
+
+        app(Recipients::class)->forDigest($this->team);
+
+        return $queries;
+    };
+
+    $small = $count();
+
+    foreach (range(1, 6) as $index) {
+        AlertTeam::member($this->team, "member{$index}@example.com", TeamRole::Member, MemberVisibility::Manual, grants: [$this->staging]);
+    }
+
+    expect($count())->toBe($small);
+});
+
+test('the extra addresses of one organization are read once per instance', function () {
+    $recipients = app(Recipients::class);
+    $queries = 0;
+    DB::listen(function () use (&$queries) {
+        $queries++;
+    });
+
+    $recipients->forDigest($this->team);
+    $before = $queries;
+
+    $recipients->extraAddress($this->team, Recipients::addressKey('ops@example.com'));
+    $recipients->forTest($this->team, $this->admin);
+
+    expect($before)->toBeGreaterThan(0)
+        ->and($queries)->toBe($before);
 });

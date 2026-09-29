@@ -19,7 +19,6 @@ use App\Models\Alert;
 use App\Models\AlertRule;
 use App\Models\Application;
 use App\Models\Environment;
-use App\Models\Membership;
 use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
@@ -697,9 +696,9 @@ test('one organization that fails does not stop the others', function () {
 
     $visible = app(VisibleEnvironments::class);
     $failing = Mockery::mock(VisibleEnvironments::class);
-    $failing->shouldReceive('idsFor')->andReturnUsing(fn (Team $team, Membership $membership) => $team->is($this->team)
+    $failing->shouldReceive('idsForAllOf')->andReturnUsing(fn (Team $team, iterable $memberships) => $team->is($this->team)
         ? throw new RuntimeException('secret-detail dev@example.com')
-        : $visible->idsFor($team, $membership));
+        : $visible->idsForAllOf($team, $memberships));
     $this->app->instance(VisibleEnvironments::class, $failing);
 
     deliveryPolicy()->repeatDue($this->now);
@@ -776,4 +775,23 @@ test('the catch-up window of lost resolutions comes from the configuration', fun
     deliveryPolicy()->resolutionsDue($this->now);
 
     expect(queuedWebhooks()->pluck('alertId')->all())->toBe([$recent->id]);
+});
+
+test('every scheduled sweep takes at most the configured number of alerts, oldest first', function () {
+    config(['horizon-watch.notifications.alerts_per_run' => 2]);
+    $overdue = ['notified' => true, 'last_notified_at' => $this->now->subHour()];
+
+    $alerts = collect(range(1, 4))->map(fn (int $index) => criticalAlert($this->production, [
+        ...$overdue,
+        'metric' => AlertRuleMetric::cases()[$index],
+        'opened_at' => $this->now->subHours(5 - $index),
+    ]));
+
+    deliveryPolicy()->repeatDue($this->now);
+
+    expect(queuedWebhooks()->pluck('alertId')->all())->toBe([$alerts[0]->id, $alerts[1]->id]);
+
+    deliveryPolicy()->repeatDue($this->now);
+
+    expect(queuedWebhooks()->pluck('alertId')->all())->toBe([$alerts[0]->id, $alerts[1]->id, $alerts[2]->id, $alerts[3]->id]);
 });

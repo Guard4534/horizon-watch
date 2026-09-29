@@ -24,6 +24,7 @@ use App\Queries\WallQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Support\Grants;
 use Tests\Support\Readings;
 
 function freshMonitoringRepository(): MonitoringRepository
@@ -107,7 +108,7 @@ test('an application with no visible environment does not appear, even though it
 
     $membership = $this->user->teamMemberships()->where('team_id', $this->team->id)->first();
     $membership->update(['visibility' => MemberVisibility::Manual->value]);
-    $membership->visibleEnvironments()->attach([$alphaProduction->id]);
+    Grants::give($this->user->id, $alphaProduction->id);
 
     $applications = $this->repository->applications($this->team);
 
@@ -144,7 +145,7 @@ test('a viewer does not see an application with zero environments', function () 
 });
 
 test('an application whose environments are all hidden still reaches the Applications view of an admin', function () {
-    $application = Application::factory()->for($this->team)->create(['name' => 'Fatturaomatic']);
+    $application = Application::factory()->for($this->team)->create(['name' => 'Invoice Desk']);
     $environment = Environment::factory()->for($application)->production()->create();
 
     $this->user->teamMemberships()->where('team_id', $this->team->id)->first()
@@ -165,7 +166,7 @@ test('an application whose environments are all hidden still reaches the Applica
 });
 
 test('an application whose environments are all hidden stays hidden for a member', function () {
-    $application = Application::factory()->for($this->team)->create(['name' => 'Fatturaomatic']);
+    $application = Application::factory()->for($this->team)->create(['name' => 'Invoice Desk']);
     $environment = Environment::factory()->for($application)->production()->create();
 
     $member = User::factory()->create();
@@ -185,7 +186,7 @@ test('an application whose environments are all hidden stays hidden for a member
 });
 
 test('non_production visibility hides production environments, including from alert counts', function () {
-    $application = Application::factory()->for($this->team)->create(['name' => 'Fatturaomatic']);
+    $application = Application::factory()->for($this->team)->create(['name' => 'Invoice Desk']);
     $production = Environment::factory()->for($application)->production()->create();
     $staging = Environment::factory()->for($application)->staging()->create();
     Readings::record($production, EnvironmentStatus::Unreachable);
@@ -646,7 +647,7 @@ test('an unwatched row of the configuration view carries no reading at all', fun
 
     $membership = $this->user->teamMemberships()->where('team_id', $this->team->id)->first();
     $membership->update(['visibility' => MemberVisibility::Manual->value]);
-    $membership->visibleEnvironments()->attach([$watched->id]);
+    Grants::give($this->user->id, $watched->id);
 
     $rows = collect(freshMonitoringRepository()->configurableEnvironments($this->team))->keyBy('id');
     $row = $rows[$hidden->slug];
@@ -794,7 +795,7 @@ test('the configuration view reads states and trends only for watched rows', fun
 
     $membership = $this->user->teamMemberships()->where('team_id', $this->team->id)->first();
     $membership->update(['visibility' => MemberVisibility::Manual->value]);
-    $membership->visibleEnvironments()->attach([$watched->id]);
+    Grants::give($this->user->id, $watched->id);
 
     $repository = freshMonitoringRepository();
     DB::enableQueryLog();

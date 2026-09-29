@@ -11,7 +11,12 @@ enum TeamRole: string
 
     public function label(): string
     {
-        return ucfirst($this->value);
+        return match ($this) {
+            self::Owner => __('Owner · admin'),
+            self::Admin => __('Admin'),
+            self::Member => __('Member'),
+            self::Viewer => __('Viewer'),
+        };
     }
 
     /**
@@ -52,17 +57,5 @@ enum TeamRole: string
     public function isAtLeast(TeamRole $role): bool
     {
         return $this->level() >= $role->level();
-    }
-
-    /**
-     * @return array<array{value: string, label: string}>
-     */
-    public static function assignable(): array
-    {
-        return collect(self::cases())
-            ->filter(fn (self $role) => $role !== self::Owner)
-            ->map(fn (self $role) => ['value' => $role->value, 'label' => $role->label()])
-            ->values()
-            ->toArray();
     }
 }

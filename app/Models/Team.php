@@ -2,8 +2,7 @@
 
 namespace App\Models;
 
-use App\Concerns\GeneratesUniqueTeamSlugs;
-use App\Enums\TeamRole;
+use App\Concerns\GeneratesUniqueSlugs;
 use Database\Factories\TeamFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
@@ -20,7 +19,6 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property string $name
  * @property string $slug
- * @property bool $is_personal
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -32,11 +30,11 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, Alert> $alerts
  * @property-read Collection<int, AlertNotification> $alertNotifications
  */
-#[Fillable(['name', 'slug', 'is_personal'])]
+#[Fillable(['name', 'slug'])]
 class Team extends Model
 {
     /** @use HasFactory<TeamFactory> */
-    use GeneratesUniqueTeamSlugs, HasFactory, SoftDeletes;
+    use GeneratesUniqueSlugs, HasFactory, SoftDeletes;
 
     protected static function boot(): void
     {
@@ -44,22 +42,15 @@ class Team extends Model
 
         static::creating(function (Team $team) {
             if (empty($team->slug)) {
-                $team->slug = static::generateUniqueTeamSlug($team->name);
+                $team->slug = static::generateUniqueSlugWithin(static::withTrashed(), $team->name);
             }
         });
 
         static::updating(function (Team $team) {
             if ($team->isDirty('name')) {
-                $team->slug = static::generateUniqueTeamSlug($team->name, $team->id);
+                $team->slug = static::generateUniqueSlugWithin(static::withTrashed(), $team->name, $team->id);
             }
         });
-    }
-
-    public function owner(): ?Model
-    {
-        return $this->members()
-            ->wherePivot('role', TeamRole::Owner->value)
-            ->first();
     }
 
     /**
@@ -135,16 +126,6 @@ class Team extends Model
     public function alertNotifications(): HasMany
     {
         return $this->hasMany(AlertNotification::class);
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'is_personal' => 'boolean',
-        ];
     }
 
     public function getRouteKeyName(): string

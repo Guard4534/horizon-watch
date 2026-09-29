@@ -38,7 +38,6 @@ test('setup creates the administrator and the organization and signs in', functi
 
     expect($user->email)->toBe('ada@example.com')
         ->and($team->name)->toBe('Example Ops')
-        ->and($team->is_personal)->toBeFalse()
         ->and($user->teamRole($team))->toBe(TeamRole::Owner);
 
     $this->assertAuthenticatedAs($user);

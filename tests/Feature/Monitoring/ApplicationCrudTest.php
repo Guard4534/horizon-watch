@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Policies\EnvironmentPolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Tests\Support\Grants;
 
 beforeEach(function () {
     $this->team = Team::factory()->create();
@@ -22,7 +23,7 @@ beforeEach(function () {
     $this->viewer = User::factory()->create();
     $this->team->members()->attach($this->viewer, ['role' => TeamRole::Viewer->value]);
 
-    $this->application = Application::factory()->for($this->team)->create(['name' => 'Fatturaomatic']);
+    $this->application = Application::factory()->for($this->team)->create(['name' => 'Invoice Desk']);
 
     $this->environmentPayload = fn (string $name = 'production'): array => [
         'name' => $name,
@@ -210,14 +211,14 @@ test('renaming an application does not change its slug', function () {
 
     $this->actingAs($this->admin)
         ->patch(route('applications.update', ['current_team' => $this->team->slug, 'application' => $this->application->slug]), [
-            'name' => 'Fatturaomatic Renamed',
+            'name' => 'Invoice Desk Renamed',
             'host' => $this->application->host,
         ])
         ->assertRedirect();
 
     $this->application->refresh();
 
-    expect($this->application->name)->toBe('Fatturaomatic Renamed')
+    expect($this->application->name)->toBe('Invoice Desk Renamed')
         ->and($this->application->slug)->toBe($originalSlug);
 });
 
@@ -287,8 +288,7 @@ test('two organizations sharing the same application slug each resolve their own
 test('deleting an application clears the manual visibility grants of its environments', function () {
     $environment = Environment::factory()->for($this->application)->create();
 
-    $this->member->teamMemberships()->where('team_id', $this->team->id)->first()
-        ->visibleEnvironments()->attach([$environment->id]);
+    Grants::give($this->member->id, $environment->id);
 
     expect(DB::table('environment_user')->where('environment_id', $environment->id)->exists())->toBeTrue();
 

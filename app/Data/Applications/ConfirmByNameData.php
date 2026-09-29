@@ -2,6 +2,7 @@
 
 namespace App\Data\Applications;
 
+use Illuminate\Validation\ValidationException;
 use Spatie\LaravelData\Data;
 
 class ConfirmByNameData extends Data
@@ -18,5 +19,12 @@ class ConfirmByNameData extends Data
         return [
             'name' => ['required', 'string'],
         ];
+    }
+
+    public function confirm(string $expected, string $message): void
+    {
+        if ($this->name !== $expected) {
+            throw ValidationException::withMessages(['name' => $message]);
+        }
     }
 }

@@ -8,9 +8,9 @@ use App\Enums\MemberVisibility;
 use App\Enums\SentNotificationKind;
 use App\Enums\TeamRole;
 use App\Externals\Horizon\Data\HorizonFailedJob;
-use App\Externals\Horizon\Dns\Resolver;
 use App\Externals\Horizon\HorizonReader;
 use App\Externals\Horizon\HorizonTarget;
+use App\Externals\Http\Dns\Resolver;
 use App\Jobs\SendAlertWebhook;
 use App\Models\Alert;
 use App\Models\Application;
@@ -24,6 +24,7 @@ use App\Notifications\Alerts\AlertMail;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Tests\Fixtures\Horizon\FakeResolver;
@@ -171,4 +172,33 @@ test('rate limits: the login limit follows the configuration', function () {
     config(['horizon-watch.rate_limits.login_per_minute' => 2]);
 
     $login()->assertTooManyRequests();
+});
+
+test('notifications: the default time zone comes from the environment and falls back to UTC', function () {
+    $config = require base_path('config/horizon-watch.php');
+
+    expect($config['notifications']['default_timezone'])->toBe('UTC')
+        ->and(NotificationSetting::defaultTimezone())->toBe('UTC');
+
+    putenv('HORIZON_WATCH_DEFAULT_TIMEZONE=Europe/Rome');
+    $_ENV['HORIZON_WATCH_DEFAULT_TIMEZONE'] = 'Europe/Rome';
+
+    try {
+        expect((require base_path('config/horizon-watch.php'))['notifications']['default_timezone'])->toBe('Europe/Rome');
+    } finally {
+        putenv('HORIZON_WATCH_DEFAULT_TIMEZONE');
+        unset($_ENV['HORIZON_WATCH_DEFAULT_TIMEZONE']);
+    }
+});
+
+test('rate limits: the test limits live with the other rate limits', function () {
+    Queue::fake();
+    config(['horizon-watch.rate_limits.test_notification_per_minute' => 1]);
+    $this->actingAs($this->admin);
+    NotificationSetting::factory()->for($this->team)->withWebhook()->create();
+
+    $send = fn () => $this->post(route('alert-settings.test', ['current_team' => $this->team->slug]), ['channel' => 'webhook']);
+
+    $send()->assertRedirect();
+    $send()->assertTooManyRequests();
 });

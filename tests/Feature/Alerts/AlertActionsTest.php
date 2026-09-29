@@ -1,9 +1,13 @@
 <?php
 
+use App\Actions\Alerts\HandleAlert;
+use App\Actions\Alerts\MuteAlert;
+use App\Actions\Alerts\UnmuteAlert;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertState;
 use App\Enums\EnvironmentColor;
 use App\Enums\MemberVisibility;
+use App\Enums\MuteDuration;
 use App\Enums\TeamRole;
 use App\Models\Alert;
 use App\Models\Application;
@@ -13,6 +17,7 @@ use App\Models\User;
 use App\Monitoring\MonitoringRepository;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
+use Tests\Support\Grants;
 
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-18 10:00:00'));
@@ -199,7 +204,7 @@ test('an alert of an environment the member does not watch does not exist for th
 test('a manual member acts only on the environments granted to them', function () {
     $user = ($this->memberAs)(TeamRole::Member, MemberVisibility::Manual);
     $staging = Alert::factory()->for($this->staging)->create();
-    $this->team->memberships()->where('user_id', $user->id)->sole()->visibleEnvironments()->attach($this->staging->id);
+    Grants::give($user->id, $this->staging->id);
 
     $this->actingAs($user)->post(($this->url)('alerts.handle'))->assertNotFound();
     $this->actingAs($user)->post(($this->url)('alerts.handle', $staging->id))->assertRedirect();
@@ -307,3 +312,23 @@ test('the routes take the alert by its uuid', function () {
         ->and(($this->url)('alerts.handle'))->toEndWith("/alerts/{$this->alert->id}/handle")
         ->and(Str::isUuid($this->alert->id))->toBeTrue();
 });
+
+test('an alert resolved between the read and the write is left alone by all three actions', function (string $action) {
+    $user = ($this->memberAs)(TeamRole::Owner);
+    $stale = $this->alert->fresh();
+    Alert::query()->whereKey($this->alert->id)->update(['resolved_at' => CarbonImmutable::now()]);
+
+    match ($action) {
+        'mute' => app(MuteAlert::class)->handle($stale, $user, MuteDuration::FourHours),
+        'unmute' => app(UnmuteAlert::class)->handle($stale),
+        'handle' => app(HandleAlert::class)->handle($stale, $user),
+    };
+
+    $alert = $this->alert->fresh();
+
+    expect($alert->muted_until)->toBeNull()
+        ->and($alert->muted_indefinitely)->toBeFalse()
+        ->and($alert->muted_by)->toBeNull()
+        ->and($alert->handled_at)->toBeNull()
+        ->and($alert->handled_by)->toBeNull();
+})->with(['mute', 'unmute', 'handle']);

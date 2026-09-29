@@ -14,8 +14,6 @@ use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
-    public function register(): void {}
-
     public function boot(): void
     {
         $this->configureDefaults();
@@ -25,11 +23,11 @@ class AppServiceProvider extends ServiceProvider
     protected function configureRateLimiting(): void
     {
         RateLimiter::for('test-connection', fn (Request $request): Limit => Limit::perMinute(
-            (int) config('horizon-watch.test_connection_per_minute'),
+            config()->integer('horizon-watch.rate_limits.test_connection_per_minute'),
         )->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
 
         RateLimiter::for('test-notification', fn (Request $request): Limit => Limit::perMinute(
-            (int) config('horizon-watch.test_notification_per_minute'),
+            config()->integer('horizon-watch.rate_limits.test_notification_per_minute'),
         )->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
     }
 

@@ -10,7 +10,6 @@ test('owners have every permission', function () {
 test('admins have every permission except deleting the team', function () {
     expect(TeamRole::Admin->permissions())->toEqualCanonicalizing([
         TeamPermission::UpdateTeam,
-        TeamPermission::AddMember,
         TeamPermission::UpdateMember,
         TeamPermission::RemoveMember,
         TeamPermission::CreateInvitation,
@@ -50,11 +49,4 @@ test('role levels order owner above admin above member above viewer', function (
         ->and(TeamRole::Member->isAtLeast(TeamRole::Viewer))->toBeTrue()
         ->and(TeamRole::Viewer->isAtLeast(TeamRole::Member))->toBeFalse()
         ->and(TeamRole::Viewer->isAtLeast(TeamRole::Viewer))->toBeTrue();
-});
-
-test('assignable roles exclude the owner and include the viewer', function () {
-    $values = array_column(TeamRole::assignable(), 'value');
-
-    expect($values)->toEqualCanonicalizing(['admin', 'member', 'viewer'])
-        ->and($values)->not->toContain('owner');
 });

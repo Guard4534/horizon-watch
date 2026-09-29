@@ -16,6 +16,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Grants;
 
 beforeEach(function () {
     $this->team = Team::factory()->create();
@@ -29,7 +30,7 @@ beforeEach(function () {
     $this->viewer = User::factory()->create();
     $this->team->members()->attach($this->viewer, ['role' => TeamRole::Viewer->value]);
 
-    $this->application = Application::factory()->for($this->team)->create(['name' => 'Fatturaomatic']);
+    $this->application = Application::factory()->for($this->team)->create(['name' => 'Invoice Desk']);
 
     $this->validPayload = fn (array $overrides = []): array => array_merge([
         'name' => 'production',
@@ -427,8 +428,7 @@ test('poll interval out of range, a color outside the palette, and a url without
 test('deleting an environment requires typing its exact name, and clears manual visibility rows', function () {
     $environment = Environment::factory()->for($this->application)->create(['name' => 'staging']);
 
-    $this->member->teamMemberships()->where('team_id', $this->team->id)->first()
-        ->visibleEnvironments()->attach([$environment->id]);
+    Grants::give($this->member->id, $environment->id);
 
     expect(DB::table('environment_user')->where('environment_id', $environment->id)->exists())->toBeTrue();
 

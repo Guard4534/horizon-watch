@@ -21,15 +21,7 @@ class TeamFactory extends Factory
         return [
             'name' => $name,
             'slug' => Str::slug($name),
-            'is_personal' => false,
         ];
-    }
-
-    public function personal(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'is_personal' => true,
-        ]);
     }
 
     public function trashed(): static

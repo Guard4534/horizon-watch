@@ -1,10 +1,10 @@
 <?php
 
 use App\Enums\ReadingError;
-use App\Externals\Horizon\Dns\SystemResolver;
-use App\Externals\Horizon\Exceptions\HorizonReadFailed;
-use App\Externals\Horizon\ResolvedTarget;
-use App\Externals\Horizon\SafeUrlGuard;
+use App\Externals\Http\Dns\SystemResolver;
+use App\Externals\Http\ResolvedTarget;
+use App\Externals\Http\SafeUrlGuard;
+use App\Externals\Http\UrlRefused;
 use Tests\Fixtures\Horizon\FakeResolver;
 use Tests\Support\TraceArguments;
 
@@ -22,7 +22,7 @@ function guardRefusal(SafeUrlGuard $guard, string $url): ?ReadingError
 {
     try {
         $guard->check($url);
-    } catch (HorizonReadFailed $exception) {
+    } catch (UrlRefused $exception) {
         return $exception->reason;
     }
 
@@ -188,7 +188,7 @@ test('the url, with its credentials, never reaches the exception', function () {
     try {
         guardFor([])->check('https://monitor:correct-horse-battery@missing.example.com/horizon');
         $this->fail('The guard accepted a name that does not resolve.');
-    } catch (HorizonReadFailed $exception) {
+    } catch (UrlRefused $exception) {
         expect($exception->getMessage())->toBe('unreachable')
             ->and($exception->getPrevious())->toBeNull()
             ->and((string) $exception)->not->toContain('correct-horse')

@@ -7,7 +7,6 @@ use App\Data\Settings\UpdateAlertEmailsData;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 
 class AlertEmailsController extends Controller
 {
@@ -15,9 +14,9 @@ class AlertEmailsController extends Controller
     {
         $updateAlertEmails->handle($request->user(), $data->alertEmails);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => $data->alertEmails
+        $this->success($data->alertEmails
             ? __('Alert emails turned on.')
-            : __('Alert emails turned off.')]);
+            : __('Alert emails turned off.'));
 
         return back();
     }

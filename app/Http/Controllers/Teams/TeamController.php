@@ -3,20 +3,15 @@
 namespace App\Http\Controllers\Teams;
 
 use App\Actions\Teams\CreateTeam;
+use App\Actions\Teams\DeleteTeam;
 use App\Actions\Teams\RemoveMember;
-use App\Alerts\AlertEngine;
-use App\Enums\TeamRole;
+use App\Actions\Teams\RenameTeam;
+use App\Data\Applications\ConfirmByNameData;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Teams\DeleteTeamRequest;
 use App\Http\Requests\Teams\SaveTeamRequest;
-use App\Models\Environment;
-use App\Models\Membership;
 use App\Models\Team;
-use App\Models\User;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,76 +20,29 @@ class TeamController extends Controller
 {
     public function index(Request $request): Response
     {
-        $user = $request->user();
-
         return Inertia::render('teams/Index', [
-            'teams' => $user->toUserTeams(includeCurrent: true),
+            'teams' => $request->user()->toUserTeams(includeCurrent: true),
         ]);
     }
 
     public function store(SaveTeamRequest $request, CreateTeam $createTeam): RedirectResponse
     {
-        $team = $createTeam->handle($request->user(), $request->validated('name'));
+        $createTeam->handle($request->user(), $request->validated('name'));
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Team created.')]);
+        $this->success(__('Team created.'));
 
-        return to_route('teams.edit', ['team' => $team->slug]);
+        return to_route('teams.index');
     }
 
-    public function edit(Request $request, Team $team): Response
-    {
-        $user = $request->user();
-
-        return Inertia::render('teams/Edit', [
-            'team' => [
-                'id' => $team->id,
-                'name' => $team->name,
-                'slug' => $team->slug,
-                'isPersonal' => $team->is_personal,
-            ],
-            'members' => $team->members()->get()->sortBy([
-                fn (User $a, User $b) => $b->getRelation('pivot')->role->level() <=> $a->getRelation('pivot')->role->level(),
-                fn (User $a, User $b) => strcasecmp($a->name, $b->name),
-            ])->values()->map(function (User $member) {
-                /** @var Membership $membership */
-                $membership = $member->getRelation('pivot');
-
-                return [
-                    'id' => $member->id,
-                    'name' => $member->name,
-                    'email' => $member->email,
-                    'avatar' => $member->avatar ?? null,
-                    'role' => $membership->role->value,
-                    'role_label' => User::roleLabel($membership->role),
-                ];
-            }),
-            'pendingInvitationCount' => $team->invitations()->pending()->count(),
-            'permissions' => $user->toTeamPermissions($team),
-            'availableRoles' => array_map(
-                fn (array $option) => [
-                    'value' => $option['value'],
-                    'label' => User::roleLabel(TeamRole::from($option['value'])),
-                ],
-                TeamRole::assignable(),
-            ),
-        ]);
-    }
-
-    public function update(SaveTeamRequest $request, Team $team): RedirectResponse
+    public function update(SaveTeamRequest $request, Team $team, RenameTeam $renameTeam): RedirectResponse
     {
         Gate::authorize('update', $team);
 
-        $team = DB::transaction(function () use ($request, $team) {
-            $team = Team::whereKey($team->id)->lockForUpdate()->firstOrFail();
+        $renameTeam->handle($team, $request->validated('name'));
 
-            $team->update(['name' => $request->validated('name')]);
+        $this->success(__('Team updated.'));
 
-            return $team;
-        });
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Team updated.')]);
-
-        return to_route('teams.edit', ['team' => $team->slug]);
+        return to_route('teams.index');
     }
 
     public function switch(Request $request, Team $team): RedirectResponse
@@ -110,47 +58,20 @@ class TeamController extends Controller
     {
         Gate::authorize('leave', $team);
 
-        $user = $request->user();
+        $removeMember->handle($team, $request->user());
 
-        $removeMember->handle($team, $user);
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('You left the team ":name"', ['name' => $team->name])]);
+        $this->success(__('You left the team ":name"', ['name' => $team->name]));
 
         return to_route('teams.index');
     }
 
-    public function destroy(DeleteTeamRequest $request, Team $team, AlertEngine $alerts): RedirectResponse
+    public function destroy(Request $request, Team $team, ConfirmByNameData $data, DeleteTeam $deleteTeam): RedirectResponse
     {
-        $user = $request->user();
-        $fallbackTeam = $user->isCurrentTeam($team)
-            ? $user->fallbackTeam($team)
-            : null;
+        Gate::authorize('delete', $team);
 
-        DB::transaction(function () use ($user, $team, $alerts) {
-            $alerts->resolveAllIn(Environment::query()->where('team_id', $team->id), CarbonImmutable::now());
+        $deleteTeam->handle($team, $request->user(), $data);
 
-            User::where('current_team_id', $team->id)
-                ->where('id', '!=', $user->id)
-                ->each(fn (User $affectedUser) => $affectedUser->switchTeam($affectedUser->personalTeam()));
-
-            $team->invitations()->delete();
-            $team->memberships()->delete();
-
-            $team->alertNotifications()->delete();
-            $team->alerts()->delete();
-            $team->alertRules()->delete();
-            $team->notificationSetting()->delete();
-
-            $team->applications()->delete();
-
-            $team->delete();
-        });
-
-        if ($fallbackTeam) {
-            $user->switchTeam($fallbackTeam);
-        }
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Team deleted.')]);
+        $this->success(__('Team deleted.'));
 
         return to_route('teams.index');
     }

@@ -2,4 +2,12 @@
 
 namespace App\Http\Controllers;
 
-abstract class Controller {}
+use Inertia\Inertia;
+
+abstract class Controller
+{
+    protected function success(string $message): void
+    {
+        Inertia::flash('toast', ['type' => 'success', 'message' => $message]);
+    }
+}

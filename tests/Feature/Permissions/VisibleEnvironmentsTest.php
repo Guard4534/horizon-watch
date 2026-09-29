@@ -7,6 +7,7 @@ use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
 use App\Monitoring\VisibleEnvironments;
+use Tests\Support\Grants;
 
 beforeEach(function () {
     $this->filter = new VisibleEnvironments;
@@ -41,8 +42,7 @@ beforeEach(function () {
         'role' => TeamRole::Member->value,
         'visibility' => MemberVisibility::Manual->value,
     ]);
-    $this->userManual->teamMemberships()->where('team_id', $this->team->id)->first()
-        ->visibleEnvironments()->attach([$this->alphaProduction->id, $this->charlieTesting->id]);
+    Grants::give($this->userManual->id, $this->alphaProduction->id, $this->charlieTesting->id);
 
     $otherTeam = Team::factory()->create();
     $otherApplication = Application::factory()->for($otherTeam)->create();

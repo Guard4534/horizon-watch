@@ -9,6 +9,8 @@ use App\Jobs\PollEnvironmentJob;
 use App\Models\Environment;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\UniqueLock;
+use Illuminate\Console\Scheduling\Event as ScheduledEvent;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
@@ -206,4 +208,15 @@ test('a dropped job never moves next_poll_at later', function () {
         ->handle(app(PollEnvironment::class));
 
     expect($environment->fresh()->next_poll_at->toDateTimeString())->toBe('2026-09-17 09:59:40');
+});
+
+test('the poll tick is scheduled every fifteen seconds, without overlapping and on one server', function () {
+    $event = collect(app(Schedule::class)->events())
+        ->first(fn (ScheduledEvent $event) => $event->description === 'dispatch-due-polls')
+        ?? throw new RuntimeException('No scheduled event dispatch-due-polls.');
+
+    expect($event->expression)->toBe('* * * * *')
+        ->and($event->withoutOverlapping)->toBeTrue()
+        ->and($event->expiresAt)->toBe(1)
+        ->and($event->onOneServer)->toBeTrue();
 });

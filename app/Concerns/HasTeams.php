@@ -2,8 +2,7 @@
 
 namespace App\Concerns;
 
-use App\Data\TeamPermissions;
-use App\Data\UserTeam;
+use App\Data\Teams\UserTeamData;
 use App\Enums\TeamPermission;
 use App\Enums\TeamRole;
 use App\Models\Membership;
@@ -11,9 +10,7 @@ use App\Models\Team;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
 
 trait HasTeams
@@ -26,21 +23,6 @@ trait HasTeams
         return $this->belongsToMany(Team::class, 'team_members', 'user_id', 'team_id')
             ->withPivot(['role'])
             ->withTimestamps();
-    }
-
-    /**
-     * @return HasManyThrough<Team, Membership, $this>
-     */
-    public function ownedTeams(): HasManyThrough
-    {
-        return $this->hasManyThrough(
-            Team::class,
-            Membership::class,
-            'user_id',
-            'id',
-            'id',
-            'team_id',
-        )->where('team_members.role', TeamRole::Owner->value);
     }
 
     /**
@@ -57,13 +39,6 @@ trait HasTeams
     public function currentTeam(): BelongsTo
     {
         return $this->belongsTo(Team::class, 'current_team_id');
-    }
-
-    public function personalTeam(): ?Team
-    {
-        return $this->ownedTeams()
-            ->where('teams.is_personal', true)
-            ->first();
     }
 
     public function switchTeam(Team $team): bool
@@ -104,7 +79,7 @@ trait HasTeams
     }
 
     /**
-     * @return Collection<int, UserTeam>
+     * @return Collection<int, UserTeamData>
      */
     public function toUserTeams(bool $includeCurrent = false): Collection
     {
@@ -115,36 +90,17 @@ trait HasTeams
             ->values();
     }
 
-    public function toUserTeam(Team $team): UserTeam
+    public function toUserTeam(Team $team): UserTeamData
     {
         $role = $this->teamRole($team);
 
-        return new UserTeam(
+        return new UserTeamData(
             id: $team->id,
             name: $team->name,
             slug: $team->slug,
-            isPersonal: $team->is_personal,
-            role: $role?->value,
-            roleLabel: $role === null ? null : self::roleLabel($role),
+            role: $role,
+            roleLabel: $role?->label(),
             isCurrent: $this->isCurrentTeam($team),
-        );
-    }
-
-    public static function roleLabel(TeamRole $role): string
-    {
-        return $role === TeamRole::Owner ? __('Owner · admin') : $role->value;
-    }
-
-    public function toTeamPermissions(Team $team): TeamPermissions
-    {
-        $gate = Gate::forUser($this);
-
-        return new TeamPermissions(
-            canUpdateTeam: $gate->allows('update', $team),
-            canDeleteTeam: $gate->allows('delete', $team),
-            canUpdateMember: $gate->allows('updateMember', $team),
-            canRemoveMember: $gate->allows('removeMember', $team),
-            canCreateInvitation: $gate->allows('inviteMember', $team),
         );
     }
 

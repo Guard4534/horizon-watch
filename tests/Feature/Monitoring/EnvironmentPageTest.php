@@ -28,13 +28,13 @@ test('a down environment carries its incident', function () {
         'reservedAt' => now()->subSeconds($secondsAgo)->toIso8601String(),
     ];
 
-    Environment::query()->where('slug', 'fatturaomatic-production')->sole()->state->update([
+    Environment::query()->where('slug', 'invoice-desk-production')->sole()->state->update([
         'failed_jobs' => array_map($failed, range(1, 5)),
         'pending_jobs' => [$reserved(1, 600), $reserved(2, 300), $reserved(3, 121), $reserved(4, 30)],
     ]);
 
     $this->actingAs($this->user)
-        ->get(route('environments.show', ['current_team' => $this->slug, 'environment' => 'fatturaomatic-production']))
+        ->get(route('environments.show', ['current_team' => $this->slug, 'environment' => 'invoice-desk-production']))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environment.status', 'inactive')
             ->where('page.openAlert.metric', 'horizon.master_inactive')

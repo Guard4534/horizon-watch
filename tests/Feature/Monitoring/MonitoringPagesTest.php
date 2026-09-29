@@ -11,6 +11,7 @@ use App\Models\Team;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Grants;
 use Tests\Support\Readings;
 
 beforeEach(function () {
@@ -23,8 +24,8 @@ beforeEach(function () {
 dataset('pages', [
     'wall' => ['wall', [], 'monitoring/Wall'],
     'applications' => ['applications.index', [], 'monitoring/applications/Index'],
-    'application' => ['applications.show', ['application' => 'fatturaomatic'], 'monitoring/applications/Show'],
-    'environment' => ['environments.show', ['environment' => 'fatturaomatic-production'], 'monitoring/environments/Show'],
+    'application' => ['applications.show', ['application' => 'invoice-desk'], 'monitoring/applications/Show'],
+    'environment' => ['environments.show', ['environment' => 'invoice-desk-production'], 'monitoring/environments/Show'],
     'alerts' => ['alerts.index', [], 'monitoring/alerts/Index'],
     'alert rules' => ['alert-rules.index', [], 'monitoring/alert-rules/Index'],
 ]);
@@ -115,7 +116,7 @@ test('the alert log defaults to open alerts and can switch state', function () {
 
 test('the application page reports its worst environment status', function () {
     $this->actingAs($this->user)
-        ->get(route('applications.show', ['current_team' => $this->slug, 'application' => 'fatturaomatic']))
+        ->get(route('applications.show', ['current_team' => $this->slug, 'application' => 'invoice-desk']))
         ->assertInertia(fn (Assert $page) => $page->where('page.worstStatus', 'inactive'));
 });
 
@@ -131,7 +132,7 @@ test('alert rules default to the organization scope', function () {
 
 test('an environment hidden from a member answers 404 on its own page', function (MemberVisibility $visibility, bool $grantsStaging) {
     $team = Team::factory()->create();
-    $application = Application::factory()->for($team)->create(['name' => 'Fatturaomatic']);
+    $application = Application::factory()->for($team)->create(['name' => 'Invoice Desk']);
     $production = Environment::factory()->for($application)->production()->create();
     $staging = Environment::factory()->for($application)->staging()->create();
 
@@ -142,8 +143,7 @@ test('an environment hidden from a member answers 404 on its own page', function
     ]);
 
     if ($grantsStaging) {
-        $member->teamMemberships()->where('team_id', $team->id)->first()
-            ->visibleEnvironments()->attach([$staging->id]);
+        Grants::give($member->id, $staging->id);
     }
 
     $member->switchTeam($team);
@@ -175,8 +175,7 @@ test('a restricted admin watches their own environments and configures every one
         'role' => TeamRole::Admin->value,
         'visibility' => MemberVisibility::Manual->value,
     ]);
-    $admin->teamMemberships()->where('team_id', $team->id)->first()
-        ->visibleEnvironments()->attach([$watched->id]);
+    Grants::give($admin->id, $watched->id);
 
     $admin->switchTeam($team);
     $this->actingAs($admin);

@@ -9,11 +9,6 @@ use App\Models\User;
 
 class EnvironmentPolicy
 {
-    public function view(User $user, Environment $environment): bool
-    {
-        return $user->belongsToTeam($environment->application->team);
-    }
-
     public function create(User $user, Application $application): bool
     {
         return $user->hasTeamPermission($application->team, TeamPermission::ManageApplications);

@@ -3,6 +3,7 @@
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
+use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
 use App\Enums\EnvironmentColor;
 use App\Enums\Locale;
@@ -69,15 +70,15 @@ test('a team has one rule per scope and metric', function () {
         ->toThrow(UniqueConstraintViolationException::class);
 });
 
-test('notification settings default to no recipients, no webhook, rome and thirty minutes', function () {
+test('notification settings default to no recipients, no webhook and the configured time zone and repetition', function () {
     $team = Team::factory()->create();
 
     $settings = $team->notificationSetting()->create([]);
 
     expect($settings->team_id)->toBe($team->id)
         ->and($settings->recipients)->toBe([])
-        ->and($settings->timezone)->toBe('Europe/Rome')
-        ->and($settings->repeat_minutes)->toBe(30);
+        ->and($settings->timezone)->toBe(NotificationSetting::defaultTimezone())
+        ->and($settings->repeat_minutes)->toBe(NotificationSetting::defaultRepeatMinutes());
 
     $fresh = $settings->fresh();
 
@@ -85,8 +86,8 @@ test('notification settings default to no recipients, no webhook, rome and thirt
         ->and($fresh->webhook_url)->toBeNull()
         ->and($fresh->webhook_secret)->toBeNull()
         ->and($fresh->quiet_from)->toBeNull()
-        ->and($fresh->timezone)->toBe('Europe/Rome')
-        ->and($fresh->repeat_minutes)->toBe(30)
+        ->and($fresh->timezone)->toBe(NotificationSetting::defaultTimezone())
+        ->and($fresh->repeat_minutes)->toBe(NotificationSetting::defaultRepeatMinutes())
         ->and($team->fresh()->notificationSetting->is($fresh))->toBeTrue();
 });
 
@@ -264,7 +265,7 @@ test('a notification log row belongs to its alert and goes with it', function ()
         'channel' => NotificationChannel::Webhook,
         'target' => 'hooks.example.com',
         'status' => DeliveryStatus::Failed,
-        'error' => 'timeout',
+        'error' => DeliveryError::Timeout,
     ]);
 
     expect($logged->alert_id)->toBe($alert->id)
@@ -273,7 +274,7 @@ test('a notification log row belongs to its alert and goes with it', function ()
         ->and($logged->status)->toBe(DeliveryStatus::Sent)
         ->and($logged->sent_at)->toBeInstanceOf(CarbonImmutable::class)
         ->and($logged->alert->is($alert))->toBeTrue()
-        ->and($alert->notifications()->sole()->is($logged))->toBeTrue()
+        ->and(AlertNotification::query()->where('alert_id', $alert->id)->sole()->is($logged))->toBeTrue()
         ->and($alert->team->alertNotifications()->count())->toBe(2)
         ->and($digest->fresh()->alert_id)->toBeNull();
 

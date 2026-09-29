@@ -83,7 +83,7 @@ test('the scripted incidents are always there, keyed by slug', function (string 
         ->and($snapshots->every(fn (EnvironmentSnapshot $snapshot) => $snapshot->breaches->contains($breach)))->toBeTrue()
         ->and($environment->state->status)->toBe($status);
 })->with([
-    ['Fatturaomatic', 'production', 'fatturaomatic-production', EnvironmentStatus::Inactive, AlertRuleMetric::HorizonMasterInactive],
+    ['Invoice Desk', 'production', 'invoice-desk-production', EnvironmentStatus::Inactive, AlertRuleMetric::HorizonMasterInactive],
     ['Mailer Service', 'workerBatch', 'mailer-service-worker-batch', EnvironmentStatus::Degraded, AlertRuleMetric::JobRuntime],
     ['Logistics Hub', 'workerBatch', 'logistics-hub-worker-batch', EnvironmentStatus::Unreachable, AlertRuleMetric::EndpointUnreachable],
     ['Media Encoder', 'production', 'media-encoder-production', EnvironmentStatus::Degraded, AlertRuleMetric::JobRuntime],
@@ -162,7 +162,7 @@ test('an unreachable environment records nothing measured but keeps a previous d
 });
 
 test('an inactive environment lists no node and no worker, but its queues still fill', function () {
-    $environment = syntheticEnvironment(Team::factory()->create(), 'Fatturaomatic', 'production');
+    $environment = syntheticEnvironment(Team::factory()->create(), 'Invoice Desk', 'production');
 
     $this->readings->seed($environment, $this->until, hours: 1);
 

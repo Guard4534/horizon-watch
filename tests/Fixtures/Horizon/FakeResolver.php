@@ -2,7 +2,7 @@
 
 namespace Tests\Fixtures\Horizon;
 
-use App\Externals\Horizon\Dns\Resolver;
+use App\Externals\Http\Dns\Resolver;
 
 final class FakeResolver implements Resolver
 {

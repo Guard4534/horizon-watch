@@ -1,6 +1,5 @@
 <?php
 
-use App\Alerts\AlertDelivery;
 use App\Alerts\NotificationDelivery;
 use App\Alerts\Payloads\WebhookPayload;
 use App\Alerts\Recipients;
@@ -12,7 +11,7 @@ use App\Enums\MemberVisibility;
 use App\Enums\NotificationChannel;
 use App\Enums\SentNotificationKind;
 use App\Enums\TeamRole;
-use App\Externals\Horizon\Dns\Resolver;
+use App\Externals\Http\Dns\Resolver;
 use App\Jobs\SendAlertEmail;
 use App\Jobs\SendAlertWebhook;
 use App\Models\Alert;
@@ -56,10 +55,6 @@ function emailJob(Team $team, ?string $alertId, SentNotificationKind $kind, ?int
 {
     return new SendAlertEmail($team->id, $alertId, $kind, $userId, $address === null ? null : Recipients::addressKey($address), $locale, $payload);
 }
-
-test('the delivery contract is bound to the real implementation', function () {
-    expect(app(AlertDelivery::class))->toBeInstanceOf(NotificationDelivery::class);
-});
 
 test('an alert email reaches a member in the given language and is logged', function () {
     Notification::fake();
@@ -210,7 +205,7 @@ test('a mail failure is retried by the worker with its backoff, then logged once
     $failedJob = DB::table('failed_jobs')->sole();
 
     expect($log->status)->toBe(DeliveryStatus::Failed)
-        ->and($log->error)->toBe(DeliveryError::Mail->value)
+        ->and($log->error)->toBe(DeliveryError::Mail)
         ->and($log->target)->toBe('ops@example.com')
         ->and($log->delivery_id)->not->toBeNull()
         ->and(DB::table('jobs')->count())->toBe(0)
@@ -274,7 +269,7 @@ test('a mail test goes to the saved addresses and to whoever asked, in their lan
     $this->setting->update(['recipients' => ['ops@example.com', 'Admin@Example.com', 'oncall@example.com']]);
     $viewer = AlertTeam::member($this->team, 'viewer@example.com', TeamRole::Viewer, alertEmails: false);
 
-    $count = app(AlertDelivery::class)->sendTest($this->team, NotificationChannel::Mail, $this->admin);
+    $count = app(NotificationDelivery::class)->sendTest($this->team, NotificationChannel::Mail, $this->admin);
 
     expect($count)->toBe(3);
 
@@ -288,13 +283,13 @@ test('a mail test goes to the saved addresses and to whoever asked, in their lan
 
     Queue::fake();
 
-    expect(app(AlertDelivery::class)->sendTest($this->team, NotificationChannel::Mail, $viewer))->toBe(4);
+    expect(app(NotificationDelivery::class)->sendTest($this->team, NotificationChannel::Mail, $viewer))->toBe(4);
 });
 
 test('a webhook test goes to the saved url only when there is one', function () {
     Queue::fake();
 
-    expect(app(AlertDelivery::class)->sendTest($this->team, NotificationChannel::Webhook, $this->admin))->toBe(1);
+    expect(app(NotificationDelivery::class)->sendTest($this->team, NotificationChannel::Webhook, $this->admin))->toBe(1);
 
     Queue::assertPushed(SendAlertWebhook::class, fn (SendAlertWebhook $job) => $job->kind === SentNotificationKind::Test
         && $job->event === 'test'
@@ -305,13 +300,13 @@ test('a webhook test goes to the saved url only when there is one', function () 
     Queue::fake();
     $this->setting->update(['webhook_url' => null, 'webhook_secret' => null]);
 
-    expect(app(AlertDelivery::class)->sendTest($this->team, NotificationChannel::Webhook, $this->admin))->toBe(0);
+    expect(app(NotificationDelivery::class)->sendTest($this->team, NotificationChannel::Webhook, $this->admin))->toBe(0);
     Queue::assertNothingPushed();
 
     NotificationSetting::query()->delete();
 
-    expect(app(AlertDelivery::class)->sendTest($this->team, NotificationChannel::Webhook, $this->admin))->toBe(0)
-        ->and(app(AlertDelivery::class)->sendTest($this->team, NotificationChannel::Mail, $this->admin))->toBe(1);
+    expect(app(NotificationDelivery::class)->sendTest($this->team, NotificationChannel::Webhook, $this->admin))->toBe(0)
+        ->and(app(NotificationDelivery::class)->sendTest($this->team, NotificationChannel::Mail, $this->admin))->toBe(1);
 });
 
 test('an alert email that is no longer due when the worker picks it up is dropped without a log row', function (SentNotificationKind $kind, array $payload, array $attributes, bool $sent) {
@@ -380,6 +375,26 @@ test('a digest email keeps only the warnings its member still sees when it is se
 
     Notification::assertSentOnDemandTimes(WarningDigestNotification::class, 1);
     expect(DeliveryLog::query()->count())->toBe(1);
+});
+
+test('a digest email is logged with the environment count the email itself shows', function () {
+    Notification::fake();
+    $staging = Environment::factory()->for($this->application)->staging()->create();
+    $production = Alert::factory()->for($this->environment)->warning()->create(['metric' => AlertRuleMetric::QueueMaxWait]);
+    $visible = Alert::factory()->for($staging)->warning()->create();
+    $this->team->members()->updateExistingPivot($this->admin->id, ['visibility' => MemberVisibility::NonProduction->value]);
+
+    dispatch_sync(emailJob($this->team, null, SentNotificationKind::WarningDigest, $this->admin->id, null, ['alertIds' => [$production->id, $visible->id], 'environmentCount' => 2]));
+
+    $sent = null;
+    Notification::assertSentOnDemand(WarningDigestNotification::class, function (WarningDigestNotification $notification) use (&$sent) {
+        $sent = $notification;
+
+        return true;
+    });
+
+    expect($sent?->environmentCount())->toBe(1)
+        ->and(DeliveryLog::query()->sole()->environment_count)->toBe(1);
 });
 
 test('an alert webhook that is no longer due when the worker picks it up is dropped without a request or a log row', function (string $event, array $attributes, bool $sent) {

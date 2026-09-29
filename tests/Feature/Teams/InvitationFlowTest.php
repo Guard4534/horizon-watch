@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Tests\Support\Grants;
 
 beforeEach(function () {
     $this->team = Team::factory()->create();
@@ -125,9 +126,7 @@ test('manual visibility invites copy the chosen environments on acceptance', fun
         ->post(route('invitations.accept', $invitation->code))
         ->assertRedirect(route('wall', ['current_team' => $this->team->slug]));
 
-    $membership = $this->team->memberships()->where('user_id', $user->id)->firstOrFail();
-
-    expect($membership->visibleEnvironments()->pluck('environments.id')->all())
+    expect(Grants::of($user->id, $this->team->id))
         ->toBe([$kept->id])
         ->not->toContain($discarded->id);
 });
@@ -141,8 +140,7 @@ test('accepting an invitation leaves the manual visibility of other organization
     $otherApplication = Application::factory()->for($otherTeam)->create();
     $otherEnvironment = Environment::factory()->for($otherApplication)->create(['name' => 'production']);
     $otherTeam->members()->attach($user, ['role' => TeamRole::Viewer->value, 'visibility' => MemberVisibility::Manual->value]);
-    $otherMembership = $otherTeam->memberships()->where('user_id', $user->id)->firstOrFail();
-    $otherMembership->visibleEnvironments()->attach($otherEnvironment);
+    Grants::give($user->id, $otherEnvironment->id);
 
     $application = Application::factory()->for($this->team)->create();
     $environment = Environment::factory()->for($application)->create(['name' => 'staging']);
@@ -162,10 +160,9 @@ test('accepting an invitation leaves the manual visibility of other organization
         ->post(route('invitations.accept', $invitation->code))
         ->assertRedirect(route('wall', ['current_team' => $this->team->slug]));
 
-    expect($otherMembership->visibleEnvironments()->pluck('environments.id')->all())
+    expect(Grants::of($user->id, $otherTeam->id))
         ->toBe([$otherEnvironment->id])
-        ->and($this->team->memberships()->where('user_id', $user->id)->firstOrFail()
-            ->visibleEnvironments()->pluck('environments.id')->all())
+        ->and(Grants::of($user->id, $this->team->id))
         ->toBe([$environment->id]);
 });
 

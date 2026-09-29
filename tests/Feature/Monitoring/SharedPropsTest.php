@@ -32,7 +32,7 @@ test('settings pages still render inside the new shell', function () {
 
 test('the sidebar badge does not count an incident the viewer cannot see', function () {
     $team = Team::factory()->create();
-    $application = Application::factory()->for($team)->create(['name' => 'Fatturaomatic']);
+    $application = Application::factory()->for($team)->create(['name' => 'Invoice Desk']);
     $production = Environment::factory()->for($application)->production()->create();
     $staging = Environment::factory()->for($application)->staging()->create();
     Readings::record($production, EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);

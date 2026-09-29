@@ -24,18 +24,6 @@ beforeEach(function () {
     $this->environment = Environment::factory()->for($this->application)->create();
 });
 
-test('every role can see the wall, applications and environment details', function () {
-    expect(Gate::forUser($this->owner)->allows('viewAny', [Application::class, $this->team]))->toBeTrue()
-        ->and(Gate::forUser($this->admin)->allows('viewAny', [Application::class, $this->team]))->toBeTrue()
-        ->and(Gate::forUser($this->member)->allows('viewAny', [Application::class, $this->team]))->toBeTrue()
-        ->and(Gate::forUser($this->viewer)->allows('viewAny', [Application::class, $this->team]))->toBeTrue();
-
-    expect(Gate::forUser($this->owner)->allows('view', $this->environment))->toBeTrue()
-        ->and(Gate::forUser($this->admin)->allows('view', $this->environment))->toBeTrue()
-        ->and(Gate::forUser($this->member)->allows('view', $this->environment))->toBeTrue()
-        ->and(Gate::forUser($this->viewer)->allows('view', $this->environment))->toBeTrue();
-});
-
 test('owner, admin and member can mute an alert, viewer cannot', function () {
     expect(Gate::forUser($this->owner)->allows('muteAlert', $this->team))->toBeTrue()
         ->and(Gate::forUser($this->admin)->allows('muteAlert', $this->team))->toBeTrue()
@@ -129,7 +117,7 @@ test('only the owner can delete the organization', function () {
 test('a user outside the organization has no permission at all', function () {
     $stranger = User::factory()->create();
 
-    expect(Gate::forUser($stranger)->allows('view', $this->environment))->toBeFalse()
-        ->and(Gate::forUser($stranger)->allows('viewAny', [Application::class, $this->team]))->toBeFalse()
+    expect(Gate::forUser($stranger)->allows('create', [Application::class, $this->team]))->toBeFalse()
+        ->and(Gate::forUser($stranger)->allows('update', $this->environment))->toBeFalse()
         ->and(Gate::forUser($stranger)->allows('muteAlert', $this->team))->toBeFalse();
 });

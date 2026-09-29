@@ -25,7 +25,6 @@ class MemberData extends Data
          * @var array<int, string>
          */
         public array $visibleEnvironmentNames,
-        public ?string $lastSeenAt,
         public bool $isOwner,
         public bool $isSelf,
     ) {}

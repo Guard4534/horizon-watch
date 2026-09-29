@@ -36,7 +36,7 @@ class SecurityController extends Controller
             'password' => $request->password,
         ]);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Password updated.')]);
+        $this->success(__('Password updated.'));
 
         return back();
     }

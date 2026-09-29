@@ -37,8 +37,7 @@ class EnvironmentFactory extends Factory
             'horizon_url' => 'https://'.Str::slug($name).'.example.com/horizon',
             'basic_auth_user' => $hasBasicAuth ? 'monitor' : null,
             'basic_auth_password' => $hasBasicAuth ? fake()->password() : null,
-            'poll_interval_seconds' => 15,
-            'muted_until' => null,
+            'poll_interval_seconds' => config()->integer('horizon-watch.readings.poll_interval_seconds.default'),
         ];
     }
 

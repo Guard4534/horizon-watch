@@ -17,6 +17,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Grants;
 use Tests\Support\Readings;
 
 beforeEach(function () {
@@ -204,7 +205,7 @@ test('a member limited to non-production neither lists nor counts production ale
 
 test('a manual member only gets the alerts of the environments granted to them', function () {
     $member = ($this->memberAs)(TeamRole::Member, MemberVisibility::Manual);
-    $this->team->memberships()->where('user_id', $member->id)->sole()->visibleEnvironments()->attach($this->shopProduction->id);
+    Grants::give($member->id, $this->shopProduction->id);
     Alert::factory()->for($this->production)->create();
     $granted = Alert::factory()->for($this->shopProduction)->create();
 

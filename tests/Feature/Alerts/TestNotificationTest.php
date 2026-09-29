@@ -1,14 +1,18 @@
 <?php
 
-use App\Alerts\AlertDelivery;
 use App\Enums\MemberVisibility;
-use App\Enums\NotificationChannel;
 use App\Enums\TeamRole;
+use App\Jobs\SendAlertEmail;
+use App\Jobs\SendAlertWebhook;
+use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 
 beforeEach(function () {
+    Queue::fake();
+
     $this->team = Team::factory()->create();
 
     $this->memberOf = function (TeamRole $role): User {
@@ -21,31 +25,22 @@ beforeEach(function () {
 
     $this->admin = ($this->memberOf)(TeamRole::Admin);
 
-    $this->delivery = new class implements AlertDelivery
-    {
-        public int $targets = 2;
-
-        /** @var list<array{int, NotificationChannel, int}> */
-        public array $calls = [];
-
-        public function sendTest(Team $team, NotificationChannel $channel, User $requestedBy): int
-        {
-            $this->calls[] = [$team->id, $channel, $requestedBy->id];
-
-            return $this->targets;
-        }
-    };
-
-    $this->app->instance(AlertDelivery::class, $this->delivery);
+    $this->settings = fn (array $attributes) => NotificationSetting::factory()->for($this->team)->create($attributes);
 
     $this->send = fn (mixed $channel) => $this->post(
         route('alert-settings.test', ['current_team' => $this->team->slug]),
         ['channel' => $channel],
     );
+
+    $this->queued = fn (string $job) => Queue::pushed($job)->count();
 });
 
-test('a manager sends a test on a channel and learns how many destinations it reached', function (string $channel, int $targets, string $message) {
-    $this->delivery->targets = $targets;
+test('a manager sends a test on a channel and learns how many destinations it reached', function (string $channel, string $job, int $targets, string $message) {
+    ($this->settings)([
+        'recipients' => ['ops@example.com', 'oncall@example.com'],
+        'webhook_url' => 'https://hooks.example.com/horizon',
+        'webhook_secret' => str_repeat('s', 40),
+    ]);
 
     $this->actingAs($this->admin);
 
@@ -54,22 +49,20 @@ test('a manager sends a test on a channel and learns how many destinations it re
         ->assertSessionHasNoErrors()
         ->assertInertiaFlash('toast', ['type' => 'success', 'message' => $message]);
 
-    expect($this->delivery->calls)->toBe([[$this->team->id, NotificationChannel::from($channel), $this->admin->id]]);
+    expect(($this->queued)($job))->toBe($targets);
 })->with([
-    'mail' => ['mail', 3, 'Test sent to 3 destinations.'],
-    'webhook' => ['webhook', 1, 'Test sent to one destination.'],
+    'mail' => ['mail', SendAlertEmail::class, 3, 'Test sent to 3 destinations.'],
+    'webhook' => ['webhook', SendAlertWebhook::class, 1, 'Test sent to one destination.'],
 ]);
 
 test('nothing to send to is refused with a message', function () {
-    $this->delivery->targets = 0;
-
     $this->actingAs($this->admin);
 
     ($this->send)('webhook')
         ->assertSessionHasErrors(['channel' => 'There is nowhere to send a test yet: save the notification settings first.'])
         ->assertInertiaFlashMissing('toast');
 
-    expect($this->delivery->calls)->toHaveCount(1);
+    Queue::assertNothingPushed();
 });
 
 test('an unknown channel is refused before anything is sent', function (mixed $channel) {
@@ -77,7 +70,7 @@ test('an unknown channel is refused before anything is sent', function (mixed $c
 
     ($this->send)($channel)->assertSessionHasErrors('channel');
 
-    expect($this->delivery->calls)->toBe([]);
+    Queue::assertNothingPushed();
 })->with(['push', null, '']);
 
 test('only a role that manages alert rules may send a test', function (TeamRole $role, bool $allowed) {
@@ -87,10 +80,10 @@ test('only a role that manages alert rules may send a test', function (TeamRole 
 
     if ($allowed) {
         $response->assertRedirect();
-        expect($this->delivery->calls)->toHaveCount(1);
+        expect(($this->queued)(SendAlertEmail::class))->toBe(1);
     } else {
         $response->assertForbidden();
-        expect($this->delivery->calls)->toBe([]);
+        Queue::assertNothingPushed();
     }
 })->with([
     'owner' => [TeamRole::Owner, true],
@@ -100,7 +93,8 @@ test('only a role that manages alert rules may send a test', function (TeamRole 
 ]);
 
 test('five tests a minute per person, then the sixth is throttled', function () {
-    config(['horizon-watch.test_notification_per_minute' => 5]);
+    config(['horizon-watch.rate_limits.test_notification_per_minute' => 5]);
+    ($this->settings)(['webhook_url' => 'https://hooks.example.com/horizon', 'webhook_secret' => str_repeat('s', 40)]);
     $other = ($this->memberOf)(TeamRole::Admin);
 
     $this->actingAs($this->admin);
@@ -110,20 +104,23 @@ test('five tests a minute per person, then the sixth is throttled', function () 
     }
 
     ($this->send)('mail')->assertStatus(429);
-    expect($this->delivery->calls)->toHaveCount(5);
+    expect(($this->queued)(SendAlertEmail::class))->toBe(5);
 
     $this->actingAs($other);
     ($this->send)('mail')->assertRedirect();
-    expect($this->delivery->calls)->toHaveCount(6);
+    expect(($this->queued)(SendAlertEmail::class))->toBe(6);
 
     $this->travel(61)->seconds();
     $this->actingAs($this->admin);
     ($this->send)('webhook')->assertRedirect();
-    expect($this->delivery->calls)->toHaveCount(7);
+    expect(($this->queued)(SendAlertWebhook::class))->toBe(1);
 });
 
 test('the throttle follows the configured limit and is separate from the connection test', function () {
-    config(['horizon-watch.test_notification_per_minute' => 2, 'horizon-watch.test_connection_per_minute' => 1]);
+    config([
+        'horizon-watch.rate_limits.test_notification_per_minute' => 2,
+        'horizon-watch.rate_limits.test_connection_per_minute' => 1,
+    ]);
 
     $this->actingAs($this->admin);
 
@@ -135,7 +132,7 @@ test('the throttle follows the configured limit and is separate from the connect
 });
 
 test('an Inertia visit that hits the throttle goes back with a toast', function () {
-    config(['horizon-watch.test_notification_per_minute' => 1]);
+    config(['horizon-watch.rate_limits.test_notification_per_minute' => 1]);
 
     $this->actingAs($this->admin);
     ($this->send)('mail');

@@ -9,16 +9,6 @@ use App\Models\User;
 
 class ApplicationPolicy
 {
-    public function viewAny(User $user, Team $team): bool
-    {
-        return $user->belongsToTeam($team);
-    }
-
-    public function view(User $user, Application $application): bool
-    {
-        return $user->belongsToTeam($application->team);
-    }
-
     public function create(User $user, Team $team): bool
     {
         return $user->hasTeamPermission($team, TeamPermission::ManageApplications);

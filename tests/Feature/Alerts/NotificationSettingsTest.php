@@ -4,7 +4,7 @@ use App\Actions\Alerts\UpdateNotificationSettings;
 use App\Data\Alerts\NotificationSettingsInputData;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
-use App\Externals\Horizon\Dns\Resolver;
+use App\Externals\Http\Dns\Resolver;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\NotificationSetting;
@@ -61,8 +61,8 @@ test('without a saved row the page shows the defaults', function () {
         ->where('page.notifications.webhookSecretSet', false)
         ->where('page.notifications.quietFrom', null)
         ->where('page.notifications.quietTo', null)
-        ->where('page.notifications.timezone', 'Europe/Rome')
-        ->where('page.notifications.repeatMinutes', 30)
+        ->where('page.notifications.timezone', NotificationSetting::defaultTimezone())
+        ->where('page.notifications.repeatMinutes', NotificationSetting::defaultRepeatMinutes())
         ->missing('page.notifications.timezones')
         ->where('page.timezones', DateTimeZone::listIdentifiers())
         ->where('page.notificationSummary', [
@@ -70,8 +70,8 @@ test('without a saved row the page shows the defaults', function () {
             'webhookConfigured' => false,
             'quietFrom' => null,
             'quietTo' => null,
-            'timezone' => 'Europe/Rome',
-            'repeatMinutes' => 30,
+            'timezone' => NotificationSetting::defaultTimezone(),
+            'repeatMinutes' => NotificationSetting::defaultRepeatMinutes(),
         ]));
 });
 
@@ -81,7 +81,7 @@ test('only the alert settings page carries the list of time zones, the polled al
     $alerts = $this->get(route('alerts.index', ['current_team' => $this->team->slug]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.notifications.timezone', 'Europe/Rome')
+            ->where('page.notifications.timezone', NotificationSetting::defaultTimezone())
             ->missing('page.notifications.timezones')
             ->missing('page.timezones'));
 
@@ -339,7 +339,7 @@ test('only a role that manages alert rules may write the settings', function (Te
         $save->assertForbidden();
         $regenerate->assertForbidden();
         expect(NotificationSetting::query()->sole()->webhook_secret)->toBe($before)
-            ->and(NotificationSetting::query()->sole()->timezone)->toBe('Europe/Rome');
+            ->and(NotificationSetting::query()->sole()->timezone)->toBe(NotificationSetting::defaultTimezone());
     }
 })->with([
     'owner' => [TeamRole::Owner, true],
@@ -366,7 +366,7 @@ test('members and viewers see only counts in the raw response, never targets or 
             ->where('page.notificationSummary.recipientCount', 2)
             ->where('page.notificationSummary.webhookConfigured', true)
             ->where('page.notificationSummary.quietFrom', '23:00')
-            ->where('page.notificationSummary.timezone', 'Europe/Rome'));
+            ->where('page.notificationSummary.timezone', NotificationSetting::defaultTimezone()));
 
     expect($response->getContent())
         ->not->toContain('hooks.example.com')
@@ -404,7 +404,7 @@ test('the one-time secret shows only on the rules page of the organization it be
     expect($elsewhere->getContent())->not->toContain($secret);
 });
 
-test('the page that shows the secret is encrypted in the browser history, and the next page clears that history', function () {
+test('the page that shows the secret encrypts and clears the browser history itself', function () {
     $this->actingAs($this->admin);
 
     ($this->page)()->assertInertia(fn (Assert $page) => expect($page->toArray())->not->toHaveKeys(['encryptHistory', 'clearHistory']));
@@ -413,11 +413,11 @@ test('the page that shows the secret is encrypted in the browser history, and th
 
     ($this->page)()->assertInertia(fn (Assert $page) => expect($page->toArray())
         ->toHaveKey('encryptHistory', true)
-        ->not->toHaveKey('clearHistory')
+        ->toHaveKey('clearHistory', true)
         ->and($page->toArray()['props']['page']['newWebhookSecret'])->toBeString());
 
     $this->get(route('wall', ['current_team' => $this->team->slug]))
-        ->assertInertia(fn (Assert $page) => expect($page->toArray())->toHaveKey('clearHistory', true)->not->toHaveKey('encryptHistory'));
+        ->assertInertia(fn (Assert $page) => expect($page->toArray())->not->toHaveKeys(['encryptHistory', 'clearHistory']));
 
     ($this->page)()->assertInertia(fn (Assert $page) => expect($page->toArray())->not->toHaveKeys(['encryptHistory', 'clearHistory']));
 });

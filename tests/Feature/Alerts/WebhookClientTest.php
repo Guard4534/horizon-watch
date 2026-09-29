@@ -5,7 +5,7 @@ use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
 use App\Enums\NotificationChannel;
 use App\Enums\SentNotificationKind;
-use App\Externals\Horizon\Dns\Resolver;
+use App\Externals\Http\Dns\Resolver;
 use App\Externals\Webhook\Signature;
 use App\Externals\Webhook\WebhookClient;
 use App\Externals\Webhook\WebhookFailed;
@@ -355,7 +355,7 @@ test('a failing receiver is tried three times with backoff, then logged once as 
     $log = DeliveryLog::query()->sole();
 
     expect($log->status)->toBe(DeliveryStatus::Failed)
-        ->and($log->error)->toBe('http_5xx')
+        ->and($log->error)->toBe(DeliveryError::ServerError)
         ->and($log->target)->toBe('127.0.0.1')
         ->and($log->alert_id)->toBe($alert->id)
         ->and($log->delivery_id)->toBe($bodies[0]['delivery_id'])
@@ -384,7 +384,7 @@ test('a blocked webhook fails at once without a request', function () {
 
     expect(receivedRequests())->toBe([])
         ->and($log->status)->toBe(DeliveryStatus::Failed)
-        ->and($log->error)->toBe('blocked')
+        ->and($log->error)->toBe(DeliveryError::Blocked)
         ->and(DB::table('jobs')->count())->toBe(0);
 });
 

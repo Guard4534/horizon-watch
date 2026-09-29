@@ -6,9 +6,9 @@ use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @property int $id
@@ -50,13 +50,12 @@ class Membership extends Pivot
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * @return BelongsToMany<Environment, $this>
-     */
-    public function visibleEnvironments(): BelongsToMany
+    public function clearEnvironmentGrants(): void
     {
-        return $this->belongsToMany(Environment::class, 'environment_user', 'user_id', 'environment_id', 'user_id')
-            ->where('environments.team_id', $this->team_id);
+        DB::table('environment_user')
+            ->where('user_id', $this->user_id)
+            ->whereIn('environment_id', $this->team->environments()->pluck('environments.id'))
+            ->delete();
     }
 
     /**

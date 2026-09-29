@@ -74,7 +74,7 @@ test('a configured local horizon is added, polled, and left without readings', f
         ->and($local->poll_interval_seconds)->toBe(15)
         ->and($local->application->name)->toBe('Local Horizon')
         ->and($local->application->host)->toBe('localhost')
-        ->and($local->application->team_id)->toBe(Environment::query()->where('slug', 'fatturaomatic-production')->sole()->team_id)
+        ->and($local->application->team_id)->toBe(Environment::query()->where('slug', 'invoice-desk-production')->sole()->team_id)
         ->and($local->state()->exists())->toBeFalse()
         ->and($local->snapshots()->exists())->toBeFalse();
 });
