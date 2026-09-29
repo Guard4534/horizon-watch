@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
 import { PhCheck, PhCopy, PhKey, PhWarningCircle } from '@phosphor-icons/vue';
-import { onBeforeUnmount, ref, useTemplateRef } from 'vue';
+import { useClipboard } from '@vueuse/core';
+import { ref } from 'vue';
 import {
     Dialog,
     DialogContent,
@@ -20,28 +21,13 @@ const { secretSet, newSecret } = defineProps<{
 
 const slug = useTeamSlug();
 
-const field = useTemplateRef<HTMLInputElement>('field');
-const copied = ref(false);
-let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+const { copy, copied } = useClipboard({ copiedDuring: 2000 });
 
-async function copy(): Promise<void> {
-    if (newSecret === null) {
-        return;
+function copySecret(): void {
+    if (newSecret !== null) {
+        void copy(newSecret);
     }
-
-    try {
-        await navigator.clipboard.writeText(newSecret);
-    } catch {
-        field.value?.select();
-        document.execCommand('copy');
-    }
-
-    copied.value = true;
-    clearTimeout(copiedTimer);
-    copiedTimer = setTimeout(() => (copied.value = false), 2000);
 }
-
-onBeforeUnmount(() => clearTimeout(copiedTimer));
 
 const confirming = ref(false);
 const regenerating = ref(false);
@@ -64,15 +50,13 @@ function regenerate(): void {
 
 <template>
     <div v-if="newSecret !== null" class="one-time" role="status">
-        <div class="flex items-center gap-2" style="font-size: 13px">
+        <div class="nc-t-sm flex items-center gap-2">
             <PhKey :size="15" class="flex-none" />
             {{ $t('Webhook signing secret') }}
         </div>
         <div class="flex items-center gap-2">
             <input
-                ref="field"
-                class="nc-input nc-code"
-                style="font-size: 13px"
+                class="nc-input nc-code nc-t-sm"
                 :value="newSecret"
                 readonly
                 autocomplete="off"
@@ -82,9 +66,8 @@ function regenerate(): void {
             />
             <button
                 type="button"
-                class="nc-btn nc-btn-secondary flex-none"
-                style="font-size: 12px"
-                @click="copy"
+                class="nc-btn nc-btn-secondary nc-t-xs flex-none"
+                @click="copySecret"
             >
                 <PhCheck v-if="copied" :size="14" />
                 <PhCopy v-else :size="14" />
@@ -92,8 +75,8 @@ function regenerate(): void {
             </button>
         </div>
         <div
-            class="flex items-start gap-2"
-            style="font-size: 12px; color: var(--st-warn)"
+            class="nc-t-xs flex items-start gap-2"
+            style="color: var(--st-warn)"
         >
             <PhWarningCircle :size="14" class="mt-px flex-none" />
             {{
@@ -106,15 +89,13 @@ function regenerate(): void {
 
     <div
         v-else-if="secretSet"
-        class="flex flex-wrap items-center gap-2"
-        style="font-size: 12px; color: var(--nc-neutral-400)"
+        class="nc-t-xs nc-tone-soft flex flex-wrap items-center gap-2"
     >
         <PhKey :size="14" class="flex-none" />
         {{ $t('Signing secret set') }}
         <button
             type="button"
-            class="nc-btn nc-btn-ghost"
-            style="font-size: 12px"
+            class="nc-btn nc-btn-ghost nc-t-xs"
             :disabled="regenerating"
             @click="confirming = true"
         >

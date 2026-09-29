@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { Link, router, usePage } from '@inertiajs/vue3';
+import { Link } from '@inertiajs/vue3';
 import { PhGearSix, PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
-import { computed } from 'vue';
 import {
     statusText,
     statusTone,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
+import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { useVisibility } from '@/composables/useVisibility';
 import { formatCount } from '@/lib/monitoring';
 import {
     edit as editApplication,
@@ -16,7 +17,6 @@ import {
 import {
     create as createEnvironment,
     edit as editEnvironment,
-    show as showEnvironment,
 } from '@/routes/environments';
 
 defineProps<{
@@ -24,32 +24,8 @@ defineProps<{
 }>();
 
 const slug = useTeamSlug();
-const shared = usePage();
-
-const canManageApplications = computed(
-    () => shared.props.canManageApplications,
-);
-function environmentHref(environmentId: string): string {
-    return showEnvironment({
-        current_team: slug.value,
-        environment: environmentId,
-    }).url;
-}
-
-function openRow(
-    environment: { id: string; watched: boolean },
-    event: MouseEvent,
-): void {
-    if (!environment.watched) {
-        return;
-    }
-
-    if ((event.target as HTMLElement).closest('a, button, input, select')) {
-        return;
-    }
-
-    router.visit(environmentHref(environment.id));
-}
+const environmentHref = useEnvironmentHref();
+const { canManageApplications } = useVisibility();
 </script>
 
 <template>
@@ -70,46 +46,30 @@ function openRow(
                 {{ group.application.name }}
             </Link>
             <span
-                style="
-                    font-size: 11px;
-                    color: var(--nc-neutral-500);
-                    letter-spacing: 0.01em;
-                "
+                class="nc-t-2xs nc-tone-muted"
+                style="letter-spacing: 0.01em"
                 >{{ group.application.host }}</span
             >
             <span
                 v-if="group.triageCount"
+                class="nc-tag nc-tag-sm nc-tone-down flex-none"
                 style="
-                    font-size: 11px;
-                    padding: 2px 8px;
-                    border-radius: var(--nc-radius-sm);
                     background: color-mix(
                         in srgb,
                         var(--st-down) 16%,
                         transparent
                     );
-                    color: var(--st-down);
                 "
                 >{{
                     $t(':count to triage', { count: String(group.triageCount) })
                 }}</span
             >
-            <span
-                v-else
-                style="
-                    font-size: 11px;
-                    padding: 2px 8px;
-                    border-radius: var(--nc-radius-sm);
-                    background: var(--nc-neutral-900);
-                    color: var(--nc-neutral-400);
-                "
-            >
+            <span v-else class="nc-tag nc-tag-sm nc-tag-neutral flex-none">
                 {{ $t('all good') }}
             </span>
             <template v-if="canManageApplications">
                 <Link
-                    class="nc-btn nc-btn-ghost ml-auto"
-                    style="font-size: 12px"
+                    class="nc-btn nc-btn-ghost nc-t-xs ml-auto"
                     :href="
                         createEnvironment({
                             current_team: slug,
@@ -120,8 +80,7 @@ function openRow(
                     <PhPlus :size="13" />{{ $t('Environment') }}
                 </Link>
                 <Link
-                    class="nc-btn nc-btn-ghost"
-                    style="font-size: 12px; color: var(--nc-neutral-400)"
+                    class="nc-btn nc-btn-ghost nc-t-xs nc-tone-soft"
                     :href="
                         editApplication({
                             current_team: slug,
@@ -141,7 +100,7 @@ function openRow(
                         <th>{{ $t('Environment') }}</th>
                         <th>{{ $t('Horizon URL') }}</th>
                         <th>{{ $t('Nodes') }}</th>
-                        <th style="text-align: right">{{ $t('Pending') }}</th>
+                        <th class="nc-right">{{ $t('Pending') }}</th>
                         <th>{{ $t('Status') }}</th>
                         <th />
                     </tr>
@@ -150,8 +109,6 @@ function openRow(
                     <tr
                         v-for="environment in group.environments"
                         :key="environment.id"
-                        :class="{ 'row-link': environment.watched }"
-                        @click="openRow(environment, $event)"
                     >
                         <td>
                             <Link
@@ -171,11 +128,8 @@ function openRow(
                             />
                         </td>
                         <td
-                            style="
-                                font-size: 12px;
-                                color: var(--nc-neutral-400);
-                                letter-spacing: 0.01em;
-                            "
+                            class="nc-t-xs nc-tone-soft"
+                            style="letter-spacing: 0.01em"
                         >
                             {{
                                 environment.horizonUrl.replace(
@@ -184,19 +138,14 @@ function openRow(
                                 )
                             }}
                         </td>
-                        <td
-                            style="
-                                font-size: 12px;
-                                color: var(--nc-neutral-400);
-                            "
-                        >
+                        <td class="nc-t-xs nc-tone-soft">
                             {{
                                 environment.status === null
                                     ? '—'
                                     : environment.nodeCount
                             }}
                         </td>
-                        <td class="nc-num" style="text-align: right">
+                        <td class="nc-num nc-right">
                             {{
                                 environment.status === null
                                     ? '—'
@@ -205,8 +154,7 @@ function openRow(
                         </td>
                         <td>
                             <span
-                                class="inline-flex items-center gap-[5px]"
-                                style="font-size: 12px"
+                                class="nc-t-xs inline-flex items-center gap-[5px]"
                                 :style="{ color: statusTone(environment) }"
                             >
                                 <template v-if="environment.watched">
@@ -221,7 +169,7 @@ function openRow(
                                 <template v-else>—</template>
                             </span>
                         </td>
-                        <td class="whitespace-nowrap" style="text-align: right">
+                        <td class="nc-right whitespace-nowrap">
                             <span
                                 v-if="!environment.watched"
                                 class="nc-tag nc-tag-neutral"
@@ -234,11 +182,7 @@ function openRow(
                             >
                             <Link
                                 v-if="canManageApplications"
-                                class="nc-btn nc-btn-ghost"
-                                style="
-                                    font-size: 12px;
-                                    color: var(--nc-neutral-400);
-                                "
+                                class="nc-btn nc-btn-ghost nc-t-xs nc-tone-soft"
                                 :href="
                                     editEnvironment({
                                         current_team: slug,
@@ -266,10 +210,6 @@ function openRow(
 
 .app-name:hover {
     color: var(--nc-accent);
-}
-
-.row-link {
-    cursor: pointer;
 }
 
 .row-anchor {

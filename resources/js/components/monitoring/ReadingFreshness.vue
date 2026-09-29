@@ -64,7 +64,7 @@ const tone = computed(() => {
             v-if="age && (!pollingEnabled || readingError !== null || stale)"
         >
             ·
-            <span style="color: var(--nc-neutral-500)">{{
+            <span class="nc-tone-muted">{{
                 $t('last reading :time ago', { time: age })
             }}</span>
         </template>

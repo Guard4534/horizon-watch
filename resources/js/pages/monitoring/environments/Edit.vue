@@ -2,7 +2,7 @@
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { PhTrashSimple } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
-import ConfirmByNameDialog from '@/components/monitoring/applications/ConfirmByNameDialog.vue';
+import ConfirmByNameDialog from '@/components/ConfirmByNameDialog.vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
@@ -72,7 +72,7 @@ const submit = () => {
     >
         <div class="flex flex-wrap items-end" style="gap: var(--nc-space-4)">
             <div class="min-w-0">
-                <div style="font-size: 11px; color: var(--nc-neutral-500)">
+                <div class="nc-t-2xs nc-tone-muted">
                     <Link
                         :href="
                             showApplication({
@@ -86,7 +86,7 @@ const submit = () => {
                 <div style="font-size: 26px; line-height: 1.15">
                     {{ name }}
                 </div>
-                <div style="font-size: 12px; color: var(--nc-neutral-500)">
+                <div class="nc-t-xs nc-tone-muted">
                     {{ $t('Edit environment') }}
                 </div>
             </div>
@@ -95,8 +95,7 @@ const submit = () => {
                 style="gap: var(--nc-space-2)"
             >
                 <Link
-                    class="nc-btn nc-btn-ghost"
-                    style="font-size: 12px"
+                    class="nc-btn nc-btn-ghost nc-t-xs"
                     :href="
                         show({ current_team: slug, environment: environment })
                     "
@@ -149,7 +148,7 @@ const submit = () => {
         </SectionCard>
 
         <SectionCard :title="$t('Delete environment')">
-            <div style="font-size: 12px; color: var(--nc-neutral-400)">
+            <div class="nc-t-xs nc-tone-soft">
                 {{
                     $t(
                         'Deleting an environment removes it from the wall and from every list. There is no undo and no archive.',
@@ -158,12 +157,8 @@ const submit = () => {
             </div>
             <button
                 type="button"
-                class="nc-btn mt-[var(--nc-space-3)]"
-                style="
-                    font-size: 12px;
-                    color: var(--st-down);
-                    border-color: var(--st-down);
-                "
+                class="nc-btn nc-t-xs nc-tone-down mt-[var(--nc-space-3)]"
+                style="border-color: var(--st-down)"
                 @click="confirming = true"
             >
                 <PhTrashSimple :size="13" />{{ $t('Delete environment') }}

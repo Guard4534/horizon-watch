@@ -5,10 +5,14 @@ import BrandMark from '@/components/nocturne/BrandMark.vue';
 import { useLastRefresh } from '@/composables/useLastRefresh';
 import { useRefreshInterval } from '@/composables/useRefreshInterval';
 
-const { title, subtitle, live } = defineProps<{
+const {
+    title,
+    subtitle,
+    live = false,
+} = defineProps<{
     title?: string;
     subtitle?: string;
-    live: boolean;
+    live?: boolean;
 }>();
 
 const page = usePage();
@@ -42,8 +46,7 @@ function choose(event: Event): void {
         <div class="ml-auto flex items-center" style="gap: var(--nc-space-3)">
             <span
                 v-if="live"
-                class="nc-num inline-flex items-center gap-[7px]"
-                style="font-size: 11px; color: var(--nc-neutral-400)"
+                class="nc-num nc-t-2xs nc-tone-soft inline-flex items-center gap-[7px]"
             >
                 <span
                     class="size-[6px] flex-none rounded-full"

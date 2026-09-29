@@ -2,7 +2,7 @@
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import {
-    failedColor,
+    failedTone,
     hasMeasurement,
     pendingTone,
     statusText,
@@ -45,13 +45,13 @@ const header = computed(() => {
                 <thead>
                     <tr>
                         <th>{{ $t('Environment') }}</th>
-                        <th style="text-align: right">{{ $t('Pending') }}</th>
-                        <th style="text-align: right">{{ $t('Max wait') }}</th>
-                        <th style="text-align: right">
+                        <th class="nc-right">{{ $t('Pending') }}</th>
+                        <th class="nc-right">{{ $t('Max wait') }}</th>
+                        <th class="nc-right">
                             {{ header }}
                         </th>
-                        <th style="text-align: right">{{ $t('Workers') }}</th>
-                        <th style="text-align: right">{{ $t('jobs/min') }}</th>
+                        <th class="nc-right">{{ $t('Workers') }}</th>
+                        <th class="nc-right">{{ $t('jobs/min') }}</th>
                     </tr>
                 </thead>
                 <tbody class="nc-num">
@@ -70,14 +70,12 @@ const header = computed(() => {
                             <td
                                 v-for="column in 5"
                                 :key="column"
-                                style="
-                                    text-align: right;
-                                    color: var(--nc-neutral-600);
-                                "
+                                class="nc-right nc-tone-faint"
                             >
                                 <span
                                     v-if="column === 1"
-                                    style="margin-right: 6px; font-size: 11px"
+                                    class="nc-t-2xs"
+                                    style="margin-right: 6px"
                                     :style="{ color: statusTone(environment) }"
                                     >{{ statusText(environment) }}</span
                                 >—
@@ -85,7 +83,7 @@ const header = computed(() => {
                         </template>
                         <template v-else>
                             <td
-                                style="text-align: right"
+                                class="nc-right"
                                 :style="{
                                     color: pendingTone(
                                         environment.pending,
@@ -99,7 +97,7 @@ const header = computed(() => {
                                 {{ formatCount(environment.pending) }}
                             </td>
                             <td
-                                style="text-align: right"
+                                class="nc-right"
                                 :style="{
                                     color: waitColor(
                                         environment.maxWaitSeconds,
@@ -113,9 +111,9 @@ const header = computed(() => {
                                 {{ formatWait(environment.maxWaitSeconds) }}
                             </td>
                             <td
-                                style="text-align: right"
+                                class="nc-right"
                                 :style="{
-                                    color: failedColor(
+                                    color: failedTone(
                                         environment.failedLastHour,
                                         thresholdOf(
                                             environment,
@@ -139,10 +137,10 @@ const header = computed(() => {
                                     }}</span
                                 >
                             </td>
-                            <td style="text-align: right">
+                            <td class="nc-right">
                                 {{ environment.workers }}
                             </td>
-                            <td style="text-align: right">
+                            <td class="nc-right">
                                 {{ environment.jobsPerMinute }}
                             </td>
                         </template>

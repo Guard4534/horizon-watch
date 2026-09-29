@@ -30,7 +30,7 @@ function width(seconds: number): string {
 <template>
     <SectionCard :title="$t('Long-running jobs')">
         <template #actions>
-            <span style="font-size: 11px; color: var(--nc-neutral-600)">{{
+            <span class="nc-t-2xs nc-tone-faint">{{
                 thresholdSeconds === null
                     ? $t('rule disabled')
                     : $t('threshold :value', {
@@ -38,10 +38,7 @@ function width(seconds: number): string {
                       })
             }}</span>
         </template>
-        <div
-            v-if="!jobs.length"
-            style="font-size: 12px; color: var(--nc-neutral-500)"
-        >
+        <div v-if="!jobs.length" class="nc-t-xs nc-tone-muted">
             {{
                 unknown
                     ? $t('Unknown until the next successful reading.')
@@ -50,8 +47,8 @@ function width(seconds: number): string {
         </div>
         <div
             v-else
-            class="flex flex-col"
-            style="gap: var(--nc-space-3); font-size: 12px"
+            class="nc-t-xs flex flex-col"
+            style="gap: var(--nc-space-3)"
         >
             <div v-for="(job, index) in jobs" :key="index">
                 <div class="flex gap-2">
@@ -78,7 +75,7 @@ function width(seconds: number): string {
                         }"
                     />
                 </div>
-                <div class="mt-1" style="color: var(--nc-neutral-600)">
+                <div class="nc-tone-faint mt-1">
                     queue {{ job.queue }} ·
                     {{ $t('started at :time', { time: job.startedAt }) }}
                 </div>

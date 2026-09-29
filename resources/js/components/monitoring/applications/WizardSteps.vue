@@ -13,7 +13,7 @@ const currentLabel = computed(() => labels[current - 1] ?? '');
 
 <template>
     <nav class="flex flex-col" style="gap: 8px">
-        <div style="font-size: 11px; color: var(--nc-neutral-500)">
+        <div class="nc-t-2xs nc-tone-muted">
             {{
                 $t('Step :current of :total', {
                     current: String(current),

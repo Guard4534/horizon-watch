@@ -22,14 +22,11 @@ const scope = computed(() => environmentName.toLowerCase());
         <template #actions>
             <Link
                 :href="alertRulesIndex({ current_team: slug, scope })"
-                style="font-size: 11px"
+                class="nc-t-2xs"
                 >{{ $t('Alert settings') }}</Link
             >
         </template>
-        <div
-            class="mb-[var(--nc-space-3)]"
-            style="font-size: 11px; color: var(--nc-neutral-500)"
-        >
+        <div class="nc-t-2xs nc-tone-muted mb-[var(--nc-space-3)]">
             {{
                 $t(
                     'The organization rules, with the overrides of the :scope environments.',
@@ -37,10 +34,7 @@ const scope = computed(() => environmentName.toLowerCase());
                 )
             }}
         </div>
-        <div
-            class="flex flex-col"
-            style="gap: var(--nc-space-2); font-size: 12px"
-        >
+        <div class="nc-t-xs flex flex-col" style="gap: var(--nc-space-2)">
             <div
                 v-for="rule in rules"
                 :key="rule.metric"

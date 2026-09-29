@@ -52,7 +52,7 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
             class="app-row flex items-center"
         >
             <span class="min-w-0 flex-1">
-                <span class="block truncate" style="font-size: 13px">{{
+                <span class="nc-t-sm block truncate">{{
                     group.application.name
                 }}</span>
                 <span class="mt-[5px] flex flex-wrap items-center gap-1">
@@ -64,12 +64,8 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
                         :title="environment.name"
                     />
                     <span
-                        class="nc-num"
-                        style="
-                            margin-left: 6px;
-                            font-size: 10px;
-                            color: var(--nc-neutral-600);
-                        "
+                        class="nc-num nc-tone-faint"
+                        style="margin-left: 6px; font-size: 10px"
                         >{{
                             $tChoice(
                                 ':count environment|:count environments',
@@ -96,11 +92,7 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
                 "
                 >{{ group.triageCount || '✓' }}</span
             >
-            <PhCaretRight
-                :size="14"
-                class="flex-none"
-                style="color: var(--nc-neutral-600)"
-            />
+            <PhCaretRight :size="14" class="nc-tone-faint flex-none" />
         </Link>
     </div>
 </template>

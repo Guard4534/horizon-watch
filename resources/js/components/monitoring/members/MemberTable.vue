@@ -23,6 +23,7 @@ import { useTeamSlug } from '@/composables/useTeamSlug';
 import {
     ASSIGNABLE_ROLES,
     losingTheLastAdmin as losesTheLastAdmin,
+    assignableRoleName,
     roleTagClass,
     VISIBILITIES,
     visibilityLabel,
@@ -140,13 +141,11 @@ function confirmRemove() {
     <SectionCard :title="`${$t('Members')} · ${members.length}`">
         <div
             v-if="errors.length && manualFor === null"
-            class="mb-[var(--nc-space-3)]"
+            class="nc-t-xs nc-tone-down mb-[var(--nc-space-3)]"
             style="
                 border-radius: var(--nc-radius-md);
                 border: 1px solid var(--st-down);
                 padding: 8px 10px;
-                font-size: 12px;
-                color: var(--st-down);
             "
             role="alert"
         >
@@ -160,7 +159,6 @@ function confirmRemove() {
                         <th>{{ $t('Person') }}</th>
                         <th>{{ $t('Role') }}</th>
                         <th>{{ $t('Visible environments') }}</th>
-                        <th>{{ $t('Last seen') }}</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -183,8 +181,7 @@ function confirmRemove() {
                                 >
                                 <div>
                                     <div
-                                        class="flex items-center gap-2"
-                                        style="font-size: 13px"
+                                        class="nc-t-sm flex items-center gap-2"
                                     >
                                         {{ member.name }}
                                         <span
@@ -193,12 +190,7 @@ function confirmRemove() {
                                             >{{ $t('you') }}</span
                                         >
                                     </div>
-                                    <div
-                                        style="
-                                            font-size: 11px;
-                                            color: var(--nc-neutral-500);
-                                        "
-                                    >
+                                    <div class="nc-t-2xs nc-tone-muted">
                                         {{ member.email }}
                                     </div>
                                 </div>
@@ -209,42 +201,21 @@ function confirmRemove() {
                                 member.roleLabel
                             }}</span>
                         </td>
-                        <td
-                            style="
-                                font-size: 12px;
-                                color: var(--nc-neutral-400);
-                            "
-                        >
+                        <td class="nc-t-xs nc-tone-soft">
                             {{ member.visibilityLabel }}
                             <div
                                 v-if="member.visibleEnvironmentNames.length"
-                                style="
-                                    font-size: 11px;
-                                    color: var(--nc-neutral-600);
-                                "
+                                class="nc-t-2xs nc-tone-faint"
                             >
                                 {{ member.visibleEnvironmentNames.join(' · ') }}
                             </div>
                         </td>
-                        <td
-                            class="whitespace-nowrap"
-                            style="
-                                font-size: 12px;
-                                color: var(--nc-neutral-600);
-                            "
-                        >
-                            {{ member.lastSeenAt ?? '—' }}
-                        </td>
-                        <td class="text-right">
+                        <td class="nc-right">
                             <DropdownMenu v-if="isActionable(member)">
                                 <DropdownMenuTrigger as-child>
                                     <button
                                         type="button"
-                                        class="nc-btn nc-btn-ghost"
-                                        style="
-                                            font-size: 12px;
-                                            color: var(--nc-neutral-400);
-                                        "
+                                        class="nc-btn nc-btn-ghost nc-t-xs nc-tone-soft"
                                         :aria-label="
                                             $t('Actions for :name', {
                                                 name: member.name,
@@ -265,7 +236,7 @@ function confirmRemove() {
                                         :disabled="member.role === role"
                                         @click="changeRole(member, role)"
                                     >
-                                        {{ role }}
+                                        {{ assignableRoleName(role) }}
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuLabel>{{
@@ -289,7 +260,7 @@ function confirmRemove() {
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
-                                        style="color: var(--st-down)"
+                                        class="nc-tone-down"
                                         @click="removing = member"
                                     >
                                         {{ $t('Remove from the organization') }}
@@ -328,8 +299,7 @@ function confirmRemove() {
                 <label
                     v-for="environment in environments"
                     :key="environment.id"
-                    class="flex items-center gap-2"
-                    style="font-size: 13px"
+                    class="nc-t-sm flex items-center gap-2"
                 >
                     <input
                         v-model="manualIds"
@@ -338,10 +308,7 @@ function confirmRemove() {
                     />
                     {{ environment.name }}
                 </label>
-                <div
-                    v-if="!environments.length"
-                    style="font-size: 12px; color: var(--nc-neutral-500)"
-                >
+                <div v-if="!environments.length" class="nc-t-xs nc-tone-muted">
                     {{
                         $t(
                             'This organization has no environment yet, so there is nothing to pick.',
@@ -353,7 +320,7 @@ function confirmRemove() {
             <p
                 v-for="message in errors"
                 :key="message"
-                style="font-size: 12px; color: var(--st-down)"
+                class="nc-t-xs nc-tone-down"
                 role="alert"
             >
                 {{ message }}
@@ -401,11 +368,12 @@ function confirmRemove() {
                 </DialogDescription>
             </DialogHeader>
 
-            <p style="font-size: 13px">{{ removing?.name }}</p>
+            <p class="nc-t-sm">{{ removing?.name }}</p>
 
             <p
                 v-if="losingTheLastAdmin"
-                style="font-size: 12px; color: var(--st-warn)"
+                class="nc-t-xs"
+                style="color: var(--st-warn)"
             >
                 {{
                     $t(

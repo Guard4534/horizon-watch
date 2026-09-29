@@ -18,7 +18,7 @@ const slug = useTeamSlug();
         <template v-if="manages" #actions>
             <Link
                 :href="alertRulesIndex({ current_team: slug })"
-                style="font-size: 11px"
+                class="nc-t-2xs"
                 >{{ $t('Alert settings') }}</Link
             >
         </template>
@@ -70,15 +70,13 @@ const slug = useTeamSlug();
             </li>
         </ul>
         <div
-            class="flex flex-col"
+            class="nc-t-xs nc-tone-soft flex flex-col"
             style="
                 gap: var(--nc-space-2);
                 margin-top: var(--nc-space-3);
                 padding-top: var(--nc-space-3);
                 border-top: 1px solid
                     color-mix(in srgb, var(--nc-text) 7%, transparent);
-                font-size: 12px;
-                color: var(--nc-neutral-400);
             "
         >
             <div class="flex items-start gap-2">

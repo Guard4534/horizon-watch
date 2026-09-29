@@ -41,13 +41,7 @@ defineProps<{
 
         <div style="font-size: 17px; line-height: 1.25">{{ title }}</div>
 
-        <p
-            style="
-                font-size: 13px;
-                line-height: 1.5;
-                color: var(--nc-neutral-400);
-            "
-        >
+        <p class="nc-t-sm nc-tone-soft" style="line-height: 1.5">
             {{ body }}
         </p>
 

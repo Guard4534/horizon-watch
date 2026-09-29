@@ -4,7 +4,7 @@ import { useRefreshInterval } from '@/composables/useRefreshInterval';
 
 type Poll = ReturnType<typeof router.poll>;
 
-export function useLivePoll(only: string[]): void {
+export function useLivePoll(only: string[] = ['page', 'openAlertCount']): void {
     const { interval } = useRefreshInterval();
     let poll: Poll | null = null;
     let mounted = false;

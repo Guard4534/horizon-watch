@@ -1,67 +1,68 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
-import { PhEye, PhSignOut, PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
+import { Head, Link, router } from '@inertiajs/vue3';
+import {
+    PhArrowsLeftRight,
+    PhPencilSimple,
+    PhPlus,
+    PhSignOut,
+    PhTrashSimple,
+    PhUsersThree,
+} from '@phosphor-icons/vue';
 import { ref } from 'vue';
-import CreateTeamModal from '@/components/CreateTeamModal.vue';
+import ConfirmByNameDialog from '@/components/ConfirmByNameDialog.vue';
 import Heading from '@/components/Heading.vue';
-import LeaveTeamModal from '@/components/LeaveTeamModal.vue';
+import CreateOrganizationModal from '@/components/teams/CreateOrganizationModal.vue';
+import LeaveOrganizationModal from '@/components/teams/LeaveOrganizationModal.vue';
+import RenameOrganizationModal from '@/components/teams/RenameOrganizationModal.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { edit, index } from '@/routes/teams';
-import type { Team } from '@/types';
-
-type Props = {
-    teams: Team[];
-};
-
-defineProps<Props>();
-
-const leaveTeamDialogOpen = ref(false);
-const teamLeaving = ref<Team | null>(null);
-
-const canLeaveTeam = (team: Team) => !team.isPersonal && team.role !== 'owner';
-
-const openLeaveTeamDialog = (team: Team) => {
-    teamLeaving.value = team;
-    leaveTeamDialogOpen.value = true;
-};
+import { index as membersIndex } from '@/routes/members';
+import { destroy, switchMethod } from '@/routes/teams';
 
 defineOptions({
-    layout: {
-        breadcrumbs: [
-            {
-                title: 'Teams',
-                href: index(),
-            },
-        ],
-    },
+    layout: { title: 'Organizations' },
 });
+
+type Organization = App.Data.Teams.UserTeamData;
+
+defineProps<{
+    teams: Organization[];
+}>();
+
+const renaming = ref<Organization | null>(null);
+const leaving = ref<Organization | null>(null);
+const deleting = ref<Organization | null>(null);
+
+const canManage = (team: Organization) =>
+    team.role === 'owner' || team.role === 'admin';
+
+function switchTo(team: Organization): void {
+    router.visit(switchMethod(team.slug));
+}
 </script>
 
 <template>
-    <Head :title="$t('Teams')" />
+    <Head :title="$t('Organizations')" />
 
-    <h1 class="sr-only">{{ $t('Teams') }}</h1>
+    <h1 class="sr-only">{{ $t('Organizations') }}</h1>
 
     <div class="flex flex-col space-y-6">
         <div class="flex items-center justify-between">
             <Heading
                 variant="small"
-                :title="$t('Teams')"
-                :description="$t('Manage your teams and team memberships')"
+                :title="$t('Organizations')"
+                :description="
+                    $t(
+                        'Every application, environment, member and alert rule belongs to one organization.',
+                    )
+                "
             />
 
-            <CreateTeamModal>
+            <CreateOrganizationModal>
                 <Button data-test="teams-new-team-button">
-                    <PhPlus /> {{ $t('New team') }}
+                    <PhPlus /> {{ $t('New organization') }}
                 </Button>
-            </CreateTeamModal>
+            </CreateOrganizationModal>
         </div>
 
         <div class="space-y-3">
@@ -69,87 +70,103 @@ defineOptions({
                 v-for="team in teams"
                 :key="team.id"
                 data-test="team-row"
-                class="flex items-center justify-between gap-4 rounded-lg border p-4"
+                class="flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4"
             >
-                <div class="flex items-center gap-4">
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <span class="font-medium">{{ team.name }}</span>
-                            <Badge v-if="team.isPersonal" variant="secondary">
-                                {{ $t('Personal') }}
-                            </Badge>
-                        </div>
-                        <span class="text-muted-foreground text-sm">
-                            {{ team.roleLabel }}
-                        </span>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <span class="font-medium">{{ team.name }}</span>
+                        <Badge v-if="team.isCurrent" variant="secondary">
+                            {{ $t('Current') }}
+                        </Badge>
                     </div>
+                    <span class="text-muted-foreground text-sm">
+                        {{ team.roleLabel }}
+                    </span>
                 </div>
 
-                <TooltipProvider>
-                    <div class="flex items-center gap-2">
-                        <Tooltip v-if="canLeaveTeam(team)">
-                            <TooltipTrigger as-child>
-                                <Button
-                                    data-test="team-leave-button"
-                                    variant="ghost"
-                                    size="sm"
-                                    @click="openLeaveTeamDialog(team)"
-                                >
-                                    <PhSignOut class="h-4 w-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{{ $t('Leave team') }}</p>
-                            </TooltipContent>
-                        </Tooltip>
+                <div class="flex flex-wrap items-center gap-2">
+                    <Button
+                        v-if="!team.isCurrent"
+                        data-test="team-switch-button"
+                        variant="secondary"
+                        size="sm"
+                        @click="switchTo(team)"
+                    >
+                        <PhArrowsLeftRight class="h-4 w-4" />
+                        {{ $t('Switch') }}
+                    </Button>
 
-                        <Tooltip v-if="team.role === 'member'">
-                            <TooltipTrigger as-child>
-                                <Button
-                                    data-test="team-view-button"
-                                    variant="ghost"
-                                    size="sm"
-                                    as-child
-                                >
-                                    <Link :href="edit(team.slug)">
-                                        <PhEye class="h-4 w-4" />
-                                    </Link>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{{ $t('View team') }}</p>
-                            </TooltipContent>
-                        </Tooltip>
+                    <Button variant="ghost" size="sm" as-child>
+                        <Link :href="membersIndex(team.slug)">
+                            <PhUsersThree class="h-4 w-4" />
+                            {{ $t('Members') }}
+                        </Link>
+                    </Button>
 
-                        <Tooltip v-else>
-                            <TooltipTrigger as-child>
-                                <Button
-                                    data-test="team-edit-button"
-                                    variant="ghost"
-                                    size="sm"
-                                    as-child
-                                >
-                                    <Link :href="edit(team.slug)">
-                                        <PhPencilSimple class="h-4 w-4" />
-                                    </Link>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{{ $t('Edit team') }}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </div>
-                </TooltipProvider>
+                    <Button
+                        v-if="canManage(team)"
+                        data-test="team-rename-button"
+                        variant="ghost"
+                        size="sm"
+                        :aria-label="$t('Rename the organization')"
+                        @click="renaming = team"
+                    >
+                        <PhPencilSimple class="h-4 w-4" />
+                    </Button>
+
+                    <Button
+                        v-if="team.role !== 'owner'"
+                        data-test="team-leave-button"
+                        variant="ghost"
+                        size="sm"
+                        :aria-label="$t('Leave the organization')"
+                        @click="leaving = team"
+                    >
+                        <PhSignOut class="h-4 w-4" />
+                    </Button>
+
+                    <Button
+                        v-if="team.role === 'owner'"
+                        data-test="team-delete-button"
+                        variant="ghost"
+                        size="sm"
+                        :aria-label="$t('Delete the organization')"
+                        @click="deleting = team"
+                    >
+                        <PhTrashSimple class="h-4 w-4" />
+                    </Button>
+                </div>
             </div>
 
             <p
                 v-if="teams.length === 0"
                 class="text-muted-foreground py-8 text-center"
             >
-                {{ $t("You don't belong to any teams yet.") }}
+                {{ $t("You don't belong to any organization yet.") }}
             </p>
         </div>
     </div>
 
-    <LeaveTeamModal v-model:open="leaveTeamDialogOpen" :team="teamLeaving" />
+    <RenameOrganizationModal v-model:organization="renaming" />
+    <LeaveOrganizationModal v-model:organization="leaving" />
+
+    <ConfirmByNameDialog
+        v-if="deleting"
+        :open="true"
+        :resource-name="deleting.name"
+        :title="$t('Delete the organization')"
+        :body="
+            $t(
+                'Everything below disappears as soon as you confirm, for everyone in the organization.',
+            )
+        "
+        :items="[
+            $t('Every application and environment of this organization.'),
+            $t('Its alert rules, alerts and notification settings.'),
+            $t('Every membership and pending invitation.'),
+        ]"
+        :confirm-label="$t('Delete the organization')"
+        :url="destroy(deleting.slug).url"
+        @update:open="(open: boolean) => !open && (deleting = null)"
+    />
 </template>

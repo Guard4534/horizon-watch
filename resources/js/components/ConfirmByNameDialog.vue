@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FieldError from '@/components/FieldError.vue';
 import { useForm } from '@inertiajs/vue3';
 import { PhWarningOctagon } from '@phosphor-icons/vue';
 import { computed } from 'vue';
@@ -65,20 +66,14 @@ const submit = () => {
                     />
                     {{ title }}
                 </DialogTitle>
-                <DialogDescription
-                    style="font-size: 13px; color: var(--nc-neutral-400)"
-                >
+                <DialogDescription class="nc-t-sm nc-tone-soft">
                     {{ body }}
                 </DialogDescription>
             </DialogHeader>
 
             <ul
-                class="flex flex-col"
-                style="
-                    gap: var(--nc-space-1);
-                    font-size: 12px;
-                    color: var(--nc-neutral-400);
-                "
+                class="nc-t-xs nc-tone-soft flex flex-col"
+                style="gap: var(--nc-space-1)"
             >
                 <li
                     v-for="item in items"
@@ -106,13 +101,7 @@ const submit = () => {
                     autocomplete="off"
                     spellcheck="false"
                 />
-                <div
-                    v-if="form.errors.name"
-                    class="mt-1"
-                    style="font-size: 11px; color: var(--st-down)"
-                >
-                    {{ form.errors.name }}
-                </div>
+                <FieldError :message="form.errors.name" />
             </form>
 
             <DialogFooter>
@@ -123,8 +112,8 @@ const submit = () => {
                 </DialogClose>
                 <button
                     type="button"
-                    class="nc-btn"
-                    style="color: var(--st-down); border-color: var(--st-down)"
+                    class="nc-btn nc-tone-down"
+                    style="border-color: var(--st-down)"
                     :disabled="!matches || form.processing"
                     @click="submit"
                 >

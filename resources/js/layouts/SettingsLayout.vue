@@ -3,29 +3,18 @@ import { Link } from '@inertiajs/vue3';
 import Heading from '@/components/Heading.vue';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { useCurrentUrl } from '@/composables/useCurrentUrl';
-import { toUrl } from '@/lib/utils';
+import { useCurrentPath } from '@/composables/useCurrentPath';
 import { edit as editProfile } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import { index as teams } from '@/routes/teams';
-import type { NavItem } from '@/types';
 
-const sidebarNavItems: NavItem[] = [
-    {
-        title: 'Profile',
-        href: editProfile(),
-    },
-    {
-        title: 'Security',
-        href: editSecurity(),
-    },
-    {
-        title: 'Teams',
-        href: teams(),
-    },
+const sections = [
+    { title: 'Profile', href: editProfile().url },
+    { title: 'Security', href: editSecurity().url },
+    { title: 'Organizations', href: teams().url },
 ];
 
-const { isCurrentOrParentUrl } = useCurrentUrl();
+const { startsWith } = useCurrentPath();
 </script>
 
 <template>
@@ -42,18 +31,22 @@ const { isCurrentOrParentUrl } = useCurrentUrl();
                     :aria-label="$t('Settings')"
                 >
                     <Button
-                        v-for="item in sidebarNavItems"
-                        :key="toUrl(item.href)"
+                        v-for="section in sections"
+                        :key="section.href"
                         variant="ghost"
                         :class="[
                             'w-full justify-start',
-                            { 'bg-muted': isCurrentOrParentUrl(item.href) },
+                            { 'bg-muted': startsWith(section.href) },
                         ]"
                         as-child
                     >
-                        <Link :href="item.href">
-                            <component :is="item.icon" class="h-4 w-4" />
-                            {{ $t(item.title) }}
+                        <Link
+                            :href="section.href"
+                            :aria-current="
+                                startsWith(section.href) ? 'page' : undefined
+                            "
+                        >
+                            {{ $t(section.title) }}
                         </Link>
                     </Button>
                 </nav>

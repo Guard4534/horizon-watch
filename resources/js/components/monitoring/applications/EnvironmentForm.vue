@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FieldError from '@/components/FieldError.vue';
 import { PhLockSimple, PhLockSimpleOpen } from '@phosphor-icons/vue';
 import ColorPicker from '@/components/monitoring/applications/ColorPicker.vue';
 
@@ -40,18 +41,11 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                     spellcheck="false"
                     placeholder="production"
                 />
-                <div
+                <FieldError
                     v-if="errors[`${prefix}name`]"
-                    class="mt-1"
-                    style="font-size: 11px; color: var(--st-down)"
-                >
-                    {{ errors[`${prefix}name`] }}
-                </div>
-                <div
-                    v-else
-                    class="mt-1"
-                    style="font-size: 11px; color: var(--nc-neutral-600)"
-                >
+                    :message="errors[`${prefix}name`]"
+                />
+                <div v-else class="nc-t-2xs nc-tone-faint mt-1">
                     {{
                         $t(
                             'Lowercase letters, digits and dashes: it becomes part of the URL.',
@@ -67,13 +61,7 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                     :colors="colors"
                     :name="fieldId('color')"
                 />
-                <div
-                    v-if="errors[`${prefix}color`]"
-                    class="mt-1"
-                    style="font-size: 11px; color: var(--st-down)"
-                >
-                    {{ errors[`${prefix}color`] }}
-                </div>
+                <FieldError :message="errors[`${prefix}color`]" />
             </div>
         </div>
 
@@ -88,13 +76,7 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                 spellcheck="false"
                 placeholder="https://production.invoicer.example.com/horizon"
             />
-            <div
-                v-if="errors[`${prefix}horizonUrl`]"
-                class="mt-1"
-                style="font-size: 11px; color: var(--st-down)"
-            >
-                {{ errors[`${prefix}horizonUrl`] }}
-            </div>
+            <FieldError :message="errors[`${prefix}horizonUrl`]" />
         </div>
 
         <div
@@ -116,13 +98,7 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                     autocomplete="off"
                     spellcheck="false"
                 />
-                <div
-                    v-if="errors[`${prefix}basicAuthUser`]"
-                    class="mt-1"
-                    style="font-size: 11px; color: var(--st-down)"
-                >
-                    {{ errors[`${prefix}basicAuthUser`] }}
-                </div>
+                <FieldError :message="errors[`${prefix}basicAuthUser`]" />
             </div>
 
             <div class="nc-field">
@@ -136,17 +112,13 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                     type="password"
                     autocomplete="new-password"
                 />
-                <div
+                <FieldError
                     v-if="errors[`${prefix}basicAuthPassword`]"
-                    class="mt-1"
-                    style="font-size: 11px; color: var(--st-down)"
-                >
-                    {{ errors[`${prefix}basicAuthPassword`] }}
-                </div>
+                    :message="errors[`${prefix}basicAuthPassword`]"
+                />
                 <div
                     v-else
-                    class="mt-1 inline-flex items-center gap-[5px]"
-                    style="font-size: 11px; color: var(--nc-neutral-600)"
+                    class="nc-t-2xs nc-tone-faint mt-1 inline-flex items-center gap-[5px]"
                 >
                     <component
                         :is="hasPassword ? PhLockSimple : PhLockSimpleOpen"
@@ -175,22 +147,16 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                         max="300"
                         step="1"
                     />
-                    <span style="font-size: 12px; color: var(--nc-neutral-500)"
+                    <span class="nc-t-xs nc-tone-muted"
                         >{{ $t('seconds') }}
                     </span>
                 </div>
-                <div
-                    v-if="errors[`${prefix}pollIntervalSeconds`]"
-                    class="mt-1"
-                    style="font-size: 11px; color: var(--st-down)"
-                >
-                    {{ errors[`${prefix}pollIntervalSeconds`] }}
-                </div>
+                <FieldError :message="errors[`${prefix}pollIntervalSeconds`]" />
             </div>
         </div>
 
         <div>
-            <label class="nc-radio" style="font-size: 13px">
+            <label class="nc-radio nc-t-sm">
                 <input
                     :id="fieldId('pollingEnabled')"
                     v-model="model.pollingEnabled"
@@ -201,18 +167,11 @@ const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
                 <span class="nc-dot" />
                 {{ $t('Collect readings') }}
             </label>
-            <div
+            <FieldError
                 v-if="errors[`${prefix}pollingEnabled`]"
-                class="mt-1"
-                style="font-size: 11px; color: var(--st-down)"
-            >
-                {{ errors[`${prefix}pollingEnabled`] }}
-            </div>
-            <div
-                v-else
-                class="mt-1"
-                style="font-size: 11px; color: var(--nc-neutral-600)"
-            >
+                :message="errors[`${prefix}pollingEnabled`]"
+            />
+            <div v-else class="nc-t-2xs nc-tone-faint mt-1">
                 {{
                     $t(
                         'Paused environments keep their last reading, and the scheduler does not contact them.',

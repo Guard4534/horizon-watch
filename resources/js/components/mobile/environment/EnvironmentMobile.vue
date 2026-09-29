@@ -7,16 +7,16 @@ import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
 import MuteMenu from '@/components/monitoring/alerts/MuteMenu.vue';
 import IncidentBanner from '@/components/monitoring/environment/IncidentBanner.vue';
 import {
-    failedColor,
-    formatAge,
+    failedTone,
     pendingTone,
     statusText,
     statusTone,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
+import MetricTile from '@/components/nocturne/MetricTile.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
+import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { thresholdOf } from '@/lib/alertRules';
 import { failedLabel } from '@/lib/failedWindow';
 import {
     formatCount,
@@ -31,33 +31,8 @@ const { page } = defineProps<{
 }>();
 
 const slug = useTeamSlug();
-const environment = computed(() => page.environment);
-
-const incident = computed(() => {
-    const status = environment.value.status;
-
-    return status !== null && status !== 'active' ? status : null;
-});
-
-const threshold = (metric: App.Enums.AlertRuleMetric) =>
-    thresholdOf(environment.value, metric);
-
-const lastKnown = computed(() => environment.value.readingError !== null);
-
-const lastKnownAge = computed(() => {
-    if (environment.value.readingError === null || !page.nodes.length) {
-        return null;
-    }
-
-    return formatAge(
-        Math.min(...page.nodes.map((node) => node.seenSecondsAgo)),
-    );
-});
-
-const lastKnownText = computed(() =>
-    lastKnownAge.value
-        ? trans('last known · :time ago', { time: lastKnownAge.value })
-        : trans('last known'),
+const { environment, threshold, incident, lastKnown } = useEnvironmentDetail(
+    () => page,
 );
 
 const tiles = computed(() => [
@@ -88,7 +63,7 @@ const tiles = computed(() => [
     {
         label: failedLabel(environment.value.failedWindowMinutes),
         value: formatCount(environment.value.failedInWindow),
-        color: failedColor(
+        color: failedTone(
             environment.value.failedLastHour,
             threshold('jobs.failed_per_hour'),
         ),
@@ -123,16 +98,15 @@ const tiles = computed(() => [
                         application: environment.applicationId,
                     })
                 "
-                class="flex flex-none items-center"
-                style="color: var(--nc-neutral-400)"
+                class="nc-tone-soft flex flex-none items-center"
                 :aria-label="$t('Back')"
             >
                 <PhCaretLeft :size="17" />
             </Link>
             <span class="min-w-0">
                 <span
-                    class="block truncate"
-                    style="font-size: 10px; color: var(--nc-neutral-600)"
+                    class="nc-tone-faint block truncate"
+                    style="font-size: 10px"
                     >{{ environment.applicationName }}</span
                 >
                 <EnvPill
@@ -160,7 +134,7 @@ const tiles = computed(() => [
                 gap: var(--nc-space-3);
             "
         >
-            <div style="font-size: 11px">
+            <div class="nc-t-2xs">
                 <ReadingFreshness
                     :last-reading-at="environment.lastReadingAt"
                     :stale="environment.stale"
@@ -181,69 +155,40 @@ const tiles = computed(() => [
             />
 
             <div class="grid grid-cols-3" style="gap: var(--nc-space-2)">
-                <div
+                <MetricTile
                     v-for="tile in tiles"
                     :key="tile.label"
-                    class="min-w-0"
-                    style="
-                        padding: var(--nc-space-2) var(--nc-space-3);
-                        border-radius: var(--nc-radius-md);
-                        background: var(--nc-surface);
-                        box-shadow: var(--nc-shadow-sm);
-                    "
-                >
-                    <div
-                        class="truncate"
-                        style="
-                            font-size: 9px;
-                            letter-spacing: 0.08em;
-                            text-transform: uppercase;
-                            color: var(--nc-neutral-600);
-                        "
-                    >
-                        {{ tile.label }}
-                    </div>
-                    <div
-                        class="nc-num"
-                        style="
-                            font-size: 17px;
-                            line-height: 1.2;
-                            margin-top: 2px;
-                        "
-                        :style="{ color: tile.color }"
-                    >
-                        {{ tile.value }}
-                    </div>
-                </div>
+                    compact
+                    :label="tile.label"
+                    :value="tile.value"
+                    :color="tile.color"
+                />
             </div>
 
-            <div class="mobile-card">
+            <div class="nc-card mobile-card">
                 <div class="mb-[var(--nc-space-2)] flex items-baseline gap-2">
-                    <span style="font-size: 13px">{{ $t('Queues') }}</span>
+                    <span class="nc-t-sm">{{ $t('Queues') }}</span>
                     <span
                         v-if="lastKnown"
                         class="ml-auto"
                         style="font-size: 10px; color: var(--st-warn)"
-                        >{{ lastKnownText }}</span
+                        >{{ lastKnown }}</span
                     >
                     <span
                         v-else
-                        class="ml-auto"
-                        style="font-size: 10px; color: var(--nc-neutral-600)"
+                        class="nc-tone-faint ml-auto"
+                        style="font-size: 10px"
                         >{{ $t('pending · wait') }}</span
                     >
                 </div>
-                <div
-                    v-if="!page.queues.length"
-                    style="font-size: 12px; color: var(--nc-neutral-500)"
-                >
+                <div v-if="!page.queues.length" class="nc-t-xs nc-tone-muted">
                     {{ $t('No queue in the latest reading.') }}
                 </div>
                 <div
                     v-for="queue in page.queues"
                     :key="queue.name"
-                    class="flex items-center gap-2"
-                    style="font-size: 12px; margin-top: var(--nc-space-2)"
+                    class="nc-t-xs flex items-center gap-2"
+                    style="margin-top: var(--nc-space-2)"
                 >
                     <span
                         class="size-[5px] flex-none rounded-full"
@@ -272,27 +217,24 @@ const tiles = computed(() => [
                 </div>
             </div>
 
-            <div class="mobile-card">
+            <div class="nc-card mobile-card">
                 <div class="mb-[var(--nc-space-2)] flex items-baseline gap-2">
-                    <span style="font-size: 13px">{{ $t('Nodes') }}</span>
+                    <span class="nc-t-sm">{{ $t('Nodes') }}</span>
                     <span
                         v-if="lastKnown"
                         class="ml-auto"
                         style="font-size: 10px; color: var(--st-warn)"
-                        >{{ lastKnownText }}</span
+                        >{{ lastKnown }}</span
                     >
                 </div>
-                <div
-                    v-if="!page.nodes.length"
-                    style="font-size: 12px; color: var(--nc-neutral-500)"
-                >
+                <div v-if="!page.nodes.length" class="nc-t-xs nc-tone-muted">
                     {{ $t('No master supervisor in the latest reading.') }}
                 </div>
                 <div
                     v-for="node in page.nodes"
                     :key="node.hostname"
-                    class="flex items-center gap-2"
-                    style="font-size: 12px; margin-top: var(--nc-space-2)"
+                    class="nc-t-xs flex items-center gap-2"
+                    style="margin-top: var(--nc-space-2)"
                 >
                     <StatusLamp :status="node.status" :size="6" />
                     <span
@@ -300,15 +242,11 @@ const tiles = computed(() => [
                         style="letter-spacing: 0.01em"
                         >{{ node.hostname }}</span
                     >
-                    <span
-                        class="nc-num ml-auto flex-none"
-                        style="color: var(--nc-neutral-500)"
-                        >{{
-                            $t(':count workers', {
-                                count: String(node.workers),
-                            })
-                        }}</span
-                    >
+                    <span class="nc-num nc-tone-muted ml-auto flex-none">{{
+                        $t(':count workers', {
+                            count: String(node.workers),
+                        })
+                    }}</span>
                 </div>
             </div>
 
@@ -323,8 +261,7 @@ const tiles = computed(() => [
                     :href="environment.horizonUrl"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="nc-btn nc-btn-primary flex-1 justify-center"
-                    style="font-size: 12px"
+                    class="nc-btn nc-btn-primary nc-t-xs flex-1 justify-center"
                 >
                     <PhArrowSquareOut :size="13" />Horizon
                 </a>
@@ -336,8 +273,5 @@ const tiles = computed(() => [
 <style scoped>
 .mobile-card {
     padding: var(--nc-space-3);
-    border-radius: var(--nc-radius-md);
-    background: var(--nc-surface);
-    box-shadow: var(--nc-shadow-sm);
 }
 </style>

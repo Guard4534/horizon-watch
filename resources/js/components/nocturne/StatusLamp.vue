@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { trans } from 'laravel-vue-i18n';
+import { needsAttention } from '@/components/monitoring/environment/readings';
 import { statusColor, statusLabel } from '@/lib/monitoring';
 
 const {
@@ -13,7 +14,7 @@ const {
     glow?: boolean;
 }>();
 
-const troubled = computed(() => status !== null && status !== 'active');
+const troubled = computed(() => needsAttention({ status }));
 
 const label = computed(() =>
     status === null ? trans('No reading yet') : statusLabel(status),

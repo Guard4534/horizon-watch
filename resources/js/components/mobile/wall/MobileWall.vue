@@ -3,14 +3,21 @@ import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
+import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
+import KpiCard from '@/components/nocturne/KpiCard.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
-import { pendingTone } from '@/components/monitoring/environment/readings';
+import {
+    calmStyle,
+    failedTone,
+    needsAttention,
+    pendingTone,
+    statusTone,
+    troubledStyle,
+} from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { thresholdOf } from '@/lib/alertRules';
 import { failedWindowNote, failedWindowShort } from '@/lib/failedWindow';
 import {
-    envColor,
-    exceeds,
     formatCount,
     formatWait,
     statusColor,
@@ -49,60 +56,41 @@ const narrowing = computed(() =>
         .join(' · '),
 );
 
-function troubled(environment: App.Data.Monitoring.EnvironmentData): boolean {
-    return environment.status !== null && environment.status !== 'active';
-}
-
 function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
-    if (!troubled(environment)) {
-        return {
-            background: 'var(--nc-surface)',
-            boxShadow: 'var(--nc-shadow-sm)',
-            opacity: 0.82,
-        };
-    }
-
-    const color = statusColor(environment.status!);
-
-    return {
-        background: `color-mix(in srgb, ${color} 15%, var(--nc-surface))`,
-        boxShadow: `var(--nc-shadow-sm), 0 0 0 3px color-mix(in srgb, ${color} 16%, transparent)`,
-    };
+    return needsAttention(environment)
+        ? troubledStyle(statusTone(environment), 3)
+        : calmStyle();
 }
 </script>
 
 <template>
     <div class="flex flex-col" style="gap: var(--nc-space-3)">
         <div class="flex" style="gap: var(--nc-space-2)">
-            <div class="kpi">
-                <div class="kpi-label">{{ $t('Up') }}</div>
-                <div class="kpi-value">
-                    {{ kpis.environmentsActive }}/{{ kpis.environmentsTotal }}
-                </div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">{{ $t('Issues') }}</div>
-                <div
-                    class="kpi-value"
-                    :style="{
-                        color: problemCount ? 'var(--st-down)' : 'var(--st-ok)',
-                    }"
-                >
-                    {{ problemCount }}
-                </div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">{{ $t('Pending') }}</div>
-                <div class="kpi-value">
-                    {{ formatCount(kpis.pendingTotal) }}
-                </div>
-            </div>
+            <KpiCard
+                compact
+                class="flex-1"
+                :label="$t('Up')"
+                :value="`${kpis.environmentsActive}/${kpis.environmentsTotal}`"
+            />
+            <KpiCard
+                compact
+                class="flex-1"
+                :label="$t('Issues')"
+                :value="String(problemCount)"
+                :color="problemCount ? 'var(--st-down)' : 'var(--st-ok)'"
+            />
+            <KpiCard
+                compact
+                class="flex-1"
+                :label="$t('Pending')"
+                :value="formatCount(kpis.pendingTotal)"
+            />
         </div>
 
         <SegmentedControl
             v-model="filter"
             name="mobile-wall-filter"
-            class="mobile-seg"
+            class="nc-seg-full"
             :options="[
                 {
                     value: 'problems',
@@ -118,8 +106,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
             }}</span>
             <button
                 type="button"
-                class="nc-btn nc-btn-ghost"
-                style="font-size: 12px"
+                class="nc-btn nc-btn-ghost nc-t-xs"
                 @click="emit('clear')"
             >
                 {{ $t('Clear filters') }}
@@ -139,14 +126,11 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                 class="row"
                 :style="rowStyle(environment)"
             >
-                <span
-                    class="absolute top-0 bottom-0 left-0 w-[4px]"
-                    :style="{ background: envColor(environment.color) }"
-                />
+                <EnvSwatch :color="environment.color" shape="edge" :size="4" />
                 <span class="flex items-center gap-[9px]">
                     <StatusLamp :status="environment.status" glow />
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate" style="font-size: 13px">{{
+                        <span class="nc-t-sm block truncate">{{
                             environment.applicationName
                         }}</span>
                         <EnvPill
@@ -168,12 +152,13 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                             }"
                             >{{ formatCount(environment.pending) }}</span
                         >
-                        <span class="unit block">pending</span>
+                        <span class="nc-micro nc-tone-faint block truncate">{{
+                            $t('Pending')
+                        }}</span>
                     </span>
                 </span>
                 <span
-                    class="nc-num mt-2 flex items-center gap-2"
-                    style="font-size: 11px; color: var(--nc-neutral-600)"
+                    class="nc-num nc-t-2xs nc-tone-faint mt-2 flex items-center gap-2"
                 >
                     <span
                         v-if="environment.status !== null"
@@ -200,15 +185,13 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                             failedWindowNote(environment.failedWindowMinutes)
                         "
                         :style="{
-                            color: exceeds(
+                            color: failedTone(
                                 environment.failedLastHour,
                                 thresholdOf(
                                     environment,
                                     'jobs.failed_per_hour',
                                 ),
-                            )
-                                ? 'var(--st-warn)'
-                                : undefined,
+                            ),
                         }"
                         >{{
                             $t(':count failed', {
@@ -224,12 +207,11 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
             </Link>
             <p
                 v-if="rows.length === 0"
+                class="nc-t-xs nc-tone-muted"
                 style="
                     margin: 0;
                     padding: var(--nc-space-4) 0;
                     text-align: center;
-                    font-size: 12px;
-                    color: var(--nc-neutral-500);
                 "
             >
                 <template v-if="narrowing">{{
@@ -249,43 +231,6 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
 </template>
 
 <style scoped>
-.kpi {
-    flex: 1;
-    min-width: 0;
-    padding: var(--nc-space-2) var(--nc-space-3);
-    border-radius: var(--nc-radius-md);
-    background: var(--nc-surface);
-    box-shadow: var(--nc-shadow-sm);
-}
-
-.kpi-label,
-.unit {
-    font-size: 9px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--nc-neutral-600);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.kpi-value {
-    margin-top: 2px;
-    font-size: 19px;
-    line-height: 1.15;
-}
-
-.mobile-seg {
-    display: flex;
-    width: 100%;
-}
-
-.mobile-seg :deep(.nc-seg-opt) {
-    flex: 1;
-    justify-content: center;
-    font-size: 12px;
-}
-
 .narrowing {
     display: flex;
     align-items: center;

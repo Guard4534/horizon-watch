@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Form } from '@inertiajs/vue3';
-import { ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,55 +10,52 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { store } from '@/routes/teams';
+import { update } from '@/routes/teams';
 
-const open = ref(false);
-const formKey = ref(0);
-
-function handleOpenChange(value: boolean) {
-    open.value = value;
-
-    if (!value) {
-        formKey.value++;
-    }
-}
+const organization = defineModel<App.Data.Teams.UserTeamData | null>(
+    'organization',
+    { required: true },
+);
 </script>
 
 <template>
-    <Dialog :open="open" @update:open="handleOpenChange">
-        <DialogTrigger as-child>
-            <slot />
-        </DialogTrigger>
-        <DialogContent>
+    <Dialog
+        :open="organization !== null"
+        @update:open="(open) => !open && (organization = null)"
+    >
+        <DialogContent v-if="organization">
             <Form
-                :key="formKey"
-                v-bind="store.form()"
+                :key="organization.slug"
+                v-bind="update.form(organization.slug)"
                 class="space-y-6"
                 v-slot="{ errors, processing }"
-                @success="open = false"
+                @success="organization = null"
             >
                 <DialogHeader>
-                    <DialogTitle>{{ $t('New organization') }}</DialogTitle>
+                    <DialogTitle>{{
+                        $t('Rename the organization')
+                    }}</DialogTitle>
                     <DialogDescription>
                         {{
                             $t(
-                                'Applications, environments, members and alert rules all live inside one organization.',
+                                'The name changes for everyone. Links and addresses keep working.',
                             )
                         }}
                     </DialogDescription>
                 </DialogHeader>
 
                 <div class="grid gap-2">
-                    <Label for="name">{{ $t('Organization name') }}</Label>
+                    <Label for="rename-organization">{{
+                        $t('Organization name')
+                    }}</Label>
                     <Input
-                        id="name"
+                        id="rename-organization"
                         name="name"
-                        data-test="create-team-name"
-                        :placeholder="$t('My organization')"
+                        data-test="rename-team-name"
+                        :default-value="organization.name"
                         required
                     />
                     <InputError :message="errors.name" />
@@ -67,17 +63,15 @@ function handleOpenChange(value: boolean) {
 
                 <DialogFooter class="gap-2">
                     <DialogClose as-child>
-                        <Button variant="secondary">
-                            {{ $t('Cancel') }}
-                        </Button>
+                        <Button variant="secondary">{{ $t('Cancel') }}</Button>
                     </DialogClose>
 
                     <Button
                         type="submit"
-                        data-test="create-team-submit"
+                        data-test="rename-team-submit"
                         :disabled="processing"
                     >
-                        {{ $t('Create the organization') }}
+                        {{ $t('Save') }}
                     </Button>
                 </DialogFooter>
             </Form>

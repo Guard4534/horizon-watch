@@ -151,8 +151,7 @@ const icon = computed(() => {
         <button
             v-if="showButton"
             type="button"
-            class="nc-btn nc-btn-secondary"
-            style="font-size: 12px"
+            class="nc-btn nc-btn-secondary nc-t-xs"
             :disabled="disabled || outcome.state === 'testing'"
             @click="run"
         >

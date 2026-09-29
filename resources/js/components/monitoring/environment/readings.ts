@@ -55,8 +55,25 @@ export function worstTone(
     return statuses[0] ? statusColor(statuses[0]) : null;
 }
 
-export function needsAttention(environment: Environment): boolean {
+export function needsAttention(
+    environment: Pick<App.Data.Monitoring.EnvironmentData, 'status'>,
+): boolean {
     return environment.status !== null && environment.status !== 'active';
+}
+
+export function troubledStyle(tone: string, ring = 4): Record<string, string> {
+    return {
+        background: `color-mix(in srgb, ${tone} 15%, var(--nc-surface))`,
+        boxShadow: `var(--nc-shadow-sm), 0 0 0 ${ring}px color-mix(in srgb, ${tone} 18%, transparent)`,
+    };
+}
+
+export function calmStyle(): Record<string, string> {
+    return {
+        background: 'var(--nc-surface)',
+        boxShadow: 'var(--nc-shadow-sm)',
+        opacity: '0.82',
+    };
 }
 
 export function formatAge(seconds: number): string {
@@ -81,13 +98,13 @@ export function secondsSince(iso: string, now: number): number {
     return Math.max(0, Math.floor((now - Date.parse(iso)) / 1000));
 }
 
-export function failedColor(
+export function failedTone(
     failedLastHour: number,
     perHourThreshold: number | null,
-): string {
+): string | undefined {
     return exceeds(failedLastHour, perHourThreshold)
         ? 'var(--st-warn)'
-        : 'var(--nc-text)';
+        : undefined;
 }
 
 export function horizonStatusLabel(status: App.Enums.HorizonStatus): string {
@@ -121,10 +138,4 @@ export function horizonStatusTone(
         default:
             return 'var(--nc-neutral-500)';
     }
-}
-
-export function formatInterval(seconds: number): string {
-    return seconds < 60 || seconds % 60 !== 0
-        ? `${seconds}s`
-        : `${seconds / 60} min`;
 }

@@ -24,7 +24,7 @@ const { page } = defineProps<{
     page: App.Data.Pages.ApplicationDetailPageData;
 }>();
 
-useLivePoll(['page', 'openAlertCount']);
+useLivePoll();
 
 const slug = useTeamSlug();
 const shared = usePage();
@@ -83,7 +83,7 @@ const stats = computed(() => [
         <div class="flex flex-col" style="gap: var(--nc-space-4)">
             <div class="flex flex-wrap items-end gap-3">
                 <div class="min-w-0">
-                    <div style="font-size: 11px; color: var(--nc-neutral-500)">
+                    <div class="nc-t-2xs nc-tone-muted">
                         <Link :href="applicationsIndex(slug)">{{
                             $t('Applications')
                         }}</Link>
@@ -92,11 +92,8 @@ const stats = computed(() => [
                         {{ page.application.name }}
                     </div>
                     <div
-                        style="
-                            font-size: 12px;
-                            color: var(--nc-neutral-500);
-                            letter-spacing: 0.01em;
-                        "
+                        class="nc-t-xs nc-tone-muted"
+                        style="letter-spacing: 0.01em"
                     >
                         {{ page.application.host }}
                     </div>
@@ -107,8 +104,7 @@ const stats = computed(() => [
                     style="gap: var(--nc-space-2)"
                 >
                     <Link
-                        class="nc-btn nc-btn-secondary"
-                        style="font-size: 12px"
+                        class="nc-btn nc-btn-secondary nc-t-xs"
                         :href="
                             createEnvironment({
                                 current_team: slug,
@@ -119,8 +115,7 @@ const stats = computed(() => [
                         <PhPlus :size="13" />{{ $t('Add environment') }}
                     </Link>
                     <Link
-                        class="nc-btn nc-btn-ghost"
-                        style="font-size: 12px"
+                        class="nc-btn nc-btn-ghost nc-t-xs"
                         :href="
                             editApplication({
                                 current_team: slug,
@@ -142,12 +137,8 @@ const stats = computed(() => [
                 <div
                     v-for="stat in stats"
                     :key="stat.label"
-                    style="
-                        padding: var(--nc-space-3) var(--nc-space-4);
-                        border-radius: var(--nc-radius-md);
-                        background: var(--nc-surface);
-                        box-shadow: var(--nc-shadow-sm);
-                    "
+                    class="nc-card"
+                    style="padding: var(--nc-space-3) var(--nc-space-4)"
                 >
                     <div class="nc-label">
                         <template v-if="stat.label === 'Environments'">{{
@@ -178,10 +169,7 @@ const stats = computed(() => [
 
         <div class="flex flex-col" style="gap: var(--nc-space-2)">
             <div class="nc-label">{{ $t('Environments') }}</div>
-            <div
-                v-if="!page.environments.length"
-                style="font-size: 12px; color: var(--nc-neutral-500)"
-            >
+            <div v-if="!page.environments.length" class="nc-t-xs nc-tone-muted">
                 {{ $t('This application has no environment yet.') }}
             </div>
             <div

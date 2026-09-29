@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import FieldError from '@/components/FieldError.vue';
+
 const model = defineModel<App.Data.Applications.ApplicationFormData>({
     required: true,
 });
@@ -34,13 +36,7 @@ const {
                 autocomplete="off"
                 placeholder="Invoicer"
             />
-            <div
-                v-if="errors[`${prefix}name`]"
-                class="mt-1"
-                style="font-size: 11px; color: var(--st-down)"
-            >
-                {{ errors[`${prefix}name`] }}
-            </div>
+            <FieldError :message="errors[`${prefix}name`]" />
         </div>
 
         <div class="nc-field">
@@ -56,29 +52,18 @@ const {
                 spellcheck="false"
                 placeholder="invoicer.example.com"
             />
-            <div
+            <FieldError
                 v-if="errors[`${prefix}host`]"
-                class="mt-1"
-                style="font-size: 11px; color: var(--st-down)"
-            >
-                {{ errors[`${prefix}host`] }}
-            </div>
-            <div
-                v-else-if="wizard"
-                class="mt-1"
-                style="font-size: 11px; color: var(--nc-neutral-600)"
-            >
+                :message="errors[`${prefix}host`]"
+            />
+            <div v-else-if="wizard" class="nc-t-2xs nc-tone-faint mt-1">
                 {{
                     $t(
                         'No scheme. It also suggests the URL of each environment.',
                     )
                 }}
             </div>
-            <div
-                v-else
-                class="mt-1"
-                style="font-size: 11px; color: var(--nc-neutral-600)"
-            >
+            <div v-else class="nc-t-2xs nc-tone-faint mt-1">
                 {{
                     $t(
                         'No scheme: every environment carries its own Horizon URL.',

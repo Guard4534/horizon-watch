@@ -67,7 +67,7 @@ const submit = () => {
         "
     >
         <div>
-            <div style="font-size: 11px; color: var(--nc-neutral-500)">
+            <div class="nc-t-2xs nc-tone-muted">
                 <Link
                     :href="
                         show({
@@ -81,7 +81,7 @@ const submit = () => {
             <div style="font-size: 26px; line-height: 1.15">
                 {{ $t('Add environment') }}
             </div>
-            <div style="font-size: 12px; color: var(--nc-neutral-500)">
+            <div class="nc-t-xs nc-tone-muted">
                 {{ page.application.host }}
             </div>
         </div>

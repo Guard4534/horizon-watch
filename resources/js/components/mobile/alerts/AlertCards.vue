@@ -1,64 +1,36 @@
 <script setup lang="ts">
-import { Link, router } from '@inertiajs/vue3';
+import { Link } from '@inertiajs/vue3';
 import AlertActions from '@/components/monitoring/alerts/AlertActions.vue';
 import AlertDetail from '@/components/monitoring/alerts/AlertDetail.vue';
 import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import AlertOpened from '@/components/monitoring/alerts/AlertOpened.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
-import { useTeamSlug } from '@/composables/useTeamSlug';
+import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { ruleLabel } from '@/lib/alertRules';
 import { severityColor, severityIcon } from '@/lib/alerts';
 import { formatElapsed } from '@/lib/monitoring';
-import { show as showEnvironment } from '@/routes/environments';
 
 defineProps<{
     alerts: App.Data.Monitoring.AlertData[];
     empty: string;
 }>();
 
-const slug = useTeamSlug();
-
-function environmentHref(environmentId: string): string {
-    return showEnvironment({
-        current_team: slug.value,
-        environment: environmentId,
-    }).url;
-}
-
-function openCard(
-    alert: App.Data.Monitoring.AlertData,
-    event: MouseEvent,
-): void {
-    if (
-        alert.environmentId === null ||
-        (event.target as HTMLElement).closest('a, button')
-    ) {
-        return;
-    }
-
-    router.visit(environmentHref(alert.environmentId));
-}
+const environmentHref = useEnvironmentHref();
 </script>
 
 <template>
     <div class="flex flex-col" style="gap: var(--nc-space-2)">
-        <div
-            v-if="alerts.length === 0"
-            class="nc-card"
-            style="font-size: 12px; color: var(--nc-neutral-500)"
-        >
+        <div v-if="alerts.length === 0" class="nc-card nc-t-xs nc-tone-muted">
             {{ empty }}
         </div>
         <div
             v-for="alert in alerts"
             :key="alert.id"
-            class="alert-card"
+            class="nc-card alert-card"
             :class="{
                 'is-critical':
                     alert.severity === 'critical' && alert.state === 'open',
-                'is-link': alert.environmentId !== null,
             }"
-            @click="openCard(alert, $event)"
         >
             <div class="flex items-start gap-[9px]">
                 <component
@@ -77,15 +49,12 @@ function openCard(
                     <span v-else class="title block">{{
                         ruleLabel(alert.metric)
                     }}</span>
-                    <div
-                        class="mt-[3px]"
-                        style="font-size: 11px; color: var(--nc-neutral-400)"
-                    >
+                    <div class="nc-t-2xs nc-tone-soft mt-[3px]">
                         <AlertDetail :alert="alert" />
                     </div>
                     <div
-                        class="mt-[4px] flex items-center gap-[6px]"
-                        style="font-size: 10px; color: var(--nc-neutral-500)"
+                        class="nc-tone-muted mt-[4px] flex items-center gap-[6px]"
+                        style="font-size: 10px"
                     >
                         <EnvSwatch
                             :color="alert.color"
@@ -120,13 +89,6 @@ function openCard(
 <style scoped>
 .alert-card {
     padding: var(--nc-space-3);
-    border-radius: var(--nc-radius-md);
-    background: var(--nc-surface);
-    box-shadow: var(--nc-shadow-sm);
-}
-
-.alert-card.is-link {
-    cursor: pointer;
 }
 
 .alert-card.is-critical {

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { PhBellSimpleSlash } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import AlertCards from '@/components/mobile/alerts/AlertCards.vue';
-import EmptyState from '@/components/monitoring/EmptyState.vue';
+import VisibilityEmptyState from '@/components/monitoring/VisibilityEmptyState.vue';
 import AlertPagination from '@/components/monitoring/alerts/AlertPagination.vue';
 import AlertTable from '@/components/monitoring/alerts/AlertTable.vue';
 import DeliveryPolicy from '@/components/monitoring/alerts/DeliveryPolicy.vue';
@@ -14,6 +14,7 @@ import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { useVisibility } from '@/composables/useVisibility';
 import { pageCount } from '@/lib/alerts';
 import { index as alertsIndex } from '@/routes/alerts';
 
@@ -25,19 +26,13 @@ const { page } = defineProps<{
     page: App.Data.Pages.AlertLogPageData;
 }>();
 
-useLivePoll(['page', 'openAlertCount']);
+useLivePoll();
 
 const isMobile = useIsMobile();
 const slug = useTeamSlug();
-const shared = usePage();
+const { canManageApplications } = useVisibility();
 
 const nothingVisible = computed(() => page.environmentCount === 0);
-
-const somethingIsHidden = computed(
-    () =>
-        shared.props.visibilityRestricted &&
-        shared.props.organizationHasEnvironments,
-);
 
 function visit(next: {
     state?: App.Enums.AlertState;
@@ -120,23 +115,19 @@ const previewed = computed(
 <template>
     <Head :title="$t('Alerts')" />
 
-    <div v-if="nothingVisible" class="page-pad">
-        <EmptyState
+    <div v-if="nothingVisible" class="nc-page">
+        <VisibilityEmptyState
             :icon="PhBellSimpleSlash"
             :kicker="$t('Nothing to watch')"
             :title="$t('No alerts yet')"
             :body="
-                somethingIsHidden
+                canManageApplications
                     ? $t(
-                          'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
+                          'Configure an application with at least one environment first: alerts appear as soon as there is something to watch.',
                       )
-                    : shared.props.canManageApplications
-                      ? $t(
-                            'Configure an application with at least one environment first: alerts appear as soon as there is something to watch.',
-                        )
-                      : $t(
-                            'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
-                        )
+                    : $t(
+                          'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                      )
             "
         />
     </div>
@@ -152,14 +143,13 @@ const previewed = computed(
             <SegmentedControl
                 v-model="state"
                 name="alert-state-mobile"
-                class="mobile-seg"
+                class="nc-seg-full"
                 :options="tabs"
             />
             <select
                 v-if="page.applications.length > 1 || page.application"
                 v-model="application"
-                class="nc-input"
-                style="font-size: 12px"
+                class="nc-input nc-t-xs"
                 :aria-label="$t('Filter by application')"
             >
                 <option value="">{{ $t('All applications') }}</option>
@@ -189,7 +179,7 @@ const previewed = computed(
         </div>
     </div>
 
-    <div v-else class="page-pad alerts-grid">
+    <div v-else class="nc-page alerts-grid">
         <section class="nc-card min-w-0">
             <div
                 class="mb-[var(--nc-space-3)] flex flex-wrap items-center"
@@ -203,8 +193,8 @@ const previewed = computed(
                 <select
                     v-if="page.applications.length > 1 || page.application"
                     v-model="application"
-                    class="nc-input ml-auto"
-                    style="max-width: 230px; font-size: 12px"
+                    class="nc-input nc-t-xs ml-auto"
+                    style="max-width: 230px"
                     :aria-label="$t('Filter by application')"
                 >
                     <option value="">{{ $t('All applications') }}</option>
@@ -242,10 +232,6 @@ const previewed = computed(
 </template>
 
 <style scoped>
-.page-pad {
-    padding: var(--nc-space-6);
-}
-
 .alerts-grid {
     display: grid;
     align-items: start;
@@ -257,17 +243,5 @@ const previewed = computed(
     .alerts-grid {
         grid-template-columns: minmax(0, 1fr);
     }
-}
-
-.mobile-seg {
-    width: 100%;
-}
-
-.mobile-seg :deep(.nc-seg-opt) {
-    flex: 1;
-    justify-content: center;
-    padding-inline: 4px;
-    font-size: 12px;
-    white-space: nowrap;
 }
 </style>

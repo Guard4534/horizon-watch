@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FieldError from '@/components/FieldError.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     PhArrowClockwise,
@@ -16,10 +17,10 @@ import ColorPicker from '@/components/monitoring/applications/ColorPicker.vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import type { ConnectionOutcome } from '@/components/monitoring/applications/ConnectionTest.vue';
 import WizardSteps from '@/components/monitoring/applications/WizardSteps.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { envColor } from '@/lib/monitoring';
 import {
     index as applicationsIndex,
     store,
@@ -259,11 +260,6 @@ const checkColor = (outcome: ConnectionOutcome): string => {
 const refusedCredentials = (outcome: ConnectionOutcome): boolean =>
     outcome.state === 'done' && outcome.result.error === 'unauthorized';
 
-const pillStyle = (color: App.Enums.EnvironmentColor) => ({
-    color: envColor(color),
-    background: `color-mix(in srgb, ${envColor(color)} 20%, transparent)`,
-});
-
 const stepOf = (keys: string[]): number => {
     if (keys.some((key) => key.startsWith('application'))) {
         return 1;
@@ -316,7 +312,7 @@ const submit = () => {
         "
     >
         <div>
-            <div style="font-size: 11px; color: var(--nc-neutral-500)">
+            <div class="nc-t-2xs nc-tone-muted">
                 <Link :href="applicationsIndex(slug)">{{
                     $t('Applications')
                 }}</Link>
@@ -324,7 +320,7 @@ const submit = () => {
             <div style="font-size: 26px; line-height: 1.15">
                 {{ $t('Add application') }}
             </div>
-            <div style="font-size: 12px; color: var(--nc-neutral-500)">
+            <div class="nc-t-xs nc-tone-muted">
                 {{
                     $t(
                         'An application and its environments are created together, in one step.',
@@ -359,10 +355,7 @@ const submit = () => {
                         spellcheck="false"
                         placeholder="horizon"
                     />
-                    <div
-                        class="mt-1"
-                        style="font-size: 11px; color: var(--nc-neutral-600)"
-                    >
+                    <div class="nc-t-2xs nc-tone-faint mt-1">
                         {{ $t('If you changed HORIZON_PATH, set it here.') }}
                     </div>
                 </div>
@@ -374,17 +367,14 @@ const submit = () => {
             class="flex flex-col"
             style="gap: var(--nc-space-3)"
         >
-            <div
-                v-if="errors.environments"
-                style="font-size: 12px; color: var(--st-down)"
-            >
+            <div v-if="errors.environments" class="nc-t-xs nc-tone-down">
                 {{ errors.environments }}
             </div>
 
             <div
                 v-for="(environment, index) in form.environments"
                 :key="rows[index].key"
-                class="row"
+                class="nc-card row"
             >
                 <EnvSwatch :color="environment.color" shape="edge" :size="4" />
 
@@ -405,13 +395,9 @@ const submit = () => {
                             spellcheck="false"
                             placeholder="production"
                         />
-                        <div
-                            v-if="errors[`environments.${index}.name`]"
-                            class="mt-1"
-                            style="font-size: 11px; color: var(--st-down)"
-                        >
-                            {{ errors[`environments.${index}.name`] }}
-                        </div>
+                        <FieldError
+                            :message="errors[`environments.${index}.name`]"
+                        />
                     </div>
 
                     <div class="nc-field">
@@ -429,23 +415,17 @@ const submit = () => {
                             placeholder="https://invoicer.example.com/horizon"
                             @input="onUrlInput(index)"
                         />
-                        <div
-                            v-if="errors[`environments.${index}.horizonUrl`]"
-                            class="mt-1"
-                            style="font-size: 11px; color: var(--st-down)"
-                        >
-                            {{ errors[`environments.${index}.horizonUrl`] }}
-                        </div>
+                        <FieldError
+                            :message="
+                                errors[`environments.${index}.horizonUrl`]
+                            "
+                        />
                     </div>
 
                     <div class="flex items-start sm:pt-[22px]">
                         <button
                             type="button"
-                            class="nc-btn nc-btn-ghost"
-                            style="
-                                font-size: 12px;
-                                color: var(--nc-neutral-400);
-                            "
+                            class="nc-btn nc-btn-ghost nc-t-xs nc-tone-soft"
                             :disabled="form.environments.length === 1"
                             :title="$t('Remove environment')"
                             :aria-label="$t('Remove environment')"
@@ -463,20 +443,16 @@ const submit = () => {
                         :colors="page.colors"
                         :name="`environments-${index}-color`"
                     />
-                    <div
-                        v-if="errors[`environments.${index}.color`]"
-                        class="mt-1"
-                        style="font-size: 11px; color: var(--st-down)"
-                    >
-                        {{ errors[`environments.${index}.color`] }}
-                    </div>
+                    <FieldError
+                        :message="errors[`environments.${index}.color`]"
+                    />
                 </div>
 
                 <div
                     class="mt-[var(--nc-space-3)] flex flex-wrap items-center"
                     style="gap: var(--nc-space-3)"
                 >
-                    <label class="nc-radio" style="font-size: 12px">
+                    <label class="nc-radio nc-t-xs">
                         <input
                             type="checkbox"
                             :checked="rows[index].auth"
@@ -513,13 +489,9 @@ const submit = () => {
                     v-for="field in ['basicAuthUser', 'basicAuthPassword']"
                     :key="field"
                 >
-                    <div
-                        v-if="errors[`environments.${index}.${field}`]"
-                        class="mt-1"
-                        style="font-size: 11px; color: var(--st-down)"
-                    >
-                        {{ errors[`environments.${index}.${field}`] }}
-                    </div>
+                    <FieldError
+                        :message="errors[`environments.${index}.${field}`]"
+                    />
                 </div>
 
                 <div
@@ -527,12 +499,8 @@ const submit = () => {
                     style="gap: var(--nc-space-4)"
                 >
                     <label
-                        class="flex items-center"
-                        style="
-                            gap: var(--nc-space-2);
-                            font-size: 12px;
-                            color: var(--nc-neutral-400);
-                        "
+                        class="nc-t-xs nc-tone-soft flex items-center"
+                        style="gap: var(--nc-space-2)"
                     >
                         {{ $t('Poll interval') }}
                         <input
@@ -546,7 +514,7 @@ const submit = () => {
                         />
                         {{ $t('seconds') }}
                     </label>
-                    <label class="nc-radio" style="font-size: 12px">
+                    <label class="nc-radio nc-t-xs">
                         <input
                             v-model="environment.pollingEnabled"
                             type="checkbox"
@@ -561,21 +529,16 @@ const submit = () => {
                     v-for="field in ['pollIntervalSeconds', 'pollingEnabled']"
                     :key="field"
                 >
-                    <div
-                        v-if="errors[`environments.${index}.${field}`]"
-                        class="mt-1"
-                        style="font-size: 11px; color: var(--st-down)"
-                    >
-                        {{ errors[`environments.${index}.${field}`] }}
-                    </div>
+                    <FieldError
+                        :message="errors[`environments.${index}.${field}`]"
+                    />
                 </div>
             </div>
 
             <div>
                 <button
                     type="button"
-                    class="nc-btn nc-btn-secondary"
-                    style="font-size: 12px"
+                    class="nc-btn nc-btn-secondary nc-t-xs"
                     @click="addEnvironment"
                 >
                     <PhPlus :size="13" />{{ $t('Add environment') }}
@@ -587,7 +550,7 @@ const submit = () => {
             <div
                 v-for="(message, index) in unplacedErrors"
                 :key="index"
-                style="font-size: 12px; color: var(--st-down)"
+                class="nc-t-xs nc-tone-down"
             >
                 {{ message }}
             </div>
@@ -598,17 +561,13 @@ const submit = () => {
             >
                 <span style="font-size: 15px">{{ form.application.name }}</span>
                 <span
-                    style="
-                        font-size: 12px;
-                        color: var(--nc-neutral-500);
-                        letter-spacing: 0.01em;
-                    "
+                    class="nc-t-xs nc-tone-muted"
+                    style="letter-spacing: 0.01em"
                     >{{ form.application.host }}</span
                 >
                 <button
                     type="button"
-                    class="nc-btn nc-btn-ghost ml-auto"
-                    style="font-size: 12px"
+                    class="nc-btn nc-btn-ghost nc-t-xs ml-auto"
                     :disabled="testing"
                     @click="void testAgain()"
                 >
@@ -619,7 +578,7 @@ const submit = () => {
             <div
                 v-for="(environment, index) in form.environments"
                 :key="rows[index].key"
-                class="check"
+                class="nc-card check"
             >
                 <component
                     :is="checkIcon(rows[index].outcome)"
@@ -632,11 +591,10 @@ const submit = () => {
                 />
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center" style="gap: 8px">
-                        <span
-                            class="pill"
-                            :style="pillStyle(environment.color)"
-                            >{{ environment.name }}</span
-                        >
+                        <EnvPill
+                            :name="environment.name"
+                            :color="environment.color"
+                        />
                         <span
                             class="ml-auto flex-none"
                             :style="{
@@ -664,12 +622,8 @@ const submit = () => {
                     </div>
                     <div class="url">{{ environment.horizonUrl }}</div>
                     <div
-                        class="nc-num"
-                        style="
-                            margin-top: 2px;
-                            font-size: 11px;
-                            color: var(--nc-neutral-600);
-                        "
+                        class="nc-num nc-t-2xs nc-tone-faint"
+                        style="margin-top: 2px"
                     >
                         {{
                             environment.basicAuthUser
@@ -696,11 +650,8 @@ const submit = () => {
                     />
                     <div
                         v-if="refusedCredentials(rows[index].outcome)"
-                        style="
-                            margin-top: 2px;
-                            font-size: 11px;
-                            color: var(--nc-neutral-500);
-                        "
+                        class="nc-t-2xs nc-tone-muted"
+                        style="margin-top: 2px"
                     >
                         {{
                             $t(
@@ -712,22 +663,9 @@ const submit = () => {
             </div>
 
             <div class="nc-field mt-[var(--nc-space-2)]">
-                <label for="wizard-rules">{{
-                    $t('Alert rules to apply')
-                }}</label>
-                <select
-                    id="wizard-rules"
-                    class="nc-input"
-                    disabled
-                    aria-describedby="wizard-rules-hint"
-                >
-                    <option>{{ $t('Organization default') }}</option>
-                </select>
-                <div
-                    id="wizard-rules-hint"
-                    class="mt-1"
-                    style="font-size: 11px; color: var(--nc-neutral-600)"
-                >
+                <span class="block">{{ $t('Alert rules to apply') }}</span>
+                <p class="nc-t-sm">{{ $t('Organization default') }}</p>
+                <div class="nc-t-2xs nc-tone-faint mt-1">
                     {{
                         $t(
                             'The organization defaults apply from the first reading; thresholds per environment name are set on the Alert settings page.',
@@ -736,7 +674,7 @@ const submit = () => {
                 </div>
             </div>
 
-            <div style="font-size: 12px; color: var(--nc-neutral-400)">
+            <div class="nc-t-xs nc-tone-soft">
                 {{
                     $t(
                         'A failed test does not stop you: the environment reads unreachable until Horizon answers.',
@@ -791,9 +729,6 @@ const submit = () => {
     overflow: hidden;
     padding: var(--nc-space-3) var(--nc-space-3) var(--nc-space-3)
         var(--nc-space-4);
-    border-radius: var(--nc-radius-md);
-    background: var(--nc-surface);
-    box-shadow: var(--nc-shadow-sm);
 }
 
 .check {
@@ -801,16 +736,6 @@ const submit = () => {
     align-items: flex-start;
     gap: 10px;
     padding: var(--nc-space-3);
-    border-radius: var(--nc-radius-md);
-    background: var(--nc-surface);
-    box-shadow: var(--nc-shadow-sm);
-}
-
-.pill {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: var(--nc-radius-sm);
-    font-size: 12px;
 }
 
 .url {

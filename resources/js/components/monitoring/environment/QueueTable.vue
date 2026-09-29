@@ -18,7 +18,7 @@ const { waitThreshold } = defineProps<{
 <template>
     <SectionCard :title="$t('Workload by queue')">
         <template v-if="note" #actions>
-            <span style="font-size: 11px; color: var(--st-warn)">{{
+            <span class="nc-t-2xs" style="color: var(--st-warn)">{{
                 note
             }}</span>
         </template>
@@ -28,36 +28,32 @@ const { waitThreshold } = defineProps<{
                     <tr>
                         <th>{{ $t('Queue') }}</th>
                         <th>{{ $t('Supervisor') }}</th>
-                        <th style="text-align: right">{{ $t('Workers') }}</th>
-                        <th style="text-align: right">{{ $t('Pending') }}</th>
-                        <th style="text-align: right">{{ $t('Wait') }}</th>
-                        <th style="text-align: right">{{ $t('Runtime') }}</th>
+                        <th class="nc-right">{{ $t('Workers') }}</th>
+                        <th class="nc-right">{{ $t('Pending') }}</th>
+                        <th class="nc-right">{{ $t('Wait') }}</th>
+                        <th class="nc-right">{{ $t('Runtime') }}</th>
                         <th>{{ $t('Status') }}</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-for="queue in queues" :key="queue.name">
-                        <td style="letter-spacing: 0.01em; font-size: 13px">
+                        <td class="nc-t-sm" style="letter-spacing: 0.01em">
                             {{ queue.name }}
                         </td>
                         <td
-                            style="
-                                font-size: 12px;
-                                color: var(--nc-neutral-400);
-                                letter-spacing: 0.01em;
-                            "
+                            class="nc-t-xs nc-tone-soft"
+                            style="letter-spacing: 0.01em"
                         >
                             {{ queue.supervisor ?? '—' }}
                         </td>
-                        <td class="nc-num" style="text-align: right">
+                        <td class="nc-num nc-right">
                             {{ queue.workers }}
                         </td>
-                        <td class="nc-num" style="text-align: right">
+                        <td class="nc-num nc-right">
                             {{ formatCount(queue.pending) }}
                         </td>
                         <td
-                            class="nc-num"
-                            style="text-align: right"
+                            class="nc-num nc-right"
                             :style="{
                                 color: waitColor(
                                     queue.waitSeconds,
@@ -67,13 +63,7 @@ const { waitThreshold } = defineProps<{
                         >
                             {{ formatWait(queue.waitSeconds) }}
                         </td>
-                        <td
-                            class="nc-num"
-                            style="
-                                text-align: right;
-                                color: var(--nc-neutral-400);
-                            "
-                        >
+                        <td class="nc-num nc-right nc-tone-soft">
                             {{
                                 queue.runtimeSeconds === null
                                     ? '—'
@@ -82,8 +72,7 @@ const { waitThreshold } = defineProps<{
                         </td>
                         <td>
                             <span
-                                class="inline-flex items-center gap-[5px]"
-                                style="font-size: 12px"
+                                class="nc-t-xs inline-flex items-center gap-[5px]"
                                 :style="{ color: statusColor(queue.status) }"
                             >
                                 <span

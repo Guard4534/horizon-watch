@@ -9,11 +9,11 @@ import {
     PhTranslate,
     PhUsersThree,
 } from '@phosphor-icons/vue';
-import { computed, onMounted, watch } from 'vue';
+import { computed, watchEffect } from 'vue';
 import LocaleSwitch from '@/components/LocaleSwitch.vue';
 import AlertEmailsToggle from '@/components/settings/AlertEmailsToggle.vue';
 import TeamSwitcher from '@/components/TeamSwitcher.vue';
-import { useInitials } from '@/composables/useInitials';
+import { getInitials } from '@/lib/initials';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { logout } from '@/routes';
@@ -33,24 +33,27 @@ const { page } = defineProps<{
 const shared = usePage();
 const slug = useTeamSlug();
 const user = computed(() => shared.props.auth.user);
-const { getInitials } = useInitials();
 
 const isMobile = useIsMobile();
 
-function leaveIfWide(): void {
-    if (!isMobile.value) {
-        router.visit(profileEdit(), { replace: true });
-    }
-}
-
-onMounted(leaveIfWide);
-watch(isMobile, leaveIfWide);
+watchEffect(
+    () => {
+        if (!isMobile.value) {
+            router.visit(profileEdit(), { replace: true });
+        }
+    },
+    { flush: 'post' },
+);
 </script>
 
 <template>
     <Head :title="$t('Profile')" />
 
-    <div class="flex flex-col" style="padding-bottom: var(--nc-space-4)">
+    <div
+        v-if="isMobile"
+        class="flex flex-col"
+        style="padding-bottom: var(--nc-space-4)"
+    >
         <div
             class="flex items-center gap-[10px]"
             style="padding: var(--nc-space-4)"
@@ -60,10 +63,7 @@ watch(isMobile, leaveIfWide);
                 <div class="truncate" style="font-size: 14px">
                     {{ user.name }}
                 </div>
-                <div
-                    class="truncate"
-                    style="font-size: 11px; color: var(--nc-neutral-500)"
-                >
+                <div class="nc-t-2xs nc-tone-muted truncate">
                     {{ user.email }}
                 </div>
             </div>

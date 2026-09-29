@@ -13,19 +13,18 @@ defineProps<{
 </script>
 
 <template>
-    <Link :href="href" class="sidebar-link" :class="{ 'is-active': active }">
+    <Link
+        :href="href"
+        class="sidebar-link"
+        :class="{ 'is-active': active }"
+        :aria-current="active ? 'page' : undefined"
+    >
         <component :is="icon" :size="16" />
         {{ $t(label) }}
         <span
             v-if="badge"
-            class="nc-num ml-auto"
-            style="
-                font-size: 10px;
-                padding: 1px 6px;
-                border-radius: 99px;
-                background: var(--nc-accent-800);
-                color: var(--nc-accent-100);
-            "
+            class="nc-num nc-tag nc-tag-sm nc-tag-accent ml-auto"
+            style="border-radius: 99px"
             >{{ badge }}</span
         >
     </Link>

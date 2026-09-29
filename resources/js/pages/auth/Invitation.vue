@@ -35,13 +35,7 @@ const flushOnSignOut = () => router.flushAll();
     <Head :title="$t('You have been invited')" />
 
     <template v-if="isOpen">
-        <p
-            style="
-                font-size: 13px;
-                color: var(--nc-neutral-400);
-                margin: 0 0 var(--nc-space-4);
-            "
-        >
+        <p class="nc-t-sm nc-tone-soft" style="margin: 0 0 var(--nc-space-4)">
             {{ $t('Complete your profile to join the organization.') }}
         </p>
 
@@ -124,11 +118,8 @@ const flushOnSignOut = () => router.flushAll();
 
         <template v-else>
             <p
-                style="
-                    font-size: 11px;
-                    color: var(--nc-neutral-600);
-                    margin: var(--nc-space-3) 0 0;
-                "
+                class="nc-t-2xs nc-tone-faint"
+                style="margin: var(--nc-space-3) 0 0"
             >
                 {{
                     $t('Invitation sent to :email', { email: page.email ?? '' })
@@ -203,12 +194,8 @@ const flushOnSignOut = () => router.flushAll();
 
     <div
         v-if="showLoginFooter"
-        class="text-center"
-        style="
-            font-size: 12px;
-            color: var(--nc-neutral-500);
-            margin-top: var(--nc-space-4);
-        "
+        class="nc-t-xs nc-tone-muted text-center"
+        style="margin-top: var(--nc-space-4)"
     >
         <span>{{ $t('Or, return to') }}&nbsp;</span>
         <TextLink :href="login()">{{ $t('log in') }}</TextLink>

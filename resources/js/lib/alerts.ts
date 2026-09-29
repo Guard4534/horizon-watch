@@ -51,7 +51,7 @@ export function isMuted(alert: App.Data.Monitoring.AlertData): boolean {
     return alert.mutedUntilResolved || alert.mutedUntil !== null;
 }
 
-export function formatMutedUntil(
+function formatMutedUntil(
     iso: string,
     locale: string,
     now: Date = new Date(),

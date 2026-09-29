@@ -25,6 +25,19 @@ export function visibilityLabel(
     }
 }
 
+export function assignableRoleName(
+    role: (typeof ASSIGNABLE_ROLES)[number],
+): string {
+    switch (role) {
+        case 'admin':
+            return trans('Admin');
+        case 'member':
+            return trans('Member');
+        case 'viewer':
+            return trans('Viewer');
+    }
+}
+
 export function roleTagClass(role: App.Enums.TeamRole): string {
     switch (role) {
         case 'owner':
@@ -49,7 +62,7 @@ export function losingTheLastAdmin(
     );
 }
 
-export function formatRelative(iso: string | null): string {
+export function formatRelative(iso: string | null, locale: string): string {
     if (!iso) {
         return '—';
     }
@@ -68,10 +81,9 @@ export function formatRelative(iso: string | null): string {
         ['minute', 60],
     ];
 
-    const formatter = new Intl.RelativeTimeFormat(
-        document.documentElement.lang || 'en',
-        { numeric: 'auto' },
-    );
+    const formatter = new Intl.RelativeTimeFormat(locale, {
+        numeric: 'auto',
+    });
 
     for (const [unit, size] of units) {
         if (Math.abs(seconds) >= size) {

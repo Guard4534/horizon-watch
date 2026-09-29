@@ -54,12 +54,9 @@ const pending = computed(() => busy.value.has(alert.id));
             </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-            <DropdownMenuLabel
-                style="font-weight: 400; color: var(--nc-neutral-500)"
-                >{{
-                    $t('Mute :rule', { rule: ruleLabel(alert.metric) })
-                }}</DropdownMenuLabel
-            >
+            <DropdownMenuLabel class="nc-tone-muted" style="font-weight: 400">{{
+                $t('Mute :rule', { rule: ruleLabel(alert.metric) })
+            }}</DropdownMenuLabel>
             <DropdownMenuItem
                 v-for="duration in MUTE_DURATIONS"
                 :key="duration"

@@ -2,6 +2,7 @@
 import { useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
+import { useLocale } from '@/composables/useLocale';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatRelative, roleTagClass } from '@/lib/members';
 import {
@@ -14,6 +15,7 @@ const { invitations } = defineProps<{
 }>();
 
 const slug = useTeamSlug();
+const { locale } = useLocale();
 
 const form = useForm({});
 
@@ -34,10 +36,7 @@ function act(
 
 <template>
     <SectionCard :title="$t('Pending invitations')">
-        <div
-            v-if="!invitations.length"
-            style="font-size: 12px; color: var(--nc-neutral-500)"
-        >
+        <div v-if="!invitations.length" class="nc-t-xs nc-tone-muted">
             {{ $t('No invitation is waiting to be accepted.') }}
         </div>
 
@@ -55,41 +54,25 @@ function act(
                 </thead>
                 <tbody>
                     <tr v-for="invitation in invitations" :key="invitation.id">
-                        <td style="font-size: 13px">{{ invitation.email }}</td>
+                        <td class="nc-t-sm">{{ invitation.email }}</td>
                         <td>
                             <span :class="roleTagClass(invitation.role)">{{
                                 invitation.roleLabel
                             }}</span>
                         </td>
-                        <td
-                            style="
-                                font-size: 12px;
-                                color: var(--nc-neutral-400);
-                            "
-                        >
+                        <td class="nc-t-xs nc-tone-soft">
                             {{ invitation.visibilityLabel }}
                         </td>
-                        <td
-                            style="
-                                font-size: 12px;
-                                color: var(--nc-neutral-500);
-                            "
-                        >
-                            {{ formatRelative(invitation.invitedAt) }}
+                        <td class="nc-t-xs nc-tone-muted">
+                            {{ formatRelative(invitation.invitedAt, locale) }}
                         </td>
-                        <td
-                            style="
-                                font-size: 12px;
-                                color: var(--nc-neutral-500);
-                            "
-                        >
-                            {{ formatRelative(invitation.expiresAt) }}
+                        <td class="nc-t-xs nc-tone-muted">
+                            {{ formatRelative(invitation.expiresAt, locale) }}
                         </td>
                         <td class="text-right whitespace-nowrap">
                             <button
                                 type="button"
-                                class="nc-btn nc-btn-ghost"
-                                style="font-size: 12px"
+                                class="nc-btn nc-btn-ghost nc-t-xs"
                                 :disabled="busy === invitation.id"
                                 @click="act(invitation, resendInvitation)"
                             >
@@ -97,11 +80,7 @@ function act(
                             </button>
                             <button
                                 type="button"
-                                class="nc-btn nc-btn-ghost"
-                                style="
-                                    font-size: 12px;
-                                    color: var(--nc-neutral-400);
-                                "
+                                class="nc-btn nc-btn-ghost nc-t-xs nc-tone-soft"
                                 :disabled="busy === invitation.id"
                                 @click="act(invitation, revokeInvitation)"
                             >

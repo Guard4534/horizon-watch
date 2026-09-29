@@ -23,11 +23,8 @@ const src = computed(() =>
     <SectionCard :title="$t('Email preview')">
         <div
             v-if="alert === null || src === null"
-            style="
-                font-size: 12px;
-                line-height: 1.5;
-                color: var(--nc-neutral-500);
-            "
+            class="nc-t-xs nc-tone-muted"
+            style="line-height: 1.5"
         >
             {{
                 $t(
@@ -37,8 +34,7 @@ const src = computed(() =>
         </div>
         <template v-else>
             <div
-                class="mb-[var(--nc-space-2)] flex items-center gap-[7px]"
-                style="font-size: 11px; color: var(--nc-neutral-500)"
+                class="nc-t-2xs nc-tone-muted mb-[var(--nc-space-2)] flex items-center gap-[7px]"
             >
                 <EnvSwatch :color="alert.color" shape="bar" :size="11" />
                 <span class="min-w-0 truncate"
@@ -55,12 +51,8 @@ const src = computed(() =>
                 :title="$t('Email preview')"
             />
             <div
-                style="
-                    font-size: 11px;
-                    color: var(--nc-neutral-600);
-                    margin-top: var(--nc-space-2);
-                    line-height: 1.5;
-                "
+                class="nc-t-2xs nc-tone-faint"
+                style="margin-top: var(--nc-space-2); line-height: 1.5"
             >
                 {{
                     $t(

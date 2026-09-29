@@ -11,58 +11,61 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { leave as leaveTeamAction } from '@/routes/teams';
-import type { Team } from '@/types';
+import { leave } from '@/routes/teams';
 
-type Props = {
-    team: Team | null;
-    open: boolean;
-};
-
-const props = defineProps<Props>();
-const emit = defineEmits<{
-    'update:open': [value: boolean];
-}>();
+const organization = defineModel<App.Data.Teams.UserTeamData | null>(
+    'organization',
+    { required: true },
+);
 
 const processing = ref(false);
 
-const leaveTeam = () => {
-    if (!props.team) {
+function confirm(): void {
+    const team = organization.value;
+
+    if (!team) {
         return;
     }
 
-    router.visit(leaveTeamAction(props.team.slug), {
+    router.visit(leave(team.slug), {
         onStart: () => (processing.value = true),
         onFinish: () => (processing.value = false),
-        onSuccess: () => emit('update:open', false),
+        onSuccess: () => (organization.value = null),
     });
-};
+}
 </script>
 
 <template>
-    <Dialog :open="props.open" @update:open="emit('update:open', $event)">
+    <Dialog
+        :open="organization !== null"
+        @update:open="(open) => !open && (organization = null)"
+    >
         <DialogContent>
             <DialogHeader>
-                <DialogTitle>{{ $t('Leave team') }}</DialogTitle>
+                <DialogTitle>{{ $t('Leave the organization') }}</DialogTitle>
                 <DialogDescription>
-                    {{ $t('Are you sure you want to leave') }}
-                    <strong>{{ props.team?.name }}</strong
-                    >?
+                    {{
+                        $t(
+                            'You lose access to every environment of this organization. Your account and your other organizations are untouched, and you can be invited again.',
+                        )
+                    }}
                 </DialogDescription>
             </DialogHeader>
 
+            <p class="font-medium">{{ organization?.name }}</p>
+
             <DialogFooter class="gap-2">
                 <DialogClose as-child>
-                    <Button variant="secondary"> {{ $t('Cancel') }} </Button>
+                    <Button variant="secondary">{{ $t('Cancel') }}</Button>
                 </DialogClose>
 
                 <Button
                     data-test="leave-team-confirm"
                     variant="destructive"
                     :disabled="processing"
-                    @click="leaveTeam"
+                    @click="confirm"
                 >
-                    {{ $t('Leave team') }}
+                    {{ $t('Leave the organization') }}
                 </Button>
             </DialogFooter>
         </DialogContent>

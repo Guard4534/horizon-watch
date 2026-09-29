@@ -213,13 +213,7 @@ const webhookSaved = computed(
                             :aria-label="$t('Quiet hours start')"
                             :aria-invalid="errors.quietFrom ? true : undefined"
                         />
-                        <span
-                            style="
-                                font-size: 12px;
-                                color: var(--nc-neutral-500);
-                            "
-                            >→</span
-                        >
+                        <span class="nc-t-xs nc-tone-muted">→</span>
                         <input
                             v-model="form.quietTo"
                             class="nc-input nc-num"
@@ -316,7 +310,7 @@ const webhookSaved = computed(
                     :new-secret="newWebhookSecret"
                 />
                 <div class="signature">
-                    <div style="color: var(--nc-neutral-500)">
+                    <div class="nc-tone-muted">
                         {{
                             $t(
                                 'Each delivery is signed with HMAC SHA-256 over the timestamp, a dot and the raw body:',
@@ -339,8 +333,7 @@ const webhookSaved = computed(
             >
                 <button
                     type="button"
-                    class="nc-btn nc-btn-secondary"
-                    style="font-size: 12px"
+                    class="nc-btn nc-btn-secondary nc-t-xs"
                     :disabled="testing !== null || form.isDirty"
                     :title="
                         form.isDirty
@@ -356,8 +349,7 @@ const webhookSaved = computed(
                 </button>
                 <button
                     type="button"
-                    class="nc-btn nc-btn-secondary"
-                    style="font-size: 12px"
+                    class="nc-btn nc-btn-secondary nc-t-xs"
                     :disabled="
                         testing !== null || form.isDirty || !webhookSaved
                     "
@@ -398,11 +390,10 @@ const webhookSaved = computed(
 
         <div
             v-else
-            class="grid"
+            class="nc-t-sm grid"
             style="
                 grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
                 gap: var(--nc-space-4);
-                font-size: 13px;
             "
         >
             <div>

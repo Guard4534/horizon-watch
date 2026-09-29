@@ -1,5 +1,4 @@
 import type { Auth } from '@/types/auth';
-import type { Team } from '@/types/teams';
 
 declare module 'vite/client' {
     interface ImportMetaEnv {
@@ -19,8 +18,8 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             locale: App.Enums.Locale;
-            currentTeam: Team | null;
-            teams: Team[];
+            currentTeam: App.Data.Teams.UserTeamData | null;
+            teams: App.Data.Teams.UserTeamData[];
             openAlertCount: number | null;
             canManageApplications: boolean;
             visibilityRestricted: boolean;

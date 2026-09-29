@@ -39,12 +39,8 @@ function send(channel: App.Enums.NotificationChannel): void {
 <template>
     <SectionCard :title="$t('Delivery test')">
         <div
-            style="
-                font-size: 12px;
-                color: var(--nc-neutral-400);
-                line-height: 1.5;
-                margin-bottom: var(--nc-space-3);
-            "
+            class="nc-t-xs nc-tone-soft"
+            style="line-height: 1.5; margin-bottom: var(--nc-space-3)"
         >
             {{
                 $t(
@@ -53,13 +49,8 @@ function send(channel: App.Enums.NotificationChannel): void {
             }}
         </div>
         <div
-            class="flex flex-col"
-            style="
-                gap: var(--nc-space-2);
-                font-size: 12px;
-                color: var(--nc-neutral-500);
-                margin-bottom: var(--nc-space-3);
-            "
+            class="nc-t-xs nc-tone-muted flex flex-col"
+            style="gap: var(--nc-space-2); margin-bottom: var(--nc-space-3)"
         >
             <div class="flex items-center gap-2">
                 <PhEnvelopeSimple :size="14" class="flex-none" />
@@ -81,8 +72,7 @@ function send(channel: App.Enums.NotificationChannel): void {
         <div class="flex flex-wrap" style="gap: var(--nc-space-2)">
             <button
                 type="button"
-                class="nc-btn nc-btn-secondary"
-                style="font-size: 12px"
+                class="nc-btn nc-btn-secondary nc-t-xs"
                 :disabled="sending !== null"
                 @click="send('mail')"
             >
@@ -91,8 +81,7 @@ function send(channel: App.Enums.NotificationChannel): void {
             </button>
             <button
                 type="button"
-                class="nc-btn nc-btn-secondary"
-                style="font-size: 12px"
+                class="nc-btn nc-btn-secondary nc-t-xs"
                 :disabled="sending !== null || !settings.webhookUrl"
                 :title="
                     settings.webhookUrl ? undefined : $t('No webhook is saved.')
@@ -104,12 +93,8 @@ function send(channel: App.Enums.NotificationChannel): void {
             </button>
         </div>
         <div
-            style="
-                font-size: 11px;
-                color: var(--nc-neutral-600);
-                margin-top: var(--nc-space-3);
-                line-height: 1.5;
-            "
+            class="nc-t-2xs nc-tone-faint"
+            style="margin-top: var(--nc-space-3); line-height: 1.5"
         >
             {{
                 $t(

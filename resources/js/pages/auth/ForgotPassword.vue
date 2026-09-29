@@ -24,8 +24,8 @@ defineProps<{
 
     <div
         v-if="status"
-        style="font-size: 12px; color: var(--st-ok)"
-        class="mb-4 text-center"
+        class="nc-t-xs mb-4 text-center"
+        style="color: var(--st-ok)"
     >
         {{ status }}
     </div>
@@ -61,12 +61,8 @@ defineProps<{
     </Form>
 
     <div
-        class="text-center"
-        style="
-            font-size: 12px;
-            color: var(--nc-neutral-500);
-            margin-top: var(--nc-space-4);
-        "
+        class="nc-t-xs nc-tone-muted text-center"
+        style="margin-top: var(--nc-space-4)"
     >
         <span>{{ $t('Or, return to') }}</span>
         <TextLink :href="login()">{{ $t('log in') }}</TextLink>

@@ -5,5 +5,5 @@ defineProps<{
 </script>
 
 <template>
-    <div v-if="message" class="nc-t-xs nc-tone-down">{{ message }}</div>
+    <div v-if="message" class="nc-t-2xs nc-tone-down mt-1">{{ message }}</div>
 </template>

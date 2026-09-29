@@ -4,6 +4,10 @@ import { PhCaretDown, PhCaretRight } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import EnvironmentTile from '@/components/monitoring/wall/EnvironmentTile.vue';
+import {
+    needsAttention,
+    worstTone,
+} from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import {
     envColor,
@@ -23,17 +27,10 @@ const forced = defineModel<boolean | undefined>('expanded');
 
 const slug = useTeamSlug();
 
-const troubled = computed(() =>
-    environments.filter(
-        (environment) =>
-            environment.status !== null && environment.status !== 'active',
-    ),
+const troubled = computed(() => environments.filter(needsAttention));
+const worstColor = computed(
+    () => worstTone(troubled.value) ?? 'var(--nc-neutral-500)',
 );
-const worstColor = computed(() => {
-    const status = troubled.value[0]?.status;
-
-    return status ? statusColor(status) : 'var(--nc-neutral-500)';
-});
 
 const expanded = computed(() => forced.value ?? troubled.value.length > 0);
 
@@ -50,10 +47,9 @@ function dotLabel(environment: App.Data.Monitoring.EnvironmentData): string {
 }
 
 function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
-    const halo =
-        environment.status !== null && environment.status !== 'active'
-            ? `0 0 0 2px color-mix(in srgb, ${statusColor(environment.status)} 55%, transparent)`
-            : undefined;
+    const halo = needsAttention(environment)
+        ? `0 0 0 2px color-mix(in srgb, ${statusColor(environment.status!)} 55%, transparent)`
+        : undefined;
 
     return { background: envColor(environment.color), boxShadow: halo };
 }
@@ -98,7 +94,7 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
             >
             <span
                 v-if="troubled.length"
-                class="badge"
+                class="nc-tag nc-tag-sm flex-none"
                 :style="{
                     background: `color-mix(in srgb, ${worstColor} 18%, transparent)`,
                     color: worstColor,
@@ -107,15 +103,9 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
                     $t(':count to handle', { count: String(troubled.length) })
                 }}</span
             >
-            <span
-                v-else
-                class="badge"
-                style="
-                    background: var(--nc-neutral-900);
-                    color: var(--nc-neutral-500);
-                "
-                >{{ $t('all good') }}</span
-            >
+            <span v-else class="nc-tag nc-tag-sm nc-tag-neutral flex-none">{{
+                $t('all good')
+            }}</span>
             <span
                 v-if="!expanded"
                 class="flex min-w-0 flex-wrap items-center gap-[5px]"
@@ -130,16 +120,14 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
                     :aria-label="dotLabel(environment)"
                 />
             </span>
-            <span
-                class="nc-num ml-auto flex-none"
-                style="font-size: 11px; color: var(--nc-neutral-600)"
+            <span class="nc-num nc-t-2xs nc-tone-faint ml-auto flex-none"
                 >{{
                     $tChoice(
                         ':count environment|:count environments',
                         environments.length,
                     )
                 }}
-                · {{ formatCount(pending) }} pending</span
+                · {{ formatCount(pending) }} {{ $t('pending') }}</span
             >
         </div>
         <div
@@ -194,13 +182,6 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
 
 .name:hover {
     color: var(--nc-accent);
-}
-
-.badge {
-    flex: none;
-    font-size: 10px;
-    padding: 1px 7px;
-    border-radius: var(--nc-radius-sm);
 }
 
 .dot {

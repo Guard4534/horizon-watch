@@ -82,10 +82,7 @@ function pick(scope: string): void {
                         }}</span
                     >
                 </span>
-                <span
-                    class="mt-px block"
-                    style="font-size: 11px; color: var(--nc-neutral-600)"
-                >
+                <span class="nc-t-2xs nc-tone-faint mt-px block">
                     {{
                         scope.id === 'organization'
                             ? $t('applies to everything')

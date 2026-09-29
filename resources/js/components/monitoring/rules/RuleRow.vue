@@ -83,15 +83,11 @@ function readThreshold(event: Event): void {
         }"
     >
         <div class="min-w-0">
-            <div
-                class="flex flex-wrap items-center gap-2"
-                style="font-size: 13px"
-            >
+            <div class="nc-t-sm flex flex-wrap items-center gap-2">
                 <component
                     :is="ruleIcon(rule.metric)"
                     :size="15"
-                    class="flex-none"
-                    style="color: var(--nc-neutral-400)"
+                    class="nc-tone-soft flex-none"
                 />
                 <span :style="{ opacity: shown.enabled ? 1 : 0.55 }">{{
                     ruleLabel(rule.metric)
@@ -107,10 +103,7 @@ function readThreshold(event: Event): void {
                     >{{ $t('from org') }}</span
                 >
             </div>
-            <div
-                class="mt-[2px]"
-                style="font-size: 11px; color: var(--nc-neutral-600)"
-            >
+            <div class="nc-t-2xs nc-tone-faint mt-[2px]">
                 {{ ruleHint(rule.metric) }}
             </div>
         </div>
@@ -122,9 +115,8 @@ function readThreshold(event: Event): void {
                         type="number"
                         inputmode="numeric"
                         step="1"
-                        class="nc-input nc-num"
+                        class="nc-input nc-num nc-right"
                         :class="{ 'is-inherited': isInherited('threshold') }"
-                        style="text-align: right"
                         :min="rule.minimum"
                         :max="rule.maximum"
                         :value="shown.threshold"
@@ -137,11 +129,9 @@ function readThreshold(event: Event): void {
                         :aria-invalid="errors.threshold ? true : undefined"
                         @input="readThreshold"
                     />
-                    <span
-                        class="flex-none"
-                        style="font-size: 11px; color: var(--nc-neutral-500)"
-                        >{{ unitLabel(rule.unit) }}</span
-                    >
+                    <span class="nc-t-2xs nc-tone-muted flex-none">{{
+                        unitLabel(rule.unit)
+                    }}</span>
                     <InheritToggle
                         v-if="environmentScope"
                         :inherited="isInherited('threshold')"
@@ -156,9 +146,8 @@ function readThreshold(event: Event): void {
             <div class="cell">
                 <div class="flex items-center gap-[6px]">
                     <select
-                        class="nc-input"
+                        class="nc-input nc-t-xs"
                         :class="{ 'is-inherited': isInherited('severity') }"
-                        style="font-size: 12px"
                         :value="shown.severity"
                         :disabled="isInherited('severity')"
                         :aria-label="
@@ -190,11 +179,10 @@ function readThreshold(event: Event): void {
             <div class="cell">
                 <div class="flex items-center gap-[6px]">
                     <label
-                        class="nc-radio check"
+                        class="nc-radio check nc-t-xs"
                         :class="{
                             'is-inherited': isInherited('notifyByEmail'),
                         }"
-                        style="font-size: 12px"
                     >
                         <input
                             type="checkbox"
@@ -225,9 +213,8 @@ function readThreshold(event: Event): void {
             <div class="cell">
                 <div class="flex items-center gap-[6px]">
                     <label
-                        class="nc-radio check"
+                        class="nc-radio check nc-t-xs"
                         :class="{ 'is-inherited': isInherited('enabled') }"
-                        style="font-size: 12px"
                     >
                         <input
                             type="checkbox"
@@ -274,10 +261,10 @@ function readThreshold(event: Event): void {
             >
                 {{ severityLabel(shown.severity) }}
             </div>
-            <div class="read-value" style="color: var(--nc-neutral-400)">
+            <div class="read-value nc-tone-soft">
                 {{ shown.notifyByEmail ? $t('Email') : $t('No email') }}
             </div>
-            <div class="read-value" style="color: var(--nc-neutral-400)">
+            <div class="read-value nc-tone-soft">
                 {{ shown.enabled ? $t('Active') : $t('Disabled') }}
             </div>
         </template>

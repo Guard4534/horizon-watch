@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import ApplicationList from '@/components/mobile/applications/ApplicationList.vue';
-import EmptyState from '@/components/monitoring/EmptyState.vue';
+import VisibilityEmptyState from '@/components/monitoring/VisibilityEmptyState.vue';
 import ApplicationSection from '@/components/monitoring/applications/ApplicationSection.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { useVisibility } from '@/composables/useVisibility';
 import { create as createApplication } from '@/routes/applications';
 
 defineOptions({
@@ -19,16 +20,10 @@ const { page } = defineProps<{
 
 const search = ref('');
 const slug = useTeamSlug();
-const shared = usePage();
 const isMobile = useIsMobile();
+const { canManageApplications } = useVisibility();
 
 const nothingVisible = computed(() => page.groups.length === 0);
-
-const somethingIsHidden = computed(
-    () =>
-        shared.props.visibilityRestricted &&
-        shared.props.organizationHasEnvironments,
-);
 
 const groups = computed(() => {
     const needle = search.value.trim().toLowerCase();
@@ -46,17 +41,9 @@ const groups = computed(() => {
 <template>
     <Head :title="$t('Applications')" />
 
-    <div
-        class="flex flex-col"
-        :style="{
-            padding: isMobile
-                ? 'var(--nc-space-3) var(--nc-space-4)'
-                : 'var(--nc-space-6)',
-            gap: isMobile ? 'var(--nc-space-3)' : 'var(--nc-space-4)',
-        }"
-    >
+    <div class="nc-page stack flex flex-col">
         <div class="flex flex-wrap items-center" style="gap: var(--nc-space-3)">
-            <div style="font-size: 13px; color: var(--nc-neutral-400)">
+            <div class="nc-t-sm nc-tone-soft">
                 {{
                     $t(
                         ':applications applications · :environments connected environments',
@@ -69,42 +56,59 @@ const groups = computed(() => {
             </div>
             <input
                 v-model="search"
-                class="nc-input ml-auto"
-                :style="{ maxWidth: isMobile ? '100%' : '230px' }"
+                class="nc-input search ml-auto"
                 :placeholder="$t('Search application')"
             />
             <Link
-                v-if="shared.props.canManageApplications"
+                v-if="canManageApplications"
                 class="nc-btn nc-btn-primary"
                 :href="createApplication(slug)"
             >
                 <PhPlus :size="14" />{{ $t('Add application') }}
             </Link>
         </div>
-        <EmptyState
+        <VisibilityEmptyState
             v-if="nothingVisible"
             :icon="PhStackSimple"
             :kicker="$t('Nothing connected')"
             :title="$t('No applications yet')"
             :body="
-                somethingIsHidden
+                canManageApplications
                     ? $t(
-                          'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
+                          'Add an application and its environments, and every one of them shows up here.',
                       )
-                    : shared.props.canManageApplications
-                      ? $t(
-                            'Add an application and its environments, and every one of them shows up here.',
-                        )
-                      : $t(
-                            'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
-                        )
+                    : $t(
+                          'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                      )
             "
         />
         <ApplicationList v-if="isMobile" :groups="groups" />
-        <ApplicationSection
-            v-for="group in isMobile ? [] : groups"
-            :key="group.application.id"
-            :group="group"
-        />
+        <template v-else>
+            <ApplicationSection
+                v-for="group in groups"
+                :key="group.application.id"
+                :group="group"
+            />
+        </template>
     </div>
 </template>
+
+<style scoped>
+.stack {
+    gap: var(--nc-space-4);
+}
+
+.search {
+    max-width: 230px;
+}
+
+@media (max-width: 639px) {
+    .stack {
+        gap: var(--nc-space-3);
+    }
+
+    .search {
+        max-width: 100%;
+    }
+}
+</style>

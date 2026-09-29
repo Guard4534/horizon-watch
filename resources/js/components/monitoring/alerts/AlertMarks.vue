@@ -17,8 +17,8 @@ const muted = computed(() => mutedText(alert, locale.value));
 <template>
     <div
         v-if="muted || alert.handledBy || alert.collectionPaused"
-        class="flex flex-col"
-        style="gap: 2px; font-size: 11px; color: var(--nc-neutral-500)"
+        class="nc-t-2xs nc-tone-muted flex flex-col"
+        style="gap: 2px"
     >
         <span v-if="muted" class="inline-flex items-center gap-[5px]">
             <PhBellSlash :size="12" class="flex-none" />

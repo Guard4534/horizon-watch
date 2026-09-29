@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { getInitials } from '@/composables/useInitials';
+import { getInitials } from '@/lib/initials';
 
 const props = defineProps<{
     organizationName: string;
@@ -42,8 +42,8 @@ const initials = computed(() => getInitials(props.organizationName));
             {{ initials }}
         </span>
         <div style="min-width: 0">
-            <div style="font-size: 13px">{{ organizationName }}</div>
-            <div style="font-size: 11px; color: var(--nc-neutral-500)">
+            <div class="nc-t-sm">{{ organizationName }}</div>
+            <div class="nc-t-2xs nc-tone-muted">
                 {{
                     $t('role: :role · :visibility', {
                         role: roleLabel,

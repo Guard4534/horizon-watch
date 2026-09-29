@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
 import { PhCheck, PhCaretUpDown, PhPlus } from '@phosphor-icons/vue';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
-import CreateTeamModal from '@/components/CreateTeamModal.vue';
+import { computed } from 'vue';
+import CreateOrganizationModal from '@/components/teams/CreateOrganizationModal.vue';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -11,27 +11,21 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useIsMobile } from '@/composables/useIsMobile';
 import { switchMethod } from '@/routes/teams';
-import type { Team } from '@/types';
 
 const page = usePage();
-const isMobile = ref(false);
-let mediaQuery: MediaQueryList | null = null;
-const updateIsMobile = () => {
-    if (mediaQuery) {
-        isMobile.value = mediaQuery.matches;
-    }
-};
+const isMobile = useIsMobile();
 
 const currentTeam = computed(() => page.props.currentTeam);
 const teams = computed(() => page.props.teams ?? []);
 
-const switchTeam = (team: Team) => {
+const switchTeam = (team: App.Data.Teams.UserTeamData) => {
     const previousTeamSlug = currentTeam.value?.slug;
 
     router.visit(switchMethod(team.slug), {
         onFinish: () => {
-            if (!previousTeamSlug || typeof window === 'undefined') {
+            if (!previousTeamSlug) {
                 router.reload();
 
                 return;
@@ -52,16 +46,6 @@ const switchTeam = (team: Team) => {
         },
     });
 };
-
-onMounted(() => {
-    mediaQuery = window.matchMedia('(max-width: 767px)');
-    updateIsMobile();
-    mediaQuery.addEventListener('change', updateIsMobile);
-});
-
-onUnmounted(() => {
-    mediaQuery?.removeEventListener('change', updateIsMobile);
-});
 </script>
 
 <template>
@@ -70,25 +54,16 @@ onUnmounted(() => {
             <button
                 type="button"
                 data-test="team-switcher-trigger"
-                class="org-card block w-full text-left"
+                class="nc-card org-card block w-full text-left"
             >
                 <span class="nc-label block">{{ $t('Organization') }}</span>
-                <span
-                    class="mt-[3px] flex items-center gap-[6px]"
-                    style="font-size: 13px"
-                >
+                <span class="nc-t-sm mt-[3px] flex items-center gap-[6px]">
                     {{ currentTeam?.name ?? $t('Select organization') }}
-                    <PhCaretUpDown
-                        :size="13"
-                        class="ml-auto"
-                        style="color: var(--nc-neutral-500)"
-                    />
+                    <PhCaretUpDown :size="13" class="nc-tone-muted ml-auto" />
                 </span>
-                <span
-                    class="mt-[2px] block"
-                    style="font-size: 11px; color: var(--nc-neutral-500)"
-                    >{{ currentTeam?.roleLabel }}</span
-                >
+                <span class="nc-t-2xs nc-tone-muted mt-[2px] block">{{
+                    currentTeam?.roleLabel
+                }}</span>
             </button>
         </DropdownMenuTrigger>
 
@@ -109,13 +84,10 @@ onUnmounted(() => {
                 @click="switchTeam(team)"
             >
                 {{ team.name }}
-                <PhCheck
-                    v-if="currentTeam?.id === team.id"
-                    class="ml-auto h-4 w-4"
-                />
+                <PhCheck v-if="team.isCurrent" class="ml-auto h-4 w-4" />
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <CreateTeamModal>
+            <CreateOrganizationModal>
                 <DropdownMenuItem
                     data-test="team-switcher-new-team"
                     class="cursor-pointer gap-2 p-2"
@@ -126,7 +98,7 @@ onUnmounted(() => {
                         $t('New organization')
                     }}</span>
                 </DropdownMenuItem>
-            </CreateTeamModal>
+            </CreateOrganizationModal>
         </DropdownMenuContent>
     </DropdownMenu>
 </template>
@@ -135,9 +107,6 @@ onUnmounted(() => {
 .org-card {
     padding: var(--nc-space-3);
     border: 0;
-    border-radius: var(--nc-radius-md);
-    background: var(--nc-surface);
-    box-shadow: var(--nc-shadow-sm);
     color: inherit;
     font: inherit;
     cursor: pointer;

@@ -14,8 +14,7 @@ import NodeCard from '@/components/monitoring/environment/NodeCard.vue';
 import QueueTable from '@/components/monitoring/environment/QueueTable.vue';
 import TrendChart from '@/components/monitoring/environment/TrendChart.vue';
 import {
-    failedColor,
-    formatAge,
+    failedTone,
     horizonStatusLabel,
     horizonStatusTone,
     pendingTone,
@@ -23,10 +22,10 @@ import {
 } from '@/components/monitoring/environment/readings';
 import MetricTile from '@/components/nocturne/MetricTile.vue';
 import StatusPill from '@/components/nocturne/StatusPill.vue';
+import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { thresholdOf } from '@/lib/alertRules';
 import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
 import { envColor, formatCount, formatWait, waitColor } from '@/lib/monitoring';
 import {
@@ -43,14 +42,13 @@ const { page } = defineProps<{
     page: App.Data.Pages.EnvironmentDetailPageData;
 }>();
 
-useLivePoll(['page', 'openAlertCount']);
+useLivePoll();
 
 const slug = useTeamSlug();
 const isMobile = useIsMobile();
-const environment = computed(() => page.environment);
-
-const threshold = (metric: App.Enums.AlertRuleMetric) =>
-    thresholdOf(environment.value, metric);
+const { environment, threshold, incident, lastKnown } = useEnvironmentDetail(
+    () => page,
+);
 
 const longRunningUnknown = computed(
     () =>
@@ -60,27 +58,7 @@ const longRunningUnknown = computed(
         environment.value.status === 'unreachable',
 );
 
-const incident = computed(() => {
-    const status = environment.value.status;
-
-    return status !== null && status !== 'active' ? status : null;
-});
-
-const lastKnown = computed(() => {
-    if (environment.value.readingError === null) {
-        return null;
-    }
-
-    const ages = page.nodes.map((node) => node.seenSecondsAgo);
-
-    return ages.length
-        ? trans('last known · :time ago', {
-              time: formatAge(Math.min(...ages)),
-          })
-        : trans('last known');
-});
-
-type Tile = { label: string; value: string; color: string; note: string };
+type Tile = { label: string; value: string; color?: string; note: string };
 
 const maxWaitNote = computed(() => {
     const seconds = threshold('queue.max_wait');
@@ -144,7 +122,7 @@ const tiles = computed<Tile[]>(() => [
     {
         label: failedLabel(environment.value.failedWindowMinutes),
         value: formatCount(environment.value.failedInWindow),
-        color: failedColor(
+        color: failedTone(
             environment.value.failedLastHour,
             threshold('jobs.failed_per_hour'),
         ),
@@ -169,7 +147,7 @@ const tiles = computed<Tile[]>(() => [
                 :style="{ background: envColor(environment.color) }"
             />
             <div class="min-w-0">
-                <div style="font-size: 11px; color: var(--nc-neutral-500)">
+                <div class="nc-t-2xs nc-tone-muted">
                     <Link :href="applicationsIndex(slug)">{{
                         $t('Applications')
                     }}</Link>
@@ -194,11 +172,10 @@ const tiles = computed<Tile[]>(() => [
             />
             <span
                 v-else
+                class="nc-t-xs nc-tone-muted"
                 style="
-                    font-size: 12px;
                     border-radius: var(--nc-radius-sm);
                     padding: 3px 9px;
-                    color: var(--nc-neutral-500);
                     border: 1px solid var(--nc-neutral-700);
                 "
                 >{{ statusText(environment) }}</span
@@ -222,8 +199,7 @@ const tiles = computed<Tile[]>(() => [
                     :href="environment.horizonUrl"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="nc-btn nc-btn-primary"
-                    style="font-size: 12px"
+                    class="nc-btn nc-btn-primary nc-t-xs"
                 >
                     <PhArrowSquareOut :size="14" />{{ $t('Open Horizon') }}
                 </a>
@@ -231,18 +207,16 @@ const tiles = computed<Tile[]>(() => [
         </div>
 
         <div
-            class="flex flex-wrap items-center"
-            style="
-                gap: 0 6px;
-                font-size: 11px;
-                color: var(--nc-neutral-500);
-                letter-spacing: 0.01em;
-            "
+            class="nc-t-2xs nc-tone-muted flex flex-wrap items-center"
+            style="gap: 0 6px; letter-spacing: 0.01em"
         >
             <span class="min-w-0 break-all">{{ environment.horizonUrl }}</span>
             <template v-if="environment.basicAuthUser">
                 <span>·</span>
-                <span>basic auth: {{ environment.basicAuthUser }}</span>
+                <span
+                    >{{ $t('basic auth') }}:
+                    {{ environment.basicAuthUser }}</span
+                >
             </template>
             <span>·</span>
             <ReadingFreshness
@@ -293,21 +267,18 @@ const tiles = computed<Tile[]>(() => [
                 <span style="font-size: 14px">{{
                     $t('Nodes (master supervisors)')
                 }}</span>
-                <span style="font-size: 11px; color: var(--nc-neutral-500)"
+                <span class="nc-t-2xs nc-tone-muted"
                     >{{ $t('one master per machine') }} ·
                     /horizon/api/masters</span
                 >
                 <span
                     v-if="lastKnown"
-                    class="ml-auto"
-                    style="font-size: 11px; color: var(--st-warn)"
+                    class="nc-t-2xs ml-auto"
+                    style="color: var(--st-warn)"
                     >{{ lastKnown }}</span
                 >
             </div>
-            <div
-                v-if="!page.nodes.length"
-                style="font-size: 12px; color: var(--nc-neutral-500)"
-            >
+            <div v-if="!page.nodes.length" class="nc-t-xs nc-tone-muted">
                 {{ $t('No master supervisor in the latest reading.') }}
             </div>
             <div

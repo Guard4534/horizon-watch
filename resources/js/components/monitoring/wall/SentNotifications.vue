@@ -16,6 +16,25 @@ const WEBHOOK_EVENTS: Record<App.Enums.SentNotificationKind, string> = {
     test: 'test',
 };
 
+function errorLabel(error: App.Enums.DeliveryError): string {
+    switch (error) {
+        case 'timeout':
+            return trans('timeout');
+        case 'blocked':
+            return trans('blocked');
+        case 'http_3xx':
+            return trans('http_3xx');
+        case 'http_4xx':
+            return trans('http_4xx');
+        case 'http_5xx':
+            return trans('http_5xx');
+        case 'unreachable':
+            return trans('unreachable');
+        case 'mail':
+            return trans('mail');
+    }
+}
+
 function prefix(
     notification: App.Data.Monitoring.SentNotificationData,
 ): string {
@@ -51,16 +70,13 @@ function text(
 
 <template>
     <SectionCard :title="$t('Notifications sent')">
-        <div
-            v-if="notifications.length === 0"
-            style="font-size: 12px; color: var(--nc-neutral-500)"
-        >
+        <div v-if="notifications.length === 0" class="nc-t-xs nc-tone-muted">
             {{ $t('No notification sent yet.') }}
         </div>
         <div
             v-else
-            class="flex flex-col"
-            style="gap: var(--nc-space-2); font-size: 12px"
+            class="nc-t-xs flex flex-col"
+            style="gap: var(--nc-space-2)"
         >
             <div
                 v-for="(notification, index) in notifications"
@@ -94,14 +110,16 @@ function text(
                             notification.target ||
                             notification.status === 'failed'
                         "
-                        class="flex items-center gap-[6px]"
-                        style="font-size: 11px; color: var(--nc-neutral-600)"
+                        class="nc-t-2xs nc-tone-faint flex items-center gap-[6px]"
                     >
                         <span
                             v-if="notification.status === 'failed'"
-                            class="flex-none"
-                            style="color: var(--st-down)"
-                            >{{ $t('not delivered') }}</span
+                            class="nc-tone-down flex-none"
+                            >{{
+                                notification.error
+                                    ? `${$t('not delivered')} · ${errorLabel(notification.error)}`
+                                    : $t('not delivered')
+                            }}</span
                         >
                         <span
                             v-if="notification.target"
@@ -110,11 +128,9 @@ function text(
                         >
                     </div>
                 </div>
-                <span
-                    class="nc-num flex-none"
-                    style="font-size: 11px; color: var(--nc-neutral-600)"
-                    >{{ formatElapsed(notification.minutesAgo) }}</span
-                >
+                <span class="nc-num nc-t-2xs nc-tone-faint flex-none">{{
+                    formatElapsed(notification.minutesAgo)
+                }}</span>
             </div>
         </div>
     </SectionCard>

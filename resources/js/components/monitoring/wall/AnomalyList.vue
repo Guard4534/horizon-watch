@@ -30,14 +30,13 @@ function color(alert: App.Data.Monitoring.AlertData): string {
 <template>
     <SectionCard :title="$t('Open anomalies')">
         <template #actions>
-            <Link :href="alertsIndex(slug)" style="font-size: 11px">{{
+            <Link :href="alertsIndex(slug)" class="nc-t-2xs">{{
                 $t('Full log')
             }}</Link>
         </template>
         <div
             v-if="anomalies.length === 0"
-            class="flex items-center gap-[9px]"
-            style="font-size: 12px; color: var(--nc-neutral-500)"
+            class="nc-t-xs nc-tone-muted flex items-center gap-[9px]"
         >
             <PhCheckCircle
                 :size="14"
@@ -75,11 +74,7 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                             ruleLabel(alert.metric)
                         }}</span>
                         <div
-                            class="mt-[3px] flex items-center gap-[6px]"
-                            style="
-                                font-size: 11px;
-                                color: var(--nc-neutral-500);
-                            "
+                            class="nc-t-2xs nc-tone-muted mt-[3px] flex items-center gap-[6px]"
                         >
                             <EnvSwatch
                                 :color="alert.color"
@@ -92,13 +87,7 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                                 {{ formatElapsed(alert.minutesAgo) }}</span
                             >
                         </div>
-                        <div
-                            class="nc-code mt-[3px]"
-                            style="
-                                font-size: 11px;
-                                color: var(--nc-neutral-600);
-                            "
-                        >
+                        <div class="nc-code nc-t-2xs nc-tone-faint mt-[3px]">
                             {{
                                 formatRule(
                                     alert.metric,
@@ -108,11 +97,7 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                             }}
                         </div>
                         <div
-                            class="mt-[3px] flex items-center gap-[6px]"
-                            style="
-                                font-size: 11px;
-                                color: var(--nc-neutral-600);
-                            "
+                            class="nc-t-2xs nc-tone-faint mt-[3px] flex items-center gap-[6px]"
                         >
                             <template v-if="alert.channels.length">
                                 <span

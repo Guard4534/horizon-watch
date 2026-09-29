@@ -3,31 +3,33 @@ import { Link } from '@inertiajs/vue3';
 import { PhMinus, PhTrendDown, PhTrendUp } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
+import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
-import { pendingTone } from '@/components/monitoring/environment/readings';
-import { useTeamSlug } from '@/composables/useTeamSlug';
+import {
+    calmStyle,
+    failedTone,
+    needsAttention,
+    pendingTone,
+    troubledStyle,
+} from '@/components/monitoring/environment/readings';
+import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { thresholdOf } from '@/lib/alertRules';
 import { failedWindowNote } from '@/lib/failedWindow';
 import {
-    envColor,
-    exceeds,
     formatCount,
     formatWait,
     statusColor,
     waitColor,
 } from '@/lib/monitoring';
-import { show as showEnvironment } from '@/routes/environments';
 
 const { environment } = defineProps<{
     environment: App.Data.Monitoring.EnvironmentData;
 }>();
 
-const slug = useTeamSlug();
+const environmentHref = useEnvironmentHref();
 
-const troubled = computed(
-    () => environment.status !== null && environment.status !== 'active',
-);
+const troubled = computed(() => needsAttention(environment));
 const tint = computed(() =>
     environment.status === null
         ? 'var(--nc-neutral-600)'
@@ -35,16 +37,7 @@ const tint = computed(() =>
 );
 
 const tileStyle = computed(() =>
-    troubled.value
-        ? {
-              background: `color-mix(in srgb, ${tint.value} 15%, var(--nc-surface))`,
-              boxShadow: `var(--nc-shadow-sm), 0 0 0 4px color-mix(in srgb, ${tint.value} 18%, transparent)`,
-          }
-        : {
-              background: 'var(--nc-surface)',
-              boxShadow: 'var(--nc-shadow-sm)',
-              opacity: 0.82,
-          },
+    troubled.value ? troubledStyle(tint.value) : calmStyle(),
 );
 
 const trend = computed(() => {
@@ -68,12 +61,10 @@ const trend = computed(() => {
 });
 
 const failedColor = computed(() =>
-    exceeds(
+    failedTone(
         environment.failedLastHour,
         thresholdOf(environment, 'jobs.failed_per_hour'),
-    )
-        ? 'var(--st-warn)'
-        : 'var(--nc-neutral-600)',
+    ),
 );
 
 const silence = computed<string | null>(() => {
@@ -91,16 +82,11 @@ const silence = computed<string | null>(() => {
 
 <template>
     <Link
-        :href="
-            showEnvironment({ current_team: slug, environment: environment.id })
-        "
+        :href="environmentHref(environment.id)"
         class="tile"
         :style="tileStyle"
     >
-        <span
-            class="absolute top-0 bottom-0 left-0 w-[4px]"
-            :style="{ background: envColor(environment.color) }"
-        />
+        <EnvSwatch :color="environment.color" shape="edge" :size="4" />
         <span class="flex items-center gap-[7px]">
             <span class="min-w-0 flex-1">
                 <EnvPill :name="environment.name" :color="environment.color" />
@@ -118,18 +104,9 @@ const silence = computed<string | null>(() => {
                 }"
                 >{{ formatCount(environment.pending) }}</span
             >
+            <span class="nc-micro nc-tone-faint">{{ $t('Pending') }}</span>
             <span
-                style="
-                    font-size: 9px;
-                    letter-spacing: 0.08em;
-                    text-transform: uppercase;
-                    color: var(--nc-neutral-600);
-                "
-                >pending</span
-            >
-            <span
-                class="ml-auto"
-                style="font-size: 11px"
+                class="nc-t-2xs ml-auto"
                 :style="{
                     color: waitColor(
                         environment.maxWaitSeconds,
@@ -152,8 +129,8 @@ const silence = computed<string | null>(() => {
             />
         </span>
         <span
-            class="nc-num mt-[5px] flex items-center gap-2"
-            style="font-size: 10px; color: var(--nc-neutral-600)"
+            class="nc-num nc-tone-faint mt-[5px] flex items-center gap-2"
+            style="font-size: 10px"
         >
             <span
                 class="inline-flex flex-none items-center gap-[3px]"

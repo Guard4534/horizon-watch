@@ -18,22 +18,21 @@ const slug = useTeamSlug();
 <template>
     <SectionCard :title="$t('Recent alerts')">
         <template #actions>
-            <Link :href="alertsIndex(slug)" style="font-size: 11px">{{
+            <Link :href="alertsIndex(slug)" class="nc-t-2xs">{{
                 $t('Full log')
             }}</Link>
         </template>
         <div
             v-if="!alerts.length"
-            class="flex items-center gap-[9px]"
-            style="font-size: 12px; color: var(--nc-neutral-500)"
+            class="nc-t-xs nc-tone-muted flex items-center gap-[9px]"
         >
             <PhCheckCircle :size="14" style="color: var(--st-ok)" />
             {{ $t('No open anomaly on the environments you watch.') }}
         </div>
         <div
             v-else
-            class="flex flex-col"
-            style="gap: var(--nc-space-3); font-size: 12px"
+            class="nc-t-xs flex flex-col"
+            style="gap: var(--nc-space-3)"
         >
             <div
                 v-for="alert in alerts"
@@ -63,7 +62,7 @@ const slug = useTeamSlug();
                     }"
                 />
                 <div class="min-w-0">
-                    <div style="font-size: 12px">
+                    <div class="nc-t-xs">
                         {{
                             alert.state === 'resolved'
                                 ? $t('Back within threshold · :environment', {
@@ -72,10 +71,7 @@ const slug = useTeamSlug();
                                 : `${ruleLabel(alert.metric)} · ${alert.environmentName}`
                         }}
                     </div>
-                    <div
-                        class="nc-num mt-[2px]"
-                        style="font-size: 11px; color: var(--nc-neutral-600)"
-                    >
+                    <div class="nc-num nc-t-2xs nc-tone-faint mt-[2px]">
                         {{
                             alert.resolvedMinutesAgo !== null
                                 ? $t('resolved :elapsed', {

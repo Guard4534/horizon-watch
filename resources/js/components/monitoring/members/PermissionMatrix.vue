@@ -27,7 +27,7 @@ const COLUMNS = ['owner', 'admin', 'member', 'viewer'] as const;
                 </thead>
                 <tbody>
                     <tr v-for="row in rows" :key="row.permission">
-                        <td style="font-size: 13px">{{ row.label }}</td>
+                        <td class="nc-t-sm">{{ row.label }}</td>
                         <td
                             v-for="column in COLUMNS"
                             :key="column"
@@ -52,11 +52,8 @@ const COLUMNS = ['owner', 'admin', 'member', 'viewer'] as const;
             </table>
         </div>
         <div
-            style="
-                font-size: 11px;
-                color: var(--nc-neutral-600);
-                margin-top: var(--nc-space-2);
-            "
+            class="nc-t-2xs nc-tone-faint"
+            style="margin-top: var(--nc-space-2)"
         >
             {{
                 $t(

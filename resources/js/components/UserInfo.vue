@@ -1,21 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useInitials } from '@/composables/useInitials';
-import type { Team, User } from '@/types';
+import { getInitials } from '@/lib/initials';
+import type { User } from '@/types';
 
 type Props = {
     user: User;
     showEmail?: boolean;
-    team?: Team | null;
 };
 
 const props = withDefaults(defineProps<Props>(), {
     showEmail: false,
-    team: null,
 });
-
-const { getInitials } = useInitials();
 
 const showAvatar = computed(
     () => props.user.avatar && props.user.avatar !== '',
@@ -32,13 +28,8 @@ const showAvatar = computed(
 
     <div class="grid flex-1 text-left text-sm leading-tight">
         <span class="truncate font-medium">{{ user.name }}</span>
-        <span v-if="team" class="text-muted-foreground truncate text-xs">{{
-            team.name
+        <span v-if="showEmail" class="text-muted-foreground truncate text-xs">{{
+            user.email
         }}</span>
-        <span
-            v-else-if="showEmail"
-            class="text-muted-foreground truncate text-xs"
-            >{{ user.email }}</span
-        >
     </div>
 </template>

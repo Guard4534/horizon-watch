@@ -30,19 +30,15 @@ const figures = computed(() => [
 
 <template>
     <div
-        class="relative overflow-hidden"
-        style="
-            padding: var(--nc-space-3);
-            border-radius: var(--nc-radius-md);
-            box-shadow: var(--nc-shadow-sm);
-        "
+        class="nc-card relative overflow-hidden"
+        style="padding: var(--nc-space-3)"
         :style="{ background }"
     >
         <div class="flex items-center gap-[7px]">
             <StatusLamp :status="node.status" :size="8" />
             <span
-                class="min-w-0 truncate"
-                style="font-size: 12px; letter-spacing: 0.01em"
+                class="nc-t-xs min-w-0 truncate"
+                style="letter-spacing: 0.01em"
                 :title="node.hostname"
                 >{{ node.hostname }}</span
             >
@@ -59,22 +55,12 @@ const figures = computed(() => [
         >
             <div v-for="figure in figures" :key="figure.key">
                 <div style="font-size: 15px">{{ figure.value }}</div>
-                <div
-                    style="
-                        font-size: 9px;
-                        letter-spacing: 0.08em;
-                        text-transform: uppercase;
-                        color: var(--nc-neutral-600);
-                    "
-                >
+                <div class="nc-micro nc-tone-faint">
                     {{ figure.label }}
                 </div>
             </div>
         </div>
-        <div
-            class="nc-num mt-[var(--nc-space-3)]"
-            style="font-size: 11px; color: var(--nc-neutral-600)"
-        >
+        <div class="nc-num nc-t-2xs nc-tone-faint mt-[var(--nc-space-3)]">
             {{ $t('seen :time ago', { time: formatAge(node.seenSecondsAgo) }) }}
         </div>
     </div>

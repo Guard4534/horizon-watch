@@ -327,7 +327,7 @@ function leave(event: PointerEvent): void {
                 boxShadow: 'var(--nc-shadow-md)',
             }"
         >
-            <span style="color: var(--nc-neutral-400)">{{ readout.time }}</span>
+            <span class="nc-tone-soft">{{ readout.time }}</span>
             <span class="inline-flex items-center gap-[5px]">
                 <span
                     class="h-[2px] w-[10px]"

@@ -85,7 +85,7 @@ export function ruleHint(metric: App.Enums.AlertRuleMetric): string {
     return LABELS[metric].hint();
 }
 
-export function isStateMetric(metric: App.Enums.AlertRuleMetric): boolean {
+function isStateMetric(metric: App.Enums.AlertRuleMetric): boolean {
     return STATE_METRICS.has(metric);
 }
 

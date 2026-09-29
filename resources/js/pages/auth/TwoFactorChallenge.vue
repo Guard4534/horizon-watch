@@ -95,10 +95,7 @@ const toggleRecoveryMode = (clearErrors: () => void): void => {
                     <Spinner v-if="processing" />
                     {{ $t('Continue') }}
                 </button>
-                <div
-                    class="text-center"
-                    style="font-size: 12px; color: var(--nc-neutral-500)"
-                >
+                <div class="nc-t-xs nc-tone-muted text-center">
                     <span>{{ $t('or you can') }} </span>
                     <button
                         type="button"
@@ -141,10 +138,7 @@ const toggleRecoveryMode = (clearErrors: () => void): void => {
                     {{ $t('Continue') }}
                 </button>
 
-                <div
-                    class="text-center"
-                    style="font-size: 12px; color: var(--nc-neutral-500)"
-                >
+                <div class="nc-t-xs nc-tone-muted text-center">
                     <span>{{ $t('or you can') }} </span>
                     <button
                         type="button"

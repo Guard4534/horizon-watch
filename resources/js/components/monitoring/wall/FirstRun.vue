@@ -50,7 +50,7 @@ const PALETTE = [
             </div>
 
             <ol class="flex flex-col" style="gap: var(--nc-space-3)">
-                <li class="step">
+                <li class="nc-card step">
                     <span class="num">1</span>
                     <div class="min-w-0 flex-1">
                         <div class="step-title">
@@ -71,7 +71,7 @@ const PALETTE = [
                         <PhPlus :size="14" />{{ $t('Add application') }}
                     </Link>
                 </li>
-                <li class="step">
+                <li class="nc-card step">
                     <span class="num">2</span>
                     <div class="min-w-0 flex-1">
                         <div class="step-title">
@@ -86,13 +86,12 @@ const PALETTE = [
                         </div>
                     </div>
                     <Link
-                        class="nc-btn nc-btn-secondary flex-none"
-                        style="font-size: 13px"
+                        class="nc-btn nc-btn-secondary nc-t-sm flex-none"
                         :href="alertRulesIndex({ current_team: slug })"
                         >{{ $t('Alert settings') }}</Link
                     >
                 </li>
-                <li class="step">
+                <li class="nc-card step">
                     <span class="num">3</span>
                     <div class="min-w-0 flex-1">
                         <div class="step-title">
@@ -107,8 +106,7 @@ const PALETTE = [
                         </div>
                     </div>
                     <Link
-                        class="nc-btn nc-btn-secondary flex-none"
-                        style="font-size: 13px"
+                        class="nc-btn nc-btn-secondary nc-t-sm flex-none"
                         :href="membersIndex(slug)"
                         >{{ $t('Members') }}</Link
                     >
@@ -152,10 +150,6 @@ ol {
     flex-wrap: wrap;
     align-items: center;
     gap: var(--nc-space-3);
-    padding: var(--nc-space-4);
-    border-radius: var(--nc-radius-md);
-    background: var(--nc-surface);
-    box-shadow: var(--nc-shadow-sm);
 }
 
 .num {

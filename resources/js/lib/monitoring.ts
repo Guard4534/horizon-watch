@@ -38,10 +38,6 @@ export function statusLabel(status: App.Enums.EnvironmentStatus): string {
     }
 }
 
-export function isDown(status: App.Enums.EnvironmentStatus): boolean {
-    return status === 'inactive' || status === 'unreachable';
-}
-
 const STATUS_ICONS: Record<App.Enums.EnvironmentStatus, Component> = {
     active: PhWarning,
     degraded: PhWarning,

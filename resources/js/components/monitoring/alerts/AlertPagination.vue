@@ -13,11 +13,11 @@ defineEmits<{
 
 <template>
     <nav
-        class="flex items-center"
-        style="gap: var(--nc-space-2); font-size: 12px"
+        class="nc-t-xs flex items-center"
+        style="gap: var(--nc-space-2)"
         :aria-label="$t('Pages')"
     >
-        <span class="nc-num" style="color: var(--nc-neutral-500)">{{
+        <span class="nc-num nc-tone-muted">{{
             $t('Page :page of :pages', {
                 page: String(page),
                 pages: String(pages),
@@ -25,8 +25,8 @@ defineEmits<{
         }}</span>
         <button
             type="button"
-            class="nc-btn nc-btn-secondary ml-auto"
-            style="font-size: 12px; padding: 3px 9px"
+            class="nc-btn nc-btn-secondary nc-t-xs ml-auto"
+            style="padding: 3px 9px"
             :disabled="page <= 1"
             @click="$emit('go', Math.min(page - 1, pages))"
         >
@@ -34,8 +34,8 @@ defineEmits<{
         </button>
         <button
             type="button"
-            class="nc-btn nc-btn-secondary"
-            style="font-size: 12px; padding: 3px 9px"
+            class="nc-btn nc-btn-secondary nc-t-xs"
+            style="padding: 3px 9px"
             :disabled="page >= pages"
             @click="$emit('go', page + 1)"
         >

@@ -7,7 +7,7 @@ import { Toaster } from '@/components/ui/sonner';
 defineProps<{
     title?: string;
     subtitle?: string;
-    live: boolean;
+    live?: boolean;
 }>();
 </script>
 

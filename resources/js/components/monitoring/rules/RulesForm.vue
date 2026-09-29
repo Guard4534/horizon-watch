@@ -134,7 +134,7 @@ function confirmReset(): void {
                               })
                     }}
                 </div>
-                <div style="font-size: 12px; color: var(--nc-neutral-500)">
+                <div class="nc-t-xs nc-tone-muted">
                     {{
                         organization
                             ? $t(
@@ -149,8 +149,7 @@ function confirmReset(): void {
             <button
                 v-if="canManage"
                 type="button"
-                class="nc-btn nc-btn-ghost ml-auto"
-                style="font-size: 12px"
+                class="nc-btn nc-btn-ghost nc-t-xs ml-auto"
                 :disabled="
                     form.processing ||
                     resetting ||
@@ -168,8 +167,7 @@ function confirmReset(): void {
 
         <div
             v-if="canManage && !organization"
-            class="mb-[var(--nc-space-3)]"
-            style="font-size: 11px; color: var(--nc-neutral-500)"
+            class="nc-t-2xs nc-tone-muted mb-[var(--nc-space-3)]"
         >
             {{
                 $t(
@@ -180,14 +178,12 @@ function confirmReset(): void {
 
         <div
             v-if="generalErrors.length"
-            class="mb-[var(--nc-space-3)]"
+            class="nc-t-xs nc-tone-down mb-[var(--nc-space-3)]"
             role="alert"
             style="
                 border-radius: var(--nc-radius-md);
                 border: 1px solid var(--st-down);
                 padding: 8px 10px;
-                font-size: 12px;
-                color: var(--st-down);
             "
         >
             <div v-for="message in generalErrors" :key="message">
@@ -223,8 +219,7 @@ function confirmReset(): void {
             >
                 <span
                     v-if="!organization"
-                    class="nc-num mr-auto"
-                    style="font-size: 11px; color: var(--nc-neutral-500)"
+                    class="nc-num nc-t-2xs nc-tone-muted mr-auto"
                     >{{
                         $tChoice(
                             ':count value overridden|:count values overridden',

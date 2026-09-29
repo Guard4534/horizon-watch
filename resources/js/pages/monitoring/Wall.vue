@@ -4,7 +4,7 @@ import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed, ref, watch } from 'vue';
 import MobileWall from '@/components/mobile/wall/MobileWall.vue';
-import EmptyState from '@/components/monitoring/EmptyState.vue';
+import VisibilityEmptyState from '@/components/monitoring/VisibilityEmptyState.vue';
 import AnomalyList from '@/components/monitoring/wall/AnomalyList.vue';
 import ApplicationGroup from '@/components/monitoring/wall/ApplicationGroup.vue';
 import FirstRun from '@/components/monitoring/wall/FirstRun.vue';
@@ -16,7 +16,9 @@ import TimeSeriesChart from '@/components/nocturne/TimeSeriesChart.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { useVisibility } from '@/composables/useVisibility';
 import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
+import { needsAttention } from '@/components/monitoring/environment/readings';
 import { formatCount } from '@/lib/monitoring';
 import { rangeLabel } from '@/lib/timeSeries';
 import {
@@ -36,7 +38,7 @@ const { page } = defineProps<{
     page: App.Data.Pages.WallPageData;
 }>();
 
-useLivePoll(['page', 'openAlertCount']);
+useLivePoll();
 
 const throughputLabel = computed(() =>
     trans(':range, peak :count jobs/min', {
@@ -52,22 +54,16 @@ const isMobile = useIsMobile();
 
 const slug = useTeamSlug();
 const shared = usePage();
+const { canManageApplications, somethingIsHidden } = useVisibility();
 
 const nothingVisible = computed(() => page.environments.length === 0);
-const canManageApplications = computed(
-    () => shared.props.canManageApplications,
-);
-const somethingIsHidden = computed(
-    () =>
-        shared.props.visibilityRestricted &&
-        shared.props.organizationHasEnvironments,
-);
 
 const needsEnvironment = computed(
     () => canManageApplications.value && page.applicationCount > 0,
 );
 
-const query = new URLSearchParams(window.location.search);
+const [path, search] = shared.url.split('?');
+const query = new URLSearchParams(search ?? '');
 const chosenFilter = ref<'all' | 'problems' | null>(
     query.get('filter') === 'problems' || query.get('filter') === 'all'
         ? (query.get('filter') as 'all' | 'problems')
@@ -80,25 +76,20 @@ const filter = computed<'all' | 'problems'>({
     },
 });
 const environmentName = ref(query.get('environment') ?? '');
-const search = ref(query.get('q') ?? '');
+const needle = ref(query.get('q') ?? '');
 
-watch([chosenFilter, environmentName, search], () => {
+watch([chosenFilter, environmentName, needle], () => {
     const params = new URLSearchParams();
 
     if (chosenFilter.value) params.set('filter', chosenFilter.value);
     if (environmentName.value) params.set('environment', environmentName.value);
-    if (search.value) params.set('q', search.value);
+    if (needle.value) params.set('q', needle.value);
 
-    const url = `${window.location.pathname}${params.size ? `?${params}` : ''}`;
+    const url = `${path}${params.size ? `?${params}` : ''}`;
     router.replace({ url, preserveState: true, preserveScroll: true });
 });
 
-const problems = computed(() =>
-    page.environments.filter(
-        (environment) =>
-            environment.status !== null && environment.status !== 'active',
-    ),
-);
+const problems = computed(() => page.environments.filter(needsAttention));
 
 const firstRun = computed(
     () =>
@@ -116,11 +107,11 @@ const waitingCount = computed(
 
 function clearNarrowing(): void {
     environmentName.value = '';
-    search.value = '';
+    needle.value = '';
 }
 
 const shown = computed(() => {
-    const needle = search.value.trim().toLowerCase();
+    const wanted = needle.value.trim().toLowerCase();
 
     return (filter.value === 'problems' ? problems.value : page.environments)
         .filter(
@@ -130,10 +121,10 @@ const shown = computed(() => {
         )
         .filter(
             (environment) =>
-                !needle ||
+                !wanted ||
                 `${environment.applicationName} ${environment.name}`
                     .toLowerCase()
-                    .includes(needle),
+                    .includes(wanted),
         );
 });
 
@@ -200,31 +191,27 @@ const kpis = computed(() => [
 <template>
     <Head :title="$t('Status wall')" />
 
-    <div v-if="firstRun" class="wall-pad">
+    <div v-if="firstRun" class="nc-page">
         <FirstRun />
     </div>
 
-    <div v-else-if="nothingVisible" class="wall-pad">
-        <EmptyState
+    <div v-else-if="nothingVisible" class="nc-page">
+        <VisibilityEmptyState
             :icon="PhStackSimple"
             :kicker="$t('Nothing connected')"
             :title="$t('No environments yet')"
             :body="
-                somethingIsHidden
+                needsEnvironment
                     ? $t(
-                          'No environment is visible to you yet. Your access covers part of this organization, which may hold environments you cannot see.',
+                          'An application is configured but has no environment yet. Add one to it and it shows up here.',
                       )
-                    : needsEnvironment
-                      ? $t(
-                            'An application is configured but has no environment yet. Add one to it and it shows up here.',
-                        )
-                      : $t(
-                            'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
-                        )
+                    : $t(
+                          'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                      )
             "
         >
             <Link
-                v-if="!somethingIsHidden && needsEnvironment"
+                v-if="needsEnvironment"
                 class="nc-btn nc-btn-primary"
                 style="margin-top: var(--nc-space-2)"
                 :href="applicationsIndex(slug)"
@@ -239,10 +226,10 @@ const kpis = computed(() => [
             >
                 <PhPlus :size="14" />{{ $t('Add application') }}
             </Link>
-        </EmptyState>
+        </VisibilityEmptyState>
     </div>
 
-    <div v-else-if="isMobile" class="wall-pad">
+    <div v-else-if="isMobile" class="nc-page">
         <MobileWall
             v-model:filter="filter"
             :rows="shown"
@@ -250,13 +237,13 @@ const kpis = computed(() => [
             :problem-count="problems.length"
             :waiting-count="waitingCount"
             :environment-name="environmentName"
-            :search="search"
+            :search="needle"
             :kpis="page.kpis"
             @clear="clearNarrowing"
         />
     </div>
 
-    <div v-else class="wall-pad wall-grid">
+    <div v-else class="nc-page wall-grid">
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
             <div
                 class="grid"
@@ -278,7 +265,7 @@ const kpis = computed(() => [
             <WallFilters
                 v-model:filter="filter"
                 v-model:environment-name="environmentName"
-                v-model:search="search"
+                v-model:search="needle"
                 :environments="page.environments"
                 :problem-count="problems.length"
             />
@@ -291,10 +278,7 @@ const kpis = computed(() => [
                 :application-name="group.name"
                 :environments="group.environments"
             />
-            <p
-                v-if="groups.length === 0"
-                style="font-size: 13px; color: var(--nc-neutral-500)"
-            >
+            <p v-if="groups.length === 0" class="nc-t-sm nc-tone-muted">
                 {{ $t('No environment matches these filters.') }}
             </p>
         </div>
@@ -312,12 +296,8 @@ const kpis = computed(() => [
                     :describe="describeThroughput"
                 />
                 <div
-                    class="mt-[var(--nc-space-2)] flex"
-                    style="
-                        gap: var(--nc-space-4);
-                        font-size: 11px;
-                        color: var(--nc-neutral-500);
-                    "
+                    class="nc-t-2xs nc-tone-muted mt-[var(--nc-space-2)] flex"
+                    style="gap: var(--nc-space-4)"
                 >
                     <span>{{
                         $t(':count jobs/min now', {
@@ -334,10 +314,6 @@ const kpis = computed(() => [
 </template>
 
 <style scoped>
-.wall-pad {
-    padding: var(--nc-space-6);
-}
-
 .wall-grid {
     display: grid;
     align-items: start;
@@ -348,12 +324,6 @@ const kpis = computed(() => [
 @media (max-width: 1023px) {
     .wall-grid {
         grid-template-columns: minmax(0, 1fr);
-    }
-}
-
-@media (max-width: 639px) {
-    .wall-pad {
-        padding: var(--nc-space-3) var(--nc-space-4) var(--nc-space-4);
     }
 }
 </style>

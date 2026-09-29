@@ -26,8 +26,8 @@ defineProps<{
 
     <div
         v-if="status"
-        style="font-size: 12px; color: var(--st-ok)"
-        class="mb-4 text-center"
+        class="nc-t-xs mb-4 text-center"
+        style="color: var(--st-ok)"
     >
         {{ status }}
     </div>
@@ -77,7 +77,7 @@ defineProps<{
             <InputError :message="errors.password" />
         </div>
 
-        <label class="nc-radio" style="font-size: 12px">
+        <label class="nc-radio nc-t-xs">
             <input type="checkbox" name="remember" :tabindex="3" />
             <span class="nc-dot" />
             {{ $t('Remember me') }}

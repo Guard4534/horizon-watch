@@ -35,7 +35,7 @@ const passwordInput = useTemplateRef('passwordInput');
                 background: color-mix(in srgb, var(--st-down) 10%, transparent);
             "
         >
-            <div class="relative space-y-0.5" style="color: var(--st-down)">
+            <div class="nc-tone-down relative space-y-0.5">
                 <p class="font-medium">{{ $t('Caution') }}</p>
                 <p class="text-sm">
                     {{

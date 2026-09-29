@@ -105,8 +105,7 @@ function reset() {
                     <label
                         v-for="environment in environments"
                         :key="environment.id"
-                        class="flex items-center gap-2"
-                        style="font-size: 13px"
+                        class="nc-t-sm flex items-center gap-2"
                     >
                         <input
                             v-model="environmentIds"
@@ -118,7 +117,7 @@ function reset() {
                     </label>
                     <div
                         v-if="!environments.length"
-                        style="font-size: 12px; color: var(--nc-neutral-500)"
+                        class="nc-t-xs nc-tone-muted"
                     >
                         {{
                             $t(
@@ -141,7 +140,7 @@ function reset() {
                 {{ $t('Send invitation') }}
             </button>
 
-            <div style="font-size: 11px; color: var(--nc-neutral-600)">
+            <div class="nc-t-2xs nc-tone-faint">
                 {{
                     $t(
                         'The invitation expires after :days days and can be resent.',

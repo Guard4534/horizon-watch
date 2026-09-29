@@ -5,6 +5,7 @@ import { computed } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import TimeSeriesChart from '@/components/nocturne/TimeSeriesChart.vue';
+import { useCurrentPath } from '@/composables/useCurrentPath';
 import { formatCount, formatWait } from '@/lib/monitoring';
 import { rangeLabel } from '@/lib/timeSeries';
 
@@ -14,6 +15,8 @@ const { throughput, maxWait, range, grid } = defineProps<{
     range: App.Enums.SeriesRange;
     grid: App.Data.Monitoring.SeriesGridData;
 }>();
+
+const { path } = useCurrentPath();
 
 const label = computed(() =>
     trans(':range, peak :count jobs/min, peak max wait :wait', {
@@ -32,7 +35,7 @@ const selected = computed({
     get: () => range,
     set: (next: App.Enums.SeriesRange) =>
         router.get(
-            window.location.pathname,
+            path.value,
             { range: next },
             {
                 only: ['page'],
@@ -48,8 +51,7 @@ const selected = computed({
     <SectionCard :title="$t('Throughput & max wait')">
         <template #actions>
             <span
-                class="inline-flex items-center gap-[5px]"
-                style="font-size: 11px; color: var(--nc-neutral-500)"
+                class="nc-t-2xs nc-tone-muted inline-flex items-center gap-[5px]"
             >
                 <span
                     class="h-[2px] w-[14px]"
@@ -57,13 +59,12 @@ const selected = computed({
                 />{{ $t('jobs/min') }}
             </span>
             <span
-                class="inline-flex items-center gap-[5px]"
-                style="font-size: 11px; color: var(--nc-neutral-500)"
+                class="nc-t-2xs nc-tone-muted inline-flex items-center gap-[5px]"
             >
                 <span
                     class="h-[2px] w-[14px]"
                     style="background: var(--st-warn)"
-                />max wait
+                />{{ $t('max wait') }}
             </span>
             <SegmentedControl
                 v-model="selected"

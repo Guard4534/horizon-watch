@@ -42,11 +42,8 @@ const {
             </h3>
             <p
                 v-if="description"
-                style="
-                    font-size: 13px;
-                    color: var(--nc-neutral-400);
-                    margin: 0 0 var(--nc-space-4);
-                "
+                class="nc-t-sm nc-tone-soft"
+                style="margin: 0 0 var(--nc-space-4)"
             >
                 {{ $t(description) }}
             </p>

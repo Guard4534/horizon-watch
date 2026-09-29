@@ -10,17 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AlertEmailsToggle from '@/components/settings/AlertEmailsToggle.vue';
-import { edit } from '@/routes/profile';
 
 defineOptions({
-    layout: {
-        breadcrumbs: [
-            {
-                title: 'Profile settings',
-                href: edit(),
-            },
-        ],
-    },
+    layout: { title: 'Profile settings' },
 });
 
 defineProps<{

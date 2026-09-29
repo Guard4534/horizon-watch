@@ -7,11 +7,10 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import UserMenuContent from '@/components/UserMenuContent.vue';
-import { useInitials } from '@/composables/useInitials';
+import { getInitials } from '@/lib/initials';
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
-const { getInitials } = useInitials();
 </script>
 
 <template>
@@ -40,14 +39,10 @@ const { getInitials } = useInitials();
                     {{ getInitials(user.name) }}
                 </span>
                 <span class="min-w-0">
-                    <span class="block truncate" style="font-size: 12px">{{
-                        user.name
+                    <span class="nc-t-xs block truncate">{{ user.name }}</span>
+                    <span class="nc-tone-faint block" style="font-size: 10px">{{
+                        page.props.currentTeam?.roleLabel
                     }}</span>
-                    <span
-                        class="block"
-                        style="font-size: 10px; color: var(--nc-neutral-600)"
-                        >{{ page.props.currentTeam?.roleLabel }}</span
-                    >
                 </span>
             </button>
         </DropdownMenuTrigger>

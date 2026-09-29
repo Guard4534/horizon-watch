@@ -99,13 +99,7 @@ defineOptions({
         </button>
     </Form>
 
-    <p
-        style="
-            font-size: 11px;
-            color: var(--nc-neutral-600);
-            margin-top: var(--nc-space-4);
-        "
-    >
+    <p class="nc-t-2xs nc-tone-faint" style="margin-top: var(--nc-space-4)">
         {{ $t('Everyone else joins by invitation from inside the panel.') }}
     </p>
 </template>

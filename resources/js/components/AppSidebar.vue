@@ -7,11 +7,11 @@ import {
     PhStack,
     PhUsersThree,
 } from '@phosphor-icons/vue';
-import { computed } from 'vue';
 import BrandMark from '@/components/nocturne/BrandMark.vue';
 import NavUser from '@/components/NavUser.vue';
 import SidebarLink from '@/components/SidebarLink.vue';
 import TeamSwitcher from '@/components/TeamSwitcher.vue';
+import { useCurrentPath } from '@/composables/useCurrentPath';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { wall } from '@/routes';
 import { index as alertsIndex } from '@/routes/alerts';
@@ -21,10 +21,7 @@ import { index as membersIndex } from '@/routes/members';
 
 const page = usePage();
 const slug = useTeamSlug();
-
-const path = computed(() => page.url.split('?')[0]);
-const startsWith = (...prefixes: string[]) =>
-    prefixes.some((prefix) => path.value.startsWith(prefix));
+const { startsWith } = useCurrentPath();
 </script>
 
 <template>
@@ -55,7 +52,6 @@ const startsWith = (...prefixes: string[]) =>
                 :icon="PhSquaresFour"
                 label="Status wall"
                 :active="startsWith(`/${slug}/wall`)"
-                :aria-current="startsWith(`/${slug}/wall`) ? 'page' : undefined"
             />
             <SidebarLink
                 :href="applicationsIndex(slug)"
@@ -64,20 +60,12 @@ const startsWith = (...prefixes: string[]) =>
                 :active="
                     startsWith(`/${slug}/applications`, `/${slug}/environments`)
                 "
-                :aria-current="
-                    startsWith(`/${slug}/applications`, `/${slug}/environments`)
-                        ? 'page'
-                        : undefined
-                "
             />
             <SidebarLink
                 :href="alertsIndex(slug)"
                 :icon="PhBellRinging"
                 label="Alerts"
                 :active="startsWith(`/${slug}/alerts`)"
-                :aria-current="
-                    startsWith(`/${slug}/alerts`) ? 'page' : undefined
-                "
                 :badge="page.props.openAlertCount"
             />
         </nav>
@@ -94,18 +82,12 @@ const startsWith = (...prefixes: string[]) =>
                 :icon="PhSlidersHorizontal"
                 label="Alert settings"
                 :active="startsWith(`/${slug}/alert-rules`)"
-                :aria-current="
-                    startsWith(`/${slug}/alert-rules`) ? 'page' : undefined
-                "
             />
             <SidebarLink
                 :href="membersIndex(slug)"
                 :icon="PhUsersThree"
                 label="Members"
                 :active="startsWith(`/${slug}/members`)"
-                :aria-current="
-                    startsWith(`/${slug}/members`) ? 'page' : undefined
-                "
             />
         </nav>
 

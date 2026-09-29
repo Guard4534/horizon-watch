@@ -10,7 +10,7 @@ const SECOND_STEPS = [
 
 const TICK_MINUTES = [15, 30, 60, 120, 180, 240, 360, 720, 1440, 2880];
 
-export type TimeTick = { at: number; label: string };
+type TimeTick = { at: number; label: string };
 
 export function niceCountMax(value: number): number {
     if (value <= 1) {
@@ -69,11 +69,7 @@ function formatClock(at: Date, locale: string): string {
     }).format(at);
 }
 
-export function formatTickTime(
-    at: Date,
-    locale: string,
-    withDay: boolean,
-): string {
+function formatTickTime(at: Date, locale: string, withDay: boolean): string {
     return withDay ? formatDay(at, locale) : formatClock(at, locale);
 }
 

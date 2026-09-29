@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link } from '@inertiajs/vue3';
 import {
     PhBellRinging,
     PhSquaresFour,
@@ -7,17 +7,14 @@ import {
     PhUser,
 } from '@phosphor-icons/vue';
 import { computed } from 'vue';
+import { useCurrentPath } from '@/composables/useCurrentPath';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { me, wall } from '@/routes';
 import { index as alertsIndex } from '@/routes/alerts';
 import { index as applicationsIndex } from '@/routes/applications';
 
-const page = usePage();
 const slug = useTeamSlug();
-
-const path = computed(() => page.url.split('?')[0]);
-const startsWith = (...prefixes: string[]) =>
-    prefixes.some((prefix) => path.value.startsWith(prefix));
+const { startsWith } = useCurrentPath();
 
 const active = computed(() => ({
     wall: startsWith(`/${slug.value}/wall`),

@@ -59,11 +59,7 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
                     $t('Horizon paused')
                 }}</template>
                 <template v-else>{{ $t('Threshold exceeded') }}</template>
-                <span
-                    v-if="since"
-                    class="nc-num"
-                    style="font-size: 11px; color: var(--nc-neutral-500)"
-                >
+                <span v-if="since" class="nc-num nc-t-2xs nc-tone-muted">
                     · {{ $t('started :elapsed', { elapsed: since }) }}</span
                 >
             </div>
@@ -117,8 +113,7 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
             </div>
             <div
                 v-if="alert && !compact"
-                class="mt-[5px]"
-                style="font-size: 11px; color: var(--nc-neutral-500)"
+                class="nc-t-2xs nc-tone-muted mt-[5px]"
             >
                 {{ $t('Rule:') }}
                 {{ formatRule(alert.metric, alert.threshold, alert.unit) }}

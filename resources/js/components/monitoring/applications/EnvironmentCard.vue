@@ -7,6 +7,7 @@ import {
     pendingTone,
     statusText,
     statusTone,
+    troubledStyle,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
@@ -25,12 +26,7 @@ const slug = useTeamSlug();
 const tone = computed(() => statusTone(environment));
 
 const cardStyle = computed(() =>
-    needsAttention(environment)
-        ? {
-              background: `color-mix(in srgb, ${tone.value} 12%, var(--nc-surface))`,
-              boxShadow: `var(--nc-shadow-sm), 0 0 0 4px color-mix(in srgb, ${tone.value} 16%, transparent)`,
-          }
-        : {},
+    needsAttention(environment) ? troubledStyle(tone.value) : {},
 );
 
 const hasNumbers = computed(() => hasMeasurement(environment));
@@ -47,7 +43,7 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                   })
                 : undefined
         "
-        class="env-card"
+        class="nc-card env-card"
         :class="{ 'env-card-link': environment.watched }"
         :style="cardStyle"
     >
@@ -61,32 +57,20 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                 />
             </span>
             <StatusLamp :status="environment.status" />
-            <span
-                class="ml-auto flex-none"
-                style="font-size: 11px"
-                :style="{ color: tone }"
-                >{{ statusText(environment) }}</span
-            >
+            <span class="nc-t-2xs ml-auto flex-none" :style="{ color: tone }">{{
+                statusText(environment)
+            }}</span>
         </span>
         <span
-            class="mt-[3px] block truncate"
-            style="
-                font-size: 11px;
-                color: var(--nc-neutral-600);
-                letter-spacing: 0.01em;
-            "
+            class="nc-t-2xs nc-tone-faint mt-[3px] block truncate"
+            style="letter-spacing: 0.01em"
         >
             {{ environment.horizonUrl.replace(/^https?:\/\//, '') }}
         </span>
         <span
             v-if="!environment.watched"
-            class="mt-[var(--nc-space-3)] flex items-center"
-            style="
-                min-height: 26px;
-                font-size: 11px;
-                line-height: 1.35;
-                color: var(--nc-neutral-500);
-            "
+            class="nc-t-2xs nc-tone-muted mt-[var(--nc-space-3)] flex items-center"
+            style="min-height: 26px; line-height: 1.35"
         >
             {{
                 $t(
@@ -128,7 +112,9 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                         hasNumbers ? formatCount(environment.pending) : '—'
                     }}</span
                 >
-                <span class="figure-label">pending</span>
+                <span class="nc-micro nc-tone-faint block">{{
+                    $t('Pending')
+                }}</span>
             </span>
             <span>
                 <span
@@ -148,13 +134,15 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                             : '—'
                     }}</span
                 >
-                <span class="figure-label">max wait</span>
+                <span class="nc-micro nc-tone-faint block">{{
+                    $t('Max wait')
+                }}</span>
             </span>
             <span>
                 <span class="block" style="font-size: 16px">{{
                     hasNumbers ? environment.nodeCount : '—'
                 }}</span>
-                <span class="figure-label">
+                <span class="nc-micro nc-tone-faint block">
                     {{ $tChoice('node|nodes', environment.nodeCount) }}
                 </span>
             </span>
@@ -168,10 +156,6 @@ const hasNumbers = computed(() => hasMeasurement(environment));
     display: block;
     width: 100%;
     text-align: left;
-    padding: var(--nc-space-4);
-    border-radius: var(--nc-radius-md);
-    background: var(--nc-surface);
-    box-shadow: var(--nc-shadow-sm);
     color: inherit;
     text-decoration: none;
     overflow: hidden;
@@ -179,13 +163,5 @@ const hasNumbers = computed(() => hasMeasurement(environment));
 
 .env-card-link:hover {
     box-shadow: var(--nc-shadow-md);
-}
-
-.figure-label {
-    display: block;
-    font-size: 9px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--nc-neutral-600);
 }
 </style>

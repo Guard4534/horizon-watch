@@ -49,7 +49,7 @@ const { page } = defineProps<{
             />
 
             <SectionCard :title="$t('How access works')">
-                <div style="font-size: 12px; color: var(--nc-neutral-400)">
+                <div class="nc-t-xs nc-tone-soft">
                     {{
                         $t(
                             'A user can belong to several organizations, with a separate role in each. Admins manage applications, environments, credentials and thresholds; members act on alerts; viewers only look. Visibility can be narrowed to a subset of environments.',

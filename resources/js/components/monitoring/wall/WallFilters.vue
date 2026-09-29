@@ -89,7 +89,7 @@ const chips = computed(() => {
                     style="background: var(--nc-neutral-500)"
                 />
                 {{ $t('All') }}
-                <span class="nc-num" style="color: var(--nc-neutral-600)">{{
+                <span class="nc-num nc-tone-faint">{{
                     environments.length
                 }}</span>
             </button>
@@ -106,9 +106,7 @@ const chips = computed(() => {
                     :style="{ background: chip.color }"
                 />
                 {{ chip.name }}
-                <span class="nc-num" style="color: var(--nc-neutral-600)">{{
-                    chip.count
-                }}</span>
+                <span class="nc-num nc-tone-faint">{{ chip.count }}</span>
             </button>
         </div>
     </div>

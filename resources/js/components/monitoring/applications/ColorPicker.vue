@@ -33,11 +33,7 @@ const selected = computed(
             />
             <span class="chip" :style="{ background: swatch(color.value) }" />
         </label>
-        <span
-            class="ml-1"
-            style="font-size: 12px; color: var(--nc-neutral-400)"
-            >{{ selected }}</span
-        >
+        <span class="nc-t-xs nc-tone-soft ml-1">{{ selected }}</span>
     </div>
 </template>
 

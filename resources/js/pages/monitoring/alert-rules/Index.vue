@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import { PhInfo } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import NotificationSettings from '@/components/monitoring/rules/NotificationSettings.vue';
 import RulesForm from '@/components/monitoring/rules/RulesForm.vue';
 import ScopeList from '@/components/monitoring/rules/ScopeList.vue';
+import { useVisibility } from '@/composables/useVisibility';
 
 defineOptions({
     layout: { title: 'Alert settings' },
@@ -14,7 +15,7 @@ const { page } = defineProps<{
     page: App.Data.Pages.AlertRulesPageData;
 }>();
 
-const shared = usePage();
+const { somethingIsHidden } = useVisibility();
 
 const currentScope = computed(() =>
     page.scopes.find((scope) => scope.id === page.scope),
@@ -25,12 +26,6 @@ const nothingVisible = computed(
         page.scopes.find((scope) => scope.id === 'organization')
             ?.environmentCount === 0,
 );
-
-const somethingIsHidden = computed(
-    () =>
-        shared.props.visibilityRestricted &&
-        shared.props.organizationHasEnvironments,
-);
 </script>
 
 <template>
@@ -40,7 +35,10 @@ const somethingIsHidden = computed(
         <ScopeList :scopes="page.scopes" :current="page.scope" />
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
-            <div v-if="nothingVisible" class="nc-card nothing-visible">
+            <div
+                v-if="nothingVisible"
+                class="nc-card nc-t-xs nc-tone-soft nothing-visible"
+            >
                 <PhInfo :size="15" class="mt-[2px] flex-none" />
                 <span>{{
                     somethingIsHidden
@@ -86,9 +84,7 @@ const somethingIsHidden = computed(
 .nothing-visible {
     display: flex;
     gap: var(--nc-space-2);
-    font-size: 12px;
     line-height: 1.5;
-    color: var(--nc-neutral-400);
 }
 
 @media (max-width: 767px) {
