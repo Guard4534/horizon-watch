@@ -47,8 +47,9 @@ environment; see [Configuration](#configuration). At the very least, change `DB_
 and set the mail server.
 
 Serve the panel over HTTPS in production, behind a reverse proxy that terminates TLS. Set
-`APP_URL` to the `https://` address and leave `TRUSTED_PROXIES` at its default if the proxy
-is on the same private network. Besides protecting the session cookie, HTTPS keeps the
+`APP_URL` to the `https://` address, have the proxy pass the original `Host` header through,
+and leave `TRUSTED_PROXIES` at its default if the proxy is on the same private network
+(see [Configuration](#configuration)). Besides protecting the session cookie, HTTPS keeps the
 one-time webhook secret out of the browser history: the page that shows it asks the browser
 to encrypt its history entry, which browsers only do in a secure context.
 
@@ -104,13 +105,13 @@ the environment of the containers. Everything has a default except the mail serv
 | Variable                               | Default                                  | Purpose                                                                                  |
 | -------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `HORIZON_WATCH_IMAGE`                  | `ghcr.io/guard4534/horizon-watch:latest` | Image to run; pin a version tag in production                                            |
-| `HORIZON_WATCH_PORT`                   | `8080`                                   | Port published on the host                                                               |
+| `HORIZON_WATCH_PORT`                   | `8080`                                   | Port published on the host; `127.0.0.1:8080` publishes it on loopback only               |
 | `HORIZON_WATCH_WORKERS`                | `2`                                      | Queue workers (readings, notifications)                                                  |
 | `HORIZON_WATCH_RETENTION_DAYS`         | `30`                                     | Days of readings kept before pruning                                                     |
 | `HORIZON_WATCH_ALERT_RETENTION_DAYS`   | `90`                                     | Days resolved alerts are kept before pruning                                             |
 | `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` | `false`                                  | Refuse Horizon addresses that resolve to a private network                               |
 | `HORIZON_WATCH_DEFAULT_TIMEZONE`       | `UTC`                                    | Time zone new organizations start with                                                   |
-| `APP_URL`                              | `http://localhost:8080`                  | Public URL, used in emails and webhook payloads                                          |
+| `APP_URL`                              | `http://localhost:8080`                  | Public URL, used in emails, password reset links and webhook payloads                    |
 | `APP_LOCALE`                           | `en`                                     | Default language, `en` or `it`                                                           |
 | `APP_KEY`                              | generated                                | Leave empty: the first start writes one to the `app-data` volume                         |
 | `TRUSTED_PROXIES`                      | `private`                                | `private` (loopback and RFC 1918), `*`, or a comma-separated list of addresses and CIDRs |
@@ -123,11 +124,20 @@ the environment of the containers. Everything has a default except the mail serv
 | `MAIL_PASSWORD`                        | _(empty)_                                | SMTP password, when the server asks for one                                              |
 | `MAIL_FROM_ADDRESS`                    | `horizon-watch@example.com`              | Sender of invitations and alert emails                                                   |
 
-`TRUSTED_PROXIES` decides which forwarded headers the panel believes. The default trusts
-loopback and private addresses, which covers a reverse proxy in the same Docker network or on
-the same private network, and ignores forwarded headers from anywhere else. If your proxy
-reaches the panel from a public address, list it explicitly; `*` trusts everyone and should
-only be used when nothing but the proxy can reach the port.
+`TRUSTED_PROXIES` decides which addresses may tell the panel the client's address and scheme
+(`X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Port`). The default trusts loopback
+and every private address, which covers a reverse proxy in the same Docker network or on the
+same private network, and ignores forwarded headers from anywhere else. Because it trusts the
+whole private range, any machine on your network that reaches the published port directly can
+claim any client address: publish the port only where the proxy needs it
+(`HORIZON_WATCH_PORT=127.0.0.1:8080` when the proxy runs on the same host), or list the proxy's
+address instead. If your proxy reaches the panel from a public address, list it explicitly;
+`*` trusts everyone and should only be used when nothing but the proxy can reach the port.
+
+`X-Forwarded-Host` is never trusted: the panel takes its host from the `Host` header, so the
+proxy must pass the original one through. Caddy and Traefik do so by default; nginx needs
+`proxy_set_header Host $host;`. Links in emails, password reset links included, are always
+built from `APP_URL`.
 
 ## Notifications
 

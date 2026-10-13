@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Actions\Settings\UpdateProfile;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,17 +17,13 @@ class ProfileController extends Controller
     public function edit(Request $request): Response
     {
         return Inertia::render('settings/Profile', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
-            'status' => $request->session()->get('status'),
             'alertEmails' => (bool) $request->user()?->alert_emails,
         ]);
     }
 
-    public function update(ProfileUpdateRequest $request): RedirectResponse
+    public function update(ProfileUpdateRequest $request, UpdateProfile $updateProfile): RedirectResponse
     {
-        $request->user()->fill($request->validated());
-
-        $request->user()->save();
+        $updateProfile->handle($request->user(), $request->string('name')->value(), $request->string('email')->value());
 
         $this->success(__('Profile updated.'));
 

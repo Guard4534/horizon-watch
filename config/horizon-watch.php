@@ -78,7 +78,11 @@ return [
 
     'rate_limits' => [
         'login_per_minute' => 5,
+        'login_per_account_per_hour' => 30,
         'two_factor_per_minute' => 5,
+        'password_reset_per_minute' => 5,
+        'password_reset_per_account_per_hour' => 5,
+        'current_password_per_minute' => 6,
         'locale_per_minute' => 30,
         'setup_per_minute' => 10,
         'invitations_per_minute' => 6,

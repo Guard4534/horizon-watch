@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import type { Props as ManageTwoFactorProps } from '@/components/ManageTwoFactor.vue';
 import ManageTwoFactor from '@/components/ManageTwoFactor.vue';
+import LogoutOtherSessions from '@/components/settings/LogoutOtherSessions.vue';
 
 // oxfmt-ignore
 type Props = {
@@ -110,4 +111,6 @@ defineOptions({
         :requiresConfirmation="requiresConfirmation"
         :twoFactorEnabled="twoFactorEnabled"
     />
+
+    <LogoutOtherSessions />
 </template>

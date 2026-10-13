@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Settings\AlertEmailsController;
+use App\Http\Controllers\Settings\OtherSessionsController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Teams\TeamController;
@@ -13,12 +14,16 @@ Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', '/settings/profile');
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::patch('settings/profile', [ProfileController::class, 'update'])
+        ->middleware('throttle:current-password')
+        ->name('profile.update');
     Route::patch('settings/alert-emails', AlertEmailsController::class)->name('alert-emails.update');
 });
 
 Route::middleware(['auth'])->group(function () {
-    Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::delete('settings/profile', [ProfileController::class, 'destroy'])
+        ->middleware('throttle:current-password')
+        ->name('profile.destroy');
 
     Route::get('settings/security', [SecurityController::class, 'edit'])
         ->middleware(RequirePassword::class)
@@ -27,6 +32,10 @@ Route::middleware(['auth'])->group(function () {
     Route::put('settings/password', [SecurityController::class, 'update'])
         ->middleware('throttle:'.config()->integer('horizon-watch.rate_limits.password_update_per_minute').',1')
         ->name('user-password.update');
+
+    Route::delete('settings/sessions', [OtherSessionsController::class, 'destroy'])
+        ->middleware('throttle:current-password')
+        ->name('other-sessions.destroy');
 
     Route::get('settings/teams', [TeamController::class, 'index'])->name('teams.index');
     Route::post('settings/teams', [TeamController::class, 'store'])->name('teams.store');

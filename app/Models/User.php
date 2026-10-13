@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Concerns\HasTeams;
 use App\Enums\Locale;
+use App\Notifications\Auth\ResetPassword;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Str;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 
@@ -53,6 +55,14 @@ class User extends Authenticatable implements HasLocalePreference
     public function preferredLocale(): ?string
     {
         return $this->locale?->value;
+    }
+
+    /**
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
+    {
+        $this->notify((new ResetPassword($token))->locale($this->preferredLocale() ?? App::getLocale()));
     }
 
     /**

@@ -20,8 +20,8 @@ production and read [CHANGELOG.md](CHANGELOG.md) before upgrading.
 
 ## Threat model
 
-Horizon Watch is invite-only and has no anonymous surface beyond the login page and the
-one-time `/setup` page, which closes for good once the first user exists. What follows is
+Horizon Watch is invite-only and has no anonymous surface beyond the login and password reset
+pages and the one-time `/setup` page, which closes for good once the first user exists. What follows is
 what the project protects, and what it deliberately does not.
 
 ### The application key and the stored Horizon credentials
@@ -102,13 +102,33 @@ Serve the panel over HTTPS. The session cookie is `HttpOnly` and `SameSite=Lax`,
 `Secure` flag follows the scheme of the request unless you force it with
 `SESSION_SECURE_COOKIE`. That scheme is only correct if the panel can trust the forwarded
 headers of your reverse proxy: `TRUSTED_PROXIES` defaults to loopback and the private ranges,
-and ignores forwarded headers from anywhere else. Widen it only to the addresses your proxy
-actually uses; `*` lets any client claim any scheme and any source address, which also means
-any client can defeat the per-address rate limits on the login and setup pages.
+and ignores forwarded headers from anywhere else. Only `X-Forwarded-For`, `X-Forwarded-Proto`
+and `X-Forwarded-Port` are honoured. `X-Forwarded-Host` never is, and links in emails are built
+from `APP_URL`, so a forged host cannot point a password reset link elsewhere.
+
+The default trusts every private address, so a machine on your network that reaches the
+published port directly can claim any source address and defeat the per-address rate limits on
+the login, password reset and setup pages. Publish the port only to the proxy, or narrow
+`TRUSTED_PROXIES` to the addresses your proxy actually uses; `*` lets any client anywhere do
+the same. The login also has a per-account limit on failed attempts that ignores the address:
+once an account collects 30 failed sign-ins within an hour, it cannot sign in, even with the
+right password, until the hour is over. Anyone who knows the address can keep an account locked
+this way; that is the price of stopping password guessing from rotating addresses. Reset emails
+for one account are likewise capped at five an hour.
 
 nginx sends `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`,
 `Permissions-Policy` and a Content-Security-Policy that allows scripts only from the panel's
 own origin.
+
+### Accounts
+
+- Changing or resetting the password logs out every other session of the account. Security
+  settings can also log out the other sessions on demand, with the password.
+- Changing the email address needs the current password, and the old address gets a notice.
+- The forgot-password form answers the same way whether an account exists or not. The reset
+  email goes out through the queue and every request takes at least half a second, which hides
+  the time spent preparing the link on a typical server.
+- Every form that checks the current password is rate limited per user.
 
 ### What is out of scope
 
@@ -116,5 +136,5 @@ own origin.
   make the server read an HTTP address of their choosing, within the limits above.
 - It does not audit the Horizon installations it watches: it reads them, and whatever they
   answer is what you see.
-- There is no built-in TLS, no rate limiting beyond the authentication and setup endpoints,
-  and no protection against a host operator who can read the volumes.
+- There is no built-in TLS, no rate limiting beyond the authentication, account and setup
+  endpoints, and no protection against a host operator who can read the volumes.
