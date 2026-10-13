@@ -73,7 +73,7 @@ const generalErrors = computed(() => {
                 .filter(
                     ([key, message]) =>
                         message !== undefined &&
-                        !/^rules\.\d+\.(threshold|severity|notifyByEmail|enabled)$/.test(
+                        !/^rules\.\d+\.(threshold|severity|notifyByEmail|enabled|forMinutes)$/.test(
                             key,
                         ),
                 )
@@ -261,7 +261,7 @@ function confirmReset(): void {
                     {{
                         organization
                             ? $t(
-                                  'Every organization rule goes back to the recommended threshold, severity and email. Environment overrides stay as they are.',
+                                  'Every organization rule goes back to the recommended threshold, duration, severity and email. Environment overrides stay as they are.',
                               )
                             : $t(
                                   'The :scope environments go back to the organization values for every rule.',

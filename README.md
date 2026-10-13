@@ -81,7 +81,12 @@ Then, in order:
    ticked for you when the label is `production`, `prod`, `prd` or `live`, alone or followed
    by a suffix such as `production-eu`.
 3. **Alert rules** → review the thresholds. Every organization starts with sensible defaults
-   and you can override any rule for a single environment.
+   and you can override any rule for a single environment. A threshold rule opens its alert at
+   the first reading that breaks it; give it a duration (**for … min**, up to 60) and it opens
+   only once the breach has lasted that long, so a queue hovering around its threshold does not
+   open and resolve an alert at every reading. A reading back under the threshold starts the
+   wait again; a failed reading does not, unless the endpoint stays unreadable for longer than
+   the stale window.
 4. **Alert rules → Notifications** → add the email recipients, and the webhook URL if you
    want one.
 5. **Members** → invite the rest of the team and pick which environments each person sees.
@@ -290,7 +295,7 @@ renaming either keeps its slug, so the links in alerts already sent keep working
 
 `rule` and `unit` take these values; `value` and `threshold` are numbers in that unit. A rule
 opens an alert when `value` goes over `threshold`, or reaches it for the first three rules and
-for missing workers:
+for missing workers, and has stayed there for the duration set on the rule, if any:
 
 | `rule`                    | `unit`    | `value`                                          |
 | ------------------------- | --------- | ------------------------------------------------ |

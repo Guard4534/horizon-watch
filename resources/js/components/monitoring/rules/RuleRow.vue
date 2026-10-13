@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import InheritToggle from '@/components/monitoring/rules/InheritToggle.vue';
 import type { RuleField, RuleValues } from '@/lib/alertRules';
 import {
+    formatDuration,
     formatThreshold,
     overriddenFieldCount,
     ruleHint,
@@ -50,6 +51,7 @@ const shown = computed<RuleValues>(() => {
         notifyByEmail:
             fields.value.notifyByEmail ?? fallback.value.notifyByEmail,
         enabled: fields.value.enabled ?? fallback.value.enabled,
+        forMinutes: fields.value.forMinutes ?? fallback.value.forMinutes,
     };
 });
 
@@ -67,10 +69,10 @@ function toggleInheritance(field: RuleField): void {
     });
 }
 
-function readThreshold(event: Event): void {
+function readNumber(event: Event): number | null {
     const raw = (event.target as HTMLInputElement).value;
 
-    update({ threshold: raw === '' ? null : Number(raw) });
+    return raw === '' ? null : Number(raw);
 }
 </script>
 
@@ -127,7 +129,7 @@ function readThreshold(event: Event): void {
                             })
                         "
                         :aria-invalid="errors.threshold ? true : undefined"
-                        @input="readThreshold"
+                        @input="update({ threshold: readNumber($event) })"
                     />
                     <span class="nc-t-2xs nc-tone-muted flex-none">{{
                         unitLabel(rule.unit)
@@ -140,6 +142,48 @@ function readThreshold(event: Event): void {
                 </div>
                 <div v-if="errors.threshold" class="field-error">
                     {{ errors.threshold }}
+                </div>
+                <div
+                    v-if="shown.forMinutes !== null"
+                    class="mt-[6px] flex items-center gap-[6px]"
+                    :title="
+                        $t(
+                            'How long the threshold must stay exceeded before the alert opens',
+                        )
+                    "
+                >
+                    <span class="nc-t-2xs nc-tone-muted flex-none">{{
+                        $t('for')
+                    }}</span>
+                    <input
+                        type="number"
+                        inputmode="numeric"
+                        step="1"
+                        min="0"
+                        class="nc-input nc-num nc-right"
+                        :class="{ 'is-inherited': isInherited('forMinutes') }"
+                        :max="rule.maximumForMinutes"
+                        :value="shown.forMinutes"
+                        :disabled="isInherited('forMinutes')"
+                        :aria-label="
+                            $t(':rule duration', {
+                                rule: ruleLabel(rule.metric),
+                            })
+                        "
+                        :aria-invalid="errors.forMinutes ? true : undefined"
+                        @input="update({ forMinutes: readNumber($event) })"
+                    />
+                    <span class="nc-t-2xs nc-tone-muted flex-none">{{
+                        unitLabel('min')
+                    }}</span>
+                    <InheritToggle
+                        v-if="environmentScope"
+                        :inherited="isInherited('forMinutes')"
+                        @toggle="toggleInheritance('forMinutes')"
+                    />
+                </div>
+                <div v-if="errors.forMinutes" class="field-error">
+                    {{ errors.forMinutes }}
                 </div>
             </div>
 
@@ -254,6 +298,9 @@ function readThreshold(event: Event): void {
                 }"
             >
                 {{ formatThreshold(shown.threshold, rule.unit) }}
+                <div v-if="shown.forMinutes" class="nc-t-2xs nc-tone-muted">
+                    {{ formatDuration(shown.forMinutes) }}
+                </div>
             </div>
             <div
                 class="read-value"

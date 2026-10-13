@@ -37,6 +37,7 @@ beforeEach(function () {
         'severity' => AlertSeverity::Critical->value,
         'notifyByEmail' => false,
         'enabled' => true,
+        'forMinutes' => 0,
     ], $overrides);
 
     $this->put = fn (string $scope, array $rules) => $this->put(
@@ -112,6 +113,7 @@ test('an environment scope overrides field by field and inherits the rest', func
         'severity' => null,
         'notifyByEmail' => true,
         'enabled' => null,
+        'forMinutes' => null,
     ]])->assertSessionHasNoErrors();
 
     $rule = ($this->rulesOf)('production')['queue.pending'];
@@ -152,6 +154,7 @@ test('an environment rule with every field inherited is deleted', function () {
         'severity' => null,
         'notifyByEmail' => null,
         'enabled' => null,
+        'forMinutes' => null,
     ]])->assertSessionHasNoErrors();
 
     expect(AlertRule::query()->pluck('metric')->all())->toBe([AlertRuleMetric::QueueMaxWait]);
@@ -159,10 +162,10 @@ test('an environment rule with every field inherited is deleted', function () {
 
 test('an environment scope may leave every field inherited only when it is not the organization', function () {
     $this->actingAs($this->admin);
-    $inherited = ['metric' => 'queue.pending', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null];
+    $inherited = ['metric' => 'queue.pending', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => null];
 
     ($this->put)('organization', [$inherited])
-        ->assertSessionHasErrors(['rules.0.threshold', 'rules.0.severity', 'rules.0.notifyByEmail', 'rules.0.enabled']);
+        ->assertSessionHasErrors(['rules.0.threshold', 'rules.0.severity', 'rules.0.notifyByEmail', 'rules.0.enabled', 'rules.0.forMinutes']);
 
     ($this->put)('staging', [$inherited])->assertSessionHasNoErrors();
 
@@ -173,7 +176,7 @@ test('every field must be sent, even when inherited', function () {
     $this->actingAs($this->admin);
 
     ($this->put)('production', [['metric' => 'queue.pending', 'threshold' => 10]])
-        ->assertSessionHasErrors(['rules.0.severity', 'rules.0.notifyByEmail', 'rules.0.enabled']);
+        ->assertSessionHasErrors(['rules.0.severity', 'rules.0.notifyByEmail', 'rules.0.enabled', 'rules.0.forMinutes']);
 
     expect(AlertRule::query()->count())->toBe(0);
 });
@@ -181,7 +184,11 @@ test('every field must be sent, even when inherited', function () {
 test('thresholds are bounded per metric', function (string $metric, mixed $threshold, bool $valid) {
     $this->actingAs($this->admin);
 
-    $response = ($this->put)('organization', [($this->organizationRule)(['metric' => $metric, 'threshold' => $threshold])]);
+    $response = ($this->put)('organization', [($this->organizationRule)([
+        'metric' => $metric,
+        'threshold' => $threshold,
+        'forMinutes' => AlertRuleMetric::from($metric)->isStateRule() ? null : 0,
+    ])]);
 
     $valid
         ? $response->assertSessionHasNoErrors()
@@ -204,10 +211,88 @@ test('thresholds are bounded per metric', function (string $metric, mixed $thres
     'text' => ['queue.pending', 'many', false],
 ]);
 
+test('a threshold rule can ask for the breach to last some minutes, and an environment can override it', function () {
+    $this->actingAs($this->admin);
+
+    ($this->put)('organization', [($this->organizationRule)(['forMinutes' => 5])])->assertSessionHasNoErrors();
+    ($this->put)('production', [[
+        'metric' => 'queue.pending',
+        'threshold' => null,
+        'severity' => null,
+        'notifyByEmail' => null,
+        'enabled' => null,
+        'forMinutes' => 0,
+    ]])->assertSessionHasNoErrors();
+
+    expect(AlertRule::query()->where('scope', 'organization')->sole()->for_minutes)->toBe(5)
+        ->and(AlertRule::query()->where('scope', 'production')->sole()->for_minutes)->toBe(0);
+
+    expect(($this->rulesOf)('organization')['queue.pending'])->toMatchArray([
+        'forMinutes' => 5,
+        'overrideForMinutes' => null,
+        'maximumForMinutes' => 60,
+        'origin' => 'organization',
+    ]);
+
+    expect(($this->rulesOf)('production')['queue.pending'])->toMatchArray([
+        'forMinutes' => 0,
+        'overrideForMinutes' => 0,
+        'origin' => 'override',
+    ]);
+
+    expect(($this->rulesOf)('staging')['queue.pending'])->toMatchArray([
+        'forMinutes' => 5,
+        'overrideForMinutes' => null,
+        'origin' => 'organization',
+    ]);
+
+    $scopes = null;
+    $this->get(route('alert-rules.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(function (Assert $page) use (&$scopes) {
+            $scopes = collect($page->toArray()['props']['page']['scopes'])->keyBy('id')->all();
+        });
+    expect($scopes['production']['overrideCount'])->toBe(1);
+});
+
+test('the duration of a breach is bounded to an hour of whole minutes', function (mixed $minutes, bool $valid) {
+    $this->actingAs($this->admin);
+
+    $response = ($this->put)('organization', [($this->organizationRule)(['forMinutes' => $minutes])]);
+
+    $valid
+        ? $response->assertSessionHasNoErrors()
+        : $response->assertSessionHasErrors('rules.0.forMinutes');
+})->with([
+    'at once' => [0, true],
+    'an hour' => [60, true],
+    'past an hour' => [61, false],
+    'a negative number' => [-1, false],
+    'a fraction' => [1.5, false],
+    'nothing' => [null, false],
+]);
+
+test('state rules already count in minutes and take no duration', function () {
+    $this->actingAs($this->admin);
+
+    $stateRule = ['metric' => 'endpoint.unreachable', 'threshold' => 3, 'severity' => 'critical', 'notifyByEmail' => true, 'enabled' => true];
+
+    ($this->put)('organization', [[...$stateRule, 'forMinutes' => 5]])
+        ->assertSessionHasErrors('rules.0.forMinutes');
+    ($this->put)('organization', [$stateRule])->assertSessionHasNoErrors();
+    ($this->put)('production', [['metric' => 'endpoint.unreachable', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => 2]])
+        ->assertSessionHasErrors('rules.0.forMinutes');
+
+    expect(AlertRule::query()->sole()->for_minutes)->toBeNull()
+        ->and(($this->rulesOf)('organization')['endpoint.unreachable'])->toMatchArray([
+            'forMinutes' => null,
+            'overrideForMinutes' => null,
+        ]);
+});
+
 test('the environment scope is bounded the same way', function () {
     $this->actingAs($this->admin);
 
-    ($this->put)('production', [['metric' => 'jobs.failed_per_hour', 'threshold' => 200, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]])
+    ($this->put)('production', [['metric' => 'jobs.failed_per_hour', 'threshold' => 200, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => null]])
         ->assertSessionHasErrors('rules.0.threshold');
 });
 
@@ -220,11 +305,11 @@ test('the payload is refused when it is malformed', function (array $payload, st
     expect(AlertRule::query()->count())->toBe(0);
 })->with([
     'no rules' => [['rules' => []], 'rules'],
-    'an unknown metric' => [['rules' => [['metric' => 'redis.memory', 'threshold' => 5, 'severity' => 'warning', 'notifyByEmail' => true, 'enabled' => true]]], 'rules.0.metric'],
-    'an unknown severity' => [['rules' => [['metric' => 'queue.pending', 'threshold' => 5, 'severity' => 'fatal', 'notifyByEmail' => true, 'enabled' => true]]], 'rules.0.severity'],
+    'an unknown metric' => [['rules' => [['metric' => 'redis.memory', 'threshold' => 5, 'severity' => 'warning', 'notifyByEmail' => true, 'enabled' => true, 'forMinutes' => 0]]], 'rules.0.metric'],
+    'an unknown severity' => [['rules' => [['metric' => 'queue.pending', 'threshold' => 5, 'severity' => 'fatal', 'notifyByEmail' => true, 'enabled' => true, 'forMinutes' => 0]]], 'rules.0.severity'],
     'the same metric twice' => [['rules' => [
-        ['metric' => 'queue.pending', 'threshold' => 5, 'severity' => 'warning', 'notifyByEmail' => true, 'enabled' => true],
-        ['metric' => 'queue.pending', 'threshold' => 6, 'severity' => 'warning', 'notifyByEmail' => true, 'enabled' => true],
+        ['metric' => 'queue.pending', 'threshold' => 5, 'severity' => 'warning', 'notifyByEmail' => true, 'enabled' => true, 'forMinutes' => 0],
+        ['metric' => 'queue.pending', 'threshold' => 6, 'severity' => 'warning', 'notifyByEmail' => true, 'enabled' => true, 'forMinutes' => 0],
     ]], 'rules.0.metric'],
 ]);
 
@@ -234,7 +319,7 @@ test('a scope that is not an environment name of the organization answers 404', 
 
     $this->actingAs($this->admin);
 
-    ($this->put)($scope, [['metric' => 'queue.pending', 'threshold' => 5, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]])
+    ($this->put)($scope, [['metric' => 'queue.pending', 'threshold' => 5, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => null]])
         ->assertNotFound();
     $this->delete(route('alert-rules.reset', ['current_team' => $this->team->slug, 'scope' => $scope]))
         ->assertNotFound();
@@ -247,9 +332,9 @@ test('a manager who does not see an environment cannot write its scope', functio
 
     $this->actingAs($admin);
 
-    ($this->put)('production', [['metric' => 'queue.pending', 'threshold' => 5, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]])
+    ($this->put)('production', [['metric' => 'queue.pending', 'threshold' => 5, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => null]])
         ->assertNotFound();
-    ($this->put)('staging', [['metric' => 'queue.pending', 'threshold' => 5, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]])
+    ($this->put)('staging', [['metric' => 'queue.pending', 'threshold' => 5, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => null]])
         ->assertSessionHasNoErrors();
 });
 
@@ -369,7 +454,7 @@ test('the checks run in order: permission, then scope, then payload', function (
 test('the scope reaches the rules through the validation context, not through the current route', function (?string $scope, bool $valid) {
     $payload = [
         ...($scope === null ? [] : ['scope' => $scope]),
-        'rules' => [['metric' => 'queue.pending', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]],
+        'rules' => [['metric' => 'queue.pending', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => null]],
     ];
 
     $attempt = fn () => AlertRulesInputData::validateAndCreate($payload);
@@ -387,7 +472,7 @@ test('a scope sent in the body never replaces the scope of the route', function 
 
     $this->put(route('alert-rules.update', ['current_team' => $this->team->slug, 'scope' => 'organization']), [
         'scope' => 'staging',
-        'rules' => [['metric' => 'queue.pending', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]],
+        'rules' => [['metric' => 'queue.pending', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => null]],
     ])->assertInvalid(['rules.0.threshold']);
 
     expect(AlertRule::query()->count())->toBe(0);
@@ -396,7 +481,7 @@ test('a scope sent in the body never replaces the scope of the route', function 
 test('a scope written in capitals answers 404 like any unknown scope', function () {
     $this->actingAs($this->admin);
 
-    ($this->put)('Organization', [['metric' => 'queue.pending', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]])
+    ($this->put)('Organization', [['metric' => 'queue.pending', 'threshold' => null, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => null]])
         ->assertNotFound();
 
     expect(AlertRule::query()->count())->toBe(0);
@@ -405,9 +490,9 @@ test('a scope written in capitals answers 404 like any unknown scope', function 
 test('saving the same rules twice leaves one row per metric with the last values', function () {
     $this->actingAs($this->admin);
 
-    ($this->put)('staging', [['metric' => 'queue.pending', 'threshold' => 50, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]])
+    ($this->put)('staging', [['metric' => 'queue.pending', 'threshold' => 50, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => null]])
         ->assertSessionHasNoErrors();
-    ($this->put)('staging', [['metric' => 'queue.pending', 'threshold' => 70, 'severity' => 'critical', 'notifyByEmail' => null, 'enabled' => null]])
+    ($this->put)('staging', [['metric' => 'queue.pending', 'threshold' => 70, 'severity' => 'critical', 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => null]])
         ->assertSessionHasNoErrors();
     ($this->put)('organization', [($this->organizationRule)()])->assertSessionHasNoErrors();
     ($this->put)('organization', [($this->organizationRule)(['threshold' => 4000])])->assertSessionHasNoErrors();
@@ -435,7 +520,7 @@ test('a save that loses the race for the first row updates it instead of failing
     });
 
     app(UpdateAlertRules::class)->handle($this->team, 'staging', AlertRulesInputData::from([
-        'rules' => [['metric' => 'queue.pending', 'threshold' => 80, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]],
+        'rules' => [['metric' => 'queue.pending', 'threshold' => 80, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null, 'forMinutes' => null]],
     ]));
 
     expect(AlertRule::query()->sole()->only(['id', 'threshold']))->toBe(['id' => $competitor->id, 'threshold' => 80.0]);

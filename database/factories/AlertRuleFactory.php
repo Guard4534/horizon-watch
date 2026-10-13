@@ -25,6 +25,7 @@ class AlertRuleFactory extends Factory
             'severity' => AlertRuleMetric::QueuePending->defaultSeverity(),
             'notify_email' => true,
             'enabled' => true,
+            'for_minutes' => null,
         ];
     }
 
@@ -40,6 +41,7 @@ class AlertRuleFactory extends Factory
             'severity' => null,
             'notify_email' => null,
             'enabled' => null,
+            'for_minutes' => null,
         ]);
     }
 }

@@ -118,6 +118,10 @@ export function formatThreshold(threshold: number, unit: string): string {
     }
 }
 
+export function formatDuration(minutes: number): string {
+    return trans('for :minutes min', { minutes: String(minutes) });
+}
+
 export function formatRule(
     metric: App.Enums.AlertRuleMetric,
     threshold: number,
@@ -129,13 +133,19 @@ export function formatRule(
     return `${metric} ${comparison} ${formatThreshold(threshold, unit)}`;
 }
 
-export type RuleField = 'threshold' | 'severity' | 'notifyByEmail' | 'enabled';
+export type RuleField =
+    | 'threshold'
+    | 'severity'
+    | 'notifyByEmail'
+    | 'enabled'
+    | 'forMinutes';
 
 export const RULE_FIELDS: readonly RuleField[] = [
     'threshold',
     'severity',
     'notifyByEmail',
     'enabled',
+    'forMinutes',
 ];
 
 export function ruleFields(
@@ -149,6 +159,7 @@ export function ruleFields(
             severity: rule.severity,
             notifyByEmail: rule.notifyByEmail,
             enabled: rule.enabled,
+            forMinutes: rule.forMinutes,
         };
     }
 
@@ -161,6 +172,7 @@ export function ruleFields(
         severity: rule.overrideSeverity,
         notifyByEmail: rule.overrideNotifyByEmail,
         enabled: rule.overrideEnabled,
+        forMinutes: rule.overrideForMinutes,
     };
 }
 
@@ -169,6 +181,7 @@ export type RuleValues = {
     severity: App.Enums.AlertSeverity;
     notifyByEmail: boolean;
     enabled: boolean;
+    forMinutes: number | null;
 };
 
 export function ruleValues(
@@ -179,6 +192,7 @@ export function ruleValues(
         severity: rule.severity,
         notifyByEmail: rule.notifyByEmail,
         enabled: rule.enabled,
+        forMinutes: rule.forMinutes,
     };
 }
 

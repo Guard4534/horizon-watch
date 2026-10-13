@@ -1272,3 +1272,180 @@ test('a quiet resolution locks its alerts in the order the digest uses before it
     expect($lock)->toBeLessThan(PHP_INT_MAX)
         ->and($lock)->toBeLessThan(firstStatementIndex($statements, 'update "alerts"'));
 });
+
+test('a threshold rule with a duration opens only once the breach has lasted that long', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 5]);
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(4)->minutes();
+    ($this->poll)(($this->pending)(2600));
+
+    expect(Alert::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->sole()->breach_runs)->toBe([
+            'queue.pending' => ['since' => '2026-09-17T10:00:00.000000Z', 'seen' => '2026-09-17T10:04:00.000000Z'],
+        ]);
+    Event::assertNotDispatched(AlertOpened::class);
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2700));
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->opened_at->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and($alert->value)->toBe(2700.0);
+    Event::assertDispatchedTimes(AlertOpened::class, 1);
+});
+
+test('a rule without a duration opens at once and keeps no run', function () {
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    expect(Alert::query()->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and(EnvironmentState::query()->sole()->breach_runs)->toBeNull();
+});
+
+test('a reading back under the threshold restarts the wait, so a flapping queue opens nothing', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 2]);
+
+    foreach ([2500, 10, 2500, 10, 2500, 10, 2500] as $pending) {
+        ($this->poll)(($this->pending)($pending));
+        $this->travel(1)->minutes();
+    }
+
+    expect(Alert::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->sole()->breach_runs['queue.pending']['since'])->toBe('2026-09-17T10:06:00.000000Z');
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:08:00');
+});
+
+test('a healthy reading clears the run of every threshold it no longer breaks', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 2]);
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(10));
+
+    expect(EnvironmentState::query()->sole()->breach_runs)->toBeNull();
+});
+
+test('an alert resolved by a healthy reading waits the whole duration again before it reopens', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 1]);
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(10));
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->count())->toBe(1)
+        ->and(Alert::query()->sole()->resolved_at->toDateTimeString())->toBe('2026-09-17 10:01:15');
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->open()->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:02:30');
+    Event::assertDispatchedTimes(AlertOpened::class, 2);
+});
+
+test('a failed or inactive reading in the middle of a breach keeps its run going', function (Closure $reading) {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 2]);
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(1)->minutes();
+    ($this->poll)($reading->call($this));
+
+    expect(Alert::query()->where('metric', AlertRuleMetric::QueuePending)->count())->toBe(0);
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->where('metric', AlertRuleMetric::QueuePending)->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:02:00');
+})->with([
+    'unreachable' => [fn () => ($this->unreachable)()],
+    'inactive' => [fn () => ($this->inactive)()],
+]);
+
+test('a breach seen again after a gap longer than the stale window starts a new run', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 2]);
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(16)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->sole()->breach_runs['queue.pending']['since'])->toBe('2026-09-17T10:16:00.000000Z');
+
+    $this->travel(2)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:18:00');
+});
+
+test('resuming the collection forgets the breaches seen before the pause', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 2]);
+    $edit = fn (bool $pollingEnabled) => app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
+        name: 'production',
+        color: EnvironmentColor::Prod,
+        horizonUrl: $this->environment->horizon_url,
+        pollIntervalSeconds: 300,
+        basicAuthUser: 'monitor',
+        pollingEnabled: $pollingEnabled,
+    ));
+
+    ($this->poll)(($this->pending)(2500));
+    $edit(false);
+    $this->travel(2)->minutes();
+    $edit(true);
+
+    expect(EnvironmentState::query()->sole()->breach_runs)->toBeNull();
+
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->count())->toBe(0);
+});
+
+test('the duration comes from the effective rule of the environment', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueueMaxWait, ['for_minutes' => 10]);
+    ($this->rule)('production', AlertRuleMetric::QueueMaxWait, ['for_minutes' => 0]);
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 10]);
+
+    ($this->poll)(($this->reading)([
+        'workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 90, processes: 7)],
+    ]));
+
+    expect(Alert::query()->sole()->metric)->toBe(AlertRuleMetric::QueueMaxWait);
+});
+
+test('a longer duration set while an alert is open keeps it open', function () {
+    ($this->poll)(($this->pending)(2500));
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 30]);
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->resolved_at)->toBeNull()
+        ->and($alert->value)->toBe(2600.0);
+});
+
+test('a disabled rule keeps no run, so enabling it starts the wait at the next reading', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['enabled' => false]);
+    ($this->poll)(($this->pending)(2500));
+
+    expect(EnvironmentState::query()->sole()->breach_runs)->toBeNull();
+
+    AlertRule::query()->update(['enabled' => null, 'for_minutes' => 3]);
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(3)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:04:00');
+});

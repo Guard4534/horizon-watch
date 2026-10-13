@@ -19,6 +19,7 @@ class AlertRuleInputData extends Data
         public ?AlertSeverity $severity = null,
         public ?bool $notifyByEmail = null,
         public ?bool $enabled = null,
+        public ?int $forMinutes = null,
     ) {}
 
     /**
@@ -45,6 +46,9 @@ class AlertRuleInputData extends Data
             'severity' => [$presence, 'present', new Enum(AlertSeverity::class)],
             'notifyByEmail' => [$presence, 'present', 'boolean'],
             'enabled' => [$presence, 'present', 'boolean'],
+            'forMinutes' => $metric?->isStateRule() === true
+                ? ['prohibited']
+                : [$presence, 'present', 'integer', 'min:0', 'max:'.AlertRule::MAX_FOR_MINUTES],
         ];
     }
 
@@ -58,6 +62,7 @@ class AlertRuleInputData extends Data
             'severity' => __('severity'),
             'notifyByEmail' => __('email'),
             'enabled' => __('active'),
+            'forMinutes' => __('duration'),
         ];
     }
 
@@ -66,7 +71,8 @@ class AlertRuleInputData extends Data
         return $this->threshold === null
             && $this->severity === null
             && $this->notifyByEmail === null
-            && $this->enabled === null;
+            && $this->enabled === null
+            && $this->forMinutes === null;
     }
 
     private static function organizationScope(ValidationContext $context): bool

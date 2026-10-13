@@ -48,7 +48,8 @@ final class EffectiveRules
             $count = count(array_filter($rows, fn (AlertRule $row) => $row->threshold !== null
                 || $row->severity !== null
                 || $row->notify_email !== null
-                || $row->enabled !== null));
+                || $row->enabled !== null
+                || $row->for_minutes !== null));
 
             if ($count > 0) {
                 $counts[$scope] = $count;
@@ -89,6 +90,9 @@ final class EffectiveRules
         [$severity, $severityOrigin] = $this->pick($default->severity, $organization?->severity, $override?->severity);
         [$notify, $notifyOrigin] = $this->pick($default->notifyByEmail, $organization?->notify_email, $override?->notify_email);
         [$enabled, $enabledOrigin] = $this->pick($default->enabled, $organization?->enabled, $override?->enabled);
+        [$forMinutes, $forMinutesOrigin] = $default->metric->isStateRule()
+            ? [$default->forMinutes, $default->forMinutesOrigin]
+            : $this->pick($default->forMinutes, $organization?->for_minutes, $override?->for_minutes);
 
         return new EffectiveRule(
             metric: $default->metric,
@@ -96,10 +100,12 @@ final class EffectiveRules
             severity: $severity,
             notifyByEmail: $notify,
             enabled: $enabled,
+            forMinutes: $forMinutes,
             thresholdOrigin: $thresholdOrigin,
             severityOrigin: $severityOrigin,
             notifyOrigin: $notifyOrigin,
             enabledOrigin: $enabledOrigin,
+            forMinutesOrigin: $forMinutesOrigin,
         );
     }
 

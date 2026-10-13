@@ -39,10 +39,12 @@ test('without rows every metric uses the defaults of the code, from the organiza
             severity: $metric->defaultSeverity(),
             notifyByEmail: $metric->notifiesByEmailByDefault(),
             enabled: true,
+            forMinutes: 0,
             thresholdOrigin: RuleOrigin::Organization,
             severityOrigin: RuleOrigin::Organization,
             notifyOrigin: RuleOrigin::Organization,
             enabledOrigin: RuleOrigin::Organization,
+            forMinutesOrigin: RuleOrigin::Organization,
         ));
     }
 });
@@ -114,6 +116,24 @@ test('an environment-name row wins over the organization row and inherits from i
         ->and(app(EffectiveRules::class)->forEnvironment($this->environment)->for(AlertRuleMetric::QueuePending)->threshold)->toBe(2000.0);
 });
 
+test('the duration of a breach is inherited like the other fields, and state rules keep none', function () {
+    effectiveOrganizationRule($this->team, AlertRuleMetric::QueueMaxWait, ['for_minutes' => 5]);
+    effectiveOrganizationRule($this->team, AlertRuleMetric::QueuePending, ['for_minutes' => 3]);
+    effectiveEnvironmentRule($this->team, 'production', AlertRuleMetric::QueuePending, ['threshold' => null, 'for_minutes' => 0]);
+    effectiveOrganizationRule($this->team, AlertRuleMetric::EndpointUnreachable, ['for_minutes' => 10]);
+
+    $rules = app(EffectiveRules::class)->forEnvironment($this->environment);
+
+    expect($rules->for(AlertRuleMetric::QueueMaxWait)->forMinutes)->toBe(5)
+        ->and($rules->for(AlertRuleMetric::QueueMaxWait)->forMinutesOrigin)->toBe(RuleOrigin::Organization)
+        ->and($rules->for(AlertRuleMetric::QueuePending)->forMinutes)->toBe(0)
+        ->and($rules->for(AlertRuleMetric::QueuePending)->forMinutesOrigin)->toBe(RuleOrigin::Override)
+        ->and($rules->for(AlertRuleMetric::QueuePending)->threshold)->toBe(5000.0)
+        ->and($rules->for(AlertRuleMetric::JobRuntime)->forMinutes)->toBe(0)
+        ->and($rules->for(AlertRuleMetric::EndpointUnreachable)->forMinutes)->toBe(0)
+        ->and(app(EffectiveRules::class)->forScope($this->team, 'staging')->for(AlertRuleMetric::QueuePending)->forMinutes)->toBe(3);
+});
+
 test('an environment named with capitals uses the lowercase row', function () {
     $environment = Environment::factory()->for($this->application)->create(['name' => 'Worker-Batch']);
     effectiveEnvironmentRule($this->team, 'worker-batch', AlertRuleMetric::WorkersMissing, ['threshold' => 2]);
@@ -180,12 +200,13 @@ test('the override count holds the rows with at least one field, per lowercase e
     effectiveEnvironmentRule($this->team, 'production', AlertRuleMetric::QueuePending, ['threshold' => 10]);
     effectiveEnvironmentRule($this->team, 'production', AlertRuleMetric::QueueMaxWait, ['threshold' => null, 'severity' => null, 'notify_email' => false, 'enabled' => null]);
     effectiveEnvironmentRule($this->team, 'production', AlertRuleMetric::JobRuntime, ['threshold' => null, 'severity' => null, 'notify_email' => null, 'enabled' => null]);
+    effectiveEnvironmentRule($this->team, 'production', AlertRuleMetric::JobsFailedPerHour, ['threshold' => null, 'severity' => null, 'notify_email' => null, 'enabled' => null, 'for_minutes' => 0]);
     effectiveEnvironmentRule($this->team, 'Worker-Batch', AlertRuleMetric::WorkersMissing, ['enabled' => false]);
     effectiveOrganizationRule($this->team, AlertRuleMetric::QueuePending, ['threshold' => 5]);
     effectiveEnvironmentRule(Team::factory()->create(), 'staging', AlertRuleMetric::QueuePending, ['threshold' => 5]);
 
     expect(app(EffectiveRules::class)->overrideCounts($this->team))->toBe([
-        'production' => 2,
+        'production' => 3,
         'worker-batch' => 1,
     ]);
 });

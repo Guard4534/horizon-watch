@@ -30,6 +30,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property EnvironmentStatus|null $last_known_status
  * @property CarbonImmutable|null $last_known_since
  * @property CarbonImmutable|null $last_known_at
+ * @property array<string, array{since: string, seen: string}>|null $breach_runs
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read Environment $environment
@@ -51,6 +52,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'last_known_status',
     'last_known_since',
     'last_known_at',
+    'breach_runs',
 ])]
 class EnvironmentState extends Model
 {
@@ -85,6 +87,7 @@ class EnvironmentState extends Model
             'last_known_status' => EnvironmentStatus::class,
             'last_known_since' => 'immutable_datetime',
             'last_known_at' => 'immutable_datetime',
+            'breach_runs' => 'array',
         ];
     }
 }

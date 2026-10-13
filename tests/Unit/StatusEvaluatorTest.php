@@ -96,10 +96,12 @@ function evaluatorRules(array $changes): RuleSet
             severity: AlertSeverity::Critical,
             notifyByEmail: false,
             enabled: $changes[$key]['enabled'] ?? $rule->enabled,
+            forMinutes: $rule->forMinutes,
             thresholdOrigin: RuleOrigin::Override,
             severityOrigin: RuleOrigin::Override,
             notifyOrigin: RuleOrigin::Override,
             enabledOrigin: RuleOrigin::Override,
+            forMinutesOrigin: RuleOrigin::Organization,
         );
     }
 

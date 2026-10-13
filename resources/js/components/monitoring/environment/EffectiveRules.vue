@@ -3,7 +3,12 @@ import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatThreshold, ruleIcon, ruleLabel } from '@/lib/alertRules';
+import {
+    formatDuration,
+    formatThreshold,
+    ruleIcon,
+    ruleLabel,
+} from '@/lib/alertRules';
 import { severityColor, severityLabel } from '@/lib/alerts';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 
@@ -59,9 +64,11 @@ const scope = computed(() => environmentName.toLowerCase());
                     class="nc-num ml-auto flex-none"
                     style="letter-spacing: 0.01em; color: var(--nc-neutral-300)"
                     >{{
-                        rule.enabled
-                            ? formatThreshold(rule.threshold, rule.unit)
-                            : $t('Disabled')
+                        !rule.enabled
+                            ? $t('Disabled')
+                            : rule.forMinutes
+                              ? `${formatThreshold(rule.threshold, rule.unit)} · ${formatDuration(rule.forMinutes)}`
+                              : formatThreshold(rule.threshold, rule.unit)
                     }}</span
                 >
                 <span

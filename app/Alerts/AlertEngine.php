@@ -31,6 +31,7 @@ final class AlertEngine
             ->lockForUpdate()
             ->get()
             ->keyBy(fn (Alert $alert) => $alert->metric->value);
+        $runs = $this->breachRuns($environment, $rules, $snapshot, $state, $at);
 
         foreach (AlertRuleMetric::cases() as $metric) {
             $rule = $rules->for($metric);
@@ -49,10 +50,14 @@ final class AlertEngine
             } elseif ($alert !== null) {
                 [$value, $detail] = $this->measure($metric, $snapshot, $state, $at);
                 $this->touch($alert, $rule, $at, $value, $detail);
-            } elseif ($rule->enabled && $violating && (! $metric->isStateRule() || $this->runLasts($state, $at, $rule->threshold))) {
+            } elseif ($rule->enabled && $violating && $this->lastsLongEnough($rule, $state, $runs, $at)) {
                 [$value, $detail] = $this->measure($metric, $snapshot, $state, $at);
                 $this->open($environment, $rule, $at, $value, $detail);
             }
+        }
+
+        if ($runs !== ($state->breach_runs ?? [])) {
+            $state->forceFill(['breach_runs' => $runs === [] ? null : $runs])->save();
         }
     }
 
@@ -123,9 +128,52 @@ final class AlertEngine
         };
     }
 
-    private function runLasts(EnvironmentState $state, CarbonImmutable $at, float $minutes): bool
+    /**
+     * @param  array<string, array{since: string, seen: string}>  $runs
+     */
+    private function lastsLongEnough(EffectiveRule $rule, EnvironmentState $state, array $runs, CarbonImmutable $at): bool
     {
-        return ($state->status_since ?? $at)->diffInSeconds($at) >= $minutes * 60;
+        $run = $runs[$rule->metric->value] ?? null;
+
+        [$since, $minutes] = $rule->metric->isStateRule()
+            ? [$state->status_since, $rule->threshold]
+            : [$run === null ? null : CarbonImmutable::parse($run['since']), $rule->forMinutes];
+
+        return ($since ?? $at)->diffInSeconds($at) >= $minutes * 60;
+    }
+
+    /**
+     * @return array<string, array{since: string, seen: string}>
+     */
+    private function breachRuns(Environment $environment, RuleSet $rules, EnvironmentSnapshot $snapshot, EnvironmentState $state, CarbonImmutable $at): array
+    {
+        $runs = $state->breach_runs ?? [];
+
+        if (! $this->judgesThresholds($snapshot)) {
+            return $runs;
+        }
+
+        $bridge = $at->subSeconds(
+            config()->integer('horizon-watch.stale_after_intervals') * $environment->poll_interval_seconds
+            + config()->integer('horizon-watch.readings.poll_job_timeout_seconds'),
+        );
+        $seen = $at->toIso8601ZuluString('microsecond');
+        $judged = [];
+
+        foreach ($snapshot->breaches as $metric) {
+            if ($metric->isStateRule() || $rules->for($metric)->forMinutes === 0) {
+                continue;
+            }
+
+            $run = $runs[$metric->value] ?? null;
+
+            $judged[$metric->value] = [
+                'since' => $run !== null && CarbonImmutable::parse($run['seen'])->gte($bridge) ? $run['since'] : $seen,
+                'seen' => $seen,
+            ];
+        }
+
+        return $judged;
     }
 
     /**
