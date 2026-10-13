@@ -88,6 +88,11 @@ final class AlertMail
         };
     }
 
+    public static function resolvedHeadline(Alert $alert): string
+    {
+        return __('Back within the threshold: :rule', ['rule' => self::ruleLabel($alert->metric)]);
+    }
+
     public static function duration(float|int $minutes): string
     {
         $total = max(0, (int) round($minutes));

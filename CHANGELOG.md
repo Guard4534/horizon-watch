@@ -37,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `HORIZON_WATCH_HEARTBEAT_URL`, off by default, is called every minute while the panel is
   healthy, for a dead man's switch such as healthchecks.io.
 - A banner tells everyone signed in when the panel itself has stopped reading or falls behind.
+- Webhook payloads carry `"version": 1`, and each alert in them a `summary` line and a
+  `detail` object: the longest-running job and its queue, the queues without workers, and
+  whether the failed-jobs count is a lower bound. The README documents the full contract:
+  events, rule and unit values, the digest, and which alerts reach the webhook.
 
 ### Changed
 
@@ -76,6 +80,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `live-preview`). Members who see everything except production stop seeing those
   environments and stop receiving their alert emails. After upgrading, review the
   **Production environment** box on each environment.
+- **Upgrade note:** webhooks queued by 0.1.0, including those waiting for a retry, are sent as
+  they were built, without `version`, `summary` and `detail`. If your receiver needs those
+  fields, let the `notifications` queue empty before upgrading.
+- The notification setting of an alert rule chooses only whether its alerts are emailed; the
+  webhook receives every alert the panel announces. 0.1.0 described it as a per-rule
+  notification channel.
 
 ### Fixed
 

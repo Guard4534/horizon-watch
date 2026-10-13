@@ -245,15 +245,23 @@ its status.
 
 ```json
 {
+    "version": 1,
     "event": "alert.opened",
     "delivery_id": "0f6d2c1e-8a4b-4c3d-9e2f-1a2b3c4d5e6f",
     "alert": {
         "id": "01992f3c-5a4e-7b1d-9c2a-6d3e4f5a6b7c",
         "rule": "horizon.master_inactive",
         "severity": "critical",
+        "summary": "Shop · production — Horizon inactive for 14 min",
         "value": 14,
         "threshold": 5,
         "unit": "min",
+        "detail": {
+            "value_is_lower_bound": false,
+            "longest_job": null,
+            "longest_job_queue": null,
+            "queues_without_workers": []
+        },
         "application": "Shop",
         "environment": "production",
         "opened_at": "2026-09-17T12:02:00Z",
@@ -265,31 +273,120 @@ its status.
 }
 ```
 
-`event` is `alert.opened`, `alert.repeated` or `alert.resolved` (critical alerts),
-`alert.digest` (warnings, every 15 minutes, with an `alerts` list instead of `alert`) or
-`test` (with `"alert": null`). `url` is `null` once the environment is deleted.
-Organization and environment slugs are fixed when they are created: renaming either keeps
-its slug, so the links in alerts already sent keep working.
+`event` is one of:
+
+| Event            | Sent                                                                  | Body             |
+| ---------------- | --------------------------------------------------------------------- | ---------------- |
+| `alert.opened`   | when a critical alert opens                                           | `alert`          |
+| `alert.repeated` | while a critical alert stays open, at the repeat interval you chose   | `alert`          |
+| `alert.resolved` | when a critical alert whose opening reached the webhook clears        | `alert`          |
+| `alert.digest`   | every 15 minutes, with the warnings opened or resolved since the last | `alerts`, a list |
+| `test`           | when someone sends a test from Alert rules → Notifications            | `"alert": null`  |
+
+`version` is `1`. Fields may be added to version 1, so ignore the keys you do not know; a field
+that is removed, renamed or changes meaning raises the version. `url` is `null` once the
+environment is deleted. Organization and environment slugs are fixed when they are created:
+renaming either keeps its slug, so the links in alerts already sent keep working.
+
+`rule` and `unit` take these values; `value` and `threshold` are numbers in that unit. A rule
+opens an alert when `value` goes over `threshold`, or reaches it for the first three rules and
+for missing workers:
+
+| `rule`                    | `unit`    | `value`                                          |
+| ------------------------- | --------- | ------------------------------------------------ |
+| `horizon.master_inactive` | `min`     | minutes Horizon has been inactive                |
+| `endpoint.unreachable`    | `min`     | minutes the Horizon endpoint has not answered    |
+| `horizon.paused`          | `min`     | minutes Horizon has been paused                  |
+| `queue.pending`           | `job`     | jobs waiting in the queues                       |
+| `queue.max_wait`          | `s`       | seconds the oldest job has been waiting          |
+| `job.runtime`             | `s`       | seconds the longest-running job has been running |
+| `jobs.failed_per_hour`    | `job`     | jobs failed in the last hour                     |
+| `workers.missing`         | _(empty)_ | queues with waiting jobs and no worker           |
+
+`severity` is `critical` or `warning`, as set on the rule. `summary` is one line for people,
+in the panel's default language (`APP_LOCALE`): `Back within the threshold: …` once the alert
+has resolved. Do not parse it, read the other fields instead. `detail` always has the same
+four keys:
+
+- `value_is_lower_bound`: `true` when there were more failed jobs than the panel reads, so
+  `value` is a minimum (`jobs.failed_per_hour`)
+- `longest_job` and `longest_job_queue`: the name and queue of the longest-running job
+  (`job.runtime`), otherwise `null`
+- `queues_without_workers`: up to 10 of the queues with waiting jobs and no worker
+  (`workers.missing`), otherwise empty
+
+A digest carries the organization's warnings in an `alerts` list, the oldest first (up to 500;
+any more follow in the next digest), each in the same shape as `alert` above. A warning that
+resolved since the previous digest has `resolved_at` set:
+
+```json
+{
+    "version": 1,
+    "event": "alert.digest",
+    "delivery_id": "6b1f0c9a-3d2e-4f5a-8b7c-9d0e1f2a3b4c",
+    "alerts": [
+        {
+            "id": "01992f41-7c2d-7e3f-8a1b-2c3d4e5f6a7b",
+            "rule": "job.runtime",
+            "severity": "warning",
+            "summary": "Shop · production — A job has been running for 300 s",
+            "value": 300,
+            "threshold": 120,
+            "unit": "s",
+            "detail": {
+                "value_is_lower_bound": false,
+                "longest_job": "App\\Jobs\\ImportCatalog",
+                "longest_job_queue": "imports",
+                "queues_without_workers": []
+            },
+            "application": "Shop",
+            "environment": "production",
+            "opened_at": "2026-09-17T12:04:00Z",
+            "resolved_at": null,
+            "url": "https://horizon-watch.example.com/acme/environments/shop-production"
+        }
+    ],
+    "organization": { "name": "Acme", "slug": "acme" },
+    "sent_at": "2026-09-17T12:15:01Z"
+}
+```
+
+The webhook gets every alert the panel announces, whatever the rule's **Email** setting: that
+setting only decides whether the alert is also emailed. The rest of the delivery policy applies
+to the webhook as to email: during quiet hours criticals still go out and the digest waits
+for the end of the window; a muted alert sends nothing, its resolution included, and a muted
+warning is left out of the digest; a handled alert stops repeating but still sends its
+resolution; an environment whose collection is paused sends nothing.
 
 `delivery_id` names one delivery and stays the same when a failed delivery is tried again,
 while `sent_at` is the time of each attempt. A receiver that answered too slowly may get the
 same delivery twice: deduplicate on `delivery_id`.
 
-Verify the signature before trusting the body, and reject old timestamps. Accept either
-signature header, so that after a regeneration the receiver can move to the new secret at
-any time within the 24 hours:
+Verify the signature over the raw body before parsing it, and reject old timestamps. Accept
+either signature header, so that after a regeneration the receiver can move to the new secret
+at any time within the 24 hours. Refuse every request when the secret is not configured,
+rather than checking against an empty key:
 
 ```php
-$body = file_get_contents('php://input');
-$timestamp = (int) ($_SERVER['HTTP_X_HORIZON_WATCH_TIMESTAMP'] ?? 0);
-$expected = 'sha256='.hash_hmac('sha256', $timestamp.'.'.$body, getenv('HORIZON_WATCH_WEBHOOK_SECRET'));
-$signed = hash_equals($expected, $_SERVER['HTTP_X_HORIZON_WATCH_SIGNATURE'] ?? '')
-    || hash_equals($expected, $_SERVER['HTTP_X_HORIZON_WATCH_PREVIOUS_SIGNATURE'] ?? '');
+$secret = getenv('HORIZON_WATCH_WEBHOOK_SECRET');
 
-if (abs(time() - $timestamp) > 300 || ! $signed) {
+if (! is_string($secret) || $secret === '') {
+    http_response_code(500);
+    exit;
+}
+
+$body = (string) file_get_contents('php://input');
+$timestamp = (string) ($_SERVER['HTTP_X_HORIZON_WATCH_TIMESTAMP'] ?? '');
+$expected = 'sha256='.hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+$signed = hash_equals($expected, (string) ($_SERVER['HTTP_X_HORIZON_WATCH_SIGNATURE'] ?? ''))
+    || hash_equals($expected, (string) ($_SERVER['HTTP_X_HORIZON_WATCH_PREVIOUS_SIGNATURE'] ?? ''));
+
+if (! ctype_digit($timestamp) || abs(time() - (int) $timestamp) > 300 || ! $signed) {
     http_response_code(401);
     exit;
 }
+
+$payload = json_decode($body, true, flags: JSON_THROW_ON_ERROR);
 ```
 
 This is what `App\Externals\Webhook\Signature::sign()` computes.

@@ -1,6 +1,7 @@
 <?php
 
 use App\Alerts\Payloads\WebhookPayload;
+use App\Enums\AlertRuleMetric;
 use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
 use App\Enums\NotificationChannel;
@@ -23,6 +24,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\URL;
 use Tests\Fixtures\Horizon\FakeResolver;
 use Tests\Support\AnotherAppKey;
 use Tests\Support\TraceArguments;
@@ -327,6 +329,7 @@ test('the webhook job stamps the send time and logs the host only', function () 
     expect(receivedRequests())->toHaveCount(1)
         ->and($log->delivery_id)->toBe($job->deliveryId)
         ->and($body)->toBe([
+            'version' => 1,
             'event' => 'test',
             'delivery_id' => $job->deliveryId,
             'alert' => null,
@@ -339,6 +342,28 @@ test('the webhook job stamps the send time and logs the host only', function () 
         ->and($log->target)->toBe('127.0.0.1')
         ->and($log->error)->toBeNull()
         ->and(json_encode(DeliveryLog::query()->get()->toArray()))->not->toContain('tok-path-secret');
+});
+
+test('an alert goes on the wire as the documented version 1 body', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:02:04', 'UTC'));
+    URL::forceRootUrl('https://horizon-watch.example.com');
+    URL::forceScheme('https');
+    $team = webhookJobTeam(receiverUrl('accepted'));
+    $environment = Environment::factory()->for(Application::factory()->for($team)->create(['name' => 'Città', 'slug' => 'citta']))->production()->create();
+    $alert = Alert::factory()->for($environment)->critical()->create([
+        'metric' => AlertRuleMetric::JobRuntime,
+        'value' => 300,
+        'detail' => ['job' => 'App\\Jobs\\ImportCatalog', 'queue' => 'imports', 'seconds' => 300],
+        'opened_at' => CarbonImmutable::parse('2026-09-17 12:02:00', 'UTC'),
+    ]);
+    $job = new SendAlertWebhook($team->id, $alert->id, SentNotificationKind::CriticalAlert, WebhookPayload::forAlert($alert, WebhookPayload::OPENED));
+
+    dispatch_sync($job);
+
+    [$request] = receivedRequests();
+
+    expect($request['body'])->toBe('{"version":1,"event":"alert.opened","delivery_id":"'.$job->deliveryId.'","alert":{"id":"'.$alert->id.'","rule":"job.runtime","severity":"critical","summary":"Città · production — A job has been running for 300 s","value":300,"threshold":120,"unit":"s","detail":{"value_is_lower_bound":false,"longest_job":"App\\\\Jobs\\\\ImportCatalog","longest_job_queue":"imports","queues_without_workers":[]},"application":"Città","environment":"production","opened_at":"2026-09-17T12:02:00Z","resolved_at":null,"url":"https://horizon-watch.example.com/'.$team->slug.'/environments/citta-production"},"organization":{"name":"Acme","slug":"'.$team->slug.'"},"sent_at":"2026-09-17T12:02:04Z"}')
+        ->and($request['headers']['x-horizon-watch-signature'])->toBe(Signature::sign(WEBHOOK_TEST_SECRET, 1_789_646_524, $request['body']));
 });
 
 test('a failing receiver is tried three times with backoff, then logged once as failed', function () {
