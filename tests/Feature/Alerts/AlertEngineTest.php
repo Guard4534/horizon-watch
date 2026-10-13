@@ -283,7 +283,7 @@ test('an unreachable alert resolves with the first reading that succeeds', funct
     Event::assertDispatchedTimes(AlertResolved::class, 1);
 });
 
-test('an inactive horizon opens after five minutes and resolves when the status changes', function () {
+test('an inactive horizon opens after five minutes and resolves when it runs again', function () {
     ($this->poll)(($this->inactive)());
     $this->travel(4)->minutes();
     ($this->poll)(($this->inactive)());
@@ -297,9 +297,165 @@ test('an inactive horizon opens after five minutes and resolves when the status 
         ->and(Alert::query()->sole()->severity)->toBe(AlertSeverity::Critical);
 
     $this->travel(15)->seconds();
-    ($this->poll)(($this->unreachable)());
+    ($this->poll)(($this->reading)());
 
     expect(Alert::query()->sole()->resolved_at->toDateTimeString())->toBe('2026-09-17 10:05:15');
+});
+
+test('a failed reading neither resolves nor touches an open inactive or paused alert', function (AlertRuleMetric $metric, Closure $reading) {
+    ($this->poll)($reading->call($this));
+    $this->travel(15)->minutes();
+    ($this->poll)($reading->call($this));
+
+    $alert = Alert::query()->where('metric', $metric)->sole();
+
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->unreachable)());
+
+    $kept = Alert::query()->where('metric', $metric)->sole();
+
+    expect($kept->resolved_at)->toBeNull()
+        ->and($kept->last_seen_at->toDateTimeString())->toBe('2026-09-17 10:15:00')
+        ->and($kept->value)->toBe($alert->value);
+    Event::assertNotDispatched(AlertResolved::class);
+
+    $this->travel(15)->seconds();
+    ($this->poll)($reading->call($this));
+
+    $kept = Alert::query()->where('metric', $metric)->sole();
+
+    expect($kept->id)->toBe($alert->id)
+        ->and($kept->resolved_at)->toBeNull()
+        ->and($kept->last_seen_at->toDateTimeString())->toBe('2026-09-17 10:15:30')
+        ->and($kept->value)->toBe(15.0);
+    Event::assertDispatchedTimes(AlertOpened::class, 1);
+    Event::assertNotDispatched(AlertResolved::class);
+
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->reading)());
+
+    expect(Alert::query()->where('metric', $metric)->sole()->resolved_at->toDateTimeString())->toBe('2026-09-17 10:15:45');
+    Event::assertDispatchedTimes(AlertResolved::class, 1);
+})->with([
+    'inactive' => [AlertRuleMetric::HorizonMasterInactive, fn () => ($this->inactive)()],
+    'paused' => [AlertRuleMetric::HorizonPaused, fn () => ($this->paused)()],
+]);
+
+test('an inactive alert stays open beside the unreachable one through a long outage', function () {
+    ($this->poll)(($this->inactive)());
+    $this->travel(5)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    foreach (range(1, 4) as $ignored) {
+        $this->travel(5)->minutes();
+        ($this->poll)(($this->unreachable)());
+    }
+
+    expect(Alert::query()->open()->pluck('metric')->all())
+        ->toEqualCanonicalizing([AlertRuleMetric::HorizonMasterInactive, AlertRuleMetric::EndpointUnreachable]);
+    Event::assertNotDispatched(AlertResolved::class);
+});
+
+test('a failed reading does not restart the run of a horizon that is still inactive', function () {
+    ($this->poll)(($this->inactive)());
+    $this->travel(3)->minutes();
+    ($this->poll)(($this->unreachable)());
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    expect(Alert::query()->count())->toBe(0);
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->metric)->toBe(AlertRuleMetric::HorizonMasterInactive)
+        ->and($alert->opened_at->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and($alert->value)->toBe(5.0);
+});
+
+test('a failed reading never opens an inactive or paused alert, however long the run before it', function (int $minutes, Closure $reading) {
+    ($this->poll)($reading->call($this));
+    $this->travel($minutes - 1)->minutes();
+    ($this->poll)($reading->call($this));
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->unreachable)());
+
+    expect(Alert::query()->count())->toBe(0);
+})->with([
+    'inactive' => [5, fn () => ($this->inactive)()],
+    'paused' => [15, fn () => ($this->paused)()],
+]);
+
+test('an inactive horizon that comes back after an outage longer than the stale window waits the minutes again', function () {
+    ($this->poll)(($this->inactive)());
+    $this->travel(4)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    foreach (range(1, 4) as $ignored) {
+        $this->travel(5)->minutes();
+        ($this->poll)(($this->unreachable)());
+    }
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    expect(Alert::query()->where('metric', AlertRuleMetric::HorizonMasterInactive)->count())->toBe(0)
+        ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:25:00');
+});
+
+test('an inactive alert kept open through an outage longer than the stale window keeps its opening and measures the run afresh', function () {
+    ($this->poll)(($this->inactive)());
+    $this->travel(5)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    foreach (range(1, 4) as $ignored) {
+        $this->travel(5)->minutes();
+        ($this->poll)(($this->unreachable)());
+    }
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    $alert = Alert::query()->where('metric', AlertRuleMetric::HorizonMasterInactive)->sole();
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:26:00')
+        ->and($alert->resolved_at)->toBeNull()
+        ->and($alert->opened_at->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and($alert->last_seen_at->toDateTimeString())->toBe('2026-09-17 10:26:00')
+        ->and($alert->value)->toBe(0.0);
+    Event::assertNotDispatched(AlertResolved::class, fn (AlertResolved $event) => $event->alertId === $alert->id);
+});
+
+test('disabling a state rule during an outage resolves its open alert quietly', function (AlertRuleMetric $metric, Closure $reading) {
+    ($this->poll)($reading->call($this));
+    $this->travel(15)->minutes();
+    ($this->poll)($reading->call($this));
+
+    ($this->rule)('production', $metric, ['enabled' => false]);
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->unreachable)());
+
+    $alert = Alert::query()->where('metric', $metric)->sole();
+
+    expect($alert->resolved_at->toDateTimeString())->toBe('2026-09-17 10:15:15')
+        ->and($alert->resolution_notified_at?->toDateTimeString())->toBe('2026-09-17 10:15:15');
+    Event::assertNotDispatched(AlertResolved::class);
+})->with([
+    'inactive' => [AlertRuleMetric::HorizonMasterInactive, fn () => ($this->inactive)()],
+    'paused' => [AlertRuleMetric::HorizonPaused, fn () => ($this->paused)()],
+]);
+
+test('a failed reading between two different states starts the run at the second one', function () {
+    ($this->poll)(($this->inactive)());
+    $this->travel(10)->minutes();
+    ($this->poll)(($this->unreachable)());
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->paused)());
+
+    expect(Alert::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:11:00');
 });
 
 test('a paused horizon opens after fifteen minutes and resolves when it runs again', function () {
@@ -1039,6 +1195,32 @@ test('resuming the collection starts a new run even within the stale window', fu
     ($this->poll)(($this->unreachable)());
 
     expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:02:00')
+        ->and(Alert::query()->count())->toBe(0);
+});
+
+test('resuming the collection during an outage does not bring back the run from before it', function () {
+    $edit = fn (bool $pollingEnabled) => app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
+        name: 'production',
+        color: EnvironmentColor::Prod,
+        horizonUrl: $this->environment->horizon_url,
+        pollIntervalSeconds: 300,
+        basicAuthUser: 'monitor',
+        pollingEnabled: $pollingEnabled,
+    ));
+
+    ($this->poll)(($this->inactive)());
+    $this->travel(3)->minutes();
+    ($this->poll)(($this->unreachable)());
+    $edit(false);
+    $this->travel(1)->minutes();
+    $edit(true);
+
+    expect(EnvironmentState::query()->sole()->last_known_since)->toBeNull();
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:05:00')
         ->and(Alert::query()->count())->toBe(0);
 });
 

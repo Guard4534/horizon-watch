@@ -287,10 +287,28 @@ test('the settings are validated', function (array $overrides, string $error) {
     'quiet to without quiet from' => [['quietFrom' => null], 'quietFrom'],
     'quiet hours with seconds' => [['quietFrom' => '23:00:00'], 'quietFrom'],
     'quiet hours out of range' => [['quietTo' => '24:30'], 'quietTo'],
+    'quiet hours over the whole day' => [['quietFrom' => '00:00', 'quietTo' => '23:59'], 'quietTo'],
+    'quiet hours that leave no quarter of an hour out' => [['quietFrom' => '08:00', 'quietTo' => '07:50'], 'quietTo'],
+    'quiet hours that end when they start' => [['quietFrom' => '08:00', 'quietTo' => '08:00'], 'quietTo'],
     'an unknown timezone' => [['timezone' => 'Mars/Olympus'], 'timezone'],
     'a timezone abbreviation' => [['timezone' => 'CEST'], 'timezone'],
     'a cadence outside the list' => [['repeatMinutes' => 45], 'repeatMinutes'],
     'a cadence of zero' => [['repeatMinutes' => 0], 'repeatMinutes'],
+]);
+
+test('quiet hours that leave a quarter of an hour of the day out are saved', function (string $from, string $to) {
+    $this->actingAs($this->admin);
+
+    ($this->save)(['quietFrom' => $from, 'quietTo' => $to])->assertSessionHasNoErrors();
+
+    $settings = NotificationSetting::query()->sole();
+
+    expect($settings->getRawOriginal('quiet_from'))->toBe($from.':00')
+        ->and($settings->getRawOriginal('quiet_to'))->toBe($to.':00');
+})->with([
+    'across midnight' => ['08:00', '07:45'],
+    'within the day' => ['00:00', '23:45'],
+    'a single minute' => ['12:00', '12:01'],
 ]);
 
 test('the whole payload must be sent', function (string $missing) {

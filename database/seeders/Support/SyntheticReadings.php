@@ -149,6 +149,9 @@ final class SyntheticReadings
                     $reading['reserved'],
                 ),
                 'latency_ms' => $unreachable ? null : $reading['horizon']->latencyMs,
+                'last_known_status' => $unreachable ? null : $evaluated->status,
+                'last_known_since' => $unreachable ? null : $statusSince,
+                'last_known_at' => $unreachable ? null : $until,
             ],
         );
     }

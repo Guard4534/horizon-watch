@@ -35,17 +35,15 @@ final class AlertEngine
         foreach (AlertRuleMetric::cases() as $metric) {
             $rule = $rules->for($metric);
             $violating = $metric->isStateRule()
-                ? $state->status === $this->stateOf($metric)
+                ? $this->holdsState($metric, $snapshot, $state)
                 : ($this->judgesThresholds($snapshot) ? $snapshot->breaches->contains($metric) : null);
-
-            if ($violating === null) {
-                continue;
-            }
 
             $alert = $open->get($metric->value);
 
-            if ($alert !== null && ! $rule->enabled) {
+            if ($alert !== null && ! $rule->enabled && ($violating !== null || $metric->isStateRule())) {
                 $this->resolveQuietly(Alert::query()->whereKey($alert->id), $at);
+            } elseif ($violating === null) {
+                continue;
             } elseif ($alert !== null && ! $violating) {
                 $this->resolve($alert, $at);
             } elseif ($alert !== null) {
@@ -103,6 +101,17 @@ final class AlertEngine
     private function judgesThresholds(EnvironmentSnapshot $snapshot): bool
     {
         return $snapshot->error === null && $snapshot->status !== EnvironmentStatus::Inactive;
+    }
+
+    private function holdsState(AlertRuleMetric $metric, EnvironmentSnapshot $snapshot, EnvironmentState $state): ?bool
+    {
+        $status = $this->stateOf($metric);
+
+        if ($snapshot->error !== null && $status !== EnvironmentStatus::Unreachable) {
+            return null;
+        }
+
+        return $state->status === $status;
     }
 
     private function stateOf(AlertRuleMetric $metric): EnvironmentStatus

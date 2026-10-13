@@ -923,6 +923,131 @@ test('failed readings in a row keep the start of the unreachable run', function 
         ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:01:00');
 });
 
+test('failed readings within the stale window do not break the run of the status that comes back', function () {
+    $this->reader->results = [
+        ($this->reading)(),
+        new HorizonReadFailed(ReadingError::Unreachable),
+        new HorizonReadFailed(ReadingError::Unreachable),
+        ($this->reading)(),
+    ];
+
+    ($this->poll)();
+    $status = EnvironmentState::query()->sole()->status;
+    $this->travel(15)->seconds();
+    ($this->poll)();
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:15')
+        ->and($state->last_known_status)->toBe($status)
+        ->and($state->last_known_since->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and($state->last_known_at->toDateTimeString())->toBe('2026-09-17 10:00:00');
+
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->toBe($status)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and($state->last_known_since->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and($state->last_known_at->toDateTimeString())->toBe('2026-09-17 10:00:45');
+});
+
+test('a status that comes back after an outage longer than the stale window starts a new run', function () {
+    $this->reader->results = [
+        ($this->reading)(),
+        ...array_fill(0, 5, new HorizonReadFailed(ReadingError::Unreachable)),
+        ($this->reading)(),
+    ];
+
+    ($this->poll)();
+
+    foreach (range(1, 6) as $ignored) {
+        $this->travel(16)->seconds();
+        ($this->poll)();
+    }
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->not->toBe(EnvironmentStatus::Unreachable)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:01:36')
+        ->and($state->last_known_since->toDateTimeString())->toBe('2026-09-17 10:01:36');
+});
+
+test('a slow failed reading that swallows the next tick does not break the run', function () {
+    $this->reader->results = [
+        ($this->reading)(),
+        new HorizonReadFailed(ReadingError::Unreachable),
+        ($this->reading)(),
+    ];
+
+    ($this->poll)();
+    $this->travel(15)->seconds();
+    ($this->poll)();
+    $this->travel(33)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->not->toBe(EnvironmentStatus::Unreachable)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and($state->last_known_at->toDateTimeString())->toBe('2026-09-17 10:00:48');
+});
+
+test('a poll killed by the job timeout does not break the run', function () {
+    $this->reader->results = [($this->reading)(), ($this->reading)()];
+
+    ($this->poll)();
+    $this->travel(47)->seconds();
+    app(PollEnvironment::class)->recordFailure($this->environment, ReadingCause::Timeout);
+
+    expect(EnvironmentState::query()->sole()->status)->toBe(EnvironmentStatus::Unreachable);
+
+    $this->travel(16)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->not->toBe(EnvironmentStatus::Unreachable)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00');
+});
+
+test('a failed reading between two different statuses starts the run at the second one', function () {
+    $this->reader->results = [
+        ($this->reading)(),
+        new HorizonReadFailed(ReadingError::Unreachable),
+        ($this->reading)(['workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 1, processes: 7)]]),
+    ];
+
+    ($this->poll)();
+    $this->travel(15)->seconds();
+    ($this->poll)();
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->toBe(EnvironmentStatus::Degraded)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:30')
+        ->and($state->last_known_status)->toBe(EnvironmentStatus::Degraded);
+});
+
+test('a first reading that fails knows no status before it', function () {
+    $this->reader->results = [new HorizonReadFailed(ReadingError::Unreachable)];
+
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->last_known_status)->toBeNull()
+        ->and($state->last_known_since)->toBeNull()
+        ->and($state->last_known_at)->toBeNull();
+});
+
 test('a late reading moves neither the status nor the start of the run', function () {
     $this->reader->results = [
         new HorizonReadFailed(ReadingError::Unreachable),

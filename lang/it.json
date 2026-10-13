@@ -487,6 +487,7 @@
     "The organization name does not match.": "Il nome dell’organizzazione non corrisponde.",
     "The organization rules, with the overrides of the :scope environments.": "Le regole dell’organizzazione, con le eccezioni degli ambienti :scope.",
     "The panel is read-only: it polls Horizon, it does not drive it. All it needs is a user with access to /horizon, with basic auth if the endpoint asks for it.": "Il pannello è in sola lettura: interroga Horizon, non lo comanda. Gli basta un utente con accesso a /horizon, con basic auth se l’endpoint la richiede.",
+    "The quiet hours cannot cover the whole day: leave at least a quarter of an hour outside the window.": "La finestra di silenzio non può coprire l’intera giornata: lascia fuori almeno un quarto d’ora.",
     "The reading did not finish: see the log of the panel's worker": "La lettura non è terminata: vedi il log del worker del pannello",
     "The stored password cannot be decrypted: enter it again": "La password salvata non si può decifrare: inseriscila di nuovo",
     "The test could not run. Reload the page and try again.": "Non è stato possibile eseguire il test. Ricarica la pagina e riprova.",

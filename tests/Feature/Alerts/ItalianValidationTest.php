@@ -49,6 +49,21 @@ test('quiet hours without an end are reported in italian', function () {
         ]);
 });
 
+test('quiet hours over the whole day are reported in italian', function () {
+    $this->actingAs($this->admin)
+        ->put(route('alert-settings.update', ['current_team' => $this->team->slug]), [
+            'recipients' => [],
+            'webhookUrl' => null,
+            'quietFrom' => '08:00',
+            'quietTo' => '07:50',
+            'timezone' => 'Europe/Rome',
+            'repeatMinutes' => null,
+        ])
+        ->assertSessionHasErrors([
+            'quietTo' => 'La finestra di silenzio non può coprire l’intera giornata: lascia fuori almeno un quarto d’ora.',
+        ]);
+});
+
 test('every english validation message has an italian line', function () {
     $english = require base_path('vendor/laravel/framework/src/Illuminate/Translation/lang/en/validation.php');
     $italian = require lang_path('it/validation.php');

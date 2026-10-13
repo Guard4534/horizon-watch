@@ -2,6 +2,7 @@
 
 namespace App\Data\Alerts;
 
+use App\Rules\QuietHoursLeaveTheDayOpen;
 use App\Rules\WebhookUrl;
 use DateTimeZone;
 use Illuminate\Support\Str;
@@ -31,7 +32,7 @@ class NotificationSettingsInputData extends Data
             'recipients.*' => ['required', 'string', 'max:255', 'email:rfc'],
             'webhookUrl' => ['present', 'nullable', 'string', 'max:2048', 'url:http,https', new WebhookUrl],
             'quietFrom' => ['present', 'nullable', 'date_format:H:i', 'required_with:'.self::key($context, 'quietTo')],
-            'quietTo' => ['present', 'nullable', 'date_format:H:i', 'required_with:'.self::key($context, 'quietFrom')],
+            'quietTo' => ['present', 'nullable', 'date_format:H:i', 'required_with:'.self::key($context, 'quietFrom'), new QuietHoursLeaveTheDayOpen(is_array($context->payload) ? $context->payload['quietFrom'] ?? null : null)],
             'timezone' => ['required', 'string', Rule::in(DateTimeZone::listIdentifiers())],
             'repeatMinutes' => ['present', 'nullable', 'integer', Rule::in(config()->array('horizon-watch.notifications.repeat_minutes'))],
         ];

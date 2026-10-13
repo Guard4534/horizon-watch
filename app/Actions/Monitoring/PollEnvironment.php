@@ -126,13 +126,15 @@ class PollEnvironment
             'nodes' => array_map(fn (HorizonMaster $master) => $this->node($master, $capturedAt), $reading->masters),
             'queues' => array_map(fn (HorizonQueueLoad $queue) => $this->queue($queue, $supervisors, $reading), $reading->workload),
             'pending_jobs' => $reading->pendingJobs === null ? [] : $this->reservedJobs($reading->pendingJobs),
+            'last_known_status' => $evaluated->status,
+            'last_known_at' => $capturedAt,
         ];
 
         if ($reading->runtimesFetched) {
             $state['runtimes_fetched_at'] = $capturedAt;
         }
 
-        $sectionsOnInsert = ['status_since' => $capturedAt];
+        $sectionsOnInsert = ['status_since' => $capturedAt, 'last_known_since' => $capturedAt];
 
         if ($reading->failedJobs === null) {
             $sectionsOnInsert['failed_jobs'] = [];
@@ -293,17 +295,24 @@ class PollEnvironment
         $query = DB::table($model->getTable());
         $grammar = $query->getGrammar();
 
-        $statusSince = new Expression(
-            'case when "environment_states"."status" = excluded."status" and "environment_states"."captured_at" >= excluded."captured_at" - make_interval(secs => ?) then coalesce("environment_states"."status_since", excluded."status_since") else excluded."status_since" end',
+        $runStart = new Expression(
+            'case when "environment_states"."status" = excluded."status" and "environment_states"."captured_at" >= excluded."captured_at" - make_interval(secs => ?) then coalesce("environment_states"."status_since", excluded."status_since")'
+            .' when "environment_states"."last_known_status" = excluded."status" and "environment_states"."last_known_at" >= excluded."captured_at" - make_interval(secs => ?) then coalesce("environment_states"."last_known_since", excluded."status_since")'
+            .' else excluded."status_since" end',
         );
 
-        $sql = $grammar->compileUpsert($query, [$row], ['environment_id'], [...array_keys($state), 'status_since' => $statusSince, 'updated_at'])
+        $runs = array_fill_keys(array_intersect(['status_since', 'last_known_since'], array_keys($insertOnly)), $runStart);
+
+        $sql = $grammar->compileUpsert($query, [$row], ['environment_id'], [...array_keys($state), ...$runs, 'updated_at'])
             .' where '.$grammar->wrap($model->getTable().'.captured_at').' <= '.$grammar->wrap('excluded.captured_at')
             .' returning *';
 
+        $stale = config()->integer('horizon-watch.stale_after_intervals') * $environment->poll_interval_seconds;
+        $bridge = $stale + config()->integer('horizon-watch.readings.poll_job_timeout_seconds');
+
         $written = DB::selectOne($sql, [
             ...array_values($row),
-            config()->integer('horizon-watch.stale_after_intervals') * $environment->poll_interval_seconds,
+            ...array_merge(...array_fill(0, count($runs), [$stale, $bridge])),
         ]);
 
         return $written === null ? null : $model->newFromBuilder((array) $written);
