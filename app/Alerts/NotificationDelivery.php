@@ -70,6 +70,6 @@ final readonly class NotificationDelivery
     {
         $setting = NotificationSetting::query()->find($team->id);
 
-        return $setting !== null && filled($setting->webhook_url) && filled($setting->webhook_secret);
+        return $setting !== null && filled($setting->webhook_url) && $setting->getRawOriginal('webhook_secret') !== null;
     }
 }

@@ -24,7 +24,6 @@ use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
 use Carbon\CarbonImmutable;
-use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Queue\TimeoutExceededException;
@@ -32,6 +31,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\AnotherAppKey;
 
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:00'));
@@ -509,18 +509,39 @@ test('an environment deleted while it is being read ends quietly', function () {
     Exceptions::assertNothingReported();
 });
 
-test('a password that no longer decrypts fails loudly and is not blamed on Horizon', function () {
+test('a password that no longer decrypts is stored as a failed reading of its own, without asking Horizon', function () {
     Exceptions::fake();
 
-    DB::table('environments')->where('id', $this->environment->id)->update(['basic_auth_password' => 'not-an-encrypted-value']);
+    DB::table('environments')->where('id', $this->environment->id)->update([
+        'basic_auth_password' => AnotherAppKey::encrypt('super-secret-value'),
+    ]);
 
-    expect(fn () => app(PollEnvironment::class)->handle($this->environment->fresh()))
-        ->toThrow(DecryptException::class);
+    $snapshot = app(PollEnvironment::class)->handle($this->environment->fresh());
+    $state = EnvironmentState::query()->sole();
 
     expect($this->reader->passwords)->toBe([])
-        ->and(EnvironmentSnapshot::query()->count())->toBe(0);
+        ->and($snapshot->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($snapshot->error)->toBe(ReadingError::PasswordUnreadable)
+        ->and($state->error)->toBe(ReadingError::PasswordUnreadable)
+        ->and($state->error_detail)->toBeNull()
+        ->and($this->environment->fresh()->last_polled_at->toDateTimeString())->toBe('2026-09-17 10:00:00');
 
     Exceptions::assertNothingReported();
+});
+
+test('a job whose password no longer decrypts does not fail, and opens the unreachable alert in time', function () {
+    DB::table('environments')->where('id', $this->environment->id)->update(['basic_auth_password' => AnotherAppKey::encrypt('super-secret-value')]);
+
+    foreach (range(1, 9) as $poll) {
+        app()->forgetScopedInstances();
+        PollEnvironmentJob::dispatchSync($this->environment->id);
+        $this->travel(15)->seconds();
+    }
+
+    expect(EnvironmentSnapshot::query()->count())->toBe(9)
+        ->and(EnvironmentSnapshot::query()->pluck('error')->unique()->all())->toBe([ReadingError::PasswordUnreadable])
+        ->and(Alert::query()->sole()->metric)->toBe(AlertRuleMetric::EndpointUnreachable)
+        ->and(DB::table('failed_jobs')->count())->toBe(0);
 });
 
 test('the breaches of the evaluation are stored with a degraded status', function () {
@@ -730,12 +751,20 @@ test('a job killed by its timeout stores an unreachable reading that says so', f
 test('a job that throws stores an unreachable reading blaming the poll, and still fails', function () {
     Exceptions::fake();
 
-    DB::table('environments')->where('id', $this->environment->id)->update(['basic_auth_password' => 'not-an-encrypted-value']);
+    $this->reader->results = [($this->reading)()];
 
-    expect(fn () => PollEnvironmentJob::dispatchSync($this->environment->id))->toThrow(DecryptException::class);
+    $thrown = false;
+    EnvironmentSnapshot::creating(function () use (&$thrown) {
+        if (! $thrown) {
+            $thrown = true;
 
-    expect($this->reader->passwords)->toBe([])
-        ->and(EnvironmentSnapshot::query()->sole()->error)->toBe(ReadingError::Unreachable)
+            throw new RuntimeException('The reading could not be stored.');
+        }
+    });
+
+    expect(fn () => PollEnvironmentJob::dispatchSync($this->environment->id))->toThrow(RuntimeException::class, 'The reading could not be stored.');
+
+    expect(EnvironmentSnapshot::query()->sole()->error)->toBe(ReadingError::Unreachable)
         ->and(EnvironmentState::query()->sole()->error_detail['cause'] ?? null)->toBe(ReadingCause::PollFailed->value);
 });
 

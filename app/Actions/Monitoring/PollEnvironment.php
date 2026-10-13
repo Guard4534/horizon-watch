@@ -26,6 +26,7 @@ use App\Monitoring\EvaluatedStatus;
 use App\Monitoring\StatusEvaluator;
 use App\Support\SafeReport;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -46,7 +47,12 @@ class PollEnvironment
     {
         $capturedAt = CarbonImmutable::now();
 
-        $target = HorizonTarget::fromEnvironment($environment);
+        try {
+            $target = HorizonTarget::fromEnvironment($environment);
+        } catch (DecryptException) {
+            return $this->storeFailure($environment, $capturedAt, ReadingError::PasswordUnreadable, null);
+        }
+
         $rules = $this->rules->forEnvironment($environment);
 
         try {

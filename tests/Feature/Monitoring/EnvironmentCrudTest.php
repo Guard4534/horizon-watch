@@ -16,6 +16,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\AnotherAppKey;
 use Tests\Support\Grants;
 
 beforeEach(function () {
@@ -120,6 +121,36 @@ test('updating an environment without a password keeps the existing one, sending
 
     $environment->refresh();
     expect($environment->basic_auth_password)->toBe('new-secret');
+});
+
+test('a stored password that no longer decrypts can still be edited, typed again or cleared', function () {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'production',
+        'horizon_url' => 'https://production.example.com/horizon/api',
+        'basic_auth_user' => 'monitor',
+        'basic_auth_password' => 'original-secret',
+    ]);
+    DB::table('environments')->where('id', $environment->id)->update(['basic_auth_password' => AnotherAppKey::encrypt('original-secret')]);
+
+    $route = fn (string $name) => route($name, ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+
+    $this->actingAs($this->admin)->get($route('environments.edit'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('page.hasPassword', true));
+
+    $this->actingAs($this->admin)->patch($route('environments.update'), ($this->validPayload)(['basicAuthPassword' => 'typed-again']))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect($environment->fresh()->basic_auth_password)->toBe('typed-again');
+
+    DB::table('environments')->where('id', $environment->id)->update(['basic_auth_password' => AnotherAppKey::encrypt('typed-again')]);
+
+    $this->actingAs($this->admin)->patch($route('environments.update'), ($this->validPayload)(['basicAuthUser' => null, 'basicAuthPassword' => null]))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect($environment->fresh()->getRawOriginal('basic_auth_password'))->toBeNull();
 });
 
 test('updating an environment with a blank or whitespace-only password keeps the existing one', function (string $blank) {

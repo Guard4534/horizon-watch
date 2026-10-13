@@ -19,8 +19,10 @@ use App\Models\EnvironmentState;
 use App\Models\Team;
 use App\Models\User;
 use App\Policies\EnvironmentPolicy;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Gate;
+use Tests\Support\AnotherAppKey;
 
 beforeEach(function () {
     $this->reader = new class implements HorizonReader
@@ -171,6 +173,41 @@ test('an admin testing the edit form with a blank password uses the stored one o
     ]])
         ->and($response->getContent())->not->toContain('stored-secret-value')
         ->and(array_keys($response->json()))->toBe(['reachable', 'horizonStatus', 'masterCount', 'latencyMs', 'error', 'problem', 'suggestedUrl', 'credentialsInClear']);
+});
+
+test('a stored password that no longer decrypts is reported as such, and a typed one is still tested', function () {
+    DB::table('environments')->where('id', $this->staging->id)->update(['basic_auth_password' => AnotherAppKey::encrypt('stored-staging-secret')]);
+
+    $form = [
+        'horizonUrl' => 'https://staging.invoicer.example.com/horizon',
+        'basicAuthUser' => 'monitor',
+        'basicAuthPassword' => '',
+    ];
+
+    $this->actingAs($this->member)
+        ->postJson(($this->environmentUrl)($this->staging))
+        ->assertOk()
+        ->assertJsonPath('reachable', false)
+        ->assertJsonPath('error', ReadingError::PasswordUnreadable->value);
+
+    $this->actingAs($this->admin)
+        ->postJson(($this->environmentUrl)($this->staging), $form)
+        ->assertOk()
+        ->assertJsonPath('reachable', false)
+        ->assertJsonPath('error', ReadingError::PasswordUnreadable->value);
+
+    expect($this->reader->probed)->toBe([]);
+
+    $this->actingAs($this->admin)
+        ->postJson(($this->environmentUrl)($this->staging), [...$form, 'basicAuthPassword' => 'typed-secret'])
+        ->assertOk()
+        ->assertJsonPath('reachable', true);
+
+    expect($this->reader->probed)->toBe([[
+        'url' => 'https://staging.invoicer.example.com/horizon',
+        'username' => 'monitor',
+        'password' => 'typed-secret',
+    ]]);
 });
 
 test('a blank password is refused when the test goes to another address or username', function (array $payload) {

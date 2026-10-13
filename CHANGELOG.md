@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `MAIL_TIMEOUT` (10 seconds by default) bounds how long an unresponsive SMTP server can hold a
   send.
 - Failed queue jobs are pruned after 7 days.
+- `APP_PREVIOUS_KEYS` reaches the containers of `compose.prod.yaml`, so the application key can
+  be rotated without losing the secrets encrypted with the old one.
+- `artisan users:reset-two-factor {email}` turns two-factor authentication off for an account
+  that can no longer complete it.
+- `artisan secrets:reencrypt` encrypts every stored secret again with the current application
+  key, so a rotated key can be removed from `APP_PREVIOUS_KEYS`.
 
 ### Changed
 
@@ -72,6 +78,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   request is tried once more.
 - Pruning no longer deletes the last reading of an environment paused for longer than the
   retention, which made its tile show zeros.
+- With a different application key, an environment whose basic-auth password can no longer be
+  decrypted stopped being read without saying why, and its edit page answered 500. It is now
+  read as failed, with its own error that asks for the password again, and the password can be
+  typed again.
+- With a different application key, a webhook signing secret that could no longer be decrypted
+  stopped every alert notification of the organization, emails included. Emails now go out,
+  the webhook delivery is logged as not delivered with its own error, and regenerating the
+  secret works.
+- With a different application key, the two-factor challenge answered 500. It now says the
+  secret can no longer be read and asks for an administrator.
 
 ## [0.1.0] - 2026-09-29
 

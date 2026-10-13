@@ -37,6 +37,7 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Tests\Fixtures\Horizon\FakeResolver;
 use Tests\Support\AlertTeam;
+use Tests\Support\AnotherAppKey;
 use Tests\Support\TraceArguments;
 
 beforeEach(function () {
@@ -415,6 +416,26 @@ test('an alert webhook that is no longer due when the worker picks it up is drop
     'resolution' => [WebhookPayload::RESOLVED, ['resolved_at' => '2026-09-17 11:59:00'], true],
     'resolution of an alert muted at the time' => [WebhookPayload::RESOLVED, ['resolved_at' => '2026-09-17 11:59:00', 'muted_until' => '2026-09-17 13:00:00'], false],
 ]);
+
+test('a webhook whose secret no longer decrypts fails at once, logged as such, without a request', function () {
+    Http::preventStrayRequests();
+    Http::fake(['*' => Http::response('', 204)]);
+    DB::table('notification_settings')->where('team_id', $this->team->id)->update(['webhook_secret' => AnotherAppKey::encrypt('old-secret')]);
+
+    SendAlertWebhook::dispatch($this->team->id, $this->alert->id, SentNotificationKind::CriticalAlert, WebhookPayload::OPENED, WebhookPayload::forAlert($this->alert, WebhookPayload::OPENED))
+        ->onConnection('database');
+
+    workOneEmail();
+
+    $log = DeliveryLog::query()->sole();
+
+    Http::assertNothingSent();
+    expect($log->channel)->toBe(NotificationChannel::Webhook)
+        ->and($log->status)->toBe(DeliveryStatus::Failed)
+        ->and($log->error)->toBe(DeliveryError::SecretUnreadable)
+        ->and($log->target)->toBe('hooks.example.com')
+        ->and(DB::table('jobs')->count())->toBe(0);
+});
 
 test('a digest or test webhook does not depend on any alert', function (SentNotificationKind $kind, string $event) {
     $this->app->instance(Resolver::class, new FakeResolver(['hooks.example.com' => ['203.0.113.10']]));

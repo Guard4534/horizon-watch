@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\ReplacesUnreadableSecrets;
 use Database\Factories\NotificationSettingFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -28,7 +29,7 @@ use Illuminate\Support\Carbon;
 class NotificationSetting extends Model
 {
     /** @use HasFactory<NotificationSettingFactory> */
-    use HasFactory;
+    use HasFactory, ReplacesUnreadableSecrets;
 
     /**
      * @var string

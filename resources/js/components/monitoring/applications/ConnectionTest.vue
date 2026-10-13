@@ -198,6 +198,11 @@ const icon = computed(() => {
                 <span v-else-if="result?.error === 'blocked'">{{
                     $t('This address is not allowed')
                 }}</span>
+                <span v-else-if="result?.error === 'password_unreadable'">{{
+                    $t(
+                        'The stored password cannot be decrypted: enter it again',
+                    )
+                }}</span>
                 <span v-else-if="result?.error === 'unreachable'">{{
                     $t('Horizon does not answer')
                 }}</span>

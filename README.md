@@ -142,6 +142,7 @@ the environment of the containers. Everything has a default except the mail serv
 | `APP_URL`                              | `http://localhost:8080`                  | Public URL, used in emails, password reset links and webhook payloads                    |
 | `APP_LOCALE`                           | `en`                                     | Default language, `en` or `it`                                                           |
 | `APP_KEY`                              | generated                                | Leave empty: the first start writes one to the `app-data` volume                         |
+| `APP_PREVIOUS_KEYS`                    | _(empty)_                                | Earlier keys, comma-separated, that still decrypt what they encrypted                    |
 | `TRUSTED_PROXIES`                      | `private`                                | `private` (loopback and RFC 1918), `*`, or a comma-separated list of addresses and CIDRs |
 | `SESSION_SECURE_COOKIE`                | `null`                                   | `null` follows the request scheme; force it with `true` or `false`                       |
 | `DB_PASSWORD`                          | `horizon_watch`                          | PostgreSQL password. Change it                                                           |
@@ -288,6 +289,20 @@ docker compose -f compose.prod.yaml run --rm web artisan users:instance-admin ad
 docker compose -f compose.prod.yaml run --rm web artisan users:instance-admin ada@example.com --revoke
 ```
 
+Turn two-factor authentication off for an account that can no longer complete it; the account
+then logs in with its password alone and can set it up again:
+
+```bash
+docker compose -f compose.prod.yaml run --rm web artisan users:reset-two-factor ada@example.com
+```
+
+Encrypt every stored secret again with the current application key, after a key change (see
+[Backup and restore](#backup-and-restore)):
+
+```bash
+docker compose -f compose.prod.yaml run --rm web artisan secrets:reencrypt
+```
+
 ## Logs
 
 Every container logs to standard output, so `docker compose logs` is the whole story:
@@ -318,9 +333,10 @@ and php-fpm the requests it serves. Read [CHANGELOG.md](CHANGELOG.md) before a m
 Two volumes hold everything:
 
 - `postgres-data` — every application, environment, reading, rule and alert.
-- `app-data` — the application key. **It decrypts the Horizon basic-auth passwords stored in
-  the database.** Lose it and those passwords are unreadable; you would have to re-enter them
-  on every environment.
+- `app-data` — the application key. **It decrypts the secrets stored in the database:** the
+  Horizon basic-auth passwords, the webhook signing secrets and the two-factor secrets of the
+  accounts. Lose it and none of them can be read again; see
+  [Troubleshooting](#troubleshooting) for what to set again.
 
 Back up both, together:
 
@@ -338,6 +354,19 @@ names.
 Restore into a stopped stack by untarring each archive back into the matching volume. If you
 would rather keep the key yourself, set `APP_KEY` in the environment: when it is set, the
 entrypoint uses it and never touches `/data/app-key`.
+
+To change the key, put the new one in `APP_KEY` and the old one in `APP_PREVIOUS_KEYS`
+(comma-separated when there are several) and restart. Secrets saved with an earlier key stay
+readable and everything saved from then on uses the new one. Then encrypt what is already
+stored again with the new key:
+
+```bash
+docker compose -f compose.prod.yaml run --rm web artisan secrets:reencrypt
+```
+
+It lists every secret no configured key can decrypt and fails while there is one; set those
+again (see [Troubleshooting](#troubleshooting)) and run it once more. When it succeeds, remove
+the old key from `APP_PREVIOUS_KEYS` and restart.
 
 ## Troubleshooting
 
@@ -357,9 +386,21 @@ FastCGI buffers are too small for the `Link` header that preloads the page's ass
 `docker/prod/nginx.conf` already raises them; if you replaced that file, raise
 `fastcgi_buffer_size` and `fastcgi_buffers` again.
 
-**The `app-data` volume is gone.** A new key is generated on the next start. Everything still
-works except the stored Horizon basic-auth passwords, which can no longer be decrypted: open
-each environment and enter its password again.
+**The `app-data` volume is gone, or `APP_KEY` changed.** Without `APP_KEY` a new key is
+generated on the next start. If you still have the old key, put it in `APP_PREVIOUS_KEYS` and
+restart: everything reads again, and `artisan secrets:reencrypt` moves it to the new key.
+Otherwise every secret the old key encrypted is lost, and
+everyone is logged out once:
+
+- Environments with basic auth stop being read and say _The stored password cannot be
+  decrypted: enter it again_. Open each one and type its password again.
+- Webhook deliveries are listed as not delivered, _signing secret unreadable_. Regenerate the
+  signing secret on the alert rules page and give the new one to the receiver. Alert emails
+  keep going out.
+- Accounts with two-factor authentication cannot get past the code, which says the secret
+  can no longer be read. Turn it off for each with
+  `artisan users:reset-two-factor` (see [Running commands](#running-commands)); they log in
+  with their password and set it up again.
 
 **A Horizon URL is refused when saved.** The panel refuses credentials and query strings in
 the URL, non-HTTP schemes, and — when `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` is `true` —

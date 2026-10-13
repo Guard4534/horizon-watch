@@ -52,6 +52,9 @@ const tone = computed(() => {
         <template v-else-if="readingError === 'blocked'">{{
             $t('This address is not allowed')
         }}</template>
+        <template v-else-if="readingError === 'password_unreadable'">{{
+            $t('The stored password cannot be decrypted: enter it again')
+        }}</template>
         <template v-else-if="readingError === 'unreachable'">{{
             $t('Horizon does not answer')
         }}</template>

@@ -32,6 +32,8 @@ function errorLabel(error: App.Enums.DeliveryError): string {
             return trans('unreachable');
         case 'mail':
             return trans('mail');
+        case 'secret_unreadable':
+            return trans('signing secret unreadable, regenerate it');
     }
 }
 

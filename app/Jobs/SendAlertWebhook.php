@@ -13,6 +13,7 @@ use App\Externals\Webhook\WebhookFailed;
 use App\Models\Alert;
 use App\Models\NotificationSetting;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Throwable;
 
 class SendAlertWebhook extends DeliverAlert
@@ -40,9 +41,17 @@ class SendAlertWebhook extends DeliverAlert
         }
 
         try {
+            $secret = (string) $setting->getAttribute('webhook_secret');
+        } catch (DecryptException $exception) {
+            $this->fail($exception);
+
+            return;
+        }
+
+        try {
             $client->post(
                 (string) $setting->webhook_url,
-                (string) $setting->webhook_secret,
+                $secret,
                 WebhookPayload::stamped($this->payload, CarbonImmutable::now(), $this->deliveryId),
             );
         } catch (WebhookFailed $exception) {
@@ -72,7 +81,11 @@ class SendAlertWebhook extends DeliverAlert
 
     protected function errorOf(?Throwable $exception): DeliveryError
     {
-        return $exception instanceof WebhookFailed ? $exception->reason : DeliveryError::Unreachable;
+        return match (true) {
+            $exception instanceof WebhookFailed => $exception->reason,
+            $exception instanceof DecryptException => DeliveryError::SecretUnreadable,
+            default => DeliveryError::Unreachable,
+        };
     }
 
     protected function loggedEnvironmentCount(): ?int
@@ -100,7 +113,7 @@ class SendAlertWebhook extends DeliverAlert
     {
         $setting = NotificationSetting::query()->find($this->teamId);
 
-        return $setting !== null && $setting->team()->exists() && filled($setting->webhook_url) && filled($setting->webhook_secret)
+        return $setting !== null && $setting->team()->exists() && filled($setting->webhook_url) && $setting->getRawOriginal('webhook_secret') !== null
             ? $setting
             : null;
     }

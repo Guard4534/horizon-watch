@@ -8,6 +8,7 @@ use App\Data\Applications\EnvironmentSummaryData;
 use App\Data\Pages\EnvironmentFormPageData;
 use App\Enums\EnvironmentColor;
 use App\Models\Environment;
+use App\Rules\StoredPasswordStaysWithItsAddress;
 
 class EnvironmentEditQuery
 {
@@ -25,7 +26,7 @@ class EnvironmentEditQuery
             ),
             application: ApplicationFormData::from($environment->application),
             colors: EnvironmentColor::options(),
-            hasPassword: $environment->basic_auth_password !== null,
+            hasPassword: StoredPasswordStaysWithItsAddress::hasStoredPassword($environment),
             applicationSlug: $environment->application->slug,
             slug: $environment->slug,
         );

@@ -35,6 +35,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\AlertTeam;
+use Tests\Support\AnotherAppKey;
 
 beforeEach(function () {
     $this->now = CarbonImmutable::parse('2026-09-17 12:00:00', 'UTC');
@@ -147,6 +148,25 @@ test('the job queue never carries an address, the webhook url or its secret', fu
     expect($serialized)->not->toContain('@example.com')
         ->not->toContain('hooks.example.com')
         ->not->toContain((string) $this->setting->webhook_secret);
+});
+
+test('a webhook secret that no longer decrypts holds back neither the emails nor the webhook job', function () {
+    DB::table('notification_settings')->where('team_id', $this->team->id)->update(['webhook_secret' => AnotherAppKey::encrypt('old-secret')]);
+
+    $opened = criticalAlert($this->production);
+    $repeated = criticalAlert($this->staging, ['notified' => true, 'last_notified_at' => $this->now->subHour()]);
+    $resolved = criticalAlert($this->production, ['metric' => AlertRuleMetric::EndpointUnreachable, 'notified' => true, 'last_notified_at' => $this->now->subMinutes(5), 'resolved_at' => $this->now]);
+
+    deliveryPolicy()->onOpened($opened);
+    deliveryPolicy()->repeatDue($this->now);
+    deliveryPolicy()->onResolved($resolved);
+
+    expect(queuedEmails()->map(fn ($email) => [$email['alert'], $email['kind']])->unique()->values()->all())->toBe([
+        [$opened->id, SentNotificationKind::CriticalAlert],
+        [$repeated->id, SentNotificationKind::CriticalRepeated],
+        [$resolved->id, SentNotificationKind::Resolved],
+    ])
+        ->and(queuedWebhooks()->pluck('event')->all())->toBe(['alert.opened', 'alert.repeated', 'alert.resolved']);
 });
 
 test('a new critical alert is sent even inside quiet hours', function () {

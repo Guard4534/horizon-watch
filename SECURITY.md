@@ -26,23 +26,33 @@ account opens it again, and whoever reaches the panel first then claims the inst
 last account only on a panel nobody else can reach. What follows is what the project protects,
 and what it deliberately does not.
 
-### The application key and the stored Horizon credentials
+### The application key and the stored secrets
 
-An environment may carry the basic-auth user and password of its Horizon dashboard. The
-password is encrypted at rest with Laravel's encrypter, which means it is protected by
-`APP_KEY` and nothing else.
+An environment may carry the basic-auth user and password of its Horizon dashboard, an
+organization may have a webhook signing secret, and an account may use two-factor
+authentication. The password, the signing secret and the two-factor secret and recovery codes
+are encrypted at rest with Laravel's encrypter, which means they are protected by `APP_KEY` and
+nothing else.
 
 Unless you set `APP_KEY` yourself, the entrypoint generates one on first start and writes it
 to `/data/app-key` inside the `app-data` volume, owned by `www-data` with mode `600`.
 Consequences to take seriously:
 
 - **Anyone who can read that volume, or a backup of it, together with the database, can
-  decrypt every stored Horizon password.** Treat backups of `app-data` as secret material and
-  keep them encrypted.
-- Losing the volume does not expose anything, but it makes the stored passwords unreadable;
-  they have to be entered again.
+  decrypt every stored Horizon password, webhook signing secret and two-factor secret.** Treat
+  backups of `app-data` as secret material and keep them encrypted.
+- Losing the volume does not expose anything, but it makes those secrets unreadable. The panel
+  says so instead of failing: an environment whose password cannot be decrypted shows it as
+  its reading error, a webhook whose secret cannot be decrypted is logged as not delivered
+  while alert emails keep going out, the two-factor challenge says the secret can no longer be
+  read, and `artisan users:reset-two-factor` lets such an account log in and set it up again.
+  The README lists the recovery steps.
 - Setting `APP_KEY` in the environment keeps the key out of the volume, at the cost of
   putting it wherever your environment file lives.
+- To rotate the key, move the old one to `APP_PREVIOUS_KEYS`. Laravel decrypts with every
+  previous key but never encrypts with them, and it does not re-encrypt what is stored on its
+  own: run `artisan secrets:reencrypt`, then remove the old key. Until then the old key stays
+  as sensitive as the new one.
 
 The stored password is never shown again, never logged, never included in an exception and
 never sent to the browser. `HorizonTarget` redacts itself when it is serialised or dumped.

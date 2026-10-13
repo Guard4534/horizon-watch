@@ -13,6 +13,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\AnotherAppKey;
 
 beforeEach(function () {
     $this->team = Team::factory()->create();
@@ -214,6 +215,33 @@ test('regenerating makes a new secret, shown once', function () {
 
     ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', $new));
     ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', null));
+});
+
+test('a secret that no longer decrypts survives a save and is replaced by regenerating', function () {
+    $this->actingAs($this->admin);
+
+    ($this->save)();
+    ($this->page)();
+
+    $unreadable = AnotherAppKey::encrypt('old-secret');
+    DB::table('notification_settings')->where('team_id', $this->team->id)->update(['webhook_secret' => $unreadable]);
+
+    ($this->save)(['repeatMinutes' => 30])->assertSessionHasNoErrors()->assertRedirect();
+
+    expect(NotificationSetting::query()->sole()->getRawOriginal('webhook_secret'))->toBe($unreadable);
+
+    ($this->page)()->assertInertia(fn (Assert $page) => $page
+        ->where('page.notifications.webhookSecretSet', true)
+        ->where('page.newWebhookSecret', null));
+
+    $this->post(route('alert-settings.regenerate-secret', ['current_team' => $this->team->slug]))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    $secret = NotificationSetting::query()->sole()->webhook_secret;
+
+    expect($secret)->toHaveLength(40);
+    ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', $secret));
 });
 
 test('regenerating without an address is refused', function (bool $withRow) {

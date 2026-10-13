@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Concerns\GeneratesUniqueSlugs;
+use App\Concerns\ReplacesUnreadableSecrets;
 use App\Enums\EnvironmentColor;
 use Carbon\CarbonImmutable;
 use Database\Factories\EnvironmentFactory;
@@ -53,7 +54,7 @@ use Illuminate\Support\Str;
 class Environment extends Model
 {
     /** @use HasFactory<EnvironmentFactory> */
-    use GeneratesUniqueSlugs, HasFactory;
+    use GeneratesUniqueSlugs, HasFactory, ReplacesUnreadableSecrets;
 
     /**
      * @var array<string, mixed>

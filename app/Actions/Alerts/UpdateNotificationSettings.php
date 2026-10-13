@@ -30,7 +30,7 @@ class UpdateNotificationSettings
 
             if ($url === null) {
                 $settings->webhook_secret = null;
-            } elseif ($settings->webhook_secret === null) {
+            } elseif ($settings->getRawOriginal('webhook_secret') === null) {
                 $secret = RegenerateWebhookSecret::newSecret();
                 $settings->webhook_secret = $secret;
             }

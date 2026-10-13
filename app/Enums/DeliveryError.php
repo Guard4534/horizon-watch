@@ -11,4 +11,5 @@ enum DeliveryError: string
     case ServerError = 'http_5xx';
     case Unreachable = 'unreachable';
     case Mail = 'mail';
+    case SecretUnreadable = 'secret_unreadable';
 }
