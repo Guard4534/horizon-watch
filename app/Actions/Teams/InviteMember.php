@@ -15,16 +15,18 @@ class InviteMember
 {
     public function handle(Team $team, User $inviter, InviteMemberData $data): TeamInvitation
     {
-        return DB::transaction(function () use ($team, $inviter, $data) {
+        $visibility = $data->role->seesEveryEnvironment() ? MemberVisibility::All : $data->visibility;
+
+        return DB::transaction(function () use ($team, $inviter, $data, $visibility) {
             $invitation = $team->invitations()->create([
                 'email' => $data->email,
                 'role' => $data->role,
-                'visibility' => $data->visibility,
+                'visibility' => $visibility,
                 'invited_by' => $inviter->id,
                 'expires_at' => now()->addDays(TeamInvitation::lifetimeDays()),
             ]);
 
-            if ($data->visibility === MemberVisibility::Manual) {
+            if ($visibility === MemberVisibility::Manual) {
                 $invitation->environments()->sync($data->environmentIds);
             }
 

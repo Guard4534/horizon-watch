@@ -385,6 +385,102 @@ test('an admin removes themselves from the members view and lands on the home ro
         ->and($this->admin->fresh()->current_team_id)->toEqual($ownTeam->id);
 });
 
+test('an admin who removes themselves from their only organization ends on the organizations page', function () {
+    $admin = User::factory()->withoutOrganization()->create();
+    $this->team->members()->attach($admin, ['role' => TeamRole::Admin->value]);
+    $admin->update(['current_team_id' => $this->team->id]);
+
+    $this->actingAs($admin)
+        ->delete(route('members.destroy', ['current_team' => $this->team->slug, 'user' => $admin->id]))
+        ->assertRedirect(route('home'));
+
+    $this->actingAs($admin->fresh())
+        ->get(route('home'))
+        ->assertRedirect(route('teams.index'));
+
+    expect($admin->fresh()->current_team_id)->toBeNull();
+});
+
+test('promoting a member to admin lifts their visibility limit', function () {
+    grantManually($this->team, $this->member, $this->staging);
+
+    $this->actingAs($this->owner)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), [
+            'role' => TeamRole::Admin->value,
+        ])
+        ->assertRedirect();
+
+    expect($this->team->memberships()->where('user_id', $this->member->id)->first()->visibility)
+        ->toBe(MemberVisibility::All);
+
+    $this->assertDatabaseMissing('environment_user', ['user_id' => $this->member->id]);
+});
+
+test('the visibility of an admin cannot be limited, not even by the admin themselves', function (string $actor) {
+    $this->actingAs($this->{$actor})
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->admin->id]), [
+            'visibility' => MemberVisibility::NonProduction->value,
+        ])
+        ->assertSessionHasErrors('visibility');
+
+    expect($this->team->memberships()->where('user_id', $this->admin->id)->first()->visibility)
+        ->toBe(MemberVisibility::All);
+})->with(['owner', 'admin']);
+
+test('a promotion that also asks for a limited visibility changes nothing', function () {
+    $this->actingAs($this->owner)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), [
+            'role' => TeamRole::Admin->value,
+            'visibility' => MemberVisibility::Manual->value,
+            'environmentIds' => [$this->staging->id],
+        ])
+        ->assertSessionHasErrors('visibility');
+
+    expect($this->member->fresh()->teamRole($this->team))->toBe(TeamRole::Member);
+    $this->assertDatabaseMissing('environment_user', ['user_id' => $this->member->id]);
+});
+
+test('an admin demoted to member can be limited in the same update', function () {
+    $this->actingAs($this->owner)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->admin->id]), [
+            'role' => TeamRole::Member->value,
+            'visibility' => MemberVisibility::NonProduction->value,
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $membership = $this->team->memberships()->where('user_id', $this->admin->id)->first();
+
+    expect($membership->role)->toBe(TeamRole::Member)
+        ->and($membership->visibility)->toBe(MemberVisibility::NonProduction);
+});
+
+test('upgrading lifts the visibility limits already set on admins and admin invitations', function () {
+    grantManually($this->team, $this->admin, $this->staging);
+    grantManually($this->team, $this->member, $this->staging);
+    $elsewhere = otherOrganizationGrant($this->admin);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'role' => TeamRole::Admin,
+        'visibility' => MemberVisibility::Manual,
+        'invited_by' => $this->owner->id,
+    ]);
+    $invitation->environments()->sync([$this->staging->id]);
+
+    $migration = require database_path('migrations/2026_10_13_030001_give_admins_every_environment.php');
+    $migration->up();
+
+    expect($this->team->memberships()->where('user_id', $this->admin->id)->first()->visibility)->toBe(MemberVisibility::All)
+        ->and($this->team->memberships()->where('user_id', $this->member->id)->first()->visibility)->toBe(MemberVisibility::Manual)
+        ->and($invitation->fresh()->visibility)->toBe(MemberVisibility::All)
+        ->and($invitation->environments()->count())->toBe(0);
+
+    $this->assertDatabaseMissing('environment_user', ['user_id' => $this->admin->id, 'environment_id' => $this->staging->id]);
+    $this->assertDatabaseHas('environment_user', ['user_id' => $this->admin->id, 'environment_id' => $elsewhere->id]);
+    $this->assertDatabaseHas('environment_user', ['user_id' => $this->member->id, 'environment_id' => $this->staging->id]);
+});
+
 test('removing a stranger from the members view is a 404, not a false success', function () {
     $stranger = User::factory()->create();
 

@@ -8,25 +8,23 @@ use Illuminate\Support\Str;
 
 trait GeneratesUniqueSlugs
 {
+    protected const int MAX_SLUG_BASE_LENGTH = 240;
+
     /**
      * @template TModel of Model
      *
      * @param  Builder<TModel>  $scope
      */
-    protected static function generateUniqueSlugWithin(Builder $scope, string $name, ?int $excludeId = null): string
+    protected static function generateUniqueSlugWithin(Builder $scope, string $name): string
     {
-        $defaultSlug = Str::slug($name);
+        $defaultSlug = self::slugBase($name);
 
-        $scope->where(function (Builder $query) use ($defaultSlug) {
-            $query->where('slug', $defaultSlug)
-                ->orWhere('slug', 'like', $defaultSlug.'-%');
-        });
-
-        if ($excludeId) {
-            $scope->where($scope->getModel()->getQualifiedKeyName(), '!=', $excludeId);
-        }
-
-        $existingSlugs = $scope->pluck('slug');
+        $existingSlugs = $scope
+            ->where(function (Builder $query) use ($defaultSlug) {
+                $query->where('slug', $defaultSlug)
+                    ->orWhere('slug', 'like', $defaultSlug.'-%');
+            })
+            ->pluck('slug');
 
         $maxSuffix = $existingSlugs
             ->map(function (string $slug) use ($defaultSlug): ?int {
@@ -44,5 +42,17 @@ trait GeneratesUniqueSlugs
         return $existingSlugs->isEmpty()
             ? $defaultSlug
             : $defaultSlug.'-'.($maxSuffix + 1);
+    }
+
+    protected static function slugFallback(): string
+    {
+        return Str::kebab(class_basename(static::class));
+    }
+
+    private static function slugBase(string $name): string
+    {
+        $slug = rtrim(Str::substr(Str::slug($name), 0, self::MAX_SLUG_BASE_LENGTH), '-');
+
+        return $slug !== '' ? $slug : static::slugFallback();
     }
 }

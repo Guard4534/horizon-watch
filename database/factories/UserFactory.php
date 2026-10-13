@@ -62,6 +62,19 @@ class UserFactory extends Factory
         ]);
     }
 
+    public function withoutOrganization(): static
+    {
+        return $this->afterCreating(function (User $user) {
+            $team = $user->currentTeam;
+
+            $user->teamMemberships()->delete();
+            $user->update(['current_team_id' => null]);
+            $user->unsetRelation('currentTeam');
+
+            $team?->forceDelete();
+        });
+    }
+
     public function withTwoFactor(): static
     {
         return $this->state(fn (array $attributes) => [

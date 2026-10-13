@@ -40,7 +40,7 @@ const { startsWith } = useCurrentPath();
             <BrandMark />
         </div>
 
-        <nav class="flex flex-col gap-[2px]">
+        <nav v-if="slug" class="flex flex-col gap-[2px]">
             <div
                 class="nc-label"
                 style="padding: 0 var(--nc-space-2) var(--nc-space-2)"
@@ -70,7 +70,7 @@ const { startsWith } = useCurrentPath();
             />
         </nav>
 
-        <nav class="flex flex-col gap-[2px]">
+        <nav v-if="slug" class="flex flex-col gap-[2px]">
             <div
                 class="nc-label"
                 style="padding: 0 var(--nc-space-2) var(--nc-space-2)"

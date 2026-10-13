@@ -2,24 +2,33 @@
 
 namespace App\Actions\Teams;
 
+use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Models\Membership;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ChangeMemberRole
 {
     public function handle(Team $team, User $actor, User $target, TeamRole $role): Membership
     {
-        /** @var Membership $membership */
-        $membership = $team->memberships()->where('user_id', $target->id)->firstOrFail();
+        return DB::transaction(function () use ($team, $actor, $target, $role) {
+            /** @var Membership $membership */
+            $membership = $team->memberships()->where('user_id', $target->id)->lockForUpdate()->firstOrFail();
 
-        $this->refuseLeavingNoAdmin($team, $actor, $target, $membership->role, $role);
+            $this->refuseLeavingNoAdmin($team, $actor, $target, $membership->role, $role);
 
-        $membership->update(['role' => $role]);
+            $membership->update(['role' => $role]);
 
-        return $membership;
+            if ($role->seesEveryEnvironment() && $membership->visibility !== MemberVisibility::All) {
+                $membership->clearEnvironmentGrants();
+                $membership->update(['visibility' => MemberVisibility::All]);
+            }
+
+            return $membership;
+        });
     }
 
     private function refuseLeavingNoAdmin(

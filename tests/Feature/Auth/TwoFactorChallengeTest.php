@@ -35,3 +35,23 @@ test('two factor challenge can be rendered', function () {
             ->component('auth/TwoFactorChallenge'),
         );
 });
+
+test('completing the challenge without an organization lands on the organizations page', function () {
+    Features::twoFactorAuthentication([
+        'confirm' => true,
+        'confirmPassword' => true,
+    ]);
+
+    $user = User::factory()->withTwoFactor()->withoutOrganization()->create();
+
+    $this->post(route('login'), [
+        'email' => $user->email,
+        'password' => 'password',
+    ])->assertRedirect(route('two-factor.login'));
+
+    $this->post(route('two-factor.login.store'), [
+        'recovery_code' => 'recovery-code-1',
+    ])->assertRedirect(route('teams.index'));
+
+    $this->assertAuthenticatedAs($user);
+});

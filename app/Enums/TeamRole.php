@@ -44,6 +44,11 @@ enum TeamRole: string
         return in_array($permission, $this->permissions());
     }
 
+    public function seesEveryEnvironment(): bool
+    {
+        return $this->isAtLeast(self::Admin);
+    }
+
     public function level(): int
     {
         return match ($this) {

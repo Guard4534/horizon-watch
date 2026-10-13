@@ -352,6 +352,39 @@ test('renaming an environment onto a sibling is rejected, keeping its own name i
     expect($staging->refresh()->poll_interval_seconds)->toBe(30);
 });
 
+test('renaming an environment keeps its slug, so links already sent keep working', function () {
+    $environment = Environment::factory()->for($this->application)->create([
+        'name' => 'staging',
+        'basic_auth_user' => null,
+        'basic_auth_password' => null,
+    ]);
+    $slug = $environment->slug;
+
+    $this->actingAs($this->admin)
+        ->patch(
+            route('environments.update', ['current_team' => $this->team->slug, 'environment' => $slug]),
+            ($this->validPayload)(['name' => 'preprod', 'basicAuthUser' => null, 'basicAuthPassword' => null]),
+        )
+        ->assertRedirect(route('environments.edit', ['current_team' => $this->team->slug, 'environment' => $slug]));
+
+    expect($environment->fresh()->name)->toBe('preprod')
+        ->and($environment->fresh()->slug)->toBe($slug);
+
+    $this->actingAs($this->admin)
+        ->get(route('environments.show', ['current_team' => $this->team->slug, 'environment' => $slug]))
+        ->assertOk();
+});
+
+test('a new environment never takes the slug a renamed one kept', function () {
+    $renamed = Environment::factory()->for($this->application)->create(['name' => 'production']);
+    $renamed->update(['name' => 'legacy']);
+
+    $fresh = Environment::factory()->for($this->application)->create(['name' => 'production']);
+
+    expect($renamed->fresh()->slug)->toBe('invoice-desk-production')
+        ->and($fresh->slug)->toBe('invoice-desk-production-1');
+});
+
 test('an environment from another organization responds 404', function () {
     $otherTeam = Team::factory()->create();
     $otherApplication = Application::factory()->for($otherTeam)->create();

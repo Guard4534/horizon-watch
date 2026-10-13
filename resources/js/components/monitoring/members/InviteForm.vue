@@ -75,7 +75,14 @@ function reset() {
                 <InputError :message="errors.role" />
             </div>
 
-            <div class="nc-field">
+            <div v-if="role === 'admin'" class="nc-field">
+                <input type="hidden" name="visibility" value="all" />
+                <span class="nc-t-2xs nc-tone-muted">{{
+                    $t('Admins and the owner always see every environment.')
+                }}</span>
+            </div>
+
+            <div v-else class="nc-field">
                 <label for="invite-visibility">{{
                     $t('Visible environments')
                 }}</label>
@@ -96,7 +103,10 @@ function reset() {
                 <InputError :message="errors.visibility" />
             </div>
 
-            <div v-if="visibility === 'manual'" class="nc-field">
+            <div
+                v-if="role !== 'admin' && visibility === 'manual'"
+                class="nc-field"
+            >
                 <label>{{ $t('Environments') }}</label>
                 <div
                     class="flex max-h-[220px] flex-col overflow-y-auto"

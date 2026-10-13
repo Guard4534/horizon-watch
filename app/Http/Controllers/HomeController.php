@@ -15,8 +15,10 @@ class HomeController extends Controller
             return to_route('login');
         }
 
-        return $user->currentTeam
-            ? to_route('wall', ['current_team' => $user->currentTeam->slug])
+        $team = $user->currentOrFallbackTeam();
+
+        return $team
+            ? to_route('wall', ['current_team' => $team->slug])
             : to_route('teams.index');
     }
 }

@@ -60,14 +60,14 @@ test('an invitation records role, visibility and a 7-day expiry, and emails a li
     $this->actingAs($this->owner)
         ->post(route('members.invitations.store', ['current_team' => $this->team->slug]), [
             'email' => 'invited@example.com',
-            'role' => TeamRole::Admin->value,
+            'role' => TeamRole::Member->value,
             'visibility' => MemberVisibility::NonProduction->value,
         ])
         ->assertRedirect();
 
     $invitation = TeamInvitation::where('email', 'invited@example.com')->firstOrFail();
 
-    expect($invitation->role)->toBe(TeamRole::Admin)
+    expect($invitation->role)->toBe(TeamRole::Member)
         ->and($invitation->visibility)->toBe(MemberVisibility::NonProduction)
         ->and($invitation->expires_at->timestamp)->toBe(now()->addDays(7)->timestamp);
 
@@ -80,6 +80,46 @@ test('an invitation records role, visibility and a 7-day expiry, and emails a li
                 && str_contains($mail->actionUrl, $invitation->code);
         },
     );
+});
+
+test('an admin invitation always sees every environment, whatever visibility was sent', function () {
+    Notification::fake();
+
+    $environment = Environment::factory()->for(Application::factory()->for($this->team))->create();
+
+    $this->actingAs($this->owner)
+        ->post(route('members.invitations.store', ['current_team' => $this->team->slug]), [
+            'email' => 'invited@example.com',
+            'role' => TeamRole::Admin->value,
+            'visibility' => MemberVisibility::Manual->value,
+            'environmentIds' => [$environment->id],
+        ])
+        ->assertRedirect();
+
+    $invitation = TeamInvitation::where('email', 'invited@example.com')->firstOrFail();
+
+    expect($invitation->visibility)->toBe(MemberVisibility::All)
+        ->and($invitation->environments()->count())->toBe(0);
+});
+
+test('accepting an older admin invitation with a limited visibility still sees every environment', function () {
+    $environment = Environment::factory()->for(Application::factory()->for($this->team))->create();
+    $invited = User::factory()->create(['email' => 'invited@example.com']);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'role' => TeamRole::Admin,
+        'visibility' => MemberVisibility::Manual,
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+    $invitation->environments()->sync([$environment->id]);
+
+    app(AcceptInvitation::class)->handle($invitation, $invited);
+
+    expect($this->team->memberships()->where('user_id', $invited->id)->first()->visibility)->toBe(MemberVisibility::All);
+    $this->assertDatabaseMissing('environment_user', ['user_id' => $invited->id]);
 });
 
 test('manual visibility without environments is rejected', function () {
@@ -247,10 +287,31 @@ test('an authenticated user with the same email declines the invitation', functi
 
     $response = $this->actingAs($invitedUser)->delete(route('invitations.decline', $invitation->code));
 
-    $response->assertRedirect(route('wall', ['current_team' => $invitedUser->currentTeam->slug]));
+    $response->assertRedirect(route('home'));
 
     $this->assertDatabaseMissing('team_invitations', ['id' => $invitation->id]);
     expect($invitedUser->fresh()->belongsToTeam($this->team))->toBeFalse();
+});
+
+test('someone without an organization can decline an invitation and lands on the organizations page', function () {
+    $invitedUser = User::factory()->withoutOrganization()->create(['email' => 'invited@example.com']);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    $this->actingAs($invitedUser)
+        ->delete(route('invitations.decline', $invitation->code))
+        ->assertRedirect(route('home'));
+
+    $this->actingAs($invitedUser)
+        ->get(route('home'))
+        ->assertRedirect(route('teams.index'));
+
+    $this->assertDatabaseMissing('team_invitations', ['id' => $invitation->id]);
 });
 
 test('an authenticated user with a different email sees wrong_account and cannot accept', function () {

@@ -24,6 +24,40 @@ test('users can authenticate using the login screen', function () {
     $response->assertRedirect(route('wall'));
 });
 
+test('people without an organization are signed in and sent to the organizations page', function () {
+    $user = User::factory()->withoutOrganization()->create();
+
+    $this->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'password',
+    ])->assertRedirect(route('teams.index'));
+
+    $this->assertAuthenticatedAs($user);
+
+    $this->get(route('home'))->assertRedirect(route('teams.index'));
+});
+
+test('signing in without a current organization picks one the user still belongs to', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $user->update(['current_team_id' => null]);
+
+    $this->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'password',
+    ])->assertRedirect(route('wall', ['current_team' => $team->slug]));
+
+    expect($user->fresh()->current_team_id)->toBe($team->id);
+});
+
+test('the login page sends a signed-in user home instead of looping', function () {
+    $user = User::factory()->withoutOrganization()->create();
+
+    $this->actingAs($user)
+        ->get(route('login'))
+        ->assertRedirect(route('home'));
+});
+
 test('users with two factor enabled are redirected to two factor challenge', function () {
     if (! Features::canManageTwoFactorAuthentication()) {
         $this->markTestSkipped('Two-factor authentication is not enabled.');

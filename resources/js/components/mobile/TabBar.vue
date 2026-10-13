@@ -12,6 +12,7 @@ import { useTeamSlug } from '@/composables/useTeamSlug';
 import { me, wall } from '@/routes';
 import { index as alertsIndex } from '@/routes/alerts';
 import { index as applicationsIndex } from '@/routes/applications';
+import { edit as editProfile } from '@/routes/profile';
 
 const slug = useTeamSlug();
 const { startsWith } = useCurrentPath();
@@ -23,7 +24,9 @@ const active = computed(() => ({
         `/${slug.value}/applications`,
         `/${slug.value}/environments`,
     ),
-    me: startsWith(`/${slug.value}/me`, '/settings'),
+    me: slug.value
+        ? startsWith(`/${slug.value}/me`, '/settings')
+        : startsWith('/settings'),
 }));
 
 const current = (on: boolean) => (on ? ('page' as const) : undefined);
@@ -31,35 +34,37 @@ const current = (on: boolean) => (on ? ('page' as const) : undefined);
 
 <template>
     <nav class="tab-bar" :aria-label="$t('Main navigation')">
+        <template v-if="slug">
+            <Link
+                :href="wall(slug)"
+                class="tab"
+                :class="{ 'is-active': active.wall }"
+                :aria-current="current(active.wall)"
+            >
+                <PhSquaresFour :size="18" />
+                <span>{{ $t('Wall') }}</span>
+            </Link>
+            <Link
+                :href="alertsIndex(slug)"
+                class="tab"
+                :class="{ 'is-active': active.alerts }"
+                :aria-current="current(active.alerts)"
+            >
+                <PhBellRinging :size="18" />
+                <span>{{ $t('Alerts') }}</span>
+            </Link>
+            <Link
+                :href="applicationsIndex(slug)"
+                class="tab"
+                :class="{ 'is-active': active.apps }"
+                :aria-current="current(active.apps)"
+            >
+                <PhStack :size="18" />
+                <span>{{ $t('Apps') }}</span>
+            </Link>
+        </template>
         <Link
-            :href="wall(slug)"
-            class="tab"
-            :class="{ 'is-active': active.wall }"
-            :aria-current="current(active.wall)"
-        >
-            <PhSquaresFour :size="18" />
-            <span>{{ $t('Wall') }}</span>
-        </Link>
-        <Link
-            :href="alertsIndex(slug)"
-            class="tab"
-            :class="{ 'is-active': active.alerts }"
-            :aria-current="current(active.alerts)"
-        >
-            <PhBellRinging :size="18" />
-            <span>{{ $t('Alerts') }}</span>
-        </Link>
-        <Link
-            :href="applicationsIndex(slug)"
-            class="tab"
-            :class="{ 'is-active': active.apps }"
-            :aria-current="current(active.apps)"
-        >
-            <PhStack :size="18" />
-            <span>{{ $t('Apps') }}</span>
-        </Link>
-        <Link
-            :href="me(slug)"
+            :href="slug ? me(slug) : editProfile()"
             class="tab"
             :class="{ 'is-active': active.me }"
             :aria-current="current(active.me)"

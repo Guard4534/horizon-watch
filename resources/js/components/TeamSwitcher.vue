@@ -24,30 +24,9 @@ const canCreateOrganizations = computed(
 );
 
 const switchTeam = (team: App.Data.Teams.UserTeamData) => {
-    const previousTeamSlug = currentTeam.value?.slug;
-
-    router.visit(switchMethod(team.slug), {
-        onFinish: () => {
-            if (!previousTeamSlug) {
-                router.reload();
-
-                return;
-            }
-
-            const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-            const segment = `/${previousTeamSlug}`;
-
-            if (currentUrl.includes(segment)) {
-                router.visit(currentUrl.replace(segment, `/${team.slug}`), {
-                    replace: true,
-                });
-
-                return;
-            }
-
-            router.reload();
-        },
-    });
+    if (!team.isCurrent) {
+        router.visit(switchMethod(team.slug));
+    }
 };
 </script>
 

@@ -12,9 +12,13 @@ use App\Http\Requests\Teams\SaveTeamRequest;
 use App\Models\Team;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Route;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Exception\RequestExceptionInterface;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class TeamController extends Controller
 {
@@ -47,13 +51,27 @@ class TeamController extends Controller
         return to_route('teams.index');
     }
 
-    public function switch(Request $request, Team $team): RedirectResponse
+    public function switch(Request $request, Team $team, Router $router): RedirectResponse
     {
         abort_unless($request->user()->belongsToTeam($team), 403);
 
         $request->user()->switchTeam($team);
 
-        return back();
+        $previous = $this->previousRoute($router);
+
+        if ($previous !== null && ! in_array('current_team', $previous->parameterNames(), true)) {
+            return back();
+        }
+
+        return to_route(match (true) {
+            $previous === null => 'wall',
+            $previous->named('applications.*', 'environments.*') => 'applications.index',
+            $previous->named('alerts.*') => 'alerts.index',
+            $previous->named('alert-rules.*', 'alert-settings.*') => 'alert-rules.index',
+            $previous->named('members.*') => 'members.index',
+            $previous->named('me') => 'me',
+            default => 'wall',
+        }, ['current_team' => $team->slug]);
     }
 
     public function leave(Request $request, Team $team, RemoveMember $removeMember): RedirectResponse
@@ -76,5 +94,14 @@ class TeamController extends Controller
         $this->success(__('Team deleted.'));
 
         return to_route('teams.index');
+    }
+
+    private function previousRoute(Router $router): ?Route
+    {
+        try {
+            return $router->getRoutes()->match(Request::create(url()->previous()));
+        } catch (HttpExceptionInterface|RequestExceptionInterface) {
+            return null;
+        }
     }
 }

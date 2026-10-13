@@ -25,7 +25,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to other organizations stay valid.
 - Deleting the last account opens `/setup` again.
 - People without an organization land on the organizations page instead of looping between
-  the home and login pages.
+  the home and login pages, also right after signing in, two-factor challenge included, or
+  declining an invitation. The navigation leaves out the organization pages until they join one.
+- Renaming an organization or an environment keeps its slug, so bookmarks, open walls and the
+  links in alerts already sent keep working.
+- Switching organization opens the same section of the new one (wall, applications, alerts,
+  alert rules, members) instead of rewriting the address of the page you were on.
+- **Upgrade note:** admins and the owner always see every environment. Upgrading lifts the
+  visibility limits already set on admins, owners and pending admin invitations, so those
+  admins start seeing, and receiving alert emails for, every environment of their
+  organization; this cannot be undone by a rollback. Before upgrading, demote to member anyone
+  who must stay limited. Promoting someone to admin now lifts their limit, and an admin
+  invitation always grants every environment.
+
+### Fixed
+
+- A name made only of symbols no longer gives an organization or application an empty slug,
+  and very long names no longer overflow the slug column.
+- An organization name whose slug would be a reserved address (such as `Settings!`) is refused.
 
 ## [0.1.0] - 2026-09-29
 

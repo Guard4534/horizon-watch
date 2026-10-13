@@ -2,6 +2,7 @@
 
 namespace App\Actions\Teams;
 
+use App\Enums\MemberVisibility;
 use App\Models\Membership;
 use App\Models\Team;
 use App\Models\TeamInvitation;
@@ -23,18 +24,19 @@ class AcceptInvitation
             abort_unless($locked->isPending() || $locked->accepted_by === $user->id, 410);
 
             $team = $locked->team;
+            $visibility = $locked->role->seesEveryEnvironment() ? MemberVisibility::All : $locked->visibility;
 
             /** @var Membership $membership */
             $membership = $team->memberships()->firstOrCreate(
                 ['user_id' => $user->id],
-                ['role' => $locked->role, 'visibility' => $locked->visibility],
+                ['role' => $locked->role, 'visibility' => $visibility],
             );
 
             if ($membership->wasRecentlyCreated) {
                 $this->changeVisibility->handle(
                     $team,
                     $user,
-                    $locked->visibility,
+                    $visibility,
                     $locked->environments()->pluck('environments.id')->all(),
                 );
             }

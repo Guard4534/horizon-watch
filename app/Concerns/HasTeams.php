@@ -112,6 +112,21 @@ trait HasTeams
             ->first();
     }
 
+    public function currentOrFallbackTeam(): ?Team
+    {
+        if ($this->currentTeam !== null) {
+            return $this->currentTeam;
+        }
+
+        $fallback = $this->fallbackTeam();
+
+        if ($fallback !== null) {
+            $this->switchTeam($fallback);
+        }
+
+        return $fallback;
+    }
+
     public function hasTeamPermission(Team $team, TeamPermission $permission): bool
     {
         return $this->teamRole($team)?->hasPermission($permission) ?? false;

@@ -100,7 +100,7 @@ const PALETTE = [
                         <div class="step-body">
                             {{
                                 $t(
-                                    'Admin, member or viewer, with visibility limited to a subset of environments if you want.',
+                                    'Admin, member or viewer. Members and viewers can be limited to a subset of environments.',
                                 )
                             }}
                         </div>

@@ -258,26 +258,34 @@ function confirmRemove() {
                                     >
                                         {{ assignableRoleName(role) }}
                                     </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuLabel>{{
-                                        $t('Visible environments')
-                                    }}</DropdownMenuLabel>
-                                    <DropdownMenuItem
-                                        v-for="visibility in VISIBILITIES"
-                                        :key="visibility"
-                                        :disabled="
-                                            member.visibility === visibility &&
-                                            visibility !== 'manual'
-                                        "
-                                        @click="
-                                            changeVisibility(member, visibility)
-                                        "
-                                    >
-                                        {{ visibilityLabel(visibility)
-                                        }}{{
-                                            visibility === 'manual' ? '…' : ''
-                                        }}
-                                    </DropdownMenuItem>
+                                    <template v-if="member.role !== 'admin'">
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuLabel>{{
+                                            $t('Visible environments')
+                                        }}</DropdownMenuLabel>
+                                        <DropdownMenuItem
+                                            v-for="visibility in VISIBILITIES"
+                                            :key="visibility"
+                                            :disabled="
+                                                member.visibility ===
+                                                    visibility &&
+                                                visibility !== 'manual'
+                                            "
+                                            @click="
+                                                changeVisibility(
+                                                    member,
+                                                    visibility,
+                                                )
+                                            "
+                                        >
+                                            {{ visibilityLabel(visibility)
+                                            }}{{
+                                                visibility === 'manual'
+                                                    ? '…'
+                                                    : ''
+                                            }}
+                                        </DropdownMenuItem>
+                                    </template>
                                     <template v-if="canTransferOwnership">
                                         <DropdownMenuSeparator />
                                         <DropdownMenuItem

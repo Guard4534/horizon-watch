@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Queries\MembersQuery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -36,13 +37,15 @@ class MemberController extends Controller
     ): RedirectResponse {
         Gate::authorize('updateMember', [$current_team, $user]);
 
-        if ($data->role !== null) {
-            $changeMemberRole->handle($current_team, $request->user(), $user, $data->role);
-        }
+        DB::transaction(function () use ($request, $current_team, $user, $data, $changeMemberRole, $changeMemberVisibility) {
+            if ($data->role !== null) {
+                $changeMemberRole->handle($current_team, $request->user(), $user, $data->role);
+            }
 
-        if ($data->visibility !== null) {
-            $changeMemberVisibility->handle($current_team, $user, $data->visibility, $data->environmentIds);
-        }
+            if ($data->visibility !== null) {
+                $changeMemberVisibility->handle($current_team, $user, $data->visibility, $data->environmentIds);
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Member updated.')]);
 

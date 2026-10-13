@@ -36,6 +36,8 @@ return Application::configure(basePath: dirname(__DIR__))
             default => array_values(array_filter(array_map(trim(...), explode(',', $proxies)))),
         }, headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO);
 
+        $middleware->redirectUsersTo(fn () => route('home'));
+
         $middleware->web(append: [
             AuthenticateSession::class,
             SetLocale::class,

@@ -190,7 +190,7 @@ three times (after 10 and 60 seconds) before it is logged as failed.
         "environment": "production",
         "opened_at": "2026-09-17T12:02:00Z",
         "resolved_at": null,
-        "url": "https://horizon-watch.example.com/acme/environments/production"
+        "url": "https://horizon-watch.example.com/acme/environments/shop-production"
     },
     "organization": { "name": "Acme", "slug": "acme" },
     "sent_at": "2026-09-17T12:02:04Z"
@@ -200,6 +200,8 @@ three times (after 10 and 60 seconds) before it is logged as failed.
 `event` is `alert.opened`, `alert.repeated` or `alert.resolved` (critical alerts),
 `alert.digest` (warnings, every 15 minutes, with an `alerts` list instead of `alert`) or
 `test` (with `"alert": null`). `url` is `null` once the environment is deleted.
+Organization and environment slugs are fixed when they are created: renaming either keeps
+its slug, so the links in alerts already sent keep working.
 
 `delivery_id` names one delivery and stays the same when a failed delivery is tried again,
 while `sent_at` is the time of each attempt. A receiver that answered too slowly may get the

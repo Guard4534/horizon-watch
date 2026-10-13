@@ -45,12 +45,11 @@ class Team extends Model
                 $team->slug = static::generateUniqueSlugWithin(static::withTrashed(), $team->name);
             }
         });
+    }
 
-        static::updating(function (Team $team) {
-            if ($team->isDirty('name')) {
-                $team->slug = static::generateUniqueSlugWithin(static::withTrashed(), $team->name, $team->id);
-            }
-        });
+    protected static function slugFallback(): string
+    {
+        return 'organization';
     }
 
     /**

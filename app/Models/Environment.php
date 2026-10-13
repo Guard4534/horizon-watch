@@ -73,13 +73,6 @@ class Environment extends Model
                 $environment->slug = static::generateUniqueSlug($application, $environment->name);
             }
         });
-
-        static::updating(function (Environment $environment) {
-            if ($environment->isDirty('name')) {
-                $application = $environment->application ?? Application::findOrFail($environment->application_id);
-                $environment->slug = static::generateUniqueSlug($application, $environment->name, $environment->id);
-            }
-        });
     }
 
     /**
@@ -125,15 +118,16 @@ class Environment extends Model
         return 'slug';
     }
 
-    protected static function generateUniqueSlug(Application $application, string $name, ?int $excludeId = null): string
+    protected static function generateUniqueSlug(Application $application, string $name): string
     {
-        $base = $application->slug.'-'.Str::slug($name);
+        $environmentSlug = Str::slug($name);
+        $base = Str::substr($application->slug, 0, self::MAX_SLUG_BASE_LENGTH - strlen($environmentSlug) - 1).'-'.$environmentSlug;
 
         $scope = static::query()->whereHas(
             'application',
             fn ($query) => $query->where('team_id', $application->team_id),
         );
 
-        return static::generateUniqueSlugWithin($scope, $base, $excludeId);
+        return static::generateUniqueSlugWithin($scope, $base);
     }
 }

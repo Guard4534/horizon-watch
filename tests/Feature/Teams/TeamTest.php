@@ -81,8 +81,68 @@ test('teams can be updated by owners', function () {
     $this->assertDatabaseHas('teams', [
         'id' => $team->id,
         'name' => 'Updated Name',
-        'slug' => 'updated-name',
+        'slug' => $team->slug,
     ]);
+});
+
+test('renaming an organization keeps its slug, so links already sent keep working', function () {
+    $user = User::factory()->create();
+    $team = Team::factory()->create(['name' => 'Acme', 'slug' => 'acme']);
+    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+
+    $this->actingAs($user)
+        ->patch(route('teams.update', $team), ['name' => 'Acme Corporation'])
+        ->assertRedirect(route('teams.index'));
+
+    expect($team->fresh()->slug)->toBe('acme');
+
+    $this->actingAs($user)
+        ->get(route('wall', ['current_team' => 'acme']))
+        ->assertOk();
+});
+
+test('a name without letters or digits still gets a usable slug', function () {
+    $user = User::factory()->instanceAdmin()->withoutOrganization()->create();
+
+    $this->actingAs($user)->post(route('teams.store'), ['name' => '!!!']);
+    $this->actingAs($user)->post(route('teams.store'), ['name' => '???']);
+
+    $slugs = Team::query()->whereIn('name', ['!!!', '???'])->orderBy('id')->pluck('slug')->all();
+
+    expect($slugs)->toBe(['organization', 'organization-1'])
+        ->and(array_intersect($slugs, config()->array('reserved-team-names')))->toBe([]);
+
+    $this->actingAs($user)
+        ->post(route('teams.store'), ['name' => 'Organization'])
+        ->assertSessionHasNoErrors();
+
+    $team = Team::query()->where('name', '!!!')->firstOrFail();
+
+    $this->actingAs($user)
+        ->get(route('wall', ['current_team' => $team->slug]))
+        ->assertOk();
+});
+
+test('a long name gets a slug that fits its column, suffix included', function () {
+    $user = User::factory()->instanceAdmin()->create();
+    $name = str_repeat('a', 255);
+
+    $this->actingAs($user)->post(route('teams.store'), ['name' => $name])->assertValid();
+    $this->actingAs($user)->post(route('teams.store'), ['name' => $name])->assertValid();
+
+    $slugs = Team::query()->where('name', $name)->orderBy('id')->pluck('slug')->all();
+
+    expect($slugs)->toBe([str_repeat('a', 240), str_repeat('a', 240).'-1']);
+});
+
+test('a name whose slug is a reserved address is refused', function () {
+    $user = User::factory()->instanceAdmin()->create();
+
+    $this->actingAs($user)
+        ->post(route('teams.store'), ['name' => 'Settings!'])
+        ->assertSessionHasErrors('name');
+
+    $this->assertDatabaseMissing('teams', ['name' => 'Settings!']);
 });
 
 test('teams cannot be updated by members', function () {
@@ -367,6 +427,74 @@ test('users can switch teams', function () {
     $response->assertRedirect();
 
     expect($user->fresh()->current_team_id)->toEqual($team->id);
+});
+
+test('switching from an organization page opens the same section of the new organization', function (string $from, string $section) {
+    $user = User::factory()->create();
+    $previous = $user->currentTeam;
+    $team = Team::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Admin->value]);
+
+    $application = Application::factory()->create(['team_id' => $previous->id]);
+    $environment = Environment::factory()->create(['application_id' => $application->id]);
+
+    $url = route($from, match ($from) {
+        'applications.show', 'applications.edit' => ['current_team' => $previous->slug, 'application' => $application->slug],
+        'environments.show' => ['current_team' => $previous->slug, 'environment' => $environment->slug],
+        'alert-rules.index' => ['current_team' => $previous->slug, 'scope' => $environment->slug],
+        default => ['current_team' => $previous->slug],
+    });
+
+    $this->actingAs($user)
+        ->from($url)
+        ->post(route('teams.switch', $team))
+        ->assertRedirect(route($section, ['current_team' => $team->slug]));
+
+    expect($user->fresh()->current_team_id)->toBe($team->id);
+})->with([
+    'wall' => ['wall', 'wall'],
+    'an application' => ['applications.show', 'applications.index'],
+    'an application form' => ['applications.edit', 'applications.index'],
+    'an environment' => ['environments.show', 'applications.index'],
+    'alerts' => ['alerts.index', 'alerts.index'],
+    'the rules of one environment' => ['alert-rules.index', 'alert-rules.index'],
+    'members' => ['members.index', 'members.index'],
+    'the profile on a phone' => ['me', 'me'],
+]);
+
+test('switching from a page outside any organization stays on it', function () {
+    $user = User::factory()->create();
+    $team = Team::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Member->value]);
+
+    $this->actingAs($user)
+        ->from(route('teams.index'))
+        ->post(route('teams.switch', $team))
+        ->assertRedirect(route('teams.index'));
+});
+
+test('switching with no page to come back to opens the wall of the new organization', function () {
+    $user = User::factory()->create();
+    $team = Team::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Member->value]);
+
+    $this->actingAs($user)
+        ->from('/'.$user->currentTeam->slug.'/no-such-page')
+        ->post(route('teams.switch', $team))
+        ->assertRedirect(route('wall', ['current_team' => $team->slug]));
+});
+
+test('switching with a malformed previous address still opens the wall of the new organization', function () {
+    $user = User::factory()->create();
+    $team = Team::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Member->value]);
+
+    $this->actingAs($user)
+        ->withHeader('Referer', 'http://bad host/'.$user->currentTeam->slug.'/wall')
+        ->post(route('teams.switch', $team))
+        ->assertRedirect(route('wall', ['current_team' => $team->slug]));
+
+    expect($user->fresh()->current_team_id)->toBe($team->id);
 });
 
 test('users cannot switch to team they dont belong to', function () {

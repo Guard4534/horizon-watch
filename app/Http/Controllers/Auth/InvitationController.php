@@ -86,7 +86,7 @@ class InvitationController extends Controller
 
         $this->success(__('Invitation declined.'));
 
-        return to_route('wall');
+        return to_route('home');
     }
 
     private function findOrFail(string $code): TeamInvitation

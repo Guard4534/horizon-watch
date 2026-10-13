@@ -143,12 +143,24 @@ function switchTo(team: Organization): void {
                 </div>
             </div>
 
-            <p
+            <div
                 v-if="teams.length === 0"
-                class="text-muted-foreground py-8 text-center"
+                data-test="teams-empty"
+                class="text-muted-foreground space-y-2 py-8 text-center"
             >
-                {{ $t("You don't belong to any organization yet.") }}
-            </p>
+                <p>{{ $t("You don't belong to any organization yet.") }}</p>
+                <p class="text-sm">
+                    {{
+                        canCreateOrganizations
+                            ? $t(
+                                  'Create one to start monitoring, or ask an admin of an existing organization to invite you.',
+                              )
+                            : $t(
+                                  'Ask an admin of an organization to invite you: the link in the invitation email brings you in.',
+                              )
+                    }}
+                </p>
+            </div>
         </div>
     </div>
 
