@@ -201,9 +201,9 @@ class PollEnvironment
         array $insertOnly,
     ): ?EnvironmentSnapshot {
         return DB::transaction(function () use ($environment, $capturedAt, $evaluated, $snapshot, $state, $insertOnly) {
-            $address = DB::table('environments')->where('id', $environment->id)->lock('for share')->value('horizon_url');
+            $row = DB::table('environments')->where('id', $environment->id)->lock('for share')->first(['horizon_url', 'polling_enabled']);
 
-            if ($address !== $environment->horizon_url) {
+            if ($row === null || ! $row->polling_enabled || $row->horizon_url !== $environment->horizon_url) {
                 return null;
             }
 

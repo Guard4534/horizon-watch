@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Monitoring\PollEnvironment;
+use App\Actions\Teams\DeleteTeam;
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
 use App\Enums\HorizonStatus;
@@ -23,6 +24,8 @@ use App\Models\AlertRule;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
+use App\Models\Team;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Queue\MaxAttemptsExceededException;
@@ -481,6 +484,24 @@ test('a reading of an address the environment left while it was read is dropped'
         ->and(EnvironmentState::query()->count())->toBe(0)
         ->and($this->environment->fresh()->last_polled_at)->toBeNull();
 });
+
+test('a reading of an environment paused or purged while it was read is dropped', function (Closure $leave) {
+    Queue::fake();
+
+    $this->reader->results = [function () use ($leave) {
+        $leave($this->environment);
+
+        return ($this->reading)();
+    }];
+
+    expect(($this->poll)())->toBeNull()
+        ->and(EnvironmentSnapshot::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->count())->toBe(0)
+        ->and(Alert::query()->count())->toBe(0);
+})->with([
+    'paused' => [fn (Environment $environment) => Environment::query()->whereKey($environment->id)->update(['polling_enabled' => false])],
+    'organization deleted' => [fn (Environment $environment) => app(DeleteTeam::class)->purge(Team::query()->findOrFail($environment->team_id), User::factory()->create())],
+]);
 
 test('a reading survives an edit that keeps the address', function () {
     $this->reader->results = [function () {

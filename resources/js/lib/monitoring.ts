@@ -8,6 +8,9 @@ import {
 import { trans } from 'laravel-vue-i18n';
 import type { Component } from 'vue';
 
+const SERIES_REFRESH_PER_STEP = 4;
+const SERIES_REFRESH_MAX_MS = 300000;
+
 const STATUS_COLORS: Record<App.Enums.EnvironmentStatus, string> = {
     active: 'var(--st-ok)',
     degraded: 'var(--st-warn)',
@@ -114,4 +117,14 @@ export function formatDuration(seconds: number): string {
     }
 
     return `${minutes}m ${seconds % 60}s`;
+}
+
+export function seriesRefreshInterval(ms: number, stepSeconds: number): number {
+    return Math.max(
+        ms,
+        Math.min(
+            (stepSeconds * 1000) / SERIES_REFRESH_PER_STEP,
+            SERIES_REFRESH_MAX_MS,
+        ),
+    );
 }

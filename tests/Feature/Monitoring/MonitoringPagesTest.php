@@ -91,11 +91,11 @@ test('the environment page follows the requested range', function () {
     $this->actingAs($this->user)
         ->get(route('environments.show', ['current_team' => $this->slug, 'environment' => 'acme-shop-production', 'range' => '7d']))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.range', '7d')
+            ->where('series.range', '7d')
             ->where('page.environment.id', 'acme-shop-production')
             ->has('page.nodes', 1)
             ->has('page.queues', 3)
-            ->has('page.maxWait', 48)
+            ->has('series.maxWait', 48)
             ->has('page.rules', 8));
 });
 

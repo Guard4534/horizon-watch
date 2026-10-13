@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/vue3';
-import { onMounted, onUnmounted, watch } from 'vue';
+import { computed, onMounted, onUnmounted, watch } from 'vue';
 import { liveRefreshFailed } from '@/composables/useLiveConnection';
 import { useRefreshInterval } from '@/composables/useRefreshInterval';
 
@@ -7,8 +7,10 @@ type Poll = ReturnType<typeof router.poll>;
 
 export function useLivePoll(
     only: string[] = ['page', 'openAlertCount', 'panelHealth'],
+    every: (ms: number) => number = (ms) => ms,
 ): void {
-    const { interval } = useRefreshInterval();
+    const { interval: refresh } = useRefreshInterval();
+    const interval = computed(() => every(refresh.value));
     let poll: Poll | null = null;
     let mounted = false;
 

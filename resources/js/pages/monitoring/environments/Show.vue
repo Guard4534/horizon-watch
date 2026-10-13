@@ -27,7 +27,13 @@ import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
-import { envColor, formatCount, formatWait, waitColor } from '@/lib/monitoring';
+import {
+    envColor,
+    formatCount,
+    formatWait,
+    seriesRefreshInterval,
+    waitColor,
+} from '@/lib/monitoring';
 import {
     index as applicationsIndex,
     show as showApplication,
@@ -38,11 +44,15 @@ defineOptions({
     layout: { title: 'Environment detail', live: true },
 });
 
-const { page } = defineProps<{
+const { page, series } = defineProps<{
     page: App.Data.Pages.EnvironmentDetailPageData;
+    series: App.Data.Pages.EnvironmentSeriesData;
 }>();
 
 useLivePoll();
+useLivePoll(['series'], (ms) =>
+    seriesRefreshInterval(ms, series.grid.stepSeconds),
+);
 
 const slug = useTeamSlug();
 const isMobile = useIsMobile();
@@ -322,10 +332,10 @@ const tiles = computed<Tile[]>(() => [
         >
             <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
                 <TrendChart
-                    :throughput="page.throughput"
-                    :max-wait="page.maxWait"
-                    :range="page.range"
-                    :grid="page.grid"
+                    :throughput="series.throughput"
+                    :max-wait="series.maxWait"
+                    :range="series.range"
+                    :grid="series.grid"
                 />
                 <QueueTable
                     :queues="page.queues"

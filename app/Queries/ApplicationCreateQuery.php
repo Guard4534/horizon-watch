@@ -12,6 +12,7 @@ class ApplicationCreateQuery
         return new ApplicationFormPageData(
             application: null,
             colors: EnvironmentColor::options(),
+            maxEnvironments: config()->integer('horizon-watch.limits.wizard_environments'),
         );
     }
 }

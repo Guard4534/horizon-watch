@@ -142,7 +142,7 @@ test('environment ids from another organization are rejected', function () {
             'visibility' => MemberVisibility::Manual->value,
             'environmentIds' => [$otherEnvironment->id],
         ])
-        ->assertSessionHasErrors('environmentIds.0');
+        ->assertSessionHasErrors('environmentIds');
 });
 
 test('manual visibility invites copy the chosen environments on acceptance', function () {

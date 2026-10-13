@@ -20,7 +20,7 @@ class ApplicationWizardData extends Data
     public static function rules(): array
     {
         return [
-            'environments' => ['required', 'array', 'min:1'],
+            'environments' => ['required', 'array', 'min:1', 'max:'.config()->integer('horizon-watch.limits.wizard_environments')],
             'environments.*.name' => ['distinct'],
         ];
     }

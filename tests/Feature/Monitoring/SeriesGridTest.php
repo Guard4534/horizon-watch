@@ -25,11 +25,11 @@ test('the environment page carries the grid its series is drawn on', function (s
     $this->actingAs($this->user)
         ->get(route('environments.show', ['current_team' => $this->user->currentTeam->slug, 'environment' => $this->environment->slug, 'range' => $range]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.grid.startsAt', $startsAt)
-            ->where('page.grid.stepSeconds', $step)
-            ->where('page.throughput.47', 7)
-            ->where('page.maxWait.47', 11)
-            ->where('page.maxWait.46', 0));
+            ->where('series.grid.startsAt', $startsAt)
+            ->where('series.grid.stepSeconds', $step)
+            ->where('series.throughput.47', 7)
+            ->where('series.maxWait.47', 11)
+            ->where('series.maxWait.46', 0));
 
     expect(CarbonImmutable::parse($startsAt)->addSeconds(47 * $step)->equalTo(CarbonImmutable::parse($lastBucket)))->toBeTrue();
 })->with([

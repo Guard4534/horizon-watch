@@ -7,6 +7,7 @@ use App\Enums\TeamPermission;
 use App\Enums\TeamRole;
 use App\Models\Membership;
 use App\Models\Team;
+use App\Support\Memberships;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -48,16 +49,28 @@ trait HasTeams
         }
 
         $this->update(['current_team_id' => $team->id]);
-        $this->setRelation('currentTeam', $team);
-
-        URL::defaults(['current_team' => $team->slug]);
+        $this->switchTeamForRequest($team);
 
         return true;
     }
 
+    public function switchTeamForRequest(Team $team): void
+    {
+        $this->setAttribute('current_team_id', $team->id);
+        $this->syncOriginalAttribute('current_team_id');
+        $this->setRelation('currentTeam', $team);
+
+        URL::defaults(['current_team' => $team->slug]);
+    }
+
     public function belongsToTeam(Team $team): bool
     {
-        return $this->teams()->where('teams.id', $team->id)->exists();
+        return ! $team->trashed() && $this->membershipOf($team) !== null;
+    }
+
+    public function membershipOf(Team $team): ?Membership
+    {
+        return app(Memberships::class)->of($this, $team);
     }
 
     public function isCurrentTeam(Team $team): bool
@@ -72,10 +85,7 @@ trait HasTeams
 
     public function teamRole(Team $team): ?TeamRole
     {
-        return $this->teamMemberships()
-            ->where('team_id', $team->id)
-            ->first()
-            ?->role;
+        return $this->membershipOf($team)?->role;
     }
 
     /**

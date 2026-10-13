@@ -63,6 +63,7 @@ return [
         'trend_step_seconds' => 300,
         'trend_span' => 3,
         'prune_chunk' => 10000,
+        'purge_budget_seconds' => 10.0,
     ],
 
     'alerts' => [
@@ -94,6 +95,11 @@ return [
 
     'invitations' => [
         'expires_days' => 7,
+    ],
+
+    'limits' => [
+        'wizard_environments' => 20,
+        'environment_ids' => 1000,
     ],
 
     'rate_limits' => [

@@ -602,20 +602,28 @@ test('the stored states are read once per view, however many panels ask', functi
     DB::enableQueryLog();
 
     $this->repository->environment($this->team, $slug);
-    $this->repository->environments($this->team);
     $this->repository->nodes($this->team, $slug);
     $this->repository->queues($this->team, $slug);
     $this->repository->failedJobs($this->team, $slug);
     $this->repository->longRunningJobs($this->team, $slug);
+    $this->repository->openAlertIn($this->team, $slug);
+    $this->repository->alertRules($this->team, 'production');
+
+    $states = fn () => collect(DB::getQueryLog())->pluck('query')->filter(fn (string $query) => str_contains($query, 'from "environment_states"'));
+    $trends = fn () => collect(DB::getQueryLog())->pluck('query')->filter(fn (string $query) => str_contains($query, 'avg(pending)'));
+
+    expect($states())->toHaveCount(1)
+        ->and($trends())->toHaveCount(1);
+
+    $this->repository->environments($this->team);
     $this->repository->openAlerts($this->team);
     $this->repository->openAlerts($this->team);
     $this->repository->configurableEnvironments($this->team);
+    $this->repository->ruleScopes($this->team);
 
-    $queries = collect(DB::getQueryLog())->pluck('query');
-
-    expect($queries->filter(fn (string $query) => str_contains($query, 'from "environment_states"')))->toHaveCount(1)
-        ->and($queries->filter(fn (string $query) => str_contains($query, 'avg(pending)')))->toHaveCount(1)
-        ->and($queries->filter(fn (string $query) => str_contains($query, 'from "alerts"')))->toHaveCount(1);
+    expect($states())->toHaveCount(2)
+        ->and($trends())->toHaveCount(2)
+        ->and(collect(DB::getQueryLog())->pluck('query')->filter(fn (string $query) => str_contains($query, 'from "alerts" where "alerts"."team_id"') && ! str_contains($query, 'limit 1')))->toHaveCount(1);
 });
 
 test('with zero applications every method returns an empty result without error', function () {
@@ -848,4 +856,37 @@ test('the configuration view reads states and trends only for watched rows', fun
         ->and($queries)->toHaveCount(2)
         ->and($queries->every(fn (array $query) => in_array($watched->id, $query['bindings'], true)
             && ! in_array($hidden->id, $query['bindings'], true)))->toBeTrue();
+});
+
+test('the rule scopes need the environment names, not their readings', function () {
+    $application = Application::factory()->for($this->team)->create();
+    $environments = Environment::factory()->for($application)->count(2)->sequence(['name' => 'production'], ['name' => 'staging'])->create();
+    Environment::factory()->for(Application::factory()->for($this->team))->create(['name' => 'Production']);
+    $environments->each(fn (Environment $environment) => Readings::record($environment));
+
+    DB::enableQueryLog();
+
+    $scopes = $this->repository->ruleScopes($this->team);
+    $this->repository->hasRuleScope($this->team, 'staging');
+    $this->repository->alertRules($this->team, 'production');
+    $this->repository->ruleScopes($this->team);
+
+    $queries = collect(DB::getQueryLog())->pluck('query');
+
+    expect(array_map(fn ($scope) => [$scope->id, $scope->environmentCount], $scopes))
+        ->toBe([['organization', 3], ['production', 2], ['staging', 1]])
+        ->and($queries->filter(fn (string $query) => str_contains($query, 'environment_states') || str_contains($query, 'environment_snapshots')))->toBeEmpty()
+        ->and($queries->filter(fn (string $query) => str_contains($query, 'from "environments"')))->toHaveCount(1);
+});
+
+test('the open alert of an environment is its most severe one, whatever the other environments hold', function () {
+    $application = Application::factory()->for($this->team)->create();
+    [$production, $staging] = Environment::factory()->for($application)->count(2)->sequence(['name' => 'production'], ['name' => 'staging'])->create()->all();
+    Alert::factory()->for($production)->warning()->create(['metric' => AlertRuleMetric::QueuePending, 'opened_at' => now()->subMinute()]);
+    $critical = Alert::factory()->for($production)->critical()->create(['metric' => AlertRuleMetric::QueueMaxWait, 'opened_at' => now()->subMinutes(5)]);
+    Alert::factory()->for($staging)->critical()->create(['metric' => AlertRuleMetric::QueueMaxWait]);
+
+    expect($this->repository->openAlertIn($this->team, $production->slug)?->id)->toBe($critical->id)
+        ->and($this->repository->openAlertIn($this->team, $production->slug)?->environmentId)->toBe($production->slug)
+        ->and($this->repository->openAlertIn($this->team, 'nowhere'))->toBeNull();
 });

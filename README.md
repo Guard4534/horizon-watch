@@ -181,6 +181,12 @@ Readings and notifications go through separate queues: the `worker`s read Horizo
 (queue `notifications`). A slow mail server therefore never holds up a reading, and a backlog of
 readings never holds up an alert.
 
+Deleting an organization takes effect at once, but its stored readings are deleted afterwards in
+the background (queue `default`, which both kinds of worker serve) in runs of about 10 seconds
+each. While a run is going, the worker that took it is busy, so a large organization can delay a
+reading or a notification by up to that long. The daily `monitoring:prune` finishes whatever a
+failed run left behind.
+
 A worker reads one environment at a time, usually in well under a second, but in up to 20
 seconds when Horizon is slow or does not answer. To keep up even when endpoints are that slow,
 set `HORIZON_WATCH_WORKERS` to about `(20 × unresponsive + healthy) / interval`, rounded up,

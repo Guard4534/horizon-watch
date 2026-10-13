@@ -14,5 +14,6 @@ class ApplicationFormPageData extends Data
          */
         public array $colors,
         public ?string $slug = null,
+        public ?int $maxEnvironments = null,
     ) {}
 }

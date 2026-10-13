@@ -254,7 +254,42 @@ test('an environment of another organization cannot be granted', function () {
             'visibility' => MemberVisibility::Manual->value,
             'environmentIds' => [$other->id],
         ])
-        ->assertSessionHasErrors('environmentIds.0');
+        ->assertSessionHasErrors('environmentIds');
+});
+
+test('a manual selection is checked against the organization in a single query', function () {
+    $more = Environment::factory()->count(20)->sequence(fn ($sequence) => ['name' => 'review-'.$sequence->index])->create(['application_id' => $this->production->application_id]);
+    $ids = [$this->production->id, $this->staging->id, ...$more->modelKeys()];
+    $environmentQueries = 0;
+
+    DB::listen(function ($query) use (&$environmentQueries) {
+        if (str_contains($query->sql, 'from "environments"') && ! str_starts_with($query->sql, 'delete')) {
+            $environmentQueries++;
+        }
+    });
+
+    $this->actingAs($this->admin)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), [
+            'visibility' => MemberVisibility::Manual->value,
+            'environmentIds' => $ids,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect(DB::table('environment_user')->where('user_id', $this->member->id)->count())->toBe(22)
+        ->and($environmentQueries)->toBeLessThan(5);
+});
+
+test('a manual selection longer than the cap is refused', function () {
+    config(['horizon-watch.limits.environment_ids' => 1]);
+
+    $this->actingAs($this->admin)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), [
+            'visibility' => MemberVisibility::Manual->value,
+            'environmentIds' => [$this->production->id, $this->staging->id],
+        ])
+        ->assertSessionHasErrors('environmentIds');
+
+    $this->assertDatabaseMissing('environment_user', ['user_id' => $this->member->id]);
 });
 
 test('an update with neither a role nor a visibility is refused', function () {

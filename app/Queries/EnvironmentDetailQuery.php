@@ -2,8 +2,8 @@
 
 namespace App\Queries;
 
-use App\Data\Monitoring\AlertData;
 use App\Data\Pages\EnvironmentDetailPageData;
+use App\Data\Pages\EnvironmentSeriesData;
 use App\Enums\SeriesRange;
 use App\Enums\TeamPermission;
 use App\Models\Team;
@@ -15,30 +15,31 @@ class EnvironmentDetailQuery
 {
     public function __construct(private MonitoringRepository $monitoring) {}
 
-    public function handle(Team $team, User $viewer, string $environmentId, SeriesRange $range): EnvironmentDetailPageData
+    public function handle(Team $team, User $viewer, string $environmentId): EnvironmentDetailPageData
     {
         $environment = $this->monitoring->environment($team, $environmentId) ?? abort(404);
 
-        $rules = $this->monitoring->alertRules($team, Str::lower($environment->name));
-
-        $openAlerts = array_filter(
-            $this->monitoring->openAlerts($team),
-            fn (AlertData $alert) => $alert->environmentId === $environment->id,
-        );
-
         return new EnvironmentDetailPageData(
             environment: $environment,
-            openAlert: array_values($openAlerts)[0] ?? null,
+            openAlert: $this->monitoring->openAlertIn($team, $environment->id),
             nodes: $this->monitoring->nodes($team, $environment->id),
             queues: $this->monitoring->queues($team, $environment->id),
             failedJobs: $this->monitoring->failedJobs($team, $environment->id),
             longRunningJobs: $this->monitoring->longRunningJobs($team, $environment->id),
+            rules: $this->monitoring->alertRules($team, Str::lower($environment->name)),
+            canTestConnection: $viewer->hasTeamPermission($team, TeamPermission::TestConnection),
+        );
+    }
+
+    public function series(Team $team, string $environmentId, SeriesRange $range): EnvironmentSeriesData
+    {
+        $environment = $this->monitoring->environment($team, $environmentId) ?? abort(404);
+
+        return new EnvironmentSeriesData(
             range: $range,
             throughput: $this->monitoring->throughputSeries($team, $environment->id, $range),
             maxWait: $this->monitoring->maxWaitSeries($team, $environment->id, $range),
             grid: $this->monitoring->seriesGrid($range),
-            rules: $rules,
-            canTestConnection: $viewer->hasTeamPermission($team, TeamPermission::TestConnection),
         );
     }
 }

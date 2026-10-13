@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Policies\EnvironmentPolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\Grants;
 
 beforeEach(function () {
@@ -139,6 +140,27 @@ test('the wizard is rejected without at least one environment', function () {
         ->assertInvalid(['environments']);
 
     expect(Application::where('name', 'NoEnv')->exists())->toBeFalse();
+});
+
+test('the wizard is rejected past the environment cap, which the form knows', function () {
+    config(['horizon-watch.limits.wizard_environments' => 2]);
+
+    $this->actingAs($this->admin)
+        ->get(route('applications.create', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page->where('page.maxEnvironments', 2));
+
+    $this->actingAs($this->admin)
+        ->post(route('applications.store', ['current_team' => $this->team->slug]), [
+            'application' => ['name' => 'Crowded', 'host' => 'crowded.example.com'],
+            'environments' => [
+                ($this->environmentPayload)('production'),
+                ($this->environmentPayload)('staging'),
+                ($this->environmentPayload)('develop'),
+            ],
+        ])
+        ->assertInvalid(['environments']);
+
+    expect(Application::where('name', 'Crowded')->exists())->toBeFalse();
 });
 
 test('the wizard is rejected when two rows carry the same environment name', function () {

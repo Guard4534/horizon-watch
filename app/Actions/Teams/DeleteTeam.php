@@ -4,9 +4,11 @@ namespace App\Actions\Teams;
 
 use App\Alerts\AlertEngine;
 use App\Data\Applications\ConfirmByNameData;
+use App\Jobs\PurgeDeletedTeam;
 use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
+use App\Support\Memberships;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -34,7 +36,12 @@ class DeleteTeam
     public function purge(Team $team, User $actor): void
     {
         DB::transaction(function () use ($actor, $team) {
-            $this->alerts->resolveAllIn(Environment::query()->where('team_id', $team->id), CarbonImmutable::now());
+            $environments = Environment::query()->where('team_id', $team->id);
+
+            $this->alerts->resolveAllIn(clone $environments, CarbonImmutable::now());
+
+            (clone $environments)->toBase()->update(['polling_enabled' => false]);
+            DB::table('environment_user')->whereIn('environment_id', (clone $environments)->select('id'))->delete();
 
             User::where('current_team_id', $team->id)
                 ->where('id', '!=', $actor->id)
@@ -48,15 +55,16 @@ class DeleteTeam
 
             $team->invitations()->delete();
             $team->memberships()->delete();
+            app(Memberships::class)->flush();
 
             $team->alertNotifications()->delete();
             $team->alerts()->delete();
             $team->alertRules()->delete();
             $team->notificationSetting()->delete();
 
-            $team->applications()->delete();
-
             $team->delete();
+
+            PurgeDeletedTeam::dispatch($team->id);
         });
     }
 }

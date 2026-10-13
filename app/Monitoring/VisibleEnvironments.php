@@ -17,7 +17,7 @@ class VisibleEnvironments
      */
     public function query(Team $team, User $user): Builder
     {
-        $membership = $this->membership($team, $user);
+        $membership = $user->membershipOf($team);
 
         if (! $membership) {
             return $this->ofTeam($team)->whereRaw('1 = 0');
@@ -28,7 +28,7 @@ class VisibleEnvironments
 
     public function seesEverything(Team $team, User $user): bool
     {
-        return $this->membership($team, $user)?->visibility === MemberVisibility::All;
+        return $user->membershipOf($team)?->visibility === MemberVisibility::All;
     }
 
     public function sees(Team $team, User $user, ?int $environmentId): bool
@@ -126,11 +126,6 @@ class VisibleEnvironments
         }
 
         return $granted;
-    }
-
-    private function membership(Team $team, User $user): ?Membership
-    {
-        return $user->teamMemberships()->where('team_id', $team->id)->first();
     }
 
     /**

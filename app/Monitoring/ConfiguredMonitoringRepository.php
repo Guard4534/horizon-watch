@@ -118,6 +118,11 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
      */
     private array $notificationSettingsByTeam = [];
 
+    /**
+     * @var array<int, array<int, RuleScopeData>>
+     */
+    private array $ruleScopesByTeam = [];
+
     public function __construct(
         private readonly Guard $auth,
         private readonly VisibleEnvironments $visible,
@@ -178,7 +183,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             return null;
         }
 
-        $this->stateOf($team, $environment);
+        $this->stateOf($environment);
 
         return $this->toEnvironmentData($environment, watched: true);
     }
@@ -186,7 +191,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     public function nodes(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
-        $state = $environment ? $this->stateOf($team, $environment) : null;
+        $state = $environment ? $this->stateOf($environment) : null;
 
         if ($state === null) {
             return [];
@@ -211,7 +216,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     public function queues(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
-        $state = $environment ? $this->stateOf($team, $environment) : null;
+        $state = $environment ? $this->stateOf($environment) : null;
 
         if ($state === null) {
             return [];
@@ -233,7 +238,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     public function failedJobs(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
-        $state = $environment ? $this->stateOf($team, $environment) : null;
+        $state = $environment ? $this->stateOf($environment) : null;
 
         if ($state === null) {
             return [];
@@ -253,7 +258,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     public function longRunningJobs(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
-        $state = $environment ? $this->stateOf($team, $environment) : null;
+        $state = $environment ? $this->stateOf($environment) : null;
 
         if ($state === null) {
             return [];
@@ -339,6 +344,20 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             ??= $this->toAlertData($team, $this->alertsIn($team, AlertState::Open)->get());
     }
 
+    public function openAlertIn(Team $team, string $environmentId): ?AlertData
+    {
+        $environment = $this->findEnvironment($team, $environmentId);
+
+        if ($environment === null) {
+            return null;
+        }
+
+        return $this->toAlertData($team, $this->alertsIn($team, AlertState::Open)
+            ->where('alerts.environment_id', $environment->id)
+            ->limit(1)
+            ->get())[0] ?? null;
+    }
+
     public function latestResolvedAlerts(Team $team, string $application, int $limit): array
     {
         return $this->toAlertData($team, $this->alertsIn($team, AlertState::Resolved, $application)->limit($limit)->get());
@@ -399,15 +418,30 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
     public function ruleScopes(Team $team): array
     {
-        $environments = $this->environments($team);
+        return $this->ruleScopesByTeam[$team->id] ??= $this->collectRuleScopes($team);
+    }
+
+    /**
+     * @return array<int, RuleScopeData>
+     */
+    private function collectRuleScopes(Team $team): array
+    {
+        $environments = $this->visibleEnvironmentModels($team);
         $overrideCounts = $this->effectiveRules->overrideCounts($team);
 
         $scopes = [new RuleScopeData(
             id: AlertRule::ORGANIZATION,
             color: null,
-            environmentCount: count($environments),
+            environmentCount: $environments->count(),
             overrideCount: 0,
         )];
+
+        $counts = [];
+
+        foreach ($environments as $environment) {
+            $scope = Str::lower($environment->name);
+            $counts[$scope] = ($counts[$scope] ?? 0) + 1;
+        }
 
         $names = [];
 
@@ -423,7 +457,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             $scopes[] = new RuleScopeData(
                 id: $scope,
                 color: $environment->color,
-                environmentCount: count(array_filter($environments, fn (EnvironmentData $item) => Str::lower($item->name) === $scope)),
+                environmentCount: $counts[$scope],
                 overrideCount: $overrideCounts[$scope] ?? 0,
             );
         }
@@ -585,11 +619,9 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         }
     }
 
-    private function stateOf(Team $team, Environment $environment): ?EnvironmentState
+    private function stateOf(Environment $environment): ?EnvironmentState
     {
-        if (! array_key_exists($environment->id, $this->statesByEnvironment)) {
-            $this->loadStates($this->visibleEnvironmentModels($team));
-        }
+        $this->loadStates([$environment]);
 
         return $this->statesByEnvironment[$environment->id] ?? null;
     }
@@ -788,14 +820,17 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             ->get(['alert_id', 'channel'])
             ->groupBy('alert_id');
 
-        $slugs = $this->visibleEnvironmentModels($team)->pluck('slug', 'id');
-        $environments = collect($this->environments($team))->keyBy('id');
+        $involved = $this->visibleEnvironmentModels($team)->only($alerts->pluck('environment_id')->filter()->unique()->all());
+        $this->loadStates($involved);
+        $environments = $involved->mapWithKeys(fn (Environment $environment) => [
+            $environment->id => $this->toEnvironmentData($environment, watched: true),
+        ]);
         $abilities = $this->alertAbilities($team);
         $now = $this->now();
 
         return $alerts->map(fn (Alert $alert) => $this->makeAlert(
             $alert,
-            $environments->get($slugs->get($alert->environment_id ?? 0) ?? ''),
+            $environments->get($alert->environment_id ?? 0),
             $now,
             array_values(array_filter(
                 NotificationChannel::cases(),

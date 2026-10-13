@@ -2,25 +2,26 @@
 
 namespace App\Console\Commands;
 
+use App\Actions\Teams\DeleteTeamApplications;
 use App\Alerts\AlertEngine;
 use App\Models\Alert;
 use App\Models\AlertNotification;
 use App\Models\EnvironmentSnapshot;
 use App\Models\NotificationSetting;
+use App\Models\Team;
+use App\Support\ChunkedDelete;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Str;
 
 #[Signature('monitoring:prune {--chunk= : Rows deleted per statement}')]
-#[Description('Delete the readings and the resolved alerts older than their retention periods, and replaced webhook secrets past their overlap')]
+#[Description('Delete the readings and the resolved alerts older than their retention periods, what deleted organizations left behind, and replaced webhook secrets past their overlap')]
 class PruneReadings extends Command
 {
-    public function handle(AlertEngine $alerts): int
+    public function handle(AlertEngine $alerts, DeleteTeamApplications $deleteApplications): int
     {
         $chunk = max(1, (int) ($this->option('chunk') ?? config()->integer('horizon-watch.readings.prune_chunk')));
         $readingCutoff = now()->subDays(config()->integer('horizon-watch.retention_days'));
@@ -29,7 +30,7 @@ class PruneReadings extends Command
         $orphans = $alerts->resolveOrphans(CarbonImmutable::now());
         $this->info("Resolved {$orphans} orphaned ".Str::plural('alert', $orphans).'.');
 
-        $this->report('reading', $this->prune(
+        $this->report('reading', ChunkedDelete::run(
             EnvironmentSnapshot::query()
                 ->where('captured_at', '<', $readingCutoff)
                 ->whereExists(fn (QueryBuilder $newer) => $newer
@@ -39,41 +40,28 @@ class PruneReadings extends Command
             $chunk,
         ));
 
-        $this->report('alert', $this->prune(
+        $this->report('alert', ChunkedDelete::run(
             Alert::query()->whereNotNull('resolved_at')->where('resolved_at', '<', $alertCutoff),
             $chunk,
         ));
 
-        $this->report('notification', $this->prune(
+        $this->report('notification', ChunkedDelete::run(
             AlertNotification::query()->whereNull('alert_id')->where('sent_at', '<', $alertCutoff),
             $chunk,
         ));
+
+        $teams = Team::onlyTrashed()->whereHas('applications')->pluck('id');
+
+        foreach ($teams as $teamId) {
+            $deleteApplications->handle($teamId);
+        }
+
+        $this->info("Purged {$teams->count()} deleted ".Str::plural('organization', $teams->count()).'.');
 
         $secrets = NotificationSetting::forgetExpiredPreviousSecrets();
         $this->info("Forgot {$secrets} replaced webhook ".Str::plural('secret', $secrets).'.');
 
         return self::SUCCESS;
-    }
-
-    /**
-     * @template TModel of Model
-     *
-     * @param  Builder<TModel>  $expired
-     */
-    private function prune(Builder $expired, int $chunk): int
-    {
-        $model = $expired->getModel();
-        $total = 0;
-
-        do {
-            $deleted = $model->newQuery()
-                ->whereIn($model->getKeyName(), (clone $expired)->select($model->getKeyName())->limit($chunk))
-                ->delete();
-
-            $total += $deleted;
-        } while ($deleted > 0);
-
-        return $total;
     }
 
     private function report(string $noun, int $total): void

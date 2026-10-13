@@ -18,8 +18,8 @@ class AlertLogQuery
     public function handle(Team $team, User $viewer, AlertState $state, ?string $application = null, int $page = 1): AlertLogPageData
     {
         $settings = $this->monitoring->notificationSettings($team);
-        $alerts = $this->monitoring->alerts($team, $state, $application, $page);
         $environments = $this->monitoring->environments($team);
+        $alerts = $this->monitoring->alerts($team, $state, $application, $page);
         $watched = array_column($environments, 'applicationId', 'applicationId');
 
         return new AlertLogPageData(

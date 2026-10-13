@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
+use App\Support\Memberships;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
@@ -33,6 +34,12 @@ class Membership extends Pivot
      * @var bool
      */
     public $incrementing = true;
+
+    protected static function booted(): void
+    {
+        static::saved(fn (Membership $membership) => app(Memberships::class)->forget($membership->user_id));
+        static::deleted(fn (Membership $membership) => app(Memberships::class)->forget($membership->user_id));
+    }
 
     /**
      * @return BelongsTo<Team, $this>

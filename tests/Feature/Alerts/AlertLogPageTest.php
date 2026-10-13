@@ -332,6 +332,24 @@ test('each tab reads its alerts with the same number of queries for one alert or
         ->and($one)->toBeLessThan(40);
 })->with(['open', 'muted', 'resolved']);
 
+test('the alert log reads the latest states and trends once, for every environment', function () {
+    foreach ([$this->production, $this->staging, $this->shopProduction] as $environment) {
+        Readings::record($environment);
+    }
+    Alert::factory()->for($this->staging)->create();
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $page = ($this->page)();
+    DB::disableQueryLog();
+
+    $queries = array_column(DB::getQueryLog(), 'query');
+
+    expect($page['alerts'])->toHaveCount(1)
+        ->and(array_filter($queries, fn (string $sql) => str_contains($sql, 'from "environment_states"')))->toHaveCount(1)
+        ->and(array_filter($queries, fn (string $sql) => str_contains($sql, 'date_bin')))->toHaveCount(1);
+});
+
 test('the application page lists its open alerts and its five latest resolutions', function () {
     $open = Alert::factory()->for($this->production)->critical()->create(['metric' => AlertRuleMetric::EndpointUnreachable]);
     Alert::factory()->for($this->production)->create(['muted_indefinitely' => true]);

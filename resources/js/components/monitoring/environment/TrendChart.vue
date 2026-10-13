@@ -38,7 +38,7 @@ const selected = computed({
             path.value,
             { range: next },
             {
-                only: ['page'],
+                only: ['series'],
                 preserveState: true,
                 preserveScroll: true,
                 replace: true,

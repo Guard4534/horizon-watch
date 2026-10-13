@@ -152,6 +152,10 @@ const {
                 <button
                     type="button"
                     class="nc-btn nc-btn-secondary nc-t-xs"
+                    :disabled="
+                        page.maxEnvironments !== null &&
+                        form.environments.length >= page.maxEnvironments
+                    "
                     @click="addEnvironment"
                 >
                     <PhPlus :size="13" />{{ $t('Add environment') }}
