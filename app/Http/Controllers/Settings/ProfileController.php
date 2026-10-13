@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Actions\Settings\DeleteAccount;
 use App\Actions\Settings\UpdateProfile;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
@@ -14,10 +15,11 @@ use Inertia\Response;
 
 class ProfileController extends Controller
 {
-    public function edit(Request $request): Response
+    public function edit(Request $request, DeleteAccount $deleteAccount): Response
     {
         return Inertia::render('settings/Profile', [
             'alertEmails' => (bool) $request->user()?->alert_emails,
+            'accountDeletion' => $deleteAccount->summary($request->user()),
         ]);
     }
 
@@ -30,13 +32,13 @@ class ProfileController extends Controller
         return to_route('profile.edit');
     }
 
-    public function destroy(ProfileDeleteRequest $request): RedirectResponse
+    public function destroy(ProfileDeleteRequest $request, DeleteAccount $deleteAccount): RedirectResponse
     {
         $user = $request->user();
 
         Auth::logout();
 
-        $user->delete();
+        $deleteAccount->handle($user);
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

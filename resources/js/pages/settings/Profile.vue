@@ -18,6 +18,7 @@ defineOptions({
 
 defineProps<{
     alertEmails: boolean;
+    accountDeletion: App.Data.Settings.AccountDeletionData;
 }>();
 
 const page = usePage();
@@ -142,5 +143,5 @@ const changesEmail = computed(
         </AlertEmailsToggle>
     </div>
 
-    <DeleteUser />
+    <DeleteUser :deletion="accountDeletion" />
 </template>

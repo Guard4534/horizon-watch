@@ -20,6 +20,7 @@ declare module '@inertiajs/core' {
             locale: App.Enums.Locale;
             currentTeam: App.Data.Teams.UserTeamData | null;
             teams: App.Data.Teams.UserTeamData[];
+            canCreateOrganizations: boolean;
             openAlertCount: number | null;
             canManageApplications: boolean;
             visibilityRestricted: boolean;

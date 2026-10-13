@@ -22,6 +22,17 @@ class DeleteTeam
             ? $actor->fallbackTeam($team)
             : null;
 
+        $this->purge($team, $actor);
+
+        if ($fallbackTeam) {
+            $actor->switchTeam($fallbackTeam);
+        } elseif ($actor->isCurrentTeam($team)) {
+            $actor->update(['current_team_id' => null]);
+        }
+    }
+
+    public function purge(Team $team, User $actor): void
+    {
         DB::transaction(function () use ($actor, $team) {
             $this->alerts->resolveAllIn(Environment::query()->where('team_id', $team->id), CarbonImmutable::now());
 
@@ -47,11 +58,5 @@ class DeleteTeam
 
             $team->delete();
         });
-
-        if ($fallbackTeam) {
-            $actor->switchTeam($fallbackTeam);
-        } elseif ($actor->isCurrentTeam($team)) {
-            $actor->update(['current_team_id' => null]);
-        }
     }
 }

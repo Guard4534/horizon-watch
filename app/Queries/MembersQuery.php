@@ -39,6 +39,7 @@ class MembersQuery
             permissions: new MembersPermissionsData(
                 canInvite: $canInvite,
                 canManageMembers: $canManageMembers,
+                canTransferOwnership: $gate->allows('transferOwnership', $team),
             ),
             matrix: $this->matrix(),
             invitationExpiresDays: TeamInvitation::lifetimeDays(),

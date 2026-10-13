@@ -25,6 +25,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string $email
  * @property Locale|null $locale
  * @property bool $alert_emails
+ * @property bool $is_instance_admin
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
@@ -50,6 +51,7 @@ class User extends Authenticatable implements HasLocalePreference
      */
     protected $attributes = [
         'alert_emails' => false,
+        'is_instance_admin' => false,
     ];
 
     public function preferredLocale(): ?string
@@ -84,6 +86,7 @@ class User extends Authenticatable implements HasLocalePreference
             'two_factor_confirmed_at' => 'datetime',
             'locale' => Locale::class,
             'alert_emails' => 'boolean',
+            'is_instance_admin' => 'boolean',
         ];
     }
 }

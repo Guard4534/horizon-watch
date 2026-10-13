@@ -20,7 +20,7 @@ test('the teams index page can be rendered', function () {
 });
 
 test('teams can be created', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->instanceAdmin()->create();
 
     $response = $this
         ->actingAs($user)
@@ -34,7 +34,7 @@ test('teams can be created', function () {
 });
 
 test('team slug uses next available suffix', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->instanceAdmin()->create();
 
     Team::factory()->create(['name' => 'Acme', 'slug' => 'acme']);
     Team::factory()->create(['name' => 'Acme One', 'slug' => 'acme-1']);
@@ -53,7 +53,7 @@ test('team slug uses next available suffix', function () {
 });
 
 test('a trashed team still reserves its slug', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->instanceAdmin()->create();
 
     Team::factory()->trashed()->create(['name' => 'Acme', 'slug' => 'acme']);
 

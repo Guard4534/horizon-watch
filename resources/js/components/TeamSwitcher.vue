@@ -19,6 +19,9 @@ const isMobile = useIsMobile();
 
 const currentTeam = computed(() => page.props.currentTeam);
 const teams = computed(() => page.props.teams ?? []);
+const canCreateOrganizations = computed(
+    () => page.props.canCreateOrganizations,
+);
 
 const switchTeam = (team: App.Data.Teams.UserTeamData) => {
     const previousTeamSlug = currentTeam.value?.slug;
@@ -86,8 +89,8 @@ const switchTeam = (team: App.Data.Teams.UserTeamData) => {
                 {{ team.name }}
                 <PhCheck v-if="team.isCurrent" class="ml-auto h-4 w-4" />
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <CreateOrganizationModal>
+            <DropdownMenuSeparator v-if="canCreateOrganizations" />
+            <CreateOrganizationModal v-if="canCreateOrganizations">
                 <DropdownMenuItem
                     data-test="team-switcher-new-team"
                     class="cursor-pointer gap-2 p-2"

@@ -21,8 +21,10 @@ production and read [CHANGELOG.md](CHANGELOG.md) before upgrading.
 ## Threat model
 
 Horizon Watch is invite-only and has no anonymous surface beyond the login and password reset
-pages and the one-time `/setup` page, which closes for good once the first user exists. What follows is
-what the project protects, and what it deliberately does not.
+pages and the `/setup` page, which is open only while no account exists. Deleting the last
+account opens it again, and whoever reaches the panel first then claims the instance: delete the
+last account only on a panel nobody else can reach. What follows is what the project protects,
+and what it deliberately does not.
 
 ### The application key and the stored Horizon credentials
 
@@ -133,7 +135,9 @@ own origin.
 ### What is out of scope
 
 - The panel trusts the members of an organization. Anyone who may manage applications can
-  make the server read an HTTP address of their choosing, within the limits above.
+  make the server read an HTTP address of their choosing, within the limits above. Only
+  instance admins can create organizations, unless `HORIZON_WATCH_ORG_CREATION=everyone`, in
+  which case every account can become the owner of one and point the reader anywhere.
 - It does not audit the Horizon installations it watches: it reads them, and whatever they
   answer is what you see.
 - There is no built-in TLS, no rate limiting beyond the authentication, account and setup

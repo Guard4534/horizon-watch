@@ -1,7 +1,9 @@
 <?php
 
 use App\Actions\Teams\AcceptInvitation;
+use App\Actions\Teams\DeclineInvitation;
 use App\Actions\Teams\RegisterInvitedUser;
+use App\Actions\Teams\RevokeInvitation;
 use App\Data\Teams\AcceptInvitationData;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
@@ -685,4 +687,57 @@ test('the invitation email tells its lifetime in the language of the app', funct
 
     expect((new TeamInvitationNotification($invitation))->toMail((object) [])->outroLines)
         ->toContain('Questo invito scade tra 5 giorni.');
+});
+
+test('an invitation revoked after it was loaded is not accepted', function () {
+    $user = User::factory()->create(['email' => 'invited@example.com']);
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    TeamInvitation::query()->whereKey($invitation->id)->update(['revoked_at' => now()]);
+
+    expect(fn () => app(AcceptInvitation::class)->handle($invitation, $user))
+        ->toThrow(fn (HttpException $exception) => expect($exception->getStatusCode())->toBe(410));
+
+    expect($user->fresh()->belongsToTeam($this->team))->toBeFalse();
+});
+
+test('an invitation revoked after it was loaded registers nobody', function () {
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    TeamInvitation::query()->whereKey($invitation->id)->update(['revoked_at' => now()]);
+
+    expect(fn () => app(RegisterInvitedUser::class)->handle($invitation, new AcceptInvitationData('Ivy Guest', 'password1234'), app(AcceptInvitation::class)))
+        ->toThrow(fn (HttpException $exception) => expect($exception->getStatusCode())->toBe(410));
+
+    expect(User::where('email', 'invited@example.com')->exists())->toBeFalse();
+});
+
+test('an invitation accepted after it was loaded can no longer be revoked or declined', function () {
+    $user = User::factory()->create(['email' => 'invited@example.com']);
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    app(AcceptInvitation::class)->handle($invitation->fresh(), $user);
+
+    expect(fn () => app(RevokeInvitation::class)->handle($invitation))
+        ->toThrow(fn (HttpException $exception) => expect($exception->getStatusCode())->toBe(409))
+        ->and(fn () => app(DeclineInvitation::class)->handle($invitation))
+        ->toThrow(fn (HttpException $exception) => expect($exception->getStatusCode())->toBe(410));
+
+    expect($invitation->fresh()->revoked_at)->toBeNull()
+        ->and($invitation->fresh()->isAccepted())->toBeTrue();
 });

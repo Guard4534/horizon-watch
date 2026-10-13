@@ -9,10 +9,14 @@ class HomeController extends Controller
 {
     public function __invoke(Request $request): RedirectResponse
     {
-        $team = $request->user()?->currentTeam;
+        $user = $request->user();
 
-        return $team
-            ? to_route('wall', ['current_team' => $team->slug])
-            : to_route('login');
+        if ($user === null) {
+            return to_route('login');
+        }
+
+        return $user->currentTeam
+            ? to_route('wall', ['current_team' => $user->currentTeam->slug])
+            : to_route('teams.index');
     }
 }

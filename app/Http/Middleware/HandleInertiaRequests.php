@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Data\Auth\AuthUserData;
 use App\Models\Application;
+use App\Models\Team;
 use App\Monitoring\MonitoringRepository;
 use App\Monitoring\VisibleEnvironments;
 use Illuminate\Http\Request;
@@ -32,6 +33,7 @@ class HandleInertiaRequests extends Middleware
             'locale' => fn () => app()->getLocale(),
             'currentTeam' => fn () => $user?->currentTeam ? $user->toUserTeam($user->currentTeam) : null,
             'teams' => fn () => $user?->toUserTeams(includeCurrent: true) ?? [],
+            'canCreateOrganizations' => fn () => $user?->can('create', Team::class) ?? false,
             'openAlertCount' => fn () => $user?->currentTeam
                 ? app(MonitoringRepository::class)->alertCounts($user->currentTeam)->open
                 : null,

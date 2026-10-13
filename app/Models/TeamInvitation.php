@@ -22,7 +22,7 @@ use Illuminate\Support\Str;
  * @property string $email
  * @property TeamRole $role
  * @property MemberVisibility $visibility
- * @property int $invited_by
+ * @property int|null $invited_by
  * @property Carbon|null $expires_at
  * @property Carbon|null $accepted_at
  * @property int|null $accepted_by
@@ -30,7 +30,7 @@ use Illuminate\Support\Str;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Team $team
- * @property-read User $inviter
+ * @property-read User|null $inviter
  * @property-read User|null $acceptedBy
  */
 #[Fillable(['team_id', 'email', 'role', 'visibility', 'invited_by', 'expires_at', 'accepted_at', 'accepted_by', 'revoked_at'])]

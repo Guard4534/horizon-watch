@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Monitoring;
 use App\Actions\Teams\ChangeMemberRole;
 use App\Actions\Teams\ChangeMemberVisibility;
 use App\Actions\Teams\RemoveMember;
+use App\Actions\Teams\TransferOwnership;
 use App\Data\Teams\UpdateMemberData;
 use App\Http\Controllers\Controller;
 use App\Models\Team;
@@ -63,5 +64,20 @@ class MemberController extends Controller
         return $request->user()?->is($user)
             ? to_route('home')
             : back();
+    }
+
+    public function transferOwnership(
+        Request $request,
+        Team $current_team,
+        User $user,
+        TransferOwnership $transferOwnership,
+    ): RedirectResponse {
+        Gate::authorize('transferOwnership', [$current_team, $user]);
+
+        $transferOwnership->handle($current_team, $request->user(), $user);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __(':name is now the owner of the organization.', ['name' => $user->name])]);
+
+        return back();
     }
 }

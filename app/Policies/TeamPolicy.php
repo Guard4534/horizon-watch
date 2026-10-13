@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\OrganizationCreation;
 use App\Enums\TeamPermission;
 use App\Enums\TeamRole;
 use App\Models\Team;
@@ -9,6 +10,11 @@ use App\Models\User;
 
 class TeamPolicy
 {
+    public function create(User $user): bool
+    {
+        return $user->is_instance_admin || OrganizationCreation::configured() === OrganizationCreation::Everyone;
+    }
+
     public function update(User $user, Team $team): bool
     {
         return $user->hasTeamPermission($team, TeamPermission::UpdateTeam);
@@ -45,6 +51,15 @@ class TeamPolicy
     public function cancelInvitation(User $user, Team $team): bool
     {
         return $user->hasTeamPermission($team, TeamPermission::CancelInvitation);
+    }
+
+    public function transferOwnership(User $user, Team $team, ?User $target = null): bool
+    {
+        if ($target !== null && $target->is($user)) {
+            return false;
+        }
+
+        return $user->ownsTeam($team);
     }
 
     public function delete(User $user, Team $team): bool

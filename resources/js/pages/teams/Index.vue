@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     PhArrowsLeftRight,
     PhPencilSimple,
@@ -8,7 +8,7 @@ import {
     PhTrashSimple,
     PhUsersThree,
 } from '@phosphor-icons/vue';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import ConfirmByNameDialog from '@/components/ConfirmByNameDialog.vue';
 import Heading from '@/components/Heading.vue';
 import CreateOrganizationModal from '@/components/teams/CreateOrganizationModal.vue';
@@ -28,6 +28,11 @@ type Organization = App.Data.Teams.UserTeamData;
 defineProps<{
     teams: Organization[];
 }>();
+
+const page = usePage();
+const canCreateOrganizations = computed(
+    () => page.props.canCreateOrganizations,
+);
 
 const renaming = ref<Organization | null>(null);
 const leaving = ref<Organization | null>(null);
@@ -58,7 +63,7 @@ function switchTo(team: Organization): void {
                 "
             />
 
-            <CreateOrganizationModal>
+            <CreateOrganizationModal v-if="canCreateOrganizations">
                 <Button data-test="teams-new-team-button">
                     <PhPlus /> {{ $t('New organization') }}
                 </Button>

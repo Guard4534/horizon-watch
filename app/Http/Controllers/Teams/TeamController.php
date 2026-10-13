@@ -27,6 +27,8 @@ class TeamController extends Controller
 
     public function store(SaveTeamRequest $request, CreateTeam $createTeam): RedirectResponse
     {
+        Gate::authorize('create', Team::class);
+
         $createTeam->handle($request->user(), $request->validated('name'));
 
         $this->success(__('Team created.'));

@@ -38,7 +38,8 @@ test('setup creates the administrator and the organization and signs in', functi
 
     expect($user->email)->toBe('ada@example.com')
         ->and($team->name)->toBe('Example Ops')
-        ->and($user->teamRole($team))->toBe(TeamRole::Owner);
+        ->and($user->teamRole($team))->toBe(TeamRole::Owner)
+        ->and($user->is_instance_admin)->toBeTrue();
 
     $this->assertAuthenticatedAs($user);
     $response->assertRedirect(route('wall', ['current_team' => $team->slug]));

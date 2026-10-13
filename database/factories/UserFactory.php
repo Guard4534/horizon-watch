@@ -55,6 +55,13 @@ class UserFactory extends Factory
         ]);
     }
 
+    public function instanceAdmin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_instance_admin' => true,
+        ]);
+    }
+
     public function withTwoFactor(): static
     {
         return $this->state(fn (array $attributes) => [

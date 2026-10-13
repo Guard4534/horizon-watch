@@ -5,6 +5,7 @@ use App\Data\Applications\EnvironmentFormData;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertState;
 use App\Enums\MemberVisibility;
+use App\Enums\OrganizationCreation;
 use App\Enums\SentNotificationKind;
 use App\Enums\TeamRole;
 use App\Externals\Horizon\Data\HorizonFailedJob;
@@ -201,4 +202,19 @@ test('rate limits: the test limits live with the other rate limits', function ()
 
     $send()->assertRedirect();
     $send()->assertTooManyRequests();
+});
+
+test('teams: organization creation comes from the environment and defaults to admins only', function () {
+    expect((require base_path('config/horizon-watch.php'))['organization_creation'])->toBe('admins')
+        ->and(OrganizationCreation::configured())->toBe(OrganizationCreation::Admins);
+
+    putenv('HORIZON_WATCH_ORG_CREATION=everyone');
+    $_ENV['HORIZON_WATCH_ORG_CREATION'] = 'everyone';
+
+    try {
+        expect((require base_path('config/horizon-watch.php'))['organization_creation'])->toBe('everyone');
+    } finally {
+        putenv('HORIZON_WATCH_ORG_CREATION');
+        unset($_ENV['HORIZON_WATCH_ORG_CREATION']);
+    }
 });

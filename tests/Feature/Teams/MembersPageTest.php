@@ -67,17 +67,19 @@ test('the invite form and the member menu only appear with the permission', func
     string $role,
     bool $canInvite,
     bool $canManageMembers,
+    bool $canTransferOwnership,
 ) {
     $this->actingAs($this->{$role})
         ->get(route('members.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.permissions.canInvite', $canInvite)
-            ->where('page.permissions.canManageMembers', $canManageMembers));
+            ->where('page.permissions.canManageMembers', $canManageMembers)
+            ->where('page.permissions.canTransferOwnership', $canTransferOwnership));
 })->with([
-    ['owner', true, true],
-    ['admin', true, true],
-    ['member', false, false],
-    ['viewer', false, false],
+    ['owner', true, true, true],
+    ['admin', true, true, false],
+    ['member', false, false, false],
+    ['viewer', false, false, false],
 ]);
 
 test('the permission matrix comes from the role definitions, one row per permission', function () {

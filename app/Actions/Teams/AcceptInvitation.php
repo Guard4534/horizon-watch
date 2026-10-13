@@ -20,6 +20,8 @@ class AcceptInvitation
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            abort_unless($locked->isPending() || $locked->accepted_by === $user->id, 410);
+
             $team = $locked->team;
 
             /** @var Membership $membership */

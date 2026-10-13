@@ -30,13 +30,15 @@ import {
 } from '@/lib/members';
 import {
     destroy as destroyMember,
+    transferOwnership,
     update as updateMember,
 } from '@/routes/members';
 
-const { members, environments, canManage } = defineProps<{
+const { members, environments, canManage, canTransferOwnership } = defineProps<{
     members: App.Data.Teams.MemberData[];
     environments: App.Data.Pages.EnvironmentOptionData[];
     canManage: boolean;
+    canTransferOwnership: boolean;
 }>();
 
 const slug = useTeamSlug();
@@ -59,6 +61,7 @@ const manualFor = ref<App.Data.Teams.MemberData | null>(null);
 const manualIds = ref<number[]>([]);
 
 const removing = ref<App.Data.Teams.MemberData | null>(null);
+const transferring = ref<App.Data.Teams.MemberData | null>(null);
 
 const losingTheLastAdmin = computed(() =>
     losesTheLastAdmin(removing.value, removing.value?.isSelf === true, members),
@@ -116,6 +119,23 @@ function saveManual() {
         member,
         { visibility: 'manual', environmentIds: manualIds.value },
         () => (manualFor.value = null),
+    );
+}
+
+function confirmTransfer() {
+    const member = transferring.value;
+
+    if (!member) {
+        return;
+    }
+
+    form.transform(() => ({})).post(
+        transferOwnership([slug.value, member.id]).url,
+        {
+            preserveScroll: true,
+            onSuccess: () => (transferring.value = null),
+            onError: () => (transferring.value = null),
+        },
     );
 }
 
@@ -258,6 +278,15 @@ function confirmRemove() {
                                             visibility === 'manual' ? '…' : ''
                                         }}
                                     </DropdownMenuItem>
+                                    <template v-if="canTransferOwnership">
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            data-test="member-transfer-ownership"
+                                            @click="transferring = member"
+                                        >
+                                            {{ $t('Transfer ownership') }}…
+                                        </DropdownMenuItem>
+                                    </template>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                         class="nc-tone-down"
@@ -398,6 +427,48 @@ function confirmRemove() {
                     @click="confirmRemove"
                 >
                     {{ $t('Remove') }}
+                </button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
+    <Dialog
+        :open="transferring !== null"
+        @update:open="(open) => !open && (transferring = null)"
+    >
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>{{ $t('Transfer ownership') }}</DialogTitle>
+                <DialogDescription>
+                    {{
+                        $t(
+                            'The new owner gets every permission, deleting the organization included. You stay on as an admin, and only the new owner can hand ownership back.',
+                        )
+                    }}
+                </DialogDescription>
+            </DialogHeader>
+
+            <p class="nc-t-sm">
+                {{ transferring?.name }}
+                <span class="nc-tone-muted">· {{ transferring?.email }}</span>
+            </p>
+
+            <DialogFooter class="gap-2">
+                <button
+                    type="button"
+                    class="nc-btn nc-btn-secondary"
+                    @click="transferring = null"
+                >
+                    {{ $t('Cancel') }}
+                </button>
+                <button
+                    type="button"
+                    class="nc-btn nc-btn-primary"
+                    data-test="confirm-transfer-ownership"
+                    :disabled="form.processing"
+                    @click="confirmTransfer"
+                >
+                    {{ $t('Transfer ownership') }}
                 </button>
             </DialogFooter>
         </DialogContent>

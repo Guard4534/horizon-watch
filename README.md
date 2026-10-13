@@ -59,6 +59,13 @@ Open the panel — `http://localhost:8080` by default. The first visit lands on 
 asks you to create the administrator and the first organization; from then on `/setup` is
 closed and everyone else joins by invitation.
 
+The account created by `/setup` is the instance admin. By default only instance admins can
+create organizations, so an invited viewer cannot open an organization of their own; set
+`HORIZON_WATCH_ORG_CREATION=everyone` to let every account create them. Grant or revoke the
+role from the command line (see [Running commands](#running-commands)); the last instance
+admin cannot be revoked. An instance admin can still delete their own account, which may leave
+the panel with no instance admin; grant the role again from the command line.
+
 Then, in order:
 
 1. **Applications** → create an application. It is a name, nothing more.
@@ -110,6 +117,7 @@ the environment of the containers. Everything has a default except the mail serv
 | `HORIZON_WATCH_RETENTION_DAYS`         | `30`                                     | Days of readings kept before pruning                                                     |
 | `HORIZON_WATCH_ALERT_RETENTION_DAYS`   | `90`                                     | Days resolved alerts are kept before pruning                                             |
 | `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` | `false`                                  | Refuse Horizon addresses that resolve to a private network                               |
+| `HORIZON_WATCH_ORG_CREATION`           | `admins`                                 | Who may create organizations: `admins` (instance admins only) or `everyone`              |
 | `HORIZON_WATCH_DEFAULT_TIMEZONE`       | `UTC`                                    | Time zone new organizations start with                                                   |
 | `APP_URL`                              | `http://localhost:8080`                  | Public URL, used in emails, password reset links and webhook payloads                    |
 | `APP_LOCALE`                           | `en`                                     | Default language, `en` or `it`                                                           |
@@ -225,6 +233,13 @@ docker compose -f compose.prod.yaml run --rm web artisan queue:failed
 docker compose -f compose.prod.yaml run --rm web artisan schedule:list
 ```
 
+Make an account an instance admin, or take the role away:
+
+```bash
+docker compose -f compose.prod.yaml run --rm web artisan users:instance-admin ada@example.com
+docker compose -f compose.prod.yaml run --rm web artisan users:instance-admin ada@example.com --revoke
+```
+
 ## Logs
 
 Every container logs to standard output, so `docker compose logs` is the whole story:
@@ -283,7 +298,10 @@ is empty. Set the SMTP settings and restart the stack; there is no log fallback 
 **`/setup` keeps appearing.** No user exists yet, so every route redirects there. If you have
 already created the administrator and still land on `/setup`, the panel is talking to an
 empty database — check `DB_*` and that the `postgres` container is the one holding your
-volume.
+volume. Deleting the last account opens `/setup` again on purpose.
+
+**Nobody can create an organization.** Only instance admins can, unless
+`HORIZON_WATCH_ORG_CREATION=everyone`. Grant the role with `artisan users:instance-admin`.
 
 **The panel answers 502 and the `web` log says `upstream sent too big header`.** nginx's
 FastCGI buffers are too small for the `Link` header that preloads the page's assets.

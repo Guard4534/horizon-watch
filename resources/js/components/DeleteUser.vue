@@ -18,6 +18,10 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
+const { deletion } = defineProps<{
+    deletion: App.Data.Settings.AccountDeletionData;
+}>();
+
 const passwordInput = useTemplateRef('passwordInput');
 </script>
 
@@ -26,7 +30,7 @@ const passwordInput = useTemplateRef('passwordInput');
         <Heading
             variant="small"
             :title="$t('Delete account')"
-            :description="$t('Delete your account and all of its resources')"
+            :description="$t('Delete your account for good')"
         />
         <div
             class="space-y-4 rounded-lg p-4"
@@ -45,7 +49,30 @@ const passwordInput = useTemplateRef('passwordInput');
                     }}
                 </p>
             </div>
-            <Dialog>
+            <div
+                v-if="deletion.sharedOrganizations.length"
+                class="nc-tone-down space-y-2 text-sm"
+                data-test="delete-user-blocked"
+            >
+                <p>
+                    {{
+                        $t(
+                            'You own organizations that other people belong to. Transfer their ownership from the Members page, or delete them, before deleting your account.',
+                        )
+                    }}
+                </p>
+                <ul class="list-disc pl-5">
+                    <li
+                        v-for="(
+                            organization, index
+                        ) in deletion.sharedOrganizations"
+                        :key="index"
+                    >
+                        {{ organization }}
+                    </li>
+                </ul>
+            </div>
+            <Dialog v-else>
                 <DialogTrigger as-child>
                     <Button
                         variant="destructive"
@@ -73,11 +100,34 @@ const passwordInput = useTemplateRef('passwordInput');
                             <DialogDescription>
                                 {{
                                     $t(
-                                        'Once your account is deleted, all of its resources and data will also be permanently deleted. Please enter your password to confirm you would like to permanently delete your account.',
+                                        'Your account is deleted for good and you leave every organization you belong to. Enter your password to confirm.',
                                     )
                                 }}
                             </DialogDescription>
                         </DialogHeader>
+
+                        <div
+                            v-if="deletion.soleOrganizations.length"
+                            class="space-y-2 text-sm"
+                        >
+                            <p>
+                                {{
+                                    $t(
+                                        'Nobody else belongs to these organizations, so they are deleted too, with every application, environment, alert rule and pending invitation:',
+                                    )
+                                }}
+                            </p>
+                            <ul class="list-disc pl-5">
+                                <li
+                                    v-for="(
+                                        organization, index
+                                    ) in deletion.soleOrganizations"
+                                    :key="index"
+                                >
+                                    {{ organization }}
+                                </li>
+                            </ul>
+                        </div>
 
                         <div class="grid gap-2">
                             <Label for="password" class="sr-only">{{
@@ -90,6 +140,7 @@ const passwordInput = useTemplateRef('passwordInput');
                                 :placeholder="$t('Password')"
                             />
                             <InputError :message="errors.password" />
+                            <InputError :message="errors.account" />
                         </div>
 
                         <DialogFooter class="gap-2">

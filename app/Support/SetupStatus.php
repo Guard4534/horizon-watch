@@ -23,4 +23,9 @@ class SetupStatus
 
         return $complete;
     }
+
+    public static function forget(): void
+    {
+        Cache::forget(self::CACHE_KEY);
+    }
 }

@@ -81,6 +81,9 @@ Route::patch('members/{user}', [MemberController::class, 'update'])
 Route::delete('members/{user}', [MemberController::class, 'destroy'])
     ->middleware(EnsureTeamMembership::class.':admin')
     ->name('members.destroy');
+Route::post('members/{user}/ownership', [MemberController::class, 'transferOwnership'])
+    ->middleware(EnsureTeamMembership::class.':owner')
+    ->name('members.transfer-ownership');
 
 Route::get('alerts', [AlertController::class, 'index'])->name('alerts.index');
 Route::get('alert-rules/{scope?}', [AlertRuleController::class, 'index'])->name('alert-rules.index');

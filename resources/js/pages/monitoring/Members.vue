@@ -31,6 +31,7 @@ const { page } = defineProps<{
                 :members="page.members"
                 :environments="page.environments"
                 :can-manage="page.permissions.canManageMembers"
+                :can-transfer-ownership="page.permissions.canTransferOwnership"
             />
 
             <PendingInvitations

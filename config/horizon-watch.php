@@ -7,6 +7,8 @@ return [
 
     'block_private_networks' => (bool) env('HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS', false),
 
+    'organization_creation' => (string) env('HORIZON_WATCH_ORG_CREATION', 'admins'),
+
     'demo_horizon_url' => env('HORIZON_WATCH_DEMO_HORIZON_URL'),
 
     'http_timeout_seconds' => 5,
