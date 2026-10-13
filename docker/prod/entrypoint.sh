@@ -88,6 +88,10 @@ case "$role" in
         as_app php artisan optimize
         exec setpriv --reuid=www-data --regid=www-data --init-groups php artisan queue:work --queue="${2:-notifications,polls,default}" --max-time=3600 --tries=3
         ;;
+    health)
+        shift
+        exec setpriv --reuid=www-data --regid=www-data --init-groups php artisan horizon-watch:health "$@"
+        ;;
     artisan)
         shift
         wait_for_database

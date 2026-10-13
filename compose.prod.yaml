@@ -44,6 +44,7 @@ x-app: &app
         HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS: ${HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS:-false}
         HORIZON_WATCH_ORG_CREATION: ${HORIZON_WATCH_ORG_CREATION:-admins}
         HORIZON_WATCH_DEFAULT_TIMEZONE: ${HORIZON_WATCH_DEFAULT_TIMEZONE:-UTC}
+        HORIZON_WATCH_HEARTBEAT_URL: ${HORIZON_WATCH_HEARTBEAT_URL:-}
     volumes:
         - app-data:/data
 
@@ -70,7 +71,7 @@ services:
             web:
                 condition: service_healthy
         healthcheck:
-            test: ['CMD', 'pgrep', '-f', 'artisan schedule:work']
+            test: ['CMD', 'horizon-watch', 'health', '--role=scheduler']
             interval: 30s
             timeout: 5s
             retries: 3
@@ -85,7 +86,7 @@ services:
             web:
                 condition: service_healthy
         healthcheck:
-            test: ['CMD', 'pgrep', '-f', 'artisan queue:work']
+            test: ['CMD', 'horizon-watch', 'health', '--role=worker']
             interval: 30s
             timeout: 5s
             retries: 3
@@ -98,7 +99,7 @@ services:
             web:
                 condition: service_healthy
         healthcheck:
-            test: ['CMD', 'pgrep', '-f', 'artisan queue:work']
+            test: ['CMD', 'horizon-watch', 'health', '--role=worker']
             interval: 30s
             timeout: 5s
             retries: 3

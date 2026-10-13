@@ -9,12 +9,13 @@ enum EnvironmentStatus: string
     case Paused = 'paused';
     case Inactive = 'inactive';
     case Unreachable = 'unreachable';
+    case Stale = 'stale';
 
     public function severity(): int
     {
         return match ($this) {
             self::Inactive, self::Unreachable => 0,
-            self::Paused => 1,
+            self::Paused, self::Stale => 1,
             self::Degraded => 2,
             self::Active => 3,
         };

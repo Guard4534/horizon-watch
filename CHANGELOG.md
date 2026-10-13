@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that can no longer complete it.
 - `artisan secrets:reencrypt` encrypts every stored secret again with the current application
   key, so a rotated key can be removed from `APP_PREVIOUS_KEYS`.
+- Self-monitoring. `GET /health` answers `503` when the database is unreachable, the scheduler
+  has not dispatched the due polls or repeated the open alerts for 2 minutes, or a queued job
+  has waited more than 5 minutes, for an external uptime monitor. `artisan horizon-watch:health` runs the same checks, or only
+  those of a scheduler or worker container with `--role`.
+- `HORIZON_WATCH_HEARTBEAT_URL`, off by default, is called every minute while the panel is
+  healthy, for a dead man's switch such as healthchecks.io.
+- A banner tells everyone signed in when the panel itself has stopped reading or falls behind.
 
 ### Changed
 
@@ -52,6 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   least 1; lower values are raised to those.
 - Switching organization opens the same section of the new one (wall, applications, alerts,
   alert rules, members) instead of rewriting the address of the page you were on.
+- **Upgrade note:** download the new `compose.prod.yaml`: the `scheduler`, `worker` and
+  `notifier` health checks now test that each one keeps working instead of only that its
+  process exists, and `HORIZON_WATCH_HEARTBEAT_URL` reaches the containers.
+- `/up` also checks the database.
+- The `web` container stops when php-fpm or nginx cannot start, so its restart policy takes over
+  instead of leaving the panel answering 502.
 - **Upgrade note:** admins and the owner always see every environment. Upgrading lifts the
   visibility limits already set on admins, owners and pending admin invitations, so those
   admins start seeing, and receiving alert emails for, every environment of their
@@ -88,6 +101,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secret works.
 - With a different application key, the two-factor challenge answered 500. It now says the
   secret can no longer be read and asks for an administrator.
+- An environment whose readings stopped arriving kept its last status, so it could stay green,
+  out of the **Problems** filter and counted as up. It is now shown as _not updated_, unless it
+  was last known down, and counts as a problem everywhere.
+- The live dot in the header stayed green while the page could not refresh, and a failed
+  refresh could cover a wall left on a screen with an error dialog. The dot now turns red and
+  the error is not shown for automatic refreshes.
 
 ## [0.1.0] - 2026-09-29
 

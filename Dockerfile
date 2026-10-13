@@ -69,6 +69,7 @@ COPY docker/prod/php-fpm.conf /etc/php/${PHP_VERSION}/fpm/horizon-watch.conf
 COPY docker/prod/php.ini /etc/php/${PHP_VERSION}/fpm/conf.d/99-horizon-watch.ini
 COPY docker/prod/php.ini /etc/php/${PHP_VERSION}/cli/conf.d/99-horizon-watch.ini
 COPY docker/prod/supervisord.conf /etc/supervisor/conf.d/horizon-watch.conf
+COPY --chmod=755 docker/prod/supervisor-fatal.sh /usr/local/bin/supervisor-fatal
 COPY --chmod=755 docker/prod/entrypoint.sh /usr/local/bin/horizon-watch
 RUN rm -rf public/hot \
         docker \
@@ -94,6 +95,7 @@ CMD ["web"]
 
 ARG VERSION=dev
 ARG REVISION=unknown
+ENV HORIZON_WATCH_VERSION=${VERSION}
 LABEL org.opencontainers.image.title="Horizon Watch" \
       org.opencontainers.image.description="Self-hosted control room for several Laravel Horizon installations." \
       org.opencontainers.image.source="https://github.com/Guard4534/horizon-watch" \

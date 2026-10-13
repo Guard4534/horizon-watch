@@ -61,6 +61,9 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
                 <template v-else-if="status === 'paused'">{{
                     $t('Horizon paused')
                 }}</template>
+                <template v-else-if="status === 'stale'">{{
+                    $t('Readings are not updated')
+                }}</template>
                 <template v-else>{{ $t('Threshold exceeded') }}</template>
                 <span v-if="since" class="nc-num nc-t-2xs nc-tone-muted">
                     · {{ $t('started :elapsed', { elapsed: since }) }}</span
@@ -120,6 +123,11 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
                 <template v-else-if="status === 'paused'">{{
                     $t(
                         'Horizon is paused: jobs stay pending until it is continued.',
+                    )
+                }}</template>
+                <template v-else-if="status === 'stale'">{{
+                    $t(
+                        'No reading has arrived for several intervals: the scheduler or the workers of Horizon Watch may be stopped, and no alert is evaluated meanwhile. The figures are the last known.',
                     )
                 }}</template>
                 <template v-else>{{

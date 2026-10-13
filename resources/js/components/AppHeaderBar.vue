@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
+import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import BrandMark from '@/components/nocturne/BrandMark.vue';
 import { useLastRefresh } from '@/composables/useLastRefresh';
+import { useLiveConnection } from '@/composables/useLiveConnection';
 import { useRefreshInterval } from '@/composables/useRefreshInterval';
 
 const {
@@ -17,6 +19,12 @@ const {
 
 const page = usePage();
 const updatedAt = useLastRefresh();
+const { connected } = useLiveConnection();
+const connectionLabel = computed(() =>
+    connected.value
+        ? trans('Live updates are working')
+        : trans('Live updates are failing: the figures may be out of date'),
+);
 const secondLine = computed(
     () => subtitle ?? page.props.currentTeam?.name ?? '',
 );
@@ -50,10 +58,15 @@ function choose(event: Event): void {
             >
                 <span
                     class="size-[6px] flex-none rounded-full"
-                    style="
-                        background: var(--st-ok);
-                        animation: nc-pulse 2.4s ease-in-out infinite;
-                    "
+                    :class="{ 'live-dot-on': connected }"
+                    :style="{
+                        background: connected
+                            ? 'var(--st-ok)'
+                            : 'var(--st-down)',
+                    }"
+                    role="img"
+                    :aria-label="connectionLabel"
+                    :title="connectionLabel"
                 />
                 <label class="inline-flex items-center gap-[7px]">
                     <span class="phone-hidden-words">{{
@@ -73,9 +86,17 @@ function choose(event: Event): void {
                         </option>
                     </select>
                 </label>
-                <span class="desktop-only">{{
+                <span v-if="connected" class="desktop-only">{{
                     $t('· updated :time', { time: updatedAt })
                 }}</span>
+                <span
+                    v-else
+                    class="desktop-only"
+                    style="color: var(--st-down)"
+                    >{{
+                        $t('· not updating since :time', { time: updatedAt })
+                    }}</span
+                >
             </span>
         </div>
     </header>
@@ -100,6 +121,10 @@ function choose(event: Event): void {
 .subtitle {
     font-size: 12px;
     color: var(--nc-neutral-500);
+}
+
+.live-dot-on {
+    animation: nc-pulse 2.4s ease-in-out infinite;
 }
 
 .interval {

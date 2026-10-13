@@ -662,9 +662,8 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             horizonUrl: EnvironmentFormData::withoutUserinfo($environment->horizon_url),
             status: match (true) {
                 ! $watched => null,
-                $state !== null => $state->status,
-                $stale => EnvironmentStatus::Unreachable,
-                default => null,
+                $stale && $state?->status->isDown() !== true => EnvironmentStatus::Stale,
+                default => $state?->status,
             },
             pending: $this->snapshotNumber($state, 'pending'),
             trend: $watched ? $trend['points'] ?? array_fill(0, StoredReadings::trendPoints(), 0) : [],

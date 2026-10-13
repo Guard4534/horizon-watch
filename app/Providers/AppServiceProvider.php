@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Jobs\DeliverAlert;
 use App\Jobs\PollEnvironmentJob;
 use App\Listeners\Alerts\SendOnAlert;
+use App\Monitoring\PanelHealth;
 use App\Notifications\Auth\EmailChanged;
 use App\Notifications\Auth\ResetPassword;
 use App\Notifications\Teams\TeamInvitation;
@@ -39,6 +40,8 @@ class AppServiceProvider extends ServiceProvider
             ResetPassword::class => 'notifications',
             EmailChanged::class => 'notifications',
         ]);
+
+        Queue::looping(fn () => rescue(fn () => app(PanelHealth::class)->recordWorkerBeat(), report: false));
 
         DevCommands::artisan('queue:listen --queue=notifications,polls,default --tries=1 --timeout=0', 'queue');
     }

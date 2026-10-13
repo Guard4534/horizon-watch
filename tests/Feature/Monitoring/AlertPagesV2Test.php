@@ -50,6 +50,7 @@ function alertsOn(string $slug, AlertState $state = AlertState::Open): array
 test('open alerts reach the page with the minutes since they opened', function () {
     Readings::record($this->production, EnvironmentStatus::Unreachable);
     Alert::query()->update(['opened_at' => now()->subMinutes(30)]);
+    $this->staging->update(['poll_interval_seconds' => 300]);
     Readings::record($this->staging, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending], snapshot: [
         'captured_at' => now()->subMinutes(7),
         'pending' => 4_200,
@@ -79,7 +80,8 @@ test('an alert of an environment that went stale keeps the minutes since it open
     $this->actingAs($this->admin);
     $alerts = alertsOn($this->team->slug);
 
-    expect($alerts[0]['minutesAgo'])->toBe(180);
+    expect($alerts[0]['minutesAgo'])->toBe(180)
+        ->and($alerts[0]['environmentStatus'])->toBe('unreachable');
 });
 
 test('a paused horizon is an open warning on the page', function () {

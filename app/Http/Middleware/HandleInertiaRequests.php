@@ -3,9 +3,11 @@
 namespace App\Http\Middleware;
 
 use App\Data\Auth\AuthUserData;
+use App\Data\Monitoring\PanelHealthData;
 use App\Models\Application;
 use App\Models\Team;
 use App\Monitoring\MonitoringRepository;
+use App\Monitoring\PanelHealth;
 use App\Monitoring\VisibleEnvironments;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -46,6 +48,9 @@ class HandleInertiaRequests extends Middleware
             'organizationHasEnvironments' => fn () => $user?->currentTeam
                 ? $user->currentTeam->environments()->exists()
                 : false,
+            'panelHealth' => fn () => $user
+                ? PanelHealthData::fromReport(app(PanelHealth::class)->report(countFailedJobs: false))
+                : null,
         ];
     }
 }

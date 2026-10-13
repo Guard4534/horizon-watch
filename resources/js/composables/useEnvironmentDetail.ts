@@ -28,7 +28,10 @@ export function useEnvironmentDetail(
     });
 
     const lastKnown = computed(() => {
-        if (environment.value.readingError === null) {
+        if (
+            environment.value.readingError === null &&
+            !environment.value.stale
+        ) {
             return null;
         }
 

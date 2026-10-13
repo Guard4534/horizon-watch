@@ -27,9 +27,17 @@ export function statusText(environment: Environment): string {
 }
 
 export function hasMeasurement(
-    environment: Pick<App.Data.Monitoring.EnvironmentData, 'status'>,
+    environment: Pick<
+        App.Data.Monitoring.EnvironmentData,
+        'status' | 'lastReadingAt' | 'readingError'
+    >,
 ): boolean {
-    return environment.status !== null && environment.status !== 'unreachable';
+    return (
+        environment.lastReadingAt !== null &&
+        environment.readingError === null &&
+        environment.status !== null &&
+        environment.status !== 'unreachable'
+    );
 }
 
 export function pendingTone(pending: number, threshold: number | null): string {
@@ -40,6 +48,7 @@ const SEVERITY: Record<App.Enums.EnvironmentStatus, number> = {
     inactive: 0,
     unreachable: 0,
     paused: 1,
+    stale: 1,
     degraded: 2,
     active: 3,
 };

@@ -20,6 +20,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Monitoring\ConfiguredMonitoringRepository;
 use App\Monitoring\MonitoringRepository;
+use App\Queries\ApplicationListQuery;
 use App\Queries\WallQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -242,7 +243,7 @@ test('an environment reads its latest stored reading', function () {
         ->and($data->readingError)->toBeNull();
 });
 
-test('an environment never read has nothing to say, then does not answer once three intervals pass', function () {
+test('an environment never read has nothing to say, then turns stale once three intervals pass', function () {
     $application = Application::factory()->for($this->team)->create();
     $environment = Environment::factory()->for($application)->production()->create(['poll_interval_seconds' => 15]);
 
@@ -256,7 +257,7 @@ test('an environment never read has nothing to say, then does not answer once th
     $this->repository = freshMonitoringRepository();
     $data = $this->repository->environment($this->team, $environment->slug);
 
-    expect($data->status)->toBe(EnvironmentStatus::Unreachable)
+    expect($data->status)->toBe(EnvironmentStatus::Stale)
         ->and([$data->pending, $data->maxWaitSeconds, $data->failedInWindow, $data->workers, $data->jobsPerMinute, $data->nodeCount])
         ->toBe([0, 0, 0, 0, 0, 0])
         ->and($data->failedWindowMinutes)->toBe(10080)
@@ -281,9 +282,48 @@ test('an environment goes stale after three silent intervals and keeps its last 
     $data = $this->repository->environment($this->team, $environment->slug);
 
     expect($data->stale)->toBeTrue()
-        ->and($data->status)->toBe(EnvironmentStatus::Active)
-        ->and($data->workers)->toBe(4);
+        ->and($data->status)->toBe(EnvironmentStatus::Stale)
+        ->and($data->workers)->toBe(4)
+        ->and($this->repository->nodes($this->team, $environment->slug)[0]->status ?? null)->toBe(EnvironmentStatus::Active);
 });
+
+test('a stale environment is a problem everywhere, not up', function () {
+    $application = Application::factory()->for($this->team)->create(['name' => 'Alpha']);
+    $stale = Environment::factory()->for($application)->production()->create(['poll_interval_seconds' => 15]);
+    $fresh = Environment::factory()->for($application)->staging()->create(['poll_interval_seconds' => 15]);
+    Readings::record($stale, EnvironmentStatus::Degraded, snapshot: ['captured_at' => now()->subMinutes(5)]);
+    Readings::record($fresh);
+    $this->actingAs($this->user);
+
+    $wall = app(WallQuery::class)->handle($this->team);
+    $applications = app(ApplicationListQuery::class)->handle($this->team);
+
+    expect(array_map(fn ($environment) => [$environment->id, $environment->status], $wall->environments))->toBe([
+        [$stale->slug, EnvironmentStatus::Stale],
+        [$fresh->slug, EnvironmentStatus::Active],
+    ])
+        ->and($wall->kpis->environmentsUp)->toBe(1)
+        ->and($wall->kpis->environmentsActive)->toBe(1)
+        ->and($wall->kpis->environmentsTotal)->toBe(2)
+        ->and($applications->groups[0]->triageCount)->toBe(1);
+});
+
+test('a stale environment last known down stays down and is not counted as up', function (EnvironmentStatus $status) {
+    $application = Application::factory()->for($this->team)->create();
+    $environment = Environment::factory()->for($application)->production()->create(['poll_interval_seconds' => 15]);
+    Readings::record($environment, $status, snapshot: ['captured_at' => now()->subMinutes(5)]);
+    $this->actingAs($this->user);
+
+    $data = $this->repository->environment($this->team, $environment->slug);
+    $wall = app(WallQuery::class)->handle($this->team);
+
+    expect($data->stale)->toBeTrue()
+        ->and($data->status)->toBe($status)
+        ->and($wall->kpis->environmentsUp)->toBe(0);
+})->with([
+    'unreachable' => [EnvironmentStatus::Unreachable],
+    'inactive' => [EnvironmentStatus::Inactive],
+]);
 
 test('a paused collection shows the last reading and is never stale', function () {
     $application = Application::factory()->for($this->team)->create();

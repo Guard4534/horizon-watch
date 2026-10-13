@@ -19,6 +19,17 @@ return [
 
     'stale_after_intervals' => 3,
 
+    'version' => env('HORIZON_WATCH_VERSION'),
+
+    'health' => [
+        'scheduler_late_seconds' => 120,
+        'backlog_late_seconds' => 300,
+        'worker_late_seconds' => 120,
+        'worker_beat_seconds' => 15,
+        'heartbeat_url' => (string) env('HORIZON_WATCH_HEARTBEAT_URL', ''),
+        'heartbeat_timeout_seconds' => 5,
+    ],
+
     'webhook_timeout_seconds' => 5,
 
     'webhook_response_bytes' => 65536,

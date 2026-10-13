@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppHeaderBar from '@/components/AppHeaderBar.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
+import PanelHealthBanner from '@/components/PanelHealthBanner.vue';
 import TabBar from '@/components/mobile/TabBar.vue';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -19,6 +20,7 @@ defineProps<{
         <AppSidebar class="shell-sidebar" />
         <main class="shell-main flex min-w-0 flex-1 flex-col">
             <AppHeaderBar :title="title" :subtitle="subtitle" :live="live" />
+            <PanelHealthBanner />
             <slot />
         </main>
         <div class="shell-tabs"><TabBar /></div>

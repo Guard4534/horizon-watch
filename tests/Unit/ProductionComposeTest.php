@@ -63,3 +63,19 @@ test('an smtp server that does not answer gives up before the delivery job times
         ->toBeLessThan($config['notifications']['delivery_timeout_seconds'])
         ->and($compose)->toContain('MAIL_TIMEOUT: ${MAIL_TIMEOUT:-10}');
 });
+
+test('the scheduler and the workers are healthy only while they keep working, and the web container stops when it cannot serve', function () {
+    $compose = (string) file_get_contents(dirname(__DIR__, 2).'/compose.prod.yaml');
+    $entrypoint = (string) file_get_contents(dirname(__DIR__, 2).'/docker/prod/entrypoint.sh');
+    $supervisor = (string) file_get_contents(dirname(__DIR__, 2).'/docker/prod/supervisord.conf');
+    $dockerfile = (string) file_get_contents(dirname(__DIR__, 2).'/Dockerfile');
+
+    expect($compose)->not->toContain('pgrep')
+        ->toContain("test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8080/up']")
+        ->and(substr_count($compose, "test: ['CMD', 'horizon-watch', 'health', '--role=scheduler']"))->toBe(1)
+        ->and(substr_count($compose, "test: ['CMD', 'horizon-watch', 'health', '--role=worker']"))->toBe(2)
+        ->and($entrypoint)->toContain('php artisan horizon-watch:health "$@"')
+        ->and($supervisor)->toContain("[eventlistener:exit-on-fatal]\ncommand=/usr/local/bin/supervisor-fatal\nevents=PROCESS_STATE_FATAL\n")
+        ->and($dockerfile)->toContain('COPY --chmod=755 docker/prod/supervisor-fatal.sh /usr/local/bin/supervisor-fatal')
+        ->toContain('ENV HORIZON_WATCH_VERSION=${VERSION}');
+});

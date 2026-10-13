@@ -115,7 +115,7 @@ test('an old reading is flagged as not updated', function () {
     $this->get(readingEnvironmentUrl($this->environment))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environment.stale', true)
-            ->where('page.environment.status', 'active')
+            ->where('page.environment.status', 'stale')
             ->where('page.environment.lastReadingAt', now()->subMinutes(10)->toIso8601String()));
 });
 

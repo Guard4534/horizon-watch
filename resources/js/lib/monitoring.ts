@@ -1,4 +1,5 @@
 import {
+    PhClockCountdown,
     PhPauseCircle,
     PhPlugs,
     PhWarning,
@@ -13,6 +14,7 @@ const STATUS_COLORS: Record<App.Enums.EnvironmentStatus, string> = {
     paused: 'var(--st-off)',
     inactive: 'var(--st-down)',
     unreachable: 'var(--st-down)',
+    stale: 'var(--st-warn)',
 };
 
 export function statusColor(status: App.Enums.EnvironmentStatus): string {
@@ -39,6 +41,8 @@ export function statusLabel(status: App.Enums.EnvironmentStatus): string {
             return trans('inactive');
         case 'unreachable':
             return trans('unreachable');
+        case 'stale':
+            return trans('not updated');
     }
 }
 
@@ -48,6 +52,7 @@ const STATUS_ICONS: Record<App.Enums.EnvironmentStatus, Component> = {
     paused: PhPauseCircle,
     inactive: PhWarningOctagon,
     unreachable: PhPlugs,
+    stale: PhClockCountdown,
 };
 
 export function statusIcon(status: App.Enums.EnvironmentStatus): Component {

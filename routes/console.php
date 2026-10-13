@@ -3,6 +3,7 @@
 use App\Actions\Alerts\DispatchDueNotifications;
 use App\Actions\Monitoring\DispatchDuePolls;
 use App\Models\TeamInvitation;
+use App\Monitoring\PanelHealth;
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::call(function () {
@@ -12,13 +13,27 @@ Schedule::call(function () {
         ->delete();
 })->daily()->description('Delete expired team invitations');
 
-Schedule::call(fn () => app(DispatchDuePolls::class)->handle())
+Schedule::call(function () {
+    app(DispatchDuePolls::class)->handle();
+    app(PanelHealth::class)->recordSchedulerTick('dispatch-due-polls');
+})
     ->name('dispatch-due-polls')
     ->everyFifteenSeconds()
     ->withoutOverlapping(1)
     ->onOneServer();
 
-Schedule::call(fn () => app(DispatchDueNotifications::class)->repeats())
+Schedule::command('horizon-watch:heartbeat')
+    ->name('heartbeat')
+    ->everyMinute()
+    ->when(fn () => config()->string('horizon-watch.health.heartbeat_url') !== '')
+    ->withoutOverlapping(1)
+    ->onOneServer()
+    ->runInBackground();
+
+Schedule::call(function () {
+    app(DispatchDueNotifications::class)->repeats();
+    app(PanelHealth::class)->recordSchedulerTick('alert-repeats');
+})
     ->name('alert-repeats')
     ->everyMinute()
     ->withoutOverlapping(5)

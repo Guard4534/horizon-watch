@@ -139,6 +139,7 @@ the environment of the containers. Everything has a default except the mail serv
 | `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` | `false`                                  | Refuse Horizon addresses that resolve to a private network                               |
 | `HORIZON_WATCH_ORG_CREATION`           | `admins`                                 | Who may create organizations: `admins` (instance admins only) or `everyone`              |
 | `HORIZON_WATCH_DEFAULT_TIMEZONE`       | `UTC`                                    | Time zone new organizations start with                                                   |
+| `HORIZON_WATCH_HEARTBEAT_URL`          | _(empty)_                                | Dead man's switch called every minute; see [Watching the panel](#watching-the-panel)     |
 | `APP_URL`                              | `http://localhost:8080`                  | Public URL, used in emails, password reset links and webhook payloads                    |
 | `APP_LOCALE`                           | `en`                                     | Default language, `en` or `it`                                                           |
 | `APP_KEY`                              | generated                                | Leave empty: the first start writes one to the `app-data` volume                         |
@@ -319,6 +320,62 @@ Encrypt every stored secret again with the current application key, after a key 
 ```bash
 docker compose -f compose.prod.yaml run --rm web artisan secrets:reencrypt
 ```
+
+## Watching the panel
+
+Polling, alerts and notifications all depend on the scheduler and the queue workers, so a
+stopped or stuck one would silence every alert. Horizon Watch checks itself in several ways.
+
+`GET /health` answers JSON without signing in: `200` while everything keeps up, `503` when the
+database is unreachable, when the scheduler has not dispatched the due polls or repeated the
+open alerts for 2 minutes, or when a queued job has waited more than 5 minutes for a worker.
+Point an uptime monitor at it. The digests, sent every 15 minutes, are not part of the check: a
+failed digest run is written to the log. It shows ages and counts only, nothing about the
+applications you watch:
+
+```json
+{
+    "status": "ok",
+    "version": "v1.0.0",
+    "checks": {
+        "database": { "ok": true },
+        "scheduler": { "ok": true, "last_run_seconds_ago": 9 },
+        "queues": {
+            "ok": true,
+            "oldest_wait_seconds": { "polls": 2 },
+            "failed_jobs_last_hour": 0
+        }
+    }
+}
+```
+
+`/up` stays the health check of the `web` container: it answers `200` while the panel boots
+and reaches its database. The `scheduler` container is healthy while it has dispatched the due
+polls and repeated the open alerts in the last 2 minutes, and each `worker` and `notifier` while
+it has looked for a job in the last 2 minutes; all of them also need the database.
+`docker compose ps` shows the result. Docker Compose does not restart an unhealthy container by
+itself, so alert on it from your monitoring. The same checks run by hand:
+
+```bash
+docker compose -f compose.prod.yaml run --rm web artisan horizon-watch:health
+```
+
+For a dead man's switch, set `HORIZON_WATCH_HEARTBEAT_URL` to the ping address of a service
+such as healthchecks.io, an Uptime Kuma push monitor or a Better Stack heartbeat. The scheduler
+calls it with a `GET` every minute, in a process of its own so a slow address never delays the
+polls, and only while `/health` would answer `200`, so the service warns you when the panel
+stops, falls behind or loses its database. `artisan horizon-watch:heartbeat` sends one by hand.
+The call follows the address rules of webhooks: no redirects, link-local and cloud metadata
+addresses refused, and private networks refused when `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` is
+`true`. It is off by default, so the panel makes no outbound call you did not ask for.
+
+Inside the panel, everyone signed in sees a banner while the scheduler is late or the queues
+fall behind. An environment without a reading for three poll intervals is shown as _not
+updated_ (or keeps its status when it was last known down) and counts as a problem on the wall,
+and the dot next to _refresh every_ turns red when the page itself cannot refresh.
+
+When php-fpm or nginx cannot start at all, the `web` container stops instead of answering 502
+forever, so its restart policy takes over.
 
 ## Logs
 
