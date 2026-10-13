@@ -36,7 +36,7 @@ class WarningDigestNotification extends Notification
                     'color' => $alert->resolved_at === null ? AlertMail::WARNING_COLOR : AlertMail::RESOLVED_COLOR,
                     'where' => AlertMail::where($alert),
                     'rule' => AlertMail::ruleLabel($alert->metric),
-                    'value' => AlertMail::withUnit($alert->value ?? 0, $alert->unit),
+                    'value' => AlertMail::value($alert),
                 ])->values()->all(),
                 'url' => AlertMail::wallUrl($this->team),
                 'action' => AlertMail::openPanel(),

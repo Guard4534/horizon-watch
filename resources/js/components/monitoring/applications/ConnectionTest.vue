@@ -18,7 +18,10 @@ import {
     PhWarning,
 } from '@phosphor-icons/vue';
 import { computed, onMounted, onUnmounted, watch } from 'vue';
-import { horizonStatusLabel } from '@/components/monitoring/environment/readings';
+import {
+    horizonStatusLabel,
+    readingProblemLabel,
+} from '@/components/monitoring/environment/readings';
 import type { RouteDefinition } from '@/wayfinder';
 
 const {
@@ -207,7 +210,37 @@ const icon = computed(() => {
                 <span v-else>{{
                     $t('The test could not run. Reload the page and try again.')
                 }}</span>
+                <span
+                    v-if="result?.problem"
+                    class="min-w-0 [overflow-wrap:anywhere]"
+                    >· {{ readingProblemLabel(result.problem) }}</span
+                >
             </template>
+        </div>
+
+        <div
+            v-if="result?.suggestedUrl"
+            class="nc-t-2xs w-full [overflow-wrap:anywhere]"
+            style="color: var(--nc-neutral-300)"
+        >
+            {{
+                $t('This looks like the address of a Horizon page; try :url', {
+                    url: result.suggestedUrl,
+                })
+            }}
+        </div>
+
+        <div
+            v-if="result?.credentialsInClear"
+            class="nc-t-2xs flex w-full items-start"
+            style="gap: 5px; color: var(--st-warn)"
+        >
+            <PhWarning :size="12" class="mt-[1px] flex-none" />
+            {{
+                $t(
+                    'The basic-auth password travels unencrypted over http://. Use https:// unless the network in between is trusted.',
+                )
+            }}
         </div>
     </div>
 </template>

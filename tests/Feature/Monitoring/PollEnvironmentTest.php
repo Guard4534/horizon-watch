@@ -4,6 +4,7 @@ use App\Actions\Monitoring\PollEnvironment;
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
 use App\Enums\HorizonStatus;
+use App\Enums\ReadingCause;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
@@ -39,9 +40,13 @@ beforeEach(function () {
         /** @var list<string|null> */
         public array $passwords = [];
 
-        public function read(HorizonTarget $target): HorizonReading
+        /** @var list<array{oldestPendingJobs: bool, knownRuntimes: array<string, float|null>|null}> */
+        public array $calls = [];
+
+        public function read(HorizonTarget $target, bool $oldestPendingJobs = false, ?array $knownRuntimes = null): HorizonReading
         {
             $this->passwords[] = $target->password();
+            $this->calls[] = ['oldestPendingJobs' => $oldestPendingJobs, 'knownRuntimes' => $knownRuntimes];
 
             $result = array_shift($this->results) ?? throw new LogicException('No reading queued.');
 
@@ -827,4 +832,121 @@ test('a rule disabled for the name of the environment does not degrade it', func
 
     expect($snapshot->status)->toBe(EnvironmentStatus::Active)
         ->and($snapshot->breaches->all())->toBe([]);
+});
+
+test('the oldest pending jobs are asked for only while the job-runtime rule is enabled', function () {
+    $this->reader->results = [($this->reading)(), ($this->reading)()];
+
+    ($this->poll)();
+
+    AlertRule::factory()->for($this->environment->application->team)->create([
+        'scope' => 'organization',
+        'metric' => AlertRuleMetric::JobRuntime,
+        'threshold' => null,
+        'severity' => null,
+        'notify_email' => null,
+        'enabled' => false,
+    ]);
+
+    $this->app->forgetScopedInstances();
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    expect(array_column($this->reader->calls, 'oldestPendingJobs'))->toBe([true, false]);
+});
+
+test('runtimes fetched by a reading are reused until they are five minutes old', function () {
+    $this->reader->results = [
+        ($this->reading)(['runtimesFetched' => true]),
+        ($this->reading)(['queueRuntimes' => ['default' => 0.4, 'reports' => 2.5]]),
+        ($this->reading)(['runtimesFetched' => true, 'queueRuntimes' => ['default' => 0.9]]),
+    ];
+
+    ($this->poll)();
+    $this->travel(299)->seconds();
+    ($this->poll)();
+    $this->travel(1)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect(array_column($this->reader->calls, 'knownRuntimes'))->toBe([
+        null,
+        ['default' => 0.4, 'emails' => null, 'reports' => 2.5, 'archive' => null],
+        null,
+    ])
+        ->and($state->runtimes_fetched_at?->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and(array_column($state->queues, 'runtimeSeconds', 'name'))->toBe(['default' => 0.9, 'emails' => null, 'reports' => null, 'archive' => null]);
+});
+
+test('a reading that reused the runtimes keeps the time they were fetched', function () {
+    $this->reader->results = [($this->reading)(['runtimesFetched' => true]), ($this->reading)()];
+
+    ($this->poll)();
+    $this->travel(60)->seconds();
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->runtimes_fetched_at?->toDateTimeString())->toBe('2026-09-17 10:00:00');
+});
+
+test('a failed reading stores what went wrong next to its reason, and the next reading clears it', function () {
+    $this->reader->results = [
+        new HorizonReadFailed(ReadingError::NotHorizon, ReadingCause::Redirect, 302, 'https://shop.example.com/login'),
+        ($this->reading)(),
+    ];
+
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->error_detail)->toBe(['cause' => 'redirect', 'status' => 302, 'location' => 'https://shop.example.com/login']);
+
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->error_detail)->toBeNull();
+});
+
+test('a failed-jobs list cut while every job is inside the hour is stored as a lower bound', function (bool $truncated, array $minutesAgo, bool $capped) {
+    $jobs = array_map(fn (int $minutes) => new HorizonFailedJob(
+        name: 'App\\Jobs\\Import',
+        queue: 'default',
+        exception: 'RuntimeException',
+        attempts: 1,
+        failedAt: CarbonImmutable::now()->subMinutes($minutes),
+    ), $minutesAgo);
+
+    $this->reader->results = [($this->reading)(['failedJobs' => $jobs, 'failedJobsTruncated' => $truncated])];
+
+    $snapshot = ($this->poll)();
+
+    expect($snapshot->failed_last_hour)->toBe(count(array_filter($minutesAgo, fn (int $minutes) => $minutes <= 60)))
+        ->and($snapshot->failed_last_hour_capped)->toBe($capped);
+})->with([
+    'cut inside the hour' => [true, array_fill(0, 200, 5), true],
+    'cut past the hour' => [true, [...array_fill(0, 150, 5), ...array_fill(0, 50, 90)], false],
+    'complete' => [false, array_fill(0, 120, 5), false],
+]);
+
+test('a poll of a horizon with many queues maps each queue to its supervisor in one pass', function () {
+    $supervisors = array_map(fn (int $s) => new HorizonSupervisor(
+        name: "supervisor-{$s}",
+        status: 'running',
+        processes: array_fill_keys(array_map(fn (int $q) => "redis:q{$s}-{$q}", range(1, 500)), 1),
+    ), range(1, 200));
+
+    $workload = array_map(fn (int $q) => new HorizonQueueLoad(name: "missing-{$q}", length: 1, wait: 0, processes: 1), range(1, 499));
+    $workload[] = new HorizonQueueLoad(name: 'q200-500', length: 1, wait: 0, processes: 1);
+
+    $this->reader->results = [($this->reading)([
+        'masters' => [new HorizonMaster(name: 'worker-1', status: 'running', supervisors: $supervisors)],
+        'workload' => $workload,
+    ])];
+
+    $started = microtime(true);
+    ($this->poll)();
+
+    $queues = EnvironmentState::query()->sole()->queues;
+
+    expect(microtime(true) - $started)->toBeLessThan(2.0)
+        ->and($queues[0]['supervisor'])->toBeNull()
+        ->and($queues[499]['supervisor'])->toBe('supervisor-200');
 });

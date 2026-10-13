@@ -871,7 +871,7 @@ test('changesCredentialsOf counts a new address as a credentials change only whe
         ->and($data('https://attacker.example.net/collect')->changesCredentialsOf($bare))->toBeFalse();
 });
 
-test('the poll interval goes from the scheduler tick of 15 seconds to 300', function (int $seconds, bool $valid) {
+test('the poll interval goes from the scheduler tick of 15 seconds to 300, in steps of the tick', function (int $seconds, bool $valid) {
     $response = $this->actingAs($this->admin)->post(
         route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
         ($this->validPayload)(['pollIntervalSeconds' => $seconds]),
@@ -882,9 +882,22 @@ test('the poll interval goes from the scheduler tick of 15 seconds to 300', func
     [5, false],
     [14, false],
     [15, true],
+    [20, false],
+    [30, true],
+    [295, false],
     [300, true],
     [301, false],
 ]);
+
+test('intervals saved before the step rule are rounded up to the cadence they already ran at', function () {
+    $intervals = [15 => 15, 16 => 30, 29 => 30, 30 => 30, 44 => 45, 299 => 300, 600 => 600];
+    $environments = array_map(fn (int $seconds) => Environment::factory()->create(['poll_interval_seconds' => $seconds]), array_keys($intervals));
+
+    $migration = require database_path('migrations/2026_10_13_050003_round_poll_intervals_up_to_the_scheduler_tick.php');
+    $migration->up();
+
+    expect(array_map(fn (Environment $environment) => $environment->fresh()->poll_interval_seconds, $environments))->toBe(array_values($intervals));
+});
 
 describe('the next reading after an edit', function () {
     beforeEach(function () {

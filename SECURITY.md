@@ -55,17 +55,30 @@ is the one place where a user can make the server talk to an address of their ch
 
 - Only `http` and `https`; no credentials in the URL, no query string, no fragment, no
   non-printable characters.
-- Link-local and cloud metadata addresses (`169.254.0.0/16`, `fe80::/10`, the AWS, GCP and
-  Alibaba metadata addresses, `metadata.google.internal`), broadcast, multicast and
-  unspecified addresses are **always** refused, whatever the settings say.
-- With `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS=true`, loopback and RFC 1918 addresses are
-  refused as well. It is `false` by default because most people run this panel next to the
-  applications it watches, on a private network. Turn it on if the panel is reachable by
-  people you would not trust with an internal HTTP client.
+- Link-local and cloud metadata addresses (`169.254.0.0/16`, `fe80::/10`, the AWS and GCP
+  IPv6 metadata addresses, Alibaba's metadata address, Azure's WireServer
+  `168.63.129.16`, `metadata.google.internal`), broadcast, multicast and unspecified
+  addresses are **always** refused, whatever the settings say.
+- With `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS=true`, loopback, RFC 1918, unique-local and
+  site-local IPv6, carrier-grade NAT (`100.64.0.0/10`, used by Tailscale and some pod
+  networks) and benchmarking (`198.18.0.0/15`) addresses are refused as well. It is `false`
+  by default because most people run this panel next to the applications it watches, on a
+  private network. Turn it on if the panel is reachable by people you would not trust with an
+  internal HTTP client.
 - The name is resolved once and the request is pinned to the address that came back, so a
   name that changes between the check and the request cannot send the read somewhere else.
 - Reads follow no redirects, ignore any proxy in the environment, time out after a few
-  seconds and stop reading at 2 MB.
+  seconds and stop reading at 2 MB. They ask for uncompressed answers and never inflate
+  one: a compressed Horizon answer is refused, so a small body cannot expand into gigabytes.
+- A failed read says why it failed: the HTTP status, the redirect target (without query
+  string, fragment or credentials) and whether the connection timed out, was refused or
+  failed TLS. Test connection and the environment page show this to the members who can see
+  the environment, so with private networks allowed, someone who can add an environment
+  learns which internal ports answer, with what status and where they redirect. That is one
+  more reason to turn on `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` on a shared panel.
+- What a hostile Horizon sends is bounded too: at most 500 queues, 200 masters, supervisors
+  and jobs per list, 4 pages of jobs and 100 runtime requests per reading, all inside the
+  read budget.
 
 The same guard runs on webhook URLs, which additionally must not carry credentials, a query
 string or a fragment: put any token in the path.

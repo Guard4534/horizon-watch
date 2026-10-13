@@ -25,13 +25,13 @@ test('a threshold above its maximum is reported in italian', function () {
         ->put(route('alert-rules.update', ['current_team' => $this->team->slug, 'scope' => 'organization']), [
             'rules' => [[
                 'metric' => AlertRuleMetric::JobsFailedPerHour->value,
-                'threshold' => 50,
+                'threshold' => 200,
                 'severity' => AlertSeverity::Warning->value,
                 'notifyByEmail' => false,
                 'enabled' => true,
             ]],
         ])
-        ->assertSessionHasErrors(['rules.0.threshold' => 'Il campo soglia non può essere maggiore di 49.']);
+        ->assertSessionHasErrors(['rules.0.threshold' => 'Il campo soglia non può essere maggiore di 199.']);
 });
 
 test('quiet hours without an end are reported in italian', function () {

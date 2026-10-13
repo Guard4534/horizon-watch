@@ -139,3 +139,42 @@ export function horizonStatusTone(
             return 'var(--nc-neutral-500)';
     }
 }
+
+export function readingProblemLabel(
+    problem: App.Data.Monitoring.ReadingProblemData,
+): string {
+    switch (problem.cause) {
+        case 'timeout':
+            return trans('The connection timed out');
+        case 'connection_failed':
+            return trans('Could not connect to the server');
+        case 'tls':
+            return trans('The TLS handshake or certificate check failed');
+        case 'dns':
+            return trans('The host name does not resolve');
+        case 'redirect':
+            return problem.location
+                ? trans('Redirected to :location', {
+                      location: problem.location,
+                  })
+                : trans('The address redirects elsewhere');
+        case 'not_found':
+            return trans(
+                'Nothing at this path (HTTP 404): check the Horizon path',
+            );
+        case 'http_status':
+            return trans('HTTP :status', {
+                status: String(problem.status ?? '—'),
+            });
+        case 'too_large':
+            return trans('The answer is larger than 2 MB');
+        case 'compressed':
+            return trans(
+                'The answer is compressed although no compression was asked for',
+            );
+        case 'not_json':
+            return trans('The answer is a web page, not the Horizon API');
+        case 'unexpected_json':
+            return trans('The answer is JSON, but not what Horizon sends');
+    }
+}

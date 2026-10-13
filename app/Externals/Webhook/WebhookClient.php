@@ -89,6 +89,7 @@ final readonly class WebhookClient
             ->withoutRedirecting()
             ->withUserAgent('HorizonWatch')
             ->withHeaders([
+                'Accept-Encoding' => 'identity',
                 Signature::TIMESTAMP_HEADER => (string) $timestamp,
                 Signature::SIGNATURE_HEADER => $signature,
             ])
@@ -96,6 +97,7 @@ final readonly class WebhookClient
             ->withOptions([
                 'curl' => [CURLOPT_RESOLVE => [$resolved->curlResolve()]],
                 'proxy' => ['no' => ['*']],
+                'decode_content' => false,
                 ...$watch->options(),
             ])
             ->post($url);

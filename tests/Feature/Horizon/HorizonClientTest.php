@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Monitoring\PollEnvironment;
+use App\Enums\ReadingCause;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
@@ -15,6 +16,7 @@ use App\Externals\Http\Dns\Resolver;
 use App\Externals\Http\Dns\SystemResolver;
 use App\Models\Environment;
 use App\Models\EnvironmentState;
+use App\Monitoring\StatusEvaluator;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -201,8 +203,12 @@ test('every request is pinned to the checked address and follows no redirect', f
             ->and($options['allow_redirects'])->toBeFalse()
             ->and($options['connect_timeout'])->toBe(5)
             ->and($options['timeout'])->toBe(5)
-            ->and($options['proxy'])->toBe(['no' => ['*']]);
+            ->and($options['proxy'])->toBe(['no' => ['*']])
+            ->and($options['decode_content'])->toBeFalse();
     }
+
+    Http::assertSent(fn (Request $request) => $request->header('Accept-Encoding') === ['identity']);
+    Http::assertNotSent(fn (Request $request) => $request->header('Accept-Encoding') !== ['identity']);
 
     expect($this->resolver->asked)->toBe(['shop.example.com']);
 });
@@ -682,4 +688,304 @@ test('a poll of an absurd horizon stores a saturated reading', function () {
         'waitSeconds' => 2147483647,
         'runtimeSeconds' => null,
     ]]);
+});
+
+/**
+ * @param  list<int>  $minutesAgo
+ * @return list<array<string, mixed>>
+ */
+function clientFailedJobsAgo(array $minutesAgo, string $prefix = 'f'): array
+{
+    return array_map(fn (int $minutes, int $index) => [
+        'id' => "{$prefix}{$index}",
+        'name' => 'App\Jobs\Import',
+        'queue' => 'default',
+        'failed_at' => (string) CarbonImmutable::now()->subMinutes($minutes)->getTimestamp(),
+    ], $minutesAgo, array_keys($minutesAgo));
+}
+
+/**
+ * @param  list<array<string, mixed>>  $jobs
+ * @param  ArrayObject<int, int>  $asked
+ */
+function clientPagedJobs(array $jobs, ArrayObject $asked, int $perPage = 50): Closure
+{
+    return function (Request $request) use ($jobs, $asked, $perPage) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+        $startingAt = (int) ($query['starting_at'] ?? -1);
+        $asked[] = $startingAt;
+
+        return Http::response(['jobs' => array_slice($jobs, $startingAt + 1, $perPage), 'total' => count($jobs)]);
+    };
+}
+
+/**
+ * @param  array<string, Closure>  $routes
+ */
+function clientPagedHorizonApi(array $routes): void
+{
+    Http::preventStrayRequests();
+    Http::fake(function (Request $request) use ($routes) {
+        $path = rawurldecode(Str::after((string) parse_url($request->url(), PHP_URL_PATH), '/horizon/api/'));
+        $route = $routes[$path] ?? match ($path) {
+            'stats' => clientJson('stats.json'),
+            'masters' => clientJson('masters.json'),
+            'workload' => clientJson('workload.json'),
+            'jobs/failed' => clientJson('failed.json'),
+            'jobs/pending' => clientJson('pending.json'),
+            default => fn () => Http::response('[]', 200, ['Content-Type' => 'application/json']),
+        };
+
+        return $route($request);
+    });
+}
+
+test('failed jobs are paged while the oldest of a page is inside the hour', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00'));
+    $asked = new ArrayObject;
+    clientPagedHorizonApi(['jobs/failed' => clientPagedJobs(clientFailedJobsAgo([...array_fill(0, 120, 10), ...array_fill(0, 200, 90)]), $asked)]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect($asked->getArrayCopy())->toEqualCanonicalizing([-1, 49, 99, 149])
+        ->and($reading->failedJobs)->toHaveCount(200)
+        ->and($reading->failedJobsTruncated)->toBeTrue()
+        ->and(app(StatusEvaluator::class)->failedLastHour($reading->failedJobs))->toBe(120);
+});
+
+test('failed jobs stop at the first page when it already reaches past the hour', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00'));
+    $asked = new ArrayObject;
+    clientPagedHorizonApi(['jobs/failed' => clientPagedJobs(clientFailedJobsAgo([...array_fill(0, 30, 10), ...array_fill(0, 200, 90)]), $asked)]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect($asked->getArrayCopy())->toBe([-1])
+        ->and($reading->failedJobs)->toHaveCount(50)
+        ->and($reading->failedJobsTruncated)->toBeTrue();
+});
+
+test('a burst of failures past the page cap is marked as truncated', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00'));
+    $asked = new ArrayObject;
+    clientPagedHorizonApi(['jobs/failed' => clientPagedJobs(clientFailedJobsAgo(array_fill(0, 5000, 5)), $asked)]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect($asked)->toHaveCount(4)
+        ->and($reading->failedJobs)->toHaveCount(200)
+        ->and($reading->failedJobsTruncated)->toBeTrue();
+});
+
+test('every failed job of a short list is read and nothing is truncated', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00'));
+    $asked = new ArrayObject;
+    clientPagedHorizonApi(['jobs/failed' => clientPagedJobs(clientFailedJobsAgo(array_fill(0, 120, 5)), $asked)]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect($asked->getArrayCopy())->toEqualCanonicalizing([-1, 49, 99])
+        ->and($reading->failedJobs)->toHaveCount(120)
+        ->and($reading->failedJobsTruncated)->toBeFalse();
+});
+
+test('a failure that shifts the list between pages is counted once', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00'));
+    $jobs = clientFailedJobsAgo(array_fill(0, 100, 5));
+    $shifted = [...clientFailedJobsAgo([1], 'new'), ...$jobs];
+
+    clientPagedHorizonApi(['jobs/failed' => function (Request $request) use ($jobs, $shifted) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+        $startingAt = (int) ($query['starting_at'] ?? -1);
+
+        return Http::response(['jobs' => array_slice($startingAt < 0 ? $jobs : $shifted, $startingAt + 1, 50), 'total' => 100]);
+    }]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect($reading->failedJobs)->toHaveCount(99)
+        ->and($reading->failedJobsTruncated)->toBeFalse();
+});
+
+test('a later page that fails leaves the count marked as truncated', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00'));
+    $first = clientPagedJobs(clientFailedJobsAgo(array_fill(0, 120, 5)), new ArrayObject);
+
+    clientPagedHorizonApi(['jobs/failed' => fn (Request $request) => str_contains($request->url(), 'starting_at=99')
+        ? Http::response('Server error', 500)
+        : $first($request)]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect($reading->failedJobs)->toHaveCount(100)
+        ->and($reading->failedJobsTruncated)->toBeTrue();
+});
+
+test('the oldest pending jobs are read from the end of the list only when asked', function () {
+    $asked = new ArrayObject;
+    $jobs = array_map(fn (int $i) => ['id' => "p{$i}", 'name' => 'App\Jobs\Import', 'queue' => 'default', 'status' => 'pending', 'reserved_at' => null], range(1, 1000));
+    $jobs[999] = ['id' => 'p1000', 'name' => 'App\Jobs\Stuck', 'queue' => 'reports', 'status' => 'reserved', 'reserved_at' => 1789645200];
+    clientPagedHorizonApi(['jobs/pending' => clientPagedJobs($jobs, $asked)]);
+
+    $shallow = app(HorizonReader::class)->read(clientTarget());
+
+    expect($asked->getArrayCopy())->toBe([-1])
+        ->and($shallow->pendingJobs)->toHaveCount(50);
+
+    $asked->exchangeArray([]);
+    $deep = app(HorizonReader::class)->read(clientTarget(), oldestPendingJobs: true);
+
+    expect($asked->getArrayCopy())->toEqualCanonicalizing([-1, 849, 899, 949])
+        ->and($deep->pendingJobs)->toHaveCount(200)
+        ->and($deep->pendingJobs[199]->name)->toBe('App\Jobs\Stuck');
+});
+
+test('runtimes known from a recent reading are reused while the queues stay the same', function () {
+    $sent = fakeHorizonApi();
+
+    $reading = app(HorizonReader::class)->read(clientTarget(), knownRuntimes: ['default' => 0.75, 'emails' => null, 'reports' => 3.0]);
+
+    expect($reading->queueRuntimes)->toBe(['default' => 0.75, 'reports' => 3.0])
+        ->and($reading->runtimesFetched)->toBeFalse()
+        ->and(array_filter(array_keys($sent->getArrayCopy()), fn (string $path) => str_starts_with($path, 'metrics/')))->toBe([]);
+});
+
+test('a queue the known runtimes do not cover asks for every runtime again', function () {
+    $sent = fakeHorizonApi();
+
+    $reading = app(HorizonReader::class)->read(clientTarget(), knownRuntimes: ['default' => 0.75, 'emails' => null]);
+
+    expect($reading->queueRuntimes)->toBe(['default' => 1.25])
+        ->and($reading->runtimesFetched)->toBeTrue()
+        ->and(array_values(array_filter(array_keys($sent->getArrayCopy()), fn (string $path) => str_starts_with($path, 'metrics/'))))
+        ->toEqualCanonicalizing(['metrics/queues/default', 'metrics/queues/emails', 'metrics/queues/reports']);
+});
+
+test('runtimes are not counted as fetched when every metrics request fails', function (?array $known, array $expected) {
+    fakeHorizonApi([
+        'metrics/queues/default' => fn () => Http::response('Unavailable', 503),
+        'metrics/queues/emails' => fn () => Http::response('Unavailable', 503),
+        'metrics/queues/reports' => fn () => Http::response('Unavailable', 503),
+    ]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget(), knownRuntimes: $known);
+
+    expect($reading->runtimesFetched)->toBeFalse()
+        ->and($reading->queueRuntimes)->toBe($expected);
+})->with([
+    'nothing known' => [null, []],
+    'a new queue' => [['default' => 0.75, 'emails' => null], ['default' => 0.75]],
+]);
+
+test('a failed metrics request keeps the known runtime of its queue', function () {
+    fakeHorizonApi(['metrics/queues/reports' => fn () => Http::response('Unavailable', 503)]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget(), knownRuntimes: ['default' => 0.75, 'reports' => 3.0]);
+
+    expect($reading->runtimesFetched)->toBeTrue()
+        ->and($reading->queueRuntimes)->toBe(['default' => 1.25, 'reports' => 3.0]);
+});
+
+test('a reading without known runtimes says it fetched them', function () {
+    fakeHorizonApi();
+
+    expect(app(HorizonReader::class)->read(clientTarget())->runtimesFetched)->toBeTrue();
+});
+
+test('the workload keeps the 500 longest queues in the order horizon sent them', function () {
+    $queues = array_map(fn (int $i) => ['name' => "q{$i}", 'length' => $i % 2 === 1 ? $i : 0, 'wait' => 0, 'processes' => 1], range(1, 1200));
+    fakeHorizonApi(['workload' => fn () => Http::response($queues)]);
+
+    $workload = app(HorizonReader::class)->read(clientTarget())->workload;
+    $lengths = array_map(fn (HorizonQueueLoad $queue) => $queue->length, $workload);
+
+    expect($workload)->toHaveCount(500)
+        ->and(min($lengths))->toBe(201)
+        ->and($workload[0]->name)->toBe('q201')
+        ->and($workload[1]->name)->toBe('q203')
+        ->and(end($workload)->name)->toBe('q1199');
+});
+
+test('the processes of a supervisor and the waits of the stats are kept up to 500 queues', function () {
+    $processes = [];
+
+    foreach (range(1, 800) as $i) {
+        $processes["redis:q{$i}"] = 1;
+    }
+
+    fakeHorizonApi([
+        'masters' => fn () => Http::response(['m' => ['name' => 'm', 'status' => 'running', 'supervisors' => [['name' => 's', 'status' => 'running', 'processes' => $processes]]]]),
+        'stats' => fn () => Http::response(['status' => 'running', 'jobsPerMinute' => 1, 'failedJobs' => 0, 'processes' => 1, 'wait' => $processes]),
+    ]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect($reading->masters[0]->supervisors[0]->processes)->toHaveCount(500)
+        ->and($reading->stats->wait)->toHaveCount(500);
+});
+
+test('a compressed answer is refused instead of being inflated', function () {
+    fakeHorizonApi(['stats' => fn () => Http::response((string) gzencode(clientFixture('stats.json')), 200, ['Content-Type' => 'application/json', 'Content-Encoding' => 'gzip'])]);
+
+    $failure = clientFailure(fn () => app(HorizonReader::class)->read(clientTarget()));
+
+    expect($failure->reason)->toBe(ReadingError::NotHorizon)
+        ->and($failure->cause)->toBe(ReadingCause::Compressed);
+});
+
+test('a failure says what went wrong beyond its reason', function (Closure $response, ReadingError $reason, ReadingCause $cause, ?int $status, ?string $location) {
+    fakeHorizonApi(['stats' => $response]);
+
+    $failure = clientFailure(fn () => app(HorizonReader::class)->probe(clientTarget()));
+
+    expect($failure->reason)->toBe($reason)
+        ->and($failure->cause)->toBe($cause)
+        ->and($failure->status)->toBe($status)
+        ->and($failure->location)->toBe($location);
+})->with([
+    'redirect to a login page' => [fn () => fn () => Http::response('', 302, ['Location' => 'https://sso:token@shop.example.com/login?next=/horizon#top']), ReadingError::NotHorizon, ReadingCause::Redirect, 302, 'https://shop.example.com/login'],
+    'relative redirect' => [fn () => fn () => Http::response('', 301, ['Location' => '/horizon/']), ReadingError::NotHorizon, ReadingCause::Redirect, 301, '/horizon/'],
+    'redirect without a location' => [fn () => fn () => Http::response('', 307), ReadingError::NotHorizon, ReadingCause::Redirect, 307, null],
+    'not found' => [fn () => fn () => Http::response('Not found', 404), ReadingError::NotHorizon, ReadingCause::NotFound, 404, null],
+    'method not allowed' => [fn () => fn () => Http::response('', 405), ReadingError::NotHorizon, ReadingCause::HttpStatus, 405, null],
+    'bad gateway' => [fn () => fn () => Http::response('', 502), ReadingError::Unreachable, ReadingCause::HttpStatus, 502, null],
+    'rate limited' => [fn () => fn () => Http::response('', 429), ReadingError::Unreachable, ReadingCause::HttpStatus, 429, null],
+    'forbidden' => [fn () => fn () => Http::response('', 403), ReadingError::Unauthorized, ReadingCause::HttpStatus, 403, null],
+    'a web page' => [fn () => fn () => Http::response(clientFixture('dashboard.html')), ReadingError::NotHorizon, ReadingCause::NotJson, null, null],
+    'json of the wrong shape' => [fn () => fn () => Http::response(['message' => 'Hello']), ReadingError::NotHorizon, ReadingCause::UnexpectedJson, null, null],
+]);
+
+test('a name that does not resolve is a dns problem', function () {
+    fakeHorizonApi();
+
+    $failure = clientFailure(fn () => app(HorizonReader::class)->probe(clientTarget(url: 'https://missing.example.com/horizon')));
+
+    expect($failure->reason)->toBe(ReadingError::Unreachable)
+        ->and($failure->cause)->toBe(ReadingCause::Dns);
+});
+
+test('a poll of a huge horizon stays linear and stores at most 500 queues', function () {
+    $environment = Environment::factory()->create(['horizon_url' => 'https://shop.example.com/horizon']);
+
+    $supervisors = array_map(function (int $supervisor) {
+        $processes = [];
+
+        foreach (range(1, 500) as $i) {
+            $processes["r:{$supervisor}.{$i}"] = 1;
+        }
+
+        return ['name' => "s{$supervisor}", 'status' => 'running', 'processes' => $processes];
+    }, range(1, 200));
+
+    fakeHorizonApi([
+        'masters' => fn () => Http::response(['m' => ['name' => 'm', 'status' => 'running', 'supervisors' => $supervisors]]),
+        'workload' => fn () => Http::response(array_map(fn (int $i) => ['name' => "q{$i}", 'length' => $i, 'wait' => 0, 'processes' => 1], range(1, 30000))),
+    ]);
+
+    $started = microtime(true);
+    $snapshot = app(PollEnvironment::class)->handle($environment);
+
+    expect($snapshot?->error)->toBeNull()
+        ->and(microtime(true) - $started)->toBeLessThan(5.0)
+        ->and(EnvironmentState::query()->where('environment_id', $environment->id)->sole()->queues)->toHaveCount(500);
 });

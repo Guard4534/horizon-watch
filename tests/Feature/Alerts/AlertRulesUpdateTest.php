@@ -187,8 +187,8 @@ test('thresholds are bounded per metric', function (string $metric, mixed $thres
         ? $response->assertSessionHasNoErrors()
         : $response->assertSessionHasErrors('rules.0.threshold');
 })->with([
-    'failed jobs at 49' => ['jobs.failed_per_hour', 49, true],
-    'failed jobs at 50' => ['jobs.failed_per_hour', 50, false],
+    'failed jobs at 199' => ['jobs.failed_per_hour', 199, true],
+    'failed jobs at 200' => ['jobs.failed_per_hour', 200, false],
     'state rule at 0' => ['endpoint.unreachable', 0, false],
     'state rule at 1' => ['endpoint.unreachable', 1, true],
     'state rule at 1440' => ['horizon.paused', 1440, true],
@@ -207,7 +207,7 @@ test('thresholds are bounded per metric', function (string $metric, mixed $thres
 test('the environment scope is bounded the same way', function () {
     $this->actingAs($this->admin);
 
-    ($this->put)('production', [['metric' => 'jobs.failed_per_hour', 'threshold' => 50, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]])
+    ($this->put)('production', [['metric' => 'jobs.failed_per_hour', 'threshold' => 200, 'severity' => null, 'notifyByEmail' => null, 'enabled' => null]])
         ->assertSessionHasErrors('rules.0.threshold');
 });
 

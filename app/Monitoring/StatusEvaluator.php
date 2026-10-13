@@ -24,12 +24,14 @@ final class StatusEvaluator
     {
         $at ??= CarbonImmutable::now();
         $failedLastHour = $this->failedLastHour($reading->failedJobs ?? [], $at);
+        $capped = $reading->failedJobsTruncated && $failedLastHour > 0 && $failedLastHour === count($reading->failedJobs ?? []);
 
         if ($reading->stats->status === 'inactive' || $reading->masters === []) {
             return new EvaluatedStatus(
                 EnvironmentStatus::Inactive,
                 $this->enabled([AlertRuleMetric::HorizonMasterInactive], $rules),
                 $failedLastHour,
+                $capped,
             );
         }
 
@@ -44,6 +46,7 @@ final class StatusEvaluator
                 EnvironmentStatus::Paused,
                 [...$this->enabled([AlertRuleMetric::HorizonPaused], $rules), ...$breaches],
                 $failedLastHour,
+                $capped,
             );
         }
 
@@ -51,6 +54,7 @@ final class StatusEvaluator
             $breaches === [] ? EnvironmentStatus::Active : EnvironmentStatus::Degraded,
             $breaches,
             $failedLastHour,
+            $capped,
         );
     }
 

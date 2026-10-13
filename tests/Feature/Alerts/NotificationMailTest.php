@@ -119,6 +119,7 @@ test('every rule has its own headline and detail', function (AlertRuleMetric $me
     'max wait' => [AlertRuleMetric::QueueMaxWait, 95, ['waitSeconds' => 95], 'Oldest job waiting 95 s', null],
     'runtime' => [AlertRuleMetric::JobRuntime, 300, ['job' => 'App\Jobs\BuildReport', 'queue' => 'reports', 'seconds' => 300], 'A job has been running for 300 s', 'App\Jobs\BuildReport on queue reports'],
     'failed' => [AlertRuleMetric::JobsFailedPerHour, 31, ['failed' => 31], '31 jobs failed in the last hour', null],
+    'failed past the jobs that were read' => [AlertRuleMetric::JobsFailedPerHour, 200, ['failed' => 200, 'atLeast' => true], 'at least 200 jobs failed in the last hour', null],
     'workers' => [AlertRuleMetric::WorkersMissing, 5, ['queues' => ['default', 'emails']], '5 queues with waiting jobs and no worker', 'Queues: default, emails'],
 ]);
 
@@ -190,6 +191,16 @@ test('the digest lists open and resolved warnings and links the wall', function 
         ->and(substr_count($html, 'Still open'))->toBe(2)
         ->and($html)->toContain('Resolved')
         ->and($html)->toContain('href="'.url('/acme/wall').'"');
+});
+
+test('a failed-jobs count cut at the jobs read is a lower bound in the value row and in the digest', function () {
+    $this->alert->update(['metric' => AlertRuleMetric::JobsFailedPerHour, 'threshold' => 150, 'value' => 200, 'unit' => 'job', 'detail' => ['failed' => 200, 'atLeast' => true]]);
+    $digest = new WarningDigestNotification($this->team, collect([$this->alert]));
+
+    expect(mailHtml(new AlertNotification($this->alert)))->toContain('at least 200 job</td>')
+        ->and(mailHtml(new AlertNotification($this->alert), 'it'))->toContain('almeno 200 job</td>')
+        ->and(mailHtml($digest))->toContain('Failed jobs / hour · at least 200 job')
+        ->and(mailHtml($digest, 'it'))->toContain('almeno 200 job');
 });
 
 test('the test email names the organization', function () {

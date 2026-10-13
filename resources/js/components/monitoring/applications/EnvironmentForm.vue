@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import FieldError from '@/components/FieldError.vue';
-import { PhLockSimple, PhLockSimpleOpen } from '@phosphor-icons/vue';
+import { PhLockSimple, PhLockSimpleOpen, PhWarning } from '@phosphor-icons/vue';
 import { createReusableTemplate } from '@vueuse/core';
-import { watch } from 'vue';
+import { computed, watch } from 'vue';
 import ColorPicker from '@/components/monitoring/applications/ColorPicker.vue';
 import { looksLikeProduction } from '@/lib/monitoring';
 
@@ -38,6 +38,12 @@ defineEmits<{
 const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
 
 const errorOf = (field: string) => errors[`${prefix}${field}`];
+
+const credentialsInClear = computed(
+    () =>
+        /^\s*http:\/\//i.test(model.value.horizonUrl ?? '') &&
+        !!model.value.basicAuthUser?.trim(),
+);
 
 const toggleAuth = () => {
     auth.value = !auth.value;
@@ -132,6 +138,18 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                 @input="$emit('urlInput')"
             />
             <FieldError :message="errorOf('horizonUrl')" />
+            <div
+                v-if="credentialsInClear && !errorOf('horizonUrl')"
+                class="nc-t-2xs mt-1 flex items-start"
+                style="gap: 5px; color: var(--st-warn)"
+            >
+                <PhWarning :size="12" class="mt-[1px] flex-none" />
+                {{
+                    $t(
+                        'The basic-auth password travels unencrypted over http://. Use https:// unless the network in between is trusted.',
+                    )
+                }}
+            </div>
         </div>
     </DefineUrl>
 
@@ -231,7 +249,7 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                     type="number"
                     min="15"
                     max="300"
-                    step="1"
+                    step="15"
                 />
                 <span
                     :class="

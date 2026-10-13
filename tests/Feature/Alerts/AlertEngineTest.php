@@ -52,7 +52,7 @@ beforeEach(function () {
         /** @var list<HorizonReading|Throwable|Closure(): HorizonReading> */
         public array $results = [];
 
-        public function read(HorizonTarget $target): HorizonReading
+        public function read(HorizonTarget $target, bool $oldestPendingJobs = false, ?array $knownRuntimes = null): HorizonReading
         {
             $result = array_shift($this->results) ?? throw new LogicException('No reading queued.');
 
@@ -476,6 +476,18 @@ test('each threshold rule stores its own value and detail', function (array $ove
         AlertRuleMetric::JobsFailedPerHour,
         21.0,
         ['failed' => 21],
+    ],
+    'failed per hour, past the jobs that were read' => [
+        ['failedJobsTruncated' => true, 'failedJobs' => array_map(fn (int $minute) => new HorizonFailedJob(
+            name: 'App\\Jobs\\SendInvoiceEmail',
+            queue: 'emails',
+            exception: 'RuntimeException: The mail server did not answer',
+            attempts: 3,
+            failedAt: CarbonImmutable::parse('2026-09-17 10:00:00')->subMinutes($minute % 60),
+        ), range(1, 200))],
+        AlertRuleMetric::JobsFailedPerHour,
+        200.0,
+        ['failed' => 200, 'atLeast' => true],
     ],
     'job runtime' => [
         ['pendingJobs' => [

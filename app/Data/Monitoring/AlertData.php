@@ -20,6 +20,7 @@ class AlertData extends Data
         public float $threshold,
         public string $unit,
         public ?float $value,
+        public bool $valueIsLowerBound,
         public ?string $longestJob,
         public ?string $longestJobQueue,
         /** @var array<int, string> */

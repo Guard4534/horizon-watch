@@ -127,7 +127,9 @@ final class AlertEngine
         return match ($metric) {
             AlertRuleMetric::QueuePending => [$snapshot->pending, ['pending' => $snapshot->pending]],
             AlertRuleMetric::QueueMaxWait => [$snapshot->max_wait_seconds, ['waitSeconds' => $snapshot->max_wait_seconds]],
-            AlertRuleMetric::JobsFailedPerHour => [$snapshot->failed_last_hour, ['failed' => $snapshot->failed_last_hour]],
+            AlertRuleMetric::JobsFailedPerHour => [$snapshot->failed_last_hour, $snapshot->failed_last_hour_capped
+                ? ['failed' => $snapshot->failed_last_hour, 'atLeast' => true]
+                : ['failed' => $snapshot->failed_last_hour]],
             AlertRuleMetric::JobRuntime => $this->longestJob($state, $at),
             AlertRuleMetric::WorkersMissing => $this->queuesWithoutWorkers($state),
             default => [(int) ($state->status_since ?? $at)->diffInMinutes($at), []],

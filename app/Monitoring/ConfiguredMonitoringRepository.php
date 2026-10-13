@@ -16,6 +16,7 @@ use App\Data\Monitoring\LongRunningJobData;
 use App\Data\Monitoring\NodeData;
 use App\Data\Monitoring\NotificationSettingsData;
 use App\Data\Monitoring\QueueData;
+use App\Data\Monitoring\ReadingProblemData;
 use App\Data\Monitoring\RuleScopeData;
 use App\Data\Monitoring\SentNotificationData;
 use App\Data\Monitoring\SeriesGridData;
@@ -682,6 +683,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             pollingEnabled: $environment->polling_enabled,
             pollIntervalSeconds: $environment->poll_interval_seconds,
             readingError: $state?->error,
+            readingProblem: $state?->error === null ? null : ReadingProblemData::fromStored($state->error_detail),
             horizonStatus: $state?->horizon_status,
             thresholds: $this->thresholdsOf($environment),
         );
@@ -821,6 +823,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             threshold: $alert->threshold,
             unit: $alert->unit,
             value: $alert->value,
+            valueIsLowerBound: ($alert->detail['atLeast'] ?? false) === true,
             longestJob: $this->detailText($alert, 'job'),
             longestJobQueue: $this->detailText($alert, 'queue'),
             queuesWithoutWorkers: is_array($alert->detail['queues'] ?? null)

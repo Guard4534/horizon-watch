@@ -3,6 +3,7 @@
 namespace App\Actions\Monitoring;
 
 use App\Data\Monitoring\ConnectionResultData;
+use App\Data\Monitoring\ReadingProblemData;
 use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Exceptions\HorizonReadFailed;
@@ -17,14 +18,21 @@ class TestConnection
 
     public function handle(HorizonTarget $target): ConnectionResultData
     {
+        $inClear = $target->sendsCredentialsInClear();
+
         try {
             $probe = $this->reader->probe($target);
         } catch (HorizonReadFailed $exception) {
-            return ConnectionResultData::failed($exception->reason);
+            return ConnectionResultData::failed(
+                $exception->reason,
+                ReadingProblemData::fromFailure($exception),
+                $exception->reason === ReadingError::NotHorizon ? $target->suggestedDashboardUrl() : null,
+                $inClear,
+            );
         } catch (Throwable $exception) {
             SafeReport::of('The Horizon reader', $exception, class_basename(HorizonReadFailed::class));
 
-            return ConnectionResultData::failed(ReadingError::Unreachable);
+            return ConnectionResultData::failed(ReadingError::Unreachable, credentialsInClear: $inClear);
         }
 
         return new ConnectionResultData(
@@ -33,6 +41,7 @@ class TestConnection
             masterCount: $probe->masterCount,
             latencyMs: $probe->latencyMs,
             error: null,
+            credentialsInClear: $inClear,
         );
     }
 }

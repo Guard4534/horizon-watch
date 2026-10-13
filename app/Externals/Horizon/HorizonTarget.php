@@ -35,6 +35,22 @@ final readonly class HorizonTarget implements JsonSerializable
         return filled($this->username) && filled($this->password);
     }
 
+    public function sendsCredentialsInClear(): bool
+    {
+        return $this->hasBasicAuth() && str_starts_with(strtolower(trim($this->dashboardUrl)), 'http://');
+    }
+
+    public function suggestedDashboardUrl(): ?string
+    {
+        $base = rtrim((string) preg_replace('/[?#].*$/s', '', $this->dashboardUrl), '/');
+
+        if (preg_match('#^([a-z][a-z0-9+.-]*://[^/]+/.*?[^/])/(?:api(?=/.)|dashboard|monitoring|metrics|jobs|failed|batches|recent-jobs)(?:/.*)?$#i', $base, $matches) !== 1) {
+            return null;
+        }
+
+        return $matches[1];
+    }
+
     public function apiUrl(string $path): string
     {
         $base = rtrim((string) preg_replace('/[?#].*$/s', '', $this->dashboardUrl), '/');

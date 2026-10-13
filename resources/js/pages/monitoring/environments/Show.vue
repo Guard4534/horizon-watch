@@ -251,6 +251,7 @@ const tiles = computed<Tile[]>(() => [
             v-if="incident"
             :status="incident"
             :reading-error="environment.readingError"
+            :reading-problem="environment.readingProblem"
             :alert="page.openAlert"
             :has-earlier-reading="page.nodes.length + page.queues.length > 0"
         />

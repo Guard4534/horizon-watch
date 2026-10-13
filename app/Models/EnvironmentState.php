@@ -19,12 +19,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property CarbonImmutable|null $status_since
  * @property EnvironmentStatus $status
  * @property ReadingError|null $error
+ * @property array{cause: string, status: int|null, location: string|null}|null $error_detail
  * @property HorizonStatus|null $horizon_status
  * @property list<array{hostname: string, status: string, workers: int, supervisors: int, queues: int, seenAt?: string}> $nodes
  * @property list<array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}> $queues
  * @property list<array{job: string, queue: string, exception: string, tries: int, failedAt: string}> $failed_jobs
  * @property list<array{job: string, queue: string, reservedAt: string}> $pending_jobs
  * @property int|null $latency_ms
+ * @property CarbonImmutable|null $runtimes_fetched_at
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read Environment $environment
@@ -35,12 +37,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'status',
     'status_since',
     'error',
+    'error_detail',
     'horizon_status',
     'nodes',
     'queues',
     'failed_jobs',
     'pending_jobs',
     'latency_ms',
+    'runtimes_fetched_at',
 ])]
 class EnvironmentState extends Model
 {
@@ -65,11 +69,13 @@ class EnvironmentState extends Model
             'status_since' => 'immutable_datetime',
             'status' => EnvironmentStatus::class,
             'error' => ReadingError::class,
+            'error_detail' => 'array',
             'horizon_status' => HorizonStatus::class,
             'nodes' => 'array',
             'queues' => 'array',
             'failed_jobs' => 'array',
             'pending_jobs' => 'array',
+            'runtimes_fetched_at' => 'immutable_datetime',
         ];
     }
 }

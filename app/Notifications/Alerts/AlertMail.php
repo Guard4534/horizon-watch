@@ -81,7 +81,9 @@ final class AlertMail
             AlertRuleMetric::QueuePending => __(':count jobs pending', ['count' => $value]),
             AlertRuleMetric::QueueMaxWait => __('Oldest job waiting :seconds s', ['seconds' => $value]),
             AlertRuleMetric::JobRuntime => __('A job has been running for :seconds s', ['seconds' => $value]),
-            AlertRuleMetric::JobsFailedPerHour => __(':count jobs failed in the last hour', ['count' => $value]),
+            AlertRuleMetric::JobsFailedPerHour => __(':count jobs failed in the last hour', [
+                'count' => ($alert->detail['atLeast'] ?? false) === true ? __('at least :count', ['count' => $value]) : $value,
+            ]),
             AlertRuleMetric::WorkersMissing => __(':count queues with waiting jobs and no worker', ['count' => $value]),
         };
     }
@@ -156,7 +158,7 @@ final class AlertMail
             ['label' => __('Environment'), 'value' => self::where($alert)],
             ['label' => __('Nodes'), 'value' => self::nodes($alert)],
             ['label' => __('Rule'), 'value' => $alert->metric->value.' > '.self::withUnit($alert->threshold, $alert->unit)],
-            ['label' => __('Value'), 'value' => self::withUnit($alert->value ?? 0, $alert->unit)],
+            ['label' => __('Value'), 'value' => self::value($alert)],
         ];
     }
 
@@ -186,6 +188,13 @@ final class AlertMail
     public static function wallUrl(Team $team): string
     {
         return route('wall', ['current_team' => $team->slug]);
+    }
+
+    public static function value(Alert $alert): string
+    {
+        $value = self::withUnit($alert->value ?? 0, $alert->unit);
+
+        return ($alert->detail['atLeast'] ?? false) === true ? __('at least :count', ['count' => $value]) : $value;
     }
 
     public static function withUnit(float|int $value, string $unit): string

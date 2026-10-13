@@ -120,9 +120,9 @@ test('rule errors name the field, not its position in the payload', function () 
 
     $this->put(route('alert-rules.update', ['current_team' => $this->team->slug, 'scope' => 'organization']), ['rules' => [
         ['metric' => 'queue.pending', 'threshold' => 3000, 'severity' => 'warning', 'notifyByEmail' => true, 'enabled' => true],
-        ['metric' => 'jobs.failed_per_hour', 'threshold' => 60, 'severity' => 'loud', 'notifyByEmail' => true, 'enabled' => true],
+        ['metric' => 'jobs.failed_per_hour', 'threshold' => 250, 'severity' => 'loud', 'notifyByEmail' => true, 'enabled' => true],
     ]])->assertSessionHasErrors([
-        'rules.1.threshold' => 'The threshold field must not be greater than 49.',
+        'rules.1.threshold' => 'The threshold field must not be greater than 199.',
         'rules.1.severity' => 'The selected severity is invalid.',
     ]);
 });

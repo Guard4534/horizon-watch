@@ -60,7 +60,11 @@ class EnvironmentFormData extends Data
             'horizonUrl' => self::horizonUrlRules(),
             'basicAuthUser' => self::basicAuthUserRules(self::key($context, 'basicAuthPassword')),
             'basicAuthPassword' => ['nullable', 'string', ...self::passwordRequiredWithUsernameRules($context)],
-            'pollIntervalSeconds' => ['integer', 'between:'.config()->integer('horizon-watch.readings.poll_interval_seconds.min').','.config()->integer('horizon-watch.readings.poll_interval_seconds.max')],
+            'pollIntervalSeconds' => [
+                'integer',
+                'between:'.config()->integer('horizon-watch.readings.poll_interval_seconds.min').','.config()->integer('horizon-watch.readings.poll_interval_seconds.max'),
+                'multiple_of:'.config()->integer('horizon-watch.readings.poll_tick_seconds'),
+            ],
             'pollingEnabled' => ['boolean'],
             'isProduction' => ['boolean'],
         ];

@@ -68,6 +68,18 @@ test('horizon: the masters kept from a reading follow the configured cap', funct
     'lowered' => [1, 1],
 ]);
 
+test('horizon: the failed-jobs threshold stops one below the failed jobs a reading can count', function (int $jobs, int $pages, float $expected) {
+    config(['horizon-watch.horizon.max_jobs' => $jobs, 'horizon-watch.horizon.max_job_pages' => $pages]);
+
+    expect(AlertRuleMetric::JobsFailedPerHour->maximumThreshold())->toBe($expected);
+})->with([
+    'default' => [200, 4, 199.0],
+    'more jobs than the pages hold' => [500, 4, 199.0],
+    'more jobs and pages' => [500, 10, 499.0],
+    'one page' => [200, 1, 49.0],
+    'absurd' => [0, 4, 1.0],
+]);
+
 test('readings: the failed-rate window follows the configuration', function (int $minutes, int $expected) {
     config(['horizon-watch.readings.failed_rate_minutes' => $minutes]);
 

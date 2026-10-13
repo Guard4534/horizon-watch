@@ -25,9 +25,12 @@ return [
         'max_body_bytes' => 2 * 1024 * 1024,
         'max_masters' => 200,
         'max_supervisors' => 200,
+        'max_queues' => 500,
         'max_jobs' => 200,
+        'max_job_pages' => 4,
         'max_metric_queues' => 100,
         'metrics_concurrency' => 10,
+        'runtime_refresh_seconds' => 300,
         'exception_length' => 200,
     ],
 

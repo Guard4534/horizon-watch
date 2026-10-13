@@ -52,7 +52,11 @@ defineProps<{
         "
         >{{
             $t(':count jobs failed in the last hour', {
-                count: formatCount(alert.value),
+                count: alert.valueIsLowerBound
+                    ? $t('at least :count', {
+                          count: formatCount(alert.value),
+                      })
+                    : formatCount(alert.value),
             })
         }}</template
     >

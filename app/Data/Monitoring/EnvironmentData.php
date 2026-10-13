@@ -38,6 +38,7 @@ class EnvironmentData extends Data
         public bool $pollingEnabled,
         public int $pollIntervalSeconds,
         public ?ReadingError $readingError,
+        public ?ReadingProblemData $readingProblem,
         public ?HorizonStatus $horizonStatus,
         /** @var array<string, float> */
         public array $thresholds,

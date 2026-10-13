@@ -464,6 +464,21 @@ test('an alert carries the longest job and the queues without workers it was ope
         ->and($alerts['queue.pending'])->toMatchArray(['longestJob' => null, 'longestJobQueue' => null, 'queuesWithoutWorkers' => []]);
 });
 
+test('a failed-jobs count read past the jobs that were listed is marked as a lower bound', function (array $detail, bool $lowerBound) {
+    Alert::factory()->for($this->production)->create([
+        'metric' => AlertRuleMetric::JobsFailedPerHour,
+        'unit' => 'job',
+        'value' => 200,
+        'detail' => $detail,
+    ]);
+
+    expect(($this->page)()['alerts'][0])->toMatchArray(['value' => 200, 'valueIsLowerBound' => $lowerBound]);
+})->with([
+    'at least' => [['failed' => 200, 'atLeast' => true], true],
+    'exact' => [['failed' => 200], false],
+    'not a boolean' => [['failed' => 200, 'atLeast' => 'yes'], false],
+]);
+
 test('a detail of an unexpected shape is left out', function (array $detail, array $queues) {
     Alert::factory()->for($this->production)->create([
         'metric' => AlertRuleMetric::WorkersMissing,

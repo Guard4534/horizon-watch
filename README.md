@@ -72,8 +72,10 @@ Then, in order:
 2. Add an **environment** to it: a label (`production`, `staging`, …), the URL of that
    installation's Horizon dashboard (for example `https://shop.example.com/horizon`), the
    basic-auth user and password if the dashboard is behind one, and how often to poll it
-   (15 to 300 seconds). **Test connection** reads the dashboard once and tells you what it
-   found before you save. Tick **Production environment** on every production installation:
+   (15 to 300 seconds, in steps of 15: the scheduler queues readings every 15 seconds).
+   **Test connection** reads the dashboard once and tells you what it found, or why it
+   failed, before you save. Give basic-auth credentials an `https://` address: over
+   `http://` the password travels in clear on every poll, and the form warns you. Tick **Production environment** on every production installation:
    members who see everything except production never see those environments. The box is
    ticked for you when the label is `production`, `prod`, `prd` or `live`, alone or followed
    by a suffix such as `production-eu`.
@@ -94,7 +96,8 @@ application needs:
 
 - **Horizon installed and reachable over HTTP.** The default path is `/horizon`; if you moved
   it with `HORIZON_PATH`, give Horizon Watch the moved URL. Either the dashboard URL or the
-  same URL ending in `/api` is accepted.
+  same URL ending in `/api` is accepted. An address copied from a Horizon screen, such as
+  `/horizon/dashboard`, is not: **Test connection** suggests the dashboard URL instead.
 - **A way in.** Horizon's `viewHorizon` gate guards those routes outside the `local`
   environment. The simplest arrangement that does not open the dashboard to the world is to
   put HTTP basic auth in front of it at the web-server level and give Horizon Watch the
@@ -103,9 +106,20 @@ application needs:
   the login redirect.
 
 Every read is a plain `GET`; nothing Horizon Watch sends changes state. Reads follow no
-redirects, time out after a few seconds, stop at 2 MB per response, ignore any proxy
-configured in the environment and connect to the address the name resolved to, so a name that
-changes between the safety check and the request cannot redirect the read elsewhere.
+redirects, time out after a few seconds, stop at 2 MB per response, ask for and accept only
+uncompressed answers, ignore any proxy configured in the environment and connect to the
+address the name resolved to, so a name that changes between the safety check and the request
+cannot redirect the read elsewhere. A reading keeps at most 500 queues (the longest) and 200
+masters, supervisors and jobs per list.
+
+Horizon lists jobs 50 at a time, newest first. Horizon Watch pages through the failed jobs
+until it passes the last hour, up to 4 pages: past 200 failures in the hour the count reads
+"at least 200", and the failed-jobs rule accepts thresholds up to 199. When the job-runtime
+rule is enabled it also reads the oldest pending jobs, where a long-running job sits on a busy
+queue. Horizon drops pending jobs after `trim.pending` (60 minutes by default), so a job-runtime
+threshold above that only fires if the monitored application keeps them longer. The per-queue
+runtimes come from Horizon's metric snapshots, which change every few minutes, so they are
+fetched again only every 5 minutes or when a new queue appears.
 
 ## Configuration
 
@@ -319,8 +333,8 @@ each environment and enter its password again.
 
 **A Horizon URL is refused when saved.** The panel refuses credentials and query strings in
 the URL, non-HTTP schemes, and — when `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` is `true` —
-addresses that resolve to a private or link-local network. Cloud metadata addresses are
-always refused.
+addresses that resolve to a private network, including carrier-grade NAT (`100.64.0.0/10`,
+used by Tailscale). Link-local and cloud metadata addresses are always refused.
 
 ## Development
 

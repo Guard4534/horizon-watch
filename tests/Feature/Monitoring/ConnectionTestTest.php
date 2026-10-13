@@ -4,6 +4,7 @@ use App\Actions\Monitoring\TestConnection;
 use App\Data\Applications\TestConnectionData;
 use App\Enums\HorizonStatus;
 use App\Enums\MemberVisibility;
+use App\Enums\ReadingCause;
 use App\Enums\ReadingError;
 use App\Enums\TeamRole;
 use App\Externals\Horizon\Exceptions\HorizonReadFailed;
@@ -34,7 +35,7 @@ beforeEach(function () {
             $this->outcome = new HorizonProbe(status: 'running', masterCount: 2, latencyMs: 84);
         }
 
-        public function read(HorizonTarget $target): HorizonReading
+        public function read(HorizonTarget $target, bool $oldestPendingJobs = false, ?array $knownRuntimes = null): HorizonReading
         {
             throw new LogicException('A connection test must never take a reading.');
         }
@@ -105,6 +106,9 @@ test('a member tests a watched environment with its saved address and credential
             'masterCount' => 2,
             'latencyMs' => 84,
             'error' => null,
+            'problem' => null,
+            'suggestedUrl' => null,
+            'credentialsInClear' => false,
         ]);
 
     expect($this->reader->probed)->toBe([[
@@ -166,7 +170,7 @@ test('an admin testing the edit form with a blank password uses the stored one o
         'password' => 'stored-secret-value',
     ]])
         ->and($response->getContent())->not->toContain('stored-secret-value')
-        ->and(array_keys($response->json()))->toBe(['reachable', 'horizonStatus', 'masterCount', 'latencyMs', 'error']);
+        ->and(array_keys($response->json()))->toBe(['reachable', 'horizonStatus', 'masterCount', 'latencyMs', 'error', 'problem', 'suggestedUrl', 'credentialsInClear']);
 });
 
 test('a blank password is refused when the test goes to another address or username', function (array $payload) {
@@ -373,8 +377,54 @@ test('a failed probe is a 200 with the reason and nothing else', function (Readi
             'masterCount' => null,
             'latencyMs' => null,
             'error' => $reason->value,
+            'problem' => null,
+            'suggestedUrl' => null,
+            'credentialsInClear' => false,
         ]);
 })->with(ReadingError::cases());
+
+test('a failed probe says what went wrong when the reader knows it', function () {
+    $this->reader->outcome = new HorizonReadFailed(ReadingError::NotHorizon, ReadingCause::Redirect, 302, 'https://staging.invoicer.example.com/login');
+
+    $this->actingAs($this->member)
+        ->postJson(($this->environmentUrl)($this->staging))
+        ->assertOk()
+        ->assertJsonPath('error', 'not_horizon')
+        ->assertJsonPath('problem', ['cause' => 'redirect', 'status' => 302, 'location' => 'https://staging.invoicer.example.com/login']);
+});
+
+test('an address pasted from a horizon page gets the dashboard address suggested', function (string $url, ReadingError $reason, ?string $suggested) {
+    $this->reader->outcome = new HorizonReadFailed($reason, ReadingCause::NotJson);
+
+    $this->actingAs($this->admin)
+        ->postJson($this->applicationUrl, ['horizonUrl' => $url])
+        ->assertOk()
+        ->assertJsonPath('suggestedUrl', $suggested);
+})->with([
+    'dashboard' => ['https://shop.example.com/horizon/dashboard', ReadingError::NotHorizon, 'https://shop.example.com/horizon'],
+    'a pending job list' => ['https://shop.example.com/horizon/jobs/pending', ReadingError::NotHorizon, 'https://shop.example.com/horizon'],
+    'a failed job' => ['https://shop.example.com/ops/horizon/failed/8a2e3d4c', ReadingError::NotHorizon, 'https://shop.example.com/ops/horizon'],
+    'an api call' => ['https://shop.example.com/horizon/api/stats', ReadingError::NotHorizon, 'https://shop.example.com/horizon'],
+    'the api root, which reads the same as the dashboard' => ['https://shop.example.com/horizon/api', ReadingError::NotHorizon, null],
+    'the dashboard itself' => ['https://shop.example.com/horizon', ReadingError::NotHorizon, null],
+    'a horizon moved to a route name' => ['https://shop.example.com/dashboard', ReadingError::NotHorizon, null],
+    'a path that only starts like a route' => ['https://shop.example.com/horizon/jobsite', ReadingError::NotHorizon, null],
+    'a failure that is not about the path' => ['https://shop.example.com/horizon/dashboard', ReadingError::Unauthorized, null],
+]);
+
+test('basic auth over plain http is flagged, whatever the outcome', function (string $url, ?string $username, HorizonProbe|Throwable $outcome, bool $flagged) {
+    $this->reader->outcome = $outcome;
+
+    $this->actingAs($this->admin)
+        ->postJson($this->applicationUrl, ['horizonUrl' => $url, 'basicAuthUser' => $username, 'basicAuthPassword' => $username === null ? null : 'typed-secret'])
+        ->assertOk()
+        ->assertJsonPath('credentialsInClear', $flagged);
+})->with([
+    'http with credentials' => ['http://shop.example.com/horizon', 'monitor', new HorizonProbe(status: 'running', masterCount: 1, latencyMs: 5), true],
+    'http with credentials, failing' => ['http://shop.example.com/horizon', 'monitor', new HorizonReadFailed(ReadingError::Unreachable), true],
+    'http without credentials' => ['http://shop.example.com/horizon', null, new HorizonProbe(status: 'running', masterCount: 1, latencyMs: 5), false],
+    'https with credentials' => ['https://shop.example.com/horizon', 'monitor', new HorizonProbe(status: 'running', masterCount: 1, latencyMs: 5), false],
+]);
 
 test('an unexpected reader failure reads as unreachable and reports nothing it carried', function () {
     Exceptions::fake();

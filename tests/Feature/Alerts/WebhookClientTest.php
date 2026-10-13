@@ -209,7 +209,7 @@ test('private networks are refused when the operator blocks them', function () {
         ->and(receivedRequests())->toBe([]);
 });
 
-test('the request is pinned to the checked address, without redirects or proxy', function () {
+test('the request is pinned to the checked address, without redirects, proxy or decompression', function () {
     config(['horizon-watch.webhook_timeout_seconds' => 5]);
     $resolver = new FakeResolver(['hooks.example.com' => ['203.0.113.10']]);
     $this->app->instance(Resolver::class, $resolver);
@@ -227,11 +227,14 @@ test('the request is pinned to the checked address, without redirects or proxy',
         ->and($sent[0]['curl'][CURLOPT_RESOLVE])->toBe(['hooks.example.com:443:203.0.113.10'])
         ->and($sent[0]['allow_redirects'])->toBeFalse()
         ->and($sent[0]['proxy'])->toBe(['no' => ['*']])
+        ->and($sent[0]['decode_content'])->toBeFalse()
         ->and($sent[0]['connect_timeout'])->toBe(5)
         ->and($sent[0]['timeout'])->toBe(5)
         ->and($resolver->asked)->toBe(['hooks.example.com']);
 
-    Http::assertSent(fn (Request $request) => $request->method() === 'POST' && $request->url() === 'https://hooks.example.com/services/tok');
+    Http::assertSent(fn (Request $request) => $request->method() === 'POST'
+        && $request->url() === 'https://hooks.example.com/services/tok'
+        && $request->header('Accept-Encoding') === ['identity']);
 });
 
 test('real curl reaches a name only through the address the guard pinned', function () {

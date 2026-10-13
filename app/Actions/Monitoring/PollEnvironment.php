@@ -4,6 +4,9 @@ namespace App\Actions\Monitoring;
 
 use App\Alerts\AlertEngine;
 use App\Alerts\EffectiveRules;
+use App\Alerts\RuleSet;
+use App\Data\Monitoring\ReadingProblemData;
+use App\Enums\AlertRuleMetric;
 use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
@@ -43,21 +46,50 @@ class PollEnvironment
         $capturedAt = CarbonImmutable::now();
 
         $target = HorizonTarget::fromEnvironment($environment);
+        $rules = $this->rules->forEnvironment($environment);
 
         try {
-            $reading = $this->reader->read($target);
+            $reading = $this->reader->read(
+                $target,
+                oldestPendingJobs: $rules->for(AlertRuleMetric::JobRuntime)->enabled,
+                knownRuntimes: $this->knownRuntimes($environment, $capturedAt),
+            );
         } catch (HorizonReadFailed $exception) {
-            return $this->storeFailure($environment, $capturedAt, $exception->reason);
+            return $this->storeFailure($environment, $capturedAt, $exception->reason, ReadingProblemData::fromFailure($exception));
         } catch (Throwable $exception) {
             SafeReport::of('The Horizon reader', $exception, class_basename(HorizonReadFailed::class));
 
-            return $this->storeFailure($environment, $capturedAt, ReadingError::Unreachable);
+            return $this->storeFailure($environment, $capturedAt, ReadingError::Unreachable, null);
         }
 
-        return $this->storeReading($environment, $capturedAt, $reading);
+        return $this->storeReading($environment, $capturedAt, $reading, $rules);
     }
 
-    private function storeReading(Environment $environment, CarbonImmutable $capturedAt, HorizonReading $reading): ?EnvironmentSnapshot
+    /**
+     * @return array<string, float|null>|null
+     */
+    private function knownRuntimes(Environment $environment, CarbonImmutable $capturedAt): ?array
+    {
+        $state = EnvironmentState::query()
+            ->where('environment_id', $environment->id)
+            ->first(['queues', 'runtimes_fetched_at']);
+
+        $fetchedAt = $state?->runtimes_fetched_at;
+
+        if ($state === null || $fetchedAt === null || $fetchedAt->lte($capturedAt->subSeconds(config()->integer('horizon-watch.horizon.runtime_refresh_seconds')))) {
+            return null;
+        }
+
+        $runtimes = [];
+
+        foreach ($state->queues as $queue) {
+            $runtimes[$queue['name']] = $queue['runtimeSeconds'];
+        }
+
+        return $runtimes;
+    }
+
+    private function storeReading(Environment $environment, CarbonImmutable $capturedAt, HorizonReading $reading, RuleSet $rules): ?EnvironmentSnapshot
     {
         $evaluated = $this->evaluator->evaluate($reading->failedJobs === null
             ? new HorizonReading(
@@ -69,17 +101,24 @@ class PollEnvironment
                 queueRuntimes: $reading->queueRuntimes,
                 latencyMs: $reading->latencyMs,
             )
-            : $reading, $this->rules->forEnvironment($environment), $capturedAt);
+            : $reading, $rules, $capturedAt);
+
+        $supervisors = $this->supervisorsByQueue($reading);
 
         $state = [
             'status' => $evaluated->status,
             'error' => null,
+            'error_detail' => null,
             'horizon_status' => HorizonStatus::tryFrom($reading->stats->status),
             'latency_ms' => $reading->latencyMs,
             'nodes' => array_map(fn (HorizonMaster $master) => $this->node($master, $capturedAt), $reading->masters),
-            'queues' => array_map(fn (HorizonQueueLoad $queue) => $this->queue($queue, $reading), $reading->workload),
+            'queues' => array_map(fn (HorizonQueueLoad $queue) => $this->queue($queue, $supervisors, $reading), $reading->workload),
             'pending_jobs' => $reading->pendingJobs === null ? [] : $this->reservedJobs($reading->pendingJobs),
         ];
+
+        if ($reading->runtimesFetched) {
+            $state['runtimes_fetched_at'] = $capturedAt;
+        }
 
         $sectionsOnInsert = ['status_since' => $capturedAt];
 
@@ -96,13 +135,14 @@ class PollEnvironment
             'failed_in_window' => $reading->stats->failedJobs,
             'failed_window_minutes' => $reading->stats->failedJobsPeriodMinutes,
             'failed_last_hour' => $evaluated->failedLastHour,
+            'failed_last_hour_capped' => $evaluated->failedLastHourCapped,
             'workers' => $reading->stats->processes,
             'node_count' => count($reading->masters),
             'latency_ms' => $reading->latencyMs,
         ], $state, $sectionsOnInsert);
     }
 
-    private function storeFailure(Environment $environment, CarbonImmutable $capturedAt, ReadingError $error): ?EnvironmentSnapshot
+    private function storeFailure(Environment $environment, CarbonImmutable $capturedAt, ReadingError $error, ?ReadingProblemData $problem): ?EnvironmentSnapshot
     {
         $evaluated = $this->evaluator->failed();
 
@@ -114,12 +154,14 @@ class PollEnvironment
             'failed_in_window' => 0,
             'failed_window_minutes' => $this->previousFailedWindow($environment),
             'failed_last_hour' => 0,
+            'failed_last_hour_capped' => false,
             'workers' => 0,
             'node_count' => 0,
             'latency_ms' => null,
         ], [
             'status' => $evaluated->status,
             'error' => $error,
+            'error_detail' => $problem?->toArray(),
             'latency_ms' => null,
             'pending_jobs' => [],
         ], [
@@ -281,13 +323,14 @@ class PollEnvironment
     }
 
     /**
+     * @param  array<string, string>  $supervisors
      * @return array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}
      */
-    private function queue(HorizonQueueLoad $queue, HorizonReading $reading): array
+    private function queue(HorizonQueueLoad $queue, array $supervisors, HorizonReading $reading): array
     {
         return [
             'name' => $queue->name,
-            'supervisor' => $this->supervisorOf($queue->name, $reading),
+            'supervisor' => $supervisors[$queue->name] ?? null,
             'workers' => $queue->processes,
             'pending' => $queue->length,
             'waitSeconds' => $queue->wait,
@@ -295,19 +338,24 @@ class PollEnvironment
         ];
     }
 
-    private function supervisorOf(string $queue, HorizonReading $reading): ?string
+    /**
+     * @return array<string, string>
+     */
+    private function supervisorsByQueue(HorizonReading $reading): array
     {
+        $supervisors = [];
+
         foreach ($reading->masters as $master) {
             foreach ($master->supervisors as $supervisor) {
                 foreach ($supervisor->processes as $key => $count) {
-                    if ($count > 0 && $this->queueName($key) === $queue) {
-                        return $supervisor->name;
+                    if ($count > 0) {
+                        $supervisors[$this->queueName($key)] ??= $supervisor->name;
                     }
                 }
             }
         }
 
-        return null;
+        return $supervisors;
     }
 
     private function queueName(string $key): string

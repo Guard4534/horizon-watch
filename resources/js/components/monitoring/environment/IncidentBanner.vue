@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { readingProblemLabel } from '@/components/monitoring/environment/readings';
 import { formatRule } from '@/lib/alertRules';
 import { formatElapsed, statusColor, statusIcon } from '@/lib/monitoring';
 
 const {
     status,
     readingError,
+    readingProblem = null,
     alert,
     hasEarlierReading,
     compact = false,
 } = defineProps<{
     status: Exclude<App.Enums.EnvironmentStatus, 'active'>;
     readingError: App.Enums.ReadingError | null;
+    readingProblem?: App.Data.Monitoring.ReadingProblemData | null;
     alert: App.Data.Monitoring.AlertData | null;
     hasEarlierReading: boolean;
     compact?: boolean;
@@ -86,6 +89,12 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
                     <template v-else>{{
                         $t('Horizon does not answer')
                     }}</template>
+                    <span
+                        v-if="readingProblem"
+                        class="[overflow-wrap:anywhere]"
+                    >
+                        · {{ readingProblemLabel(readingProblem) }}
+                    </span>
                     <template v-if="hasEarlierReading">
                         ·
                         {{

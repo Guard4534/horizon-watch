@@ -349,6 +349,6 @@ test('every metric has validation bounds and knows whether it measures a state',
     [AlertRuleMetric::QueuePending, 2147483647.0, false],
     [AlertRuleMetric::QueueMaxWait, 86400.0, false],
     [AlertRuleMetric::JobRuntime, 86400.0, false],
-    [AlertRuleMetric::JobsFailedPerHour, 49.0, false],
+    [AlertRuleMetric::JobsFailedPerHour, 199.0, false],
     [AlertRuleMetric::WorkersMissing, 1000.0, false],
 ]);

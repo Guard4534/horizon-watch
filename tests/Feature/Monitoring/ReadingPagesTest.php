@@ -137,6 +137,7 @@ test('a failed reading carries its reason, zero counters and the last known deta
         snapshot: ['error' => ReadingError::Unauthorized],
         state: [
             'error' => ReadingError::Unauthorized,
+            'error_detail' => ['cause' => 'http_status', 'status' => 403, 'location' => null],
             'horizon_status' => HorizonStatus::Paused,
             'nodes' => [
                 ['hostname' => 'worker-1.example.com', 'status' => 'running', 'workers' => 6, 'supervisors' => 2, 'queues' => 3, 'seenAt' => now()->subMinutes(7)->toIso8601String()],
@@ -148,6 +149,7 @@ test('a failed reading carries its reason, zero counters and the last known deta
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environment.status', 'unreachable')
             ->where('page.environment.readingError', 'unauthorized')
+            ->where('page.environment.readingProblem', ['cause' => 'http_status', 'status' => 403, 'location' => null])
             ->where('page.environment.horizonStatus', 'paused')
             ->where('page.environment.latencyMs', null)
             ->where('page.environment.pending', 0)
@@ -159,12 +161,27 @@ test('a failed reading carries its reason, zero counters and the last known deta
             ->where('page.openAlert.metric', 'endpoint.unreachable'));
 });
 
+test('a stored problem of an unknown cause is left out', function () {
+    Readings::record(
+        $this->environment,
+        EnvironmentStatus::Unreachable,
+        snapshot: ['error' => ReadingError::Unreachable],
+        state: ['error' => ReadingError::Unreachable, 'error_detail' => ['cause' => 'solar_flare']],
+    );
+
+    $this->get(readingEnvironmentUrl($this->environment))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.environment.readingError', 'unreachable')
+            ->where('page.environment.readingProblem', null));
+});
+
 test('an environment without readings says nothing yet', function () {
     $this->get(readingEnvironmentUrl($this->environment))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environment.status', null)
             ->where('page.environment.lastReadingAt', null)
             ->where('page.environment.readingError', null)
+            ->where('page.environment.readingProblem', null)
             ->where('page.environment.stale', false)
             ->where('page.environment.latencyMs', null)
             ->where('page.environment.horizonStatus', null)
