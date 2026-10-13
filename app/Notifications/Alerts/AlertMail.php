@@ -157,9 +157,14 @@ final class AlertMail
         return [
             ['label' => __('Environment'), 'value' => self::where($alert)],
             ['label' => __('Nodes'), 'value' => self::nodes($alert)],
-            ['label' => __('Rule'), 'value' => $alert->metric->value.' > '.self::withUnit($alert->threshold, $alert->unit)],
+            ['label' => __('Rule'), 'value' => self::rule($alert)],
             ['label' => __('Value'), 'value' => self::value($alert)],
         ];
+    }
+
+    public static function rule(Alert $alert): string
+    {
+        return self::ruleLabel($alert->metric).' '.$alert->metric->comparator().' '.self::threshold($alert->threshold, $alert->unit);
     }
 
     public static function where(Alert $alert): string
@@ -199,7 +204,26 @@ final class AlertMail
 
     public static function withUnit(float|int $value, string $unit): string
     {
-        return trim(self::number($value).' '.$unit);
+        $number = self::number($value);
+
+        return match ($unit) {
+            'min' => __(':minutes min', ['minutes' => $number]),
+            's' => __(':seconds s', ['seconds' => $number]),
+            'job' => trans_choice(':count job|:count jobs', $value, ['count' => $number]),
+            default => trim($number.' '.$unit),
+        };
+    }
+
+    public static function threshold(float|int $threshold, string $unit): string
+    {
+        $number = self::number($threshold);
+
+        return match ($unit) {
+            'min' => __(':minutes min', ['minutes' => $number]),
+            's' => $number.__('s'),
+            'job', '' => $number,
+            default => $number.' '.$unit,
+        };
     }
 
     public static function number(float|int $value): string

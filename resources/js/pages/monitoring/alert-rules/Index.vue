@@ -66,6 +66,7 @@ const nothingVisible = computed(
                 :new-webhook-secret="page.newWebhookSecret"
                 :repeat-choices="page.repeatChoices"
                 :max-recipients="page.maxRecipients"
+                :previous-secret-hours="page.previousSecretHours"
                 :timezones="page.timezones"
             />
         </div>

@@ -16,7 +16,14 @@ const WEBHOOK_EVENTS: Record<App.Enums.SentNotificationKind, string> = {
     test: 'test',
 };
 
-function errorLabel(error: App.Enums.DeliveryError): string {
+function errorLabel(
+    error: App.Enums.DeliveryError,
+    httpStatus: number | null,
+): string {
+    if (httpStatus !== null) {
+        return `HTTP ${httpStatus}`;
+    }
+
     switch (error) {
         case 'timeout':
             return trans('timeout');
@@ -32,9 +39,36 @@ function errorLabel(error: App.Enums.DeliveryError): string {
             return trans('unreachable');
         case 'mail':
             return trans('mail');
+        case 'mail_unreachable':
+            return trans('mail server unreachable');
+        case 'mail_authentication':
+            return trans('mail server refused the login');
+        case 'mail_rejected':
+            return trans('refused by the mail server');
         case 'secret_unreadable':
             return trans('signing secret unreadable, regenerate it');
+        case 'no_longer_due':
+            return trans('alert resolved, handled or muted first');
+        case 'opening_not_delivered':
+            return trans('its opening never reached this destination');
     }
+}
+
+function outcome(
+    notification: App.Data.Monitoring.SentNotificationData,
+): string | null {
+    if (notification.status === 'sent') {
+        return null;
+    }
+
+    const status =
+        notification.status === 'failed'
+            ? trans('not delivered')
+            : trans('not sent');
+
+    return notification.error
+        ? `${status} · ${errorLabel(notification.error, notification.httpStatus)}`
+        : status;
 }
 
 function prefix(
@@ -108,20 +142,17 @@ function text(
                         }}
                     </div>
                     <div
-                        v-if="
-                            notification.target ||
-                            notification.status === 'failed'
-                        "
+                        v-if="notification.target || outcome(notification)"
                         class="nc-t-2xs nc-tone-faint flex items-center gap-[6px]"
                     >
                         <span
-                            v-if="notification.status === 'failed'"
-                            class="nc-tone-down flex-none"
-                            >{{
-                                notification.error
-                                    ? `${$t('not delivered')} · ${errorLabel(notification.error)}`
-                                    : $t('not delivered')
-                            }}</span
+                            v-if="outcome(notification)"
+                            class="flex-none"
+                            :class="{
+                                'nc-tone-down':
+                                    notification.status === 'failed',
+                            }"
+                            >{{ outcome(notification) }}</span
                         >
                         <span
                             v-if="notification.target"

@@ -24,7 +24,7 @@ final readonly class NotificationDelivery
     }
 
     /**
-     * @param  list<array{email: string, locale: string, user: ?User}>  $recipients
+     * @param  list<array{email: string, locale: string, user: ?User, extra: bool}>  $recipients
      * @param  array{alertIds?: list<string>, environmentCount?: int}  $payload
      */
     public function queueEmails(Team $team, ?string $alertId, SentNotificationKind $kind, array $recipients, array $payload = []): int
@@ -38,6 +38,7 @@ final readonly class NotificationDelivery
                 $recipient['user'] === null ? Recipients::addressKey($recipient['email']) : null,
                 $recipient['locale'],
                 $payload,
+                $recipient['user'] !== null && $recipient['extra'],
             );
         }
 
@@ -63,7 +64,7 @@ final readonly class NotificationDelivery
      */
     public function dispatchWebhook(Team $team, ?string $alertId, SentNotificationKind $kind, array $payload, ?int $environmentCount = null): void
     {
-        SendAlertWebhook::dispatch($team->id, $alertId, $kind, (string) $payload['event'], $payload, $environmentCount);
+        SendAlertWebhook::dispatch($team->id, $alertId, $kind, $payload, $environmentCount);
     }
 
     public function hasWebhook(Team $team): bool

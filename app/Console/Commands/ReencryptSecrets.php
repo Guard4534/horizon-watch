@@ -22,7 +22,7 @@ class ReencryptSecrets extends Command
      */
     private const array SECRETS = [
         Environment::class => ['basic_auth_password'],
-        NotificationSetting::class => ['webhook_secret'],
+        NotificationSetting::class => ['webhook_secret', 'previous_webhook_secret'],
         User::class => ['two_factor_secret', 'two_factor_recovery_codes'],
     ];
 
@@ -30,6 +30,8 @@ class ReencryptSecrets extends Command
     {
         $reencrypted = 0;
         $unreadable = 0;
+
+        NotificationSetting::forgetExpiredPreviousSecrets();
 
         foreach (self::SECRETS as $class => $columns) {
             $model = new $class;

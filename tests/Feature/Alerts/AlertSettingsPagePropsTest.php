@@ -77,25 +77,28 @@ test('an environment scope carries the organization values it inherits, the orga
     'viewer' => TeamRole::Viewer,
 ]);
 
-test('the repeat choices and the recipient limit come from the configuration', function () {
+test('the repeat choices, the recipient limit and the secret overlap come from the configuration', function () {
     config([
         'horizon-watch.notifications.repeat_minutes' => [5, 45],
         'horizon-watch.notifications.max_recipients' => 3,
+        'horizon-watch.notifications.previous_webhook_secret_hours' => 6,
     ]);
 
     $this->actingAs(($this->memberOf)(TeamRole::Admin));
 
     expect(($this->pageOf)('organization'))
         ->repeatChoices->toBe([5, 45])
-        ->maxRecipients->toBe(3);
+        ->maxRecipients->toBe(3)
+        ->previousSecretHours->toBe(6);
 });
 
-test('the default configuration offers 15, 30 and 60 minutes and twenty recipients', function () {
+test('the default configuration offers 15, 30 and 60 minutes, twenty recipients and a day of overlap', function () {
     $this->actingAs(($this->memberOf)(TeamRole::Member));
 
     expect(($this->pageOf)('organization'))
         ->repeatChoices->toBe([15, 30, 60])
-        ->maxRecipients->toBe(20);
+        ->maxRecipients->toBe(20)
+        ->previousSecretHours->toBe(24);
 });
 
 test('the me page shows the quiet hours of the organization', function () {

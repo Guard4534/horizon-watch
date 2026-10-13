@@ -25,6 +25,11 @@ enum AlertRuleMetric: string
         };
     }
 
+    public function comparator(): string
+    {
+        return $this->isStateRule() || $this === self::WorkersMissing ? '≥' : '>';
+    }
+
     public function defaultThreshold(): float
     {
         return match ($this) {

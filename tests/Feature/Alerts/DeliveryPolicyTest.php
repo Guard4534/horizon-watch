@@ -128,7 +128,7 @@ test('a new critical alert is sent at once by email and webhook', function () {
         ->and($webhook->teamId)->toBe($this->team->id)
         ->and($webhook->alertId)->toBe($alert->id)
         ->and($webhook->kind)->toBe(SentNotificationKind::CriticalAlert)
-        ->and($webhook->event)->toBe('alert.opened')
+        ->and($webhook->payload['event'])->toBe('alert.opened')
         ->and($webhook->payload['alert']['id'])->toBe($alert->id)
         ->and($webhook->payload['alert']['rule'])->toBe('horizon.master_inactive')
         ->and($webhook->payload['alert']['severity'])->toBe('critical')
@@ -166,7 +166,7 @@ test('a webhook secret that no longer decrypts holds back neither the emails nor
         [$repeated->id, SentNotificationKind::CriticalRepeated],
         [$resolved->id, SentNotificationKind::Resolved],
     ])
-        ->and(queuedWebhooks()->pluck('event')->all())->toBe(['alert.opened', 'alert.repeated', 'alert.resolved']);
+        ->and(queuedWebhooks()->pluck('payload.event')->all())->toBe(['alert.opened', 'alert.repeated', 'alert.resolved']);
 });
 
 test('a new critical alert is sent even inside quiet hours', function () {
@@ -238,7 +238,7 @@ test('an alert without any target is not marked notified and is announced once a
     deliveryPolicy()->repeatDue(CarbonImmutable::now());
 
     expect(queuedWebhooks())->toHaveCount(1)
-        ->and(queuedWebhooks()->first()->event)->toBe('alert.opened')
+        ->and(queuedWebhooks()->first()->payload['event'])->toBe('alert.opened')
         ->and($alert->refresh()->notified)->toBeTrue();
 });
 
@@ -251,7 +251,7 @@ test('a critical alert raised by a later reading is announced by the scheduler',
 
     expect(queuedEmails()->pluck('kind')->all())->toBe([SentNotificationKind::CriticalAlert, SentNotificationKind::CriticalAlert])
         ->and(queuedWebhooks()->first()->kind)->toBe(SentNotificationKind::CriticalAlert)
-        ->and(queuedWebhooks()->first()->event)->toBe('alert.opened');
+        ->and(queuedWebhooks()->first()->payload['event'])->toBe('alert.opened');
 });
 
 test('a critical alert repeats at the organization cadence', function (?int $minutes, bool $hasSettings, ?int $repeatsAfter) {
@@ -295,7 +295,7 @@ test('a repetition says so and moves the clock', function () {
         ->and(queuedEmails()->pluck('kind')->all())->toBe([SentNotificationKind::CriticalRepeated, SentNotificationKind::CriticalRepeated])
         ->and(queuedWebhooks())->toHaveCount(1)
         ->and(queuedWebhooks()->first()->kind)->toBe(SentNotificationKind::CriticalRepeated)
-        ->and(queuedWebhooks()->first()->event)->toBe('alert.repeated')
+        ->and(queuedWebhooks()->first()->payload['event'])->toBe('alert.repeated')
         ->and($alert->refresh()->last_notified_at?->equalTo($this->now))->toBeTrue();
 });
 
@@ -315,7 +315,7 @@ test('handling, muting or resolving stops the repetition; an expired mute resume
 
     expect(queuedWebhooks())->toHaveCount(1)
         ->and(queuedWebhooks()->first()->payload['alert']['rule'])->toBe('endpoint.unreachable')
-        ->and(queuedWebhooks()->first()->event)->toBe('alert.repeated');
+        ->and(queuedWebhooks()->first()->payload['event'])->toBe('alert.repeated');
 });
 
 test('a repetition of a deleted organization or a paused collection is not sent', function () {
@@ -345,7 +345,7 @@ test('a notified critical alert announces its resolution', function () {
     ])
         ->and(queuedWebhooks())->toHaveCount(1)
         ->and(queuedWebhooks()->first()->kind)->toBe(SentNotificationKind::Resolved)
-        ->and(queuedWebhooks()->first()->event)->toBe('alert.resolved')
+        ->and(queuedWebhooks()->first()->payload['event'])->toBe('alert.resolved')
         ->and(queuedWebhooks()->first()->payload['alert']['resolved_at'])->toBe('2026-09-17T12:00:00Z');
 });
 
@@ -394,7 +394,7 @@ test('the digest sends each recipient the warnings they see and the webhook all 
     expect(queuedWebhooks())->toHaveCount(1)
         ->and($webhook->kind)->toBe(SentNotificationKind::WarningDigest)
         ->and($webhook->alertId)->toBeNull()
-        ->and($webhook->event)->toBe(WebhookPayload::DIGEST)
+        ->and($webhook->payload['event'])->toBe(WebhookPayload::DIGEST)
         ->and($webhook->environmentCount)->toBe(2)
         ->and(array_column($webhook->payload['alerts'], 'id'))->toBe([$production->id, $staging->id, $resolved->id])
         ->and(Alert::query()->whereNull('digested_at')->count())->toBe(0);
@@ -519,7 +519,7 @@ test('a resolution is announced once, whether the listener or the catch-up gets 
     deliveryPolicy()->onResolved($other->fresh());
 
     expect(queuedWebhooks())->toHaveCount(1)
-        ->and(queuedWebhooks()->first()->event)->toBe('alert.resolved')
+        ->and(queuedWebhooks()->first()->payload['event'])->toBe('alert.resolved')
         ->and(queuedWebhooks()->first()->alertId)->toBe($other->id)
         ->and(queuedEmails()->pluck('kind')->unique()->all())->toBe([SentNotificationKind::Resolved]);
 });
@@ -546,7 +546,7 @@ test('a lost resolution is caught up by the per-minute run within the configured
         ->and(queuedEmails()->count())->toBe($caughtUp ? 2 : 0);
 
     if ($caughtUp) {
-        expect(queuedWebhooks()->first()->event)->toBe('alert.resolved');
+        expect(queuedWebhooks()->first()->payload['event'])->toBe('alert.resolved');
     }
 })->with([
     'resolved five minutes ago' => [[], true],
@@ -590,13 +590,16 @@ test('an address that is both a restricted member and an extra address gets ever
     deliveryPolicy()->digestDue($this->now);
 
     $emails = queuedEmails()->keyBy('to');
+    $unrestricted = fn () => Queue::pushed(SendAlertEmail::class)->filter(fn (SendAlertEmail $job) => $job->unrestricted)->pluck('userId')->all();
 
-    expect($emails['dev@example.com']['payload']['alertIds'])->toBe([$production->id, $staging->id]);
+    expect($emails['dev@example.com']['payload']['alertIds'])->toBe([$production->id, $staging->id])
+        ->and($unrestricted())->toBe([$this->dev->id]);
 
     Queue::fake();
     deliveryPolicy()->onOpened(criticalAlert($this->production));
 
-    expect(queuedEmails()->pluck('to')->all())->toBe(['admin@example.com', 'dev@example.com', 'ops@example.com']);
+    expect(queuedEmails()->pluck('to')->all())->toBe(['admin@example.com', 'dev@example.com', 'ops@example.com'])
+        ->and($unrestricted())->toBe([$this->dev->id]);
 });
 
 test('the digest locks the warnings in environment and metric order, as a reading does, and still lists them by opening', function () {
@@ -726,7 +729,7 @@ test('one organization that fails does not stop the others', function () {
     deliveryPolicy()->digestDue($this->now);
 
     expect(queuedWebhooks()->pluck('teamId')->unique()->all())->toBe([$other->id])
-        ->and(queuedWebhooks()->pluck('event')->all())->toBe(['alert.repeated', 'alert.resolved', 'alert.digest']);
+        ->and(queuedWebhooks()->pluck('payload.event')->all())->toBe(['alert.repeated', 'alert.resolved', 'alert.digest']);
 
     $reported = collect(Exceptions::reported());
 
@@ -814,4 +817,45 @@ test('every scheduled sweep takes at most the configured number of alerts, oldes
     deliveryPolicy()->repeatDue($this->now);
 
     expect(queuedWebhooks()->pluck('alertId')->all())->toBe([$alerts[0]->id, $alerts[1]->id, $alerts[2]->id, $alerts[3]->id]);
+});
+
+function otherOrganization(): Environment
+{
+    $team = Team::factory()->create();
+    NotificationSetting::factory()->for($team)->withWebhook()->create();
+
+    return Environment::factory()->for(Application::factory()->for($team))->production()->create();
+}
+
+test('the per-run limit applies to each organization, so a busy one never holds back another', function () {
+    config(['horizon-watch.notifications.alerts_per_run' => 2]);
+    $overdue = ['notified' => true, 'last_notified_at' => $this->now->subHour()];
+
+    $busy = collect(range(1, 3))->map(fn (int $index) => criticalAlert($this->production, [
+        ...$overdue,
+        'metric' => AlertRuleMetric::cases()[$index],
+        'opened_at' => $this->now->subHours(5 - $index),
+    ]));
+    $other = criticalAlert(otherOrganization(), $overdue);
+
+    deliveryPolicy()->repeatDue($this->now);
+
+    expect(queuedWebhooks()->pluck('alertId')->all())->toBe([$busy[0]->id, $busy[1]->id, $other->id]);
+});
+
+test('a digest held by quiet hours never holds back the digest of another organization', function () {
+    config(['horizon-watch.notifications.alerts_per_run' => 1]);
+    $this->setting->update(['quiet_from' => '11:00', 'quiet_to' => '13:00', 'timezone' => 'UTC']);
+    $held = [
+        warningAlert($this->production, ['opened_at' => $this->now->subHours(3)]),
+        warningAlert($this->staging, ['opened_at' => $this->now->subHours(2)]),
+    ];
+    $environment = otherOrganization();
+    $other = warningAlert($environment);
+
+    deliveryPolicy()->digestDue($this->now);
+
+    expect(queuedWebhooks()->pluck('teamId')->all())->toBe([$environment->application->team_id])
+        ->and($other->refresh()->digested_at)->not->toBeNull()
+        ->and(collect($held)->map(fn (Alert $alert) => $alert->refresh()->digested_at)->filter()->all())->toBe([]);
 });

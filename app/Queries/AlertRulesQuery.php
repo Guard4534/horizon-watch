@@ -44,6 +44,7 @@ class AlertRulesQuery
             newWebhookSecret: $canManage ? $this->newWebhookSecret($team, $session) : null,
             repeatChoices: array_values(array_map(intval(...), config()->array('horizon-watch.notifications.repeat_minutes'))),
             maxRecipients: config()->integer('horizon-watch.notifications.max_recipients'),
+            previousSecretHours: config()->integer('horizon-watch.notifications.previous_webhook_secret_hours'),
             timezones: $canManage ? DateTimeZone::listIdentifiers() : [],
         );
     }

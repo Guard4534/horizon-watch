@@ -332,7 +332,7 @@ test('mute durations know their length', function () {
         ->and(MuteDuration::OneDay->minutes())->toBe(1440)
         ->and(MuteDuration::UntilResolved->minutes())->toBeNull()
         ->and(array_map(fn (MuteDuration $duration) => $duration->value, MuteDuration::cases()))->toBe(['1h', '4h', '24h', 'resolved'])
-        ->and(array_map(fn (DeliveryStatus $status) => $status->value, DeliveryStatus::cases()))->toBe(['sent', 'failed'])
+        ->and(array_map(fn (DeliveryStatus $status) => $status->value, DeliveryStatus::cases()))->toBe(['sent', 'failed', 'skipped'])
         ->and(SentNotificationKind::Test->value)->toBe('test');
 });
 

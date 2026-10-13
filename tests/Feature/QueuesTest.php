@@ -41,7 +41,7 @@ test('alert deliveries go on the notifications queue', function () {
     $team = Team::factory()->create();
 
     SendAlertEmail::dispatch($team->id, null, SentNotificationKind::Test, null, 'extra', 'en');
-    SendAlertWebhook::dispatch($team->id, null, SentNotificationKind::Test, 'test', []);
+    SendAlertWebhook::dispatch($team->id, null, SentNotificationKind::Test, []);
 
     Queue::assertPushedOn('notifications', SendAlertEmail::class);
     Queue::assertPushedOn('notifications', SendAlertWebhook::class);

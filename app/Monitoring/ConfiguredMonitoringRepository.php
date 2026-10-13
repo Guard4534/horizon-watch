@@ -385,6 +385,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
                 kind: $notification->kind,
                 status: $notification->status,
                 error: $notification->error,
+                httpStatus: $notification->http_status,
                 subject: match (true) {
                     $notification->alert !== null => $notification->alert->application_name.' · '.$notification->alert->environment_name,
                     $notification->kind === SentNotificationKind::WarningDigest => (string) ($notification->environment_count ?? 0),

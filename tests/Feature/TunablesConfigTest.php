@@ -155,7 +155,7 @@ test('notifications: defaults and delivery retries follow the configuration', fu
     ]);
 
     $setting = new NotificationSetting;
-    $job = new SendAlertWebhook($this->team->id, null, SentNotificationKind::Test, 'test', []);
+    $job = new SendAlertWebhook($this->team->id, null, SentNotificationKind::Test, []);
 
     expect($setting->timezone)->toBe('America/New_York')
         ->and($setting->repeat_minutes)->toBe(15)

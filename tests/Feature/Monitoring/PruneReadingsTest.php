@@ -7,6 +7,7 @@ use App\Models\AlertNotification;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
+use App\Models\NotificationSetting;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
@@ -192,4 +193,25 @@ test('an open alert left without its environment is resolved, and the others sta
     expect($orphan->fresh()->resolved_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
         ->and($open->fresh()->resolved_at)->toBeNull()
         ->and($resolved->fresh()->resolved_at->toDateTimeString())->toBe('2026-09-16 10:00:00');
+});
+
+test('a replaced webhook secret is forgotten once its overlap has ended', function () {
+    $expired = NotificationSetting::factory()->withWebhook()->create([
+        'previous_webhook_secret' => 'whsec-expired',
+        'previous_webhook_secret_expires_at' => now()->subMinute(),
+    ]);
+    $current = NotificationSetting::factory()->withWebhook()->create([
+        'previous_webhook_secret' => 'whsec-current',
+        'previous_webhook_secret_expires_at' => now()->addHour(),
+    ]);
+
+    $this->artisan('monitoring:prune')->expectsOutput('Forgot 1 replaced webhook secret.')->assertSuccessful();
+
+    expect($expired->fresh())
+        ->previous_webhook_secret->toBeNull()
+        ->previous_webhook_secret_expires_at->toBeNull()
+        ->webhook_secret->not->toBeNull()
+        ->and($current->fresh())
+        ->previous_webhook_secret->toBe('whsec-current')
+        ->previous_webhook_secret_expires_at->not->toBeNull();
 });

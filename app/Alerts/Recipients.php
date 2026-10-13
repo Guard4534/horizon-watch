@@ -27,7 +27,7 @@ final class Recipients
 
     /**
      * @param  list<array{email: string, locale: string, user: ?User, environmentIds: list<int>|null, extra: bool}>  $audience
-     * @return list<array{email: string, locale: string, user: ?User}>
+     * @return list<array{email: string, locale: string, user: ?User, extra: bool}>
      */
     public function forAlertIn(Alert $alert, array $audience): array
     {
@@ -67,7 +67,7 @@ final class Recipients
     }
 
     /**
-     * @return list<array{email: string, locale: string, user: ?User}>
+     * @return list<array{email: string, locale: string, user: ?User, extra: bool}>
      */
     public function forTest(Team $team, User $requestedBy): array
     {
@@ -104,7 +104,7 @@ final class Recipients
     }
 
     /**
-     * @return array{email: string, locale: string, user: ?User, environmentIds: null}
+     * @return array{email: string, locale: string, user: ?User, environmentIds: null, extra: false}
      */
     private function member(User $user): array
     {
@@ -113,6 +113,7 @@ final class Recipients
             'locale' => $user->preferredLocale() ?? $this->defaultLocale(),
             'user' => $user,
             'environmentIds' => null,
+            'extra' => false,
         ];
     }
 
@@ -180,8 +181,8 @@ final class Recipients
     }
 
     /**
-     * @param  list<array{email: string, locale: string, user: ?User}>  $recipients
-     * @return list<array{email: string, locale: string, user: ?User}>
+     * @param  list<array{email: string, locale: string, user: ?User, extra: bool}>  $recipients
+     * @return list<array{email: string, locale: string, user: ?User, extra: bool}>
      */
     private function withoutScope(array $recipients): array
     {
@@ -189,6 +190,7 @@ final class Recipients
             'email' => $recipient['email'],
             'locale' => $recipient['locale'],
             'user' => $recipient['user'],
+            'extra' => $recipient['extra'],
         ], $recipients);
     }
 

@@ -88,10 +88,9 @@ final readonly class DeliveryPolicy
                     ->whereRaw("date_trunc('minute', alerts.last_notified_at) <= ?::timestamptz - make_interval(mins => ?)", [$minute, NotificationSetting::defaultRepeatMinutes()]))
                 ->orWhere(fn (Builder $configured) => $configured
                     ->whereNotNull('notification_settings.repeat_minutes')
-                    ->whereRaw("date_trunc('minute', alerts.last_notified_at) <= ?::timestamptz - make_interval(mins => notification_settings.repeat_minutes)", [$minute])))
-            ->get();
+                    ->whereRaw("date_trunc('minute', alerts.last_notified_at) <= ?::timestamptz - make_interval(mins => notification_settings.repeat_minutes)", [$minute])));
 
-        $this->eachByTeam($alerts, 'repetitions', function (Alert $alert, array $reach) use ($now): void {
+        $this->eachByTeam($this->firstPerTeam($alerts), 'repetitions', function (Alert $alert, array $reach) use ($now): void {
             $this->announce($alert, $now, $alert->last_notified_at, $reach);
         });
     }
@@ -108,10 +107,9 @@ final readonly class DeliveryPolicy
             ->where('alerts.muted_indefinitely', false)
             ->where(fn (Builder $unmuted) => $unmuted
                 ->whereNull('alerts.muted_until')
-                ->orWhereColumn('alerts.muted_until', '<=', 'alerts.resolved_at'))
-            ->get();
+                ->orWhereColumn('alerts.muted_until', '<=', 'alerts.resolved_at'));
 
-        $this->eachByTeam($alerts, 'resolutions', function (Alert $alert, array $reach) use ($now): void {
+        $this->eachByTeam($this->firstPerTeam($alerts), 'resolutions', function (Alert $alert, array $reach) use ($now): void {
             $this->announceResolution($alert, $now, $reach);
         });
     }
@@ -120,9 +118,9 @@ final readonly class DeliveryPolicy
     {
         $now = $now->utc();
 
-        $alerts = $this->deliverable($now)
-            ->where(fn (Builder $pending) => $this->pendingDigest($pending, $now))
-            ->get();
+        $alerts = $this->firstPerTeam($this->deliverable($now)
+            ->whereNotIn('alerts.team_id', $this->heldDigests($now))
+            ->where(fn (Builder $pending) => $this->pendingDigest($pending, $now)));
 
         foreach ($alerts->groupBy('team_id') as $teamId => $teamAlerts) {
             try {
@@ -353,17 +351,47 @@ final readonly class DeliveryPolicy
     private function deliverable(CarbonImmutable $now): Builder
     {
         return Alert::query()
-            ->select('alerts.*')
             ->join('environments', 'environments.id', '=', 'alerts.environment_id')
             ->join('teams', 'teams.id', '=', 'alerts.team_id')
             ->leftJoin('notification_settings', 'notification_settings.team_id', '=', 'alerts.team_id')
             ->whereNull('teams.deleted_at')
             ->where('environments.polling_enabled', true)
-            ->where('alerts.opened_at', '<=', $now)
+            ->where('alerts.opened_at', '<=', $now);
+    }
+
+    /**
+     * @param  Builder<Alert>  $candidates
+     * @return Collection<int, Alert>
+     */
+    private function firstPerTeam(Builder $candidates): Collection
+    {
+        $ranked = $candidates
+            ->select('alerts.id')
+            ->selectRaw('row_number() over (partition by alerts.team_id order by alerts.opened_at, alerts.id) as team_position')
+            ->toBase();
+
+        return Alert::query()
+            ->whereIn('id', DB::query()
+                ->fromSub($ranked, 'ranked')
+                ->where('team_position', '<=', config()->integer('horizon-watch.notifications.alerts_per_run'))
+                ->select('id'))
             ->with(['team', 'environment.state'])
-            ->orderBy('alerts.opened_at')
-            ->orderBy('alerts.id')
-            ->limit(config()->integer('horizon-watch.notifications.alerts_per_run'));
+            ->orderBy('opened_at')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function heldDigests(CarbonImmutable $now): array
+    {
+        return array_values(NotificationSetting::query()
+            ->whereNotNull('quiet_from')
+            ->whereNotNull('quiet_to')
+            ->get()
+            ->filter(fn (NotificationSetting $setting) => QuietHours::holdsDigest($setting, $now))
+            ->modelKeys());
     }
 
     private function watched(Alert $alert): bool

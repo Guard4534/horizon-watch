@@ -168,17 +168,37 @@ test('the save response itself carries neither the secret nor the address', func
         ->and(json_encode(session()->all()))->not->toContain($secret);
 });
 
-test('saving again with an address keeps the secret and shows nothing new', function () {
+test('saving again with an address on the same host keeps the secret and shows nothing new', function () {
     $this->actingAs($this->admin);
 
     ($this->save)();
     ($this->page)();
     $secret = NotificationSetting::query()->sole()->webhook_secret;
 
-    ($this->save)(['webhookUrl' => 'https://hooks.example.net/other']);
+    ($this->save)(['webhookUrl' => 'https://HOOKS.example.com/other']);
 
     expect(NotificationSetting::query()->sole()->webhook_secret)->toBe($secret);
     ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', null));
+});
+
+test('moving the address to another host makes a new secret, shown once, and forgets the previous one', function () {
+    $this->actingAs($this->admin);
+
+    ($this->save)();
+    ($this->page)();
+    $this->post(route('alert-settings.regenerate-secret', ['current_team' => $this->team->slug]));
+    ($this->page)();
+    $old = NotificationSetting::query()->sole()->webhook_secret;
+
+    ($this->save)(['webhookUrl' => 'https://hooks.example.net/other'])->assertSessionHasNoErrors();
+
+    $settings = NotificationSetting::query()->sole();
+
+    expect($settings->webhook_secret)->not->toBe($old)->toHaveLength(40)
+        ->and($settings->previous_webhook_secret)->toBeNull()
+        ->and($settings->previous_webhook_secret_expires_at)->toBeNull();
+
+    ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', $settings->webhook_secret));
 });
 
 test('removing the address removes the secret', function (?string $removed) {
@@ -199,7 +219,8 @@ test('removing the address removes the secret', function (?string $removed) {
         ->where('page.newWebhookSecret', null));
 })->with([null, '', '   ']);
 
-test('regenerating makes a new secret, shown once', function () {
+test('regenerating makes a new secret, shown once, and keeps the replaced one for a day', function () {
+    $this->freezeSecond();
     $this->actingAs($this->admin);
 
     ($this->save)();
@@ -210,8 +231,14 @@ test('regenerating makes a new secret, shown once', function () {
         ->assertRedirect()
         ->assertInertiaFlash('toast.message', 'New webhook secret generated.');
 
-    $new = NotificationSetting::query()->sole()->webhook_secret;
-    expect($new)->not->toBe($old)->toHaveLength(40);
+    $settings = NotificationSetting::query()->sole();
+    $new = $settings->webhook_secret;
+
+    expect($new)->not->toBe($old)->toHaveLength(40)
+        ->and($settings->previous_webhook_secret)->toBe($old)
+        ->and($settings->getRawOriginal('previous_webhook_secret'))->not->toContain($old)
+        ->and($settings->previous_webhook_secret_expires_at?->equalTo(now()->addHours(24)))->toBeTrue()
+        ->and($settings->toArray())->not->toHaveKey('previous_webhook_secret');
 
     ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', $new));
     ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', null));
@@ -238,9 +265,12 @@ test('a secret that no longer decrypts survives a save and is replaced by regene
         ->assertSessionHasNoErrors()
         ->assertRedirect();
 
-    $secret = NotificationSetting::query()->sole()->webhook_secret;
+    $settings = NotificationSetting::query()->sole();
+    $secret = $settings->webhook_secret;
 
-    expect($secret)->toHaveLength(40);
+    expect($secret)->toHaveLength(40)
+        ->and($settings->previous_webhook_secret)->toBeNull()
+        ->and($settings->previous_webhook_secret_expires_at)->toBeNull();
     ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', $secret));
 });
 
@@ -485,7 +515,7 @@ test('a first save that loses the race for the row updates it instead of failing
         if (! $raced && str_starts_with($sql, 'insert into "notification_settings"')) {
             $raced = true;
             NotificationSetting::factory()->for($this->team)->create([
-                'webhook_url' => $competitorHasAddress ? 'https://hooks.example.org/first' : null,
+                'webhook_url' => $competitorHasAddress ? 'https://hooks.example.com/first' : null,
                 'webhook_secret' => $competitorHasAddress ? str_repeat('s', 40) : null,
             ]);
         }

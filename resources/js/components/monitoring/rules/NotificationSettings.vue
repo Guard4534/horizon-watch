@@ -16,6 +16,7 @@ const {
     newWebhookSecret,
     repeatChoices,
     maxRecipients,
+    previousSecretHours,
     timezones,
 } = defineProps<{
     summary: App.Data.Pages.NotificationSummaryData;
@@ -23,6 +24,7 @@ const {
     newWebhookSecret: string | null;
     repeatChoices: number[];
     maxRecipients: number;
+    previousSecretHours: number;
     timezones: string[];
 }>();
 
@@ -135,6 +137,21 @@ function sendTest(channel: App.Enums.NotificationChannel): void {
 const webhookSaved = computed(
     () => settings !== null && (settings.webhookUrl ?? '') !== '',
 );
+
+function hostOf(url: string): string {
+    try {
+        return new URL(url).hostname.toLowerCase();
+    } catch {
+        return '';
+    }
+}
+
+const movesHost = computed(
+    () =>
+        webhookSaved.value &&
+        form.webhookUrl.trim() !== '' &&
+        hostOf(form.webhookUrl.trim()) !== hostOf(settings?.webhookUrl ?? ''),
+);
 </script>
 
 <template>
@@ -192,6 +209,17 @@ const webhookSaved = computed(
                     </div>
                     <div class="field-hint">
                         {{ $t('JSON POST with severity, rule and metrics') }}
+                    </div>
+                    <div
+                        v-if="movesHost"
+                        class="field-hint"
+                        style="color: var(--st-warn)"
+                    >
+                        {{
+                            $t(
+                                'Another host gets a new signing secret when you save.',
+                            )
+                        }}
                     </div>
                 </div>
 
@@ -308,6 +336,7 @@ const webhookSaved = computed(
                 <WebhookSecret
                     :secret-set="settings.webhookSecretSet"
                     :new-secret="newWebhookSecret"
+                    :previous-secret-hours="previousSecretHours"
                 />
                 <div class="signature">
                     <div class="nc-tone-muted">

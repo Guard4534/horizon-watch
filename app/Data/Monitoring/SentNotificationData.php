@@ -15,6 +15,7 @@ class SentNotificationData extends Data
         public SentNotificationKind $kind,
         public DeliveryStatus $status,
         public ?DeliveryError $error,
+        public ?int $httpStatus,
         public string $subject,
         public ?string $target,
         public int $minutesAgo,

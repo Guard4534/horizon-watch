@@ -156,7 +156,7 @@ the environment of the containers. Everything has a default except the mail serv
 
 Readings and resolved alerts are pruned once a day. The newest reading of each environment is
 never pruned, so an environment paused for longer than the retention still shows its last
-numbers.
+numbers. The same daily run forgets replaced webhook secrets whose overlap has ended.
 
 `TRUSTED_PROXIES` decides which addresses may tell the panel the client's address and scheme
 (`X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Port`). The default trusts loopback
@@ -201,10 +201,19 @@ minutes, your choice) and are sent again when they resolve. Warnings are collect
 digest every 15 minutes. Each organization has its own recipients, its own quiet settings and
 its own webhook.
 
+A resolution goes only to the addresses, and to the webhook host, that received the alert
+while it was open. An alert that resolves before its notice goes out is not announced at all:
+the panel lists that notice, and its resolution, as not sent.
+
 Email goes out only through the SMTP server you configure. Until `MAIL_HOST` is set, every
 email — invitations and alerts — fails: the panel lists alert emails as not delivered, and
 invitations stay in the failed jobs of the queue for 7 days. There is deliberately no fallback
 that writes emails to the log, because the log would then hold recipients and links.
+
+An alert email that does not go out is listed with the reason: _mail server unreachable_
+(connection, TLS or timeout; tried three times), _mail server refused the login_ or _refused by
+the mail server_ (a permanent 5xx answer; both logged at once, without retrying). The worker
+log names the exception class behind each failure, never the address.
 
 ### Webhook
 
@@ -215,12 +224,17 @@ panel `POST`s JSON with these headers:
 - `X-Horizon-Watch-Timestamp`: the Unix time of the send
 - `X-Horizon-Watch-Signature`: `sha256=` followed by the hex HMAC-SHA256 of
   `<timestamp>.<raw body>`, keyed with the organization's webhook secret
+- `X-Horizon-Watch-Previous-Signature`: the same, keyed with the secret it replaced, for 24
+  hours after the secret is regenerated
 
-The secret is shown once, when the first URL is saved or when it is regenerated (serve the
-panel over HTTPS, see [Install](#install)). Put any token in the URL path: query strings and
-credentials in the URL are refused. The receiver has 5 seconds to answer with a 2xx;
-redirects are not followed, the response body is ignored, and a failed delivery is tried
-three times (after 10 and 60 seconds) before it is logged as failed.
+The secret is shown once: when the first URL is saved, when the URL moves to another host,
+and when it is regenerated (serve the panel over HTTPS, see [Install](#install)). Put any
+token in the URL path: query strings and credentials in the URL are refused. The receiver
+has 5 seconds to answer with a 2xx; redirects are not followed and the response body is
+ignored. A timeout, an unreachable receiver, a 5xx, a 408 or a 429 is tried three times
+(after 10 and 60 seconds, or later when a 429 asks so with `Retry-After`, up to 5 minutes)
+before it is logged as failed; a redirect or any other 4xx is logged as failed at once, with
+its status.
 
 ```json
 {
@@ -254,15 +268,18 @@ its slug, so the links in alerts already sent keep working.
 while `sent_at` is the time of each attempt. A receiver that answered too slowly may get the
 same delivery twice: deduplicate on `delivery_id`.
 
-Verify the signature before trusting the body, and reject old timestamps:
+Verify the signature before trusting the body, and reject old timestamps. Accept either
+signature header, so that after a regeneration the receiver can move to the new secret at
+any time within the 24 hours:
 
 ```php
 $body = file_get_contents('php://input');
 $timestamp = (int) ($_SERVER['HTTP_X_HORIZON_WATCH_TIMESTAMP'] ?? 0);
 $expected = 'sha256='.hash_hmac('sha256', $timestamp.'.'.$body, getenv('HORIZON_WATCH_WEBHOOK_SECRET'));
+$signed = hash_equals($expected, $_SERVER['HTTP_X_HORIZON_WATCH_SIGNATURE'] ?? '')
+    || hash_equals($expected, $_SERVER['HTTP_X_HORIZON_WATCH_PREVIOUS_SIGNATURE'] ?? '');
 
-if (abs(time() - $timestamp) > 300
-    || ! hash_equals($expected, $_SERVER['HTTP_X_HORIZON_WATCH_SIGNATURE'] ?? '')) {
+if (abs(time() - $timestamp) > 300 || ! $signed) {
     http_response_code(401);
     exit;
 }
@@ -371,7 +388,9 @@ the old key from `APP_PREVIOUS_KEYS` and restart.
 ## Troubleshooting
 
 **Every alert email is listed as not delivered, and invitations never arrive.** `MAIL_HOST`
-is empty. Set the SMTP settings and restart the stack; there is no log fallback by design.
+is empty, or the server refuses the panel (_mail server refused the login_: check
+`MAIL_USERNAME` and `MAIL_PASSWORD`). Set the SMTP settings and restart the stack; there is no
+log fallback by design.
 
 **`/setup` keeps appearing.** No user exists yet, so every route redirects there. If you have
 already created the administrator and still land on `/setup`, the panel is talking to an

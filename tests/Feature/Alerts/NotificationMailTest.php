@@ -70,8 +70,9 @@ test('a critical alert email carries the subject, the detail rows and the panel 
         ->and($html)->toContain('4,312 jobs pending')
         ->and($html)->toContain('Detected on 2026-09-17 14:02 (Europe/Rome)')
         ->and($html)->toContain('queue-01, queue-02')
-        ->and($html)->toContain('queue.pending &gt; 2,000 job')
-        ->and($html)->toContain('4,312 job')
+        ->and($html)->toContain('Pending jobs &gt; 2,000</td>')
+        ->and($html)->toContain('4,312 jobs</td>')
+        ->and($html)->not->toContain('queue.pending')
         ->and($html)->toContain('Shop &lt;b&gt;&amp;&lt;/b&gt; · production')
         ->and($html)->not->toContain('<b>&</b>')
         ->and($html)->toContain('href="'.url('/acme/environments/'.$this->environment->slug).'"')
@@ -121,6 +122,21 @@ test('every rule has its own headline and detail', function (AlertRuleMetric $me
     'failed' => [AlertRuleMetric::JobsFailedPerHour, 31, ['failed' => 31], '31 jobs failed in the last hour', null],
     'failed past the jobs that were read' => [AlertRuleMetric::JobsFailedPerHour, 200, ['failed' => 200, 'atLeast' => true], 'at least 200 jobs failed in the last hour', null],
     'workers' => [AlertRuleMetric::WorkersMissing, 5, ['queues' => ['default', 'emails']], '5 queues with waiting jobs and no worker', 'Queues: default, emails'],
+]);
+
+test('the rule row names the rule, compares the way the rule fires and translates the unit', function (AlertRuleMetric $metric, float $threshold, float $value, string $english, string $italian) {
+    $this->alert->update(['metric' => $metric, 'threshold' => $threshold, 'value' => $value, 'detail' => [], 'unit' => $metric->unit()]);
+    $notification = new AlertNotification($this->alert);
+
+    expect(mailHtml($notification))->toContain($english)
+        ->and(mailHtml($notification, 'it'))->toContain($italian);
+})->with([
+    'inactive' => [AlertRuleMetric::HorizonMasterInactive, 5, 14, 'Horizon inactive ≥ 5 min</td>', 'Horizon inattivo ≥ 5 min</td>'],
+    'workers' => [AlertRuleMetric::WorkersMissing, 4, 4, 'Missing workers ≥ 4</td>', 'Worker mancanti ≥ 4</td>'],
+    'max wait' => [AlertRuleMetric::QueueMaxWait, 60, 95, 'Max wait &gt; 60s</td>', 'Max wait &gt; 60s</td>'],
+    'pending' => [AlertRuleMetric::QueuePending, 2000, 2345, '2,345 jobs</td>', 'Job pending &gt; 2.000</td>'],
+    'one failed job' => [AlertRuleMetric::JobsFailedPerHour, 1, 1, '1 job</td>', '1 job</td>'],
+    'runtime' => [AlertRuleMetric::JobRuntime, 120, 300, '300 s</td>', '300 s</td>'],
 ]);
 
 test('a state rule headline reads its duration in minutes, hours and days', function (AlertRuleMetric $metric, float $minutes, string $english, string $italian) {
@@ -187,7 +203,7 @@ test('the digest lists open and resolved warnings and links the wall', function 
         ->and($notification->environmentCount())->toBe(2)
         ->and($html)->toContain('Warnings: 3 · Environments: 2')
         ->and($html)->toContain('Max wait · 75 s')
-        ->and($html)->toContain('Pending jobs · 2,100 job')
+        ->and($html)->toContain('Pending jobs · 2,100 jobs')
         ->and(substr_count($html, 'Still open'))->toBe(2)
         ->and($html)->toContain('Resolved')
         ->and($html)->toContain('href="'.url('/acme/wall').'"');
@@ -197,9 +213,9 @@ test('a failed-jobs count cut at the jobs read is a lower bound in the value row
     $this->alert->update(['metric' => AlertRuleMetric::JobsFailedPerHour, 'threshold' => 150, 'value' => 200, 'unit' => 'job', 'detail' => ['failed' => 200, 'atLeast' => true]]);
     $digest = new WarningDigestNotification($this->team, collect([$this->alert]));
 
-    expect(mailHtml(new AlertNotification($this->alert)))->toContain('at least 200 job</td>')
+    expect(mailHtml(new AlertNotification($this->alert)))->toContain('at least 200 jobs</td>')
         ->and(mailHtml(new AlertNotification($this->alert), 'it'))->toContain('almeno 200 job</td>')
-        ->and(mailHtml($digest))->toContain('Failed jobs / hour · at least 200 job')
+        ->and(mailHtml($digest))->toContain('Failed jobs / hour · at least 200 jobs')
         ->and(mailHtml($digest, 'it'))->toContain('almeno 200 job');
 });
 

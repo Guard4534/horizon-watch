@@ -2,7 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Alerts\DeliveryPolicy;
 use App\Alerts\Payloads\WebhookPayload;
 use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
@@ -25,7 +24,6 @@ class SendAlertWebhook extends DeliverAlert
         int $teamId,
         ?string $alertId,
         SentNotificationKind $kind,
-        public readonly string $event,
         public readonly array $payload,
         public readonly ?int $environmentCount = null,
     ) {
@@ -34,9 +32,15 @@ class SendAlertWebhook extends DeliverAlert
 
     public function handle(WebhookClient $client): void
     {
-        $setting = $this->recorded() || ! $this->stillDue() ? null : $this->setting();
+        $setting = $this->recorded() ? null : $this->setting();
 
         if ($setting === null) {
+            return;
+        }
+
+        $host = self::host((string) $setting->webhook_url);
+
+        if ($this->alertId !== null && ! $this->alertStillDue($host)) {
             return;
         }
 
@@ -53,10 +57,20 @@ class SendAlertWebhook extends DeliverAlert
                 (string) $setting->webhook_url,
                 $secret,
                 WebhookPayload::stamped($this->payload, CarbonImmutable::now(), $this->deliveryId),
+                $this->previousSecret($setting),
             );
         } catch (WebhookFailed $exception) {
-            if ($exception->reason === DeliveryError::Blocked) {
+            if ($exception->permanent()) {
                 $this->fail($exception);
+
+                return;
+            }
+
+            if ($exception->retryAfter !== null && $this->attempts() < $this->tries) {
+                $this->release(min(
+                    max($exception->retryAfter, $this->backoff[min($this->attempts(), count($this->backoff)) - 1] ?? 0),
+                    config()->integer('horizon-watch.notifications.retry_after_max_seconds'),
+                ));
 
                 return;
             }
@@ -64,7 +78,7 @@ class SendAlertWebhook extends DeliverAlert
             throw $exception;
         }
 
-        $this->log(DeliveryStatus::Sent, null, self::host((string) $setting->webhook_url), $this->environmentCount);
+        $this->log(DeliveryStatus::Sent, null, $host, $this->environmentCount);
     }
 
     protected function channel(): NotificationChannel
@@ -88,25 +102,21 @@ class SendAlertWebhook extends DeliverAlert
         };
     }
 
+    protected function httpStatusOf(?Throwable $exception): ?int
+    {
+        return $exception instanceof WebhookFailed ? $exception->status : null;
+    }
+
     protected function loggedEnvironmentCount(): ?int
     {
         return $this->environmentCount;
     }
 
-    private function stillDue(): bool
+    private function alertStillDue(string $host): bool
     {
-        if ($this->alertId === null) {
-            return true;
-        }
-
         $alert = Alert::query()->where('team_id', $this->teamId)->find($this->alertId);
 
-        return $alert !== null && DeliveryPolicy::stillDue(
-            $alert,
-            $this->event === WebhookPayload::RESOLVED,
-            $this->event === WebhookPayload::REPEATED,
-            CarbonImmutable::now(),
-        );
+        return $alert !== null && $this->stillDueTo($alert, $host);
     }
 
     private function setting(): ?NotificationSetting
@@ -116,6 +126,21 @@ class SendAlertWebhook extends DeliverAlert
         return $setting !== null && $setting->team()->exists() && filled($setting->webhook_url) && $setting->getRawOriginal('webhook_secret') !== null
             ? $setting
             : null;
+    }
+
+    private function previousSecret(NotificationSetting $setting): ?string
+    {
+        if ($setting->previous_webhook_secret_expires_at?->isFuture() !== true) {
+            return null;
+        }
+
+        try {
+            $secret = $setting->getAttribute('previous_webhook_secret');
+        } catch (DecryptException) {
+            return null;
+        }
+
+        return is_string($secret) ? $secret : null;
     }
 
     private static function host(string $url): string

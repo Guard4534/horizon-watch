@@ -70,6 +70,8 @@ return [
         'delivery_tries' => 3,
         'delivery_backoff_seconds' => [10, 60],
         'delivery_timeout_seconds' => 30,
+        'retry_after_max_seconds' => 300,
+        'previous_webhook_secret_hours' => 24,
     ],
 
     'pages' => [

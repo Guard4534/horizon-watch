@@ -63,3 +63,28 @@ test('a secret no key can decrypt is left as it is and fails the command', funct
     expect(DB::table('environments')->where('id', $unreadable->id)->value('basic_auth_password'))->toBe($stored)
         ->and($environment->refresh()->basic_auth_password)->toBe('readable');
 });
+
+test('a replaced webhook secret still in use is encrypted again, an expired one is dropped first', function () {
+    $previous = encrypterWithPreviousKey();
+    $current = NotificationSetting::factory()->withWebhook()->create();
+    $expired = NotificationSetting::factory()->withWebhook()->create();
+
+    DB::table('notification_settings')->where('team_id', $current->team_id)->update([
+        'previous_webhook_secret' => $previous->encryptString('replaced-secret'),
+        'previous_webhook_secret_expires_at' => now()->addHour(),
+    ]);
+    DB::table('notification_settings')->where('team_id', $expired->team_id)->update([
+        'previous_webhook_secret' => AnotherAppKey::encrypt('long-gone'),
+        'previous_webhook_secret_expires_at' => now()->subMinute(),
+    ]);
+
+    $this->artisan('secrets:reencrypt')
+        ->expectsOutput('Encrypted 3 secrets again with the current key.')
+        ->assertSuccessful();
+
+    app('encrypter')->previousKeys([]);
+
+    expect($current->refresh()->previous_webhook_secret)->toBe('replaced-secret')
+        ->and($expired->refresh()->getRawOriginal('previous_webhook_secret'))->toBeNull()
+        ->and($expired->previous_webhook_secret_expires_at)->toBeNull();
+});

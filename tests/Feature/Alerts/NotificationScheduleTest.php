@@ -68,7 +68,7 @@ test('the scheduled repetition queues the overdue critical alerts', function () 
     $this->artisan('schedule:test', ['--name' => 'alert-repeats'])->assertSuccessful();
 
     Queue::assertPushed(SendAlertEmail::class, 1);
-    Queue::assertPushed(SendAlertWebhook::class, fn (SendAlertWebhook $job) => $job->event === 'alert.repeated');
+    Queue::assertPushed(SendAlertWebhook::class, fn (SendAlertWebhook $job) => $job->payload['event'] === 'alert.repeated');
 });
 
 test('the scheduled digest queues the pending warnings', function () {
@@ -77,7 +77,7 @@ test('the scheduled digest queues the pending warnings', function () {
     $this->artisan('schedule:test', ['--name' => 'alert-digests'])->assertSuccessful();
 
     Queue::assertPushed(SendAlertEmail::class, 1);
-    Queue::assertPushed(SendAlertWebhook::class, fn (SendAlertWebhook $job) => $job->event === 'alert.digest');
+    Queue::assertPushed(SendAlertWebhook::class, fn (SendAlertWebhook $job) => $job->payload['event'] === 'alert.digest');
 });
 
 test('each scheduled run reads the rules afresh in a long-lived process', function () {
@@ -118,7 +118,7 @@ test('the scheduled repetition also catches up a resolution whose notice was los
     $this->artisan('schedule:test', ['--name' => 'alert-repeats'])->assertSuccessful();
 
     Queue::assertPushed(SendAlertEmail::class, fn (SendAlertEmail $job) => $job->kind === SentNotificationKind::Resolved && $job->alertId === $alert->id);
-    Queue::assertPushed(SendAlertWebhook::class, fn (SendAlertWebhook $job) => $job->event === 'alert.resolved');
+    Queue::assertPushed(SendAlertWebhook::class, fn (SendAlertWebhook $job) => $job->payload['event'] === 'alert.resolved');
 
     expect($alert->refresh()->resolution_notified_at)->not->toBeNull();
 });
@@ -146,7 +146,7 @@ test('a failing step of the per-minute run does not stop the other, and is repor
     app(DispatchDueNotifications::class)->repeats();
 
     Queue::assertPushed(SendAlertWebhook::class, 1);
-    Queue::assertPushed(SendAlertWebhook::class, fn (SendAlertWebhook $job) => $job->event === $event);
+    Queue::assertPushed(SendAlertWebhook::class, fn (SendAlertWebhook $job) => $job->payload['event'] === $event);
 
     $messages = collect(Exceptions::reported())->map(fn (Throwable $exception) => $exception->getMessage());
 

@@ -54,6 +54,29 @@ switch ($scenario) {
         echo 'response-body-secret-marker';
         break;
 
+    case 'gone':
+        http_response_code(410);
+        break;
+
+    case 'request-timeout':
+        http_response_code(408);
+        break;
+
+    case 'too-many':
+        http_response_code(429);
+        header('Retry-After: 30');
+        break;
+
+    case 'too-many-right-now':
+        http_response_code(429);
+        header('Retry-After: 0');
+        break;
+
+    case 'too-many-for-long':
+        http_response_code(429);
+        header('Retry-After: 3600');
+        break;
+
     case 'server-error':
         http_response_code(500);
         echo 'response-body-secret-marker';

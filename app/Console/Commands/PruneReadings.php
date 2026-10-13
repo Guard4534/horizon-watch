@@ -6,6 +6,7 @@ use App\Alerts\AlertEngine;
 use App\Models\Alert;
 use App\Models\AlertNotification;
 use App\Models\EnvironmentSnapshot;
+use App\Models\NotificationSetting;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -16,7 +17,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Str;
 
 #[Signature('monitoring:prune {--chunk= : Rows deleted per statement}')]
-#[Description('Delete the readings and the resolved alerts older than their retention periods')]
+#[Description('Delete the readings and the resolved alerts older than their retention periods, and replaced webhook secrets past their overlap')]
 class PruneReadings extends Command
 {
     public function handle(AlertEngine $alerts): int
@@ -47,6 +48,9 @@ class PruneReadings extends Command
             AlertNotification::query()->whereNull('alert_id')->where('sent_at', '<', $alertCutoff),
             $chunk,
         ));
+
+        $secrets = NotificationSetting::forgetExpiredPreviousSecrets();
+        $this->info("Forgot {$secrets} replaced webhook ".Str::plural('secret', $secrets).'.');
 
         return self::SUCCESS;
     }

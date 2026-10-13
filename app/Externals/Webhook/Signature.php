@@ -10,6 +10,8 @@ final class Signature
 
     public const string SIGNATURE_HEADER = 'X-Horizon-Watch-Signature';
 
+    public const string PREVIOUS_SIGNATURE_HEADER = 'X-Horizon-Watch-Previous-Signature';
+
     public static function sign(#[SensitiveParameter] string $secret, int $timestamp, string $body): string
     {
         return 'sha256='.hash_hmac('sha256', $timestamp.'.'.$body, $secret);

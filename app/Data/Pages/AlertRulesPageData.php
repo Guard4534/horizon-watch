@@ -24,6 +24,7 @@ class AlertRulesPageData extends Data
         /** @var array<int, int> */
         public array $repeatChoices,
         public int $maxRecipients,
+        public int $previousSecretHours,
         /** @var array<int, string> */
         public array $timezones,
     ) {}

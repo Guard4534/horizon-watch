@@ -14,9 +14,10 @@ import {
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { regenerateSecret } from '@/routes/alert-settings';
 
-const { secretSet, newSecret } = defineProps<{
+const { secretSet, newSecret, previousSecretHours } = defineProps<{
     secretSet: boolean;
     newSecret: string | null;
+    previousSecretHours: number;
 }>();
 
 const slug = useTeamSlug();
@@ -114,8 +115,9 @@ function regenerate(): void {
                 }}</DialogTitle>
                 <DialogDescription>
                     {{
-                        $t(
-                            'The current secret stops working at once: webhook deliveries are signed with the new one, which is shown only once.',
+                        $tChoice(
+                            'Webhook deliveries are signed with the new secret, shown only once. For the next hour they also carry a signature made with the current one, so the receiver can switch without missing any.|Webhook deliveries are signed with the new secret, shown only once. For the next :count hours they also carry a signature made with the current one, so the receiver can switch without missing any.',
+                            previousSecretHours,
                         )
                     }}
                 </DialogDescription>
