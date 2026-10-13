@@ -2,7 +2,9 @@
 import FieldError from '@/components/FieldError.vue';
 import { PhLockSimple, PhLockSimpleOpen } from '@phosphor-icons/vue';
 import { createReusableTemplate } from '@vueuse/core';
+import { watch } from 'vue';
 import ColorPicker from '@/components/monitoring/applications/ColorPicker.vue';
+import { looksLikeProduction } from '@/lib/monitoring';
 
 const model = defineModel<App.Data.Applications.EnvironmentFormData>({
     required: true,
@@ -10,17 +12,23 @@ const model = defineModel<App.Data.Applications.EnvironmentFormData>({
 
 const auth = defineModel<boolean>('auth', { default: true });
 
+const productionEdited = defineModel<boolean>('productionEdited', {
+    default: false,
+});
+
 const {
     errors,
     prefix = '',
     hasPassword = false,
     compact = false,
+    suggestProduction = false,
 } = defineProps<{
     colors: App.Data.Pages.EnvironmentFormPageData['colors'];
     errors: Record<string, string | undefined>;
     prefix?: string;
     hasPassword?: boolean;
     compact?: boolean;
+    suggestProduction?: boolean;
 }>();
 
 defineEmits<{
@@ -40,12 +48,28 @@ const toggleAuth = () => {
     }
 };
 
+watch(
+    () => model.value.name,
+    (name) => {
+        if (productionEdited.value) {
+            return;
+        }
+
+        if (looksLikeProduction(name)) {
+            model.value.isProduction = true;
+        } else if (suggestProduction) {
+            model.value.isProduction = false;
+        }
+    },
+);
+
 const [DefineName, NameField] = createReusableTemplate();
 const [DefineColor, ColorField] = createReusableTemplate();
 const [DefineUrl, UrlField] = createReusableTemplate();
 const [DefineCredentials, CredentialFields] = createReusableTemplate();
 const [DefineInterval, IntervalField] = createReusableTemplate();
 const [DefineCollect, CollectField] = createReusableTemplate();
+const [DefineProduction, ProductionField] = createReusableTemplate();
 </script>
 
 <template>
@@ -227,7 +251,16 @@ const [DefineCollect, CollectField] = createReusableTemplate();
 
     <DefineCollect>
         <div :class="compact ? 'contents' : undefined">
-            <label :class="compact ? 'nc-radio nc-t-xs' : 'nc-radio nc-t-sm'">
+            <label
+                :class="compact ? 'nc-radio nc-t-xs' : 'nc-radio nc-t-sm'"
+                :title="
+                    compact
+                        ? $t(
+                              'Hidden from members who see everything except production.',
+                          )
+                        : undefined
+                "
+            >
                 <input
                     :id="fieldId('pollingEnabled')"
                     v-model="model.pollingEnabled"
@@ -253,6 +286,34 @@ const [DefineCollect, CollectField] = createReusableTemplate();
             </template>
         </div>
     </DefineCollect>
+
+    <DefineProduction>
+        <div :class="compact ? 'contents' : undefined">
+            <label :class="compact ? 'nc-radio nc-t-xs' : 'nc-radio nc-t-sm'">
+                <input
+                    :id="fieldId('isProduction')"
+                    v-model="model.isProduction"
+                    type="checkbox"
+                    @change="productionEdited = true"
+                />
+                <span class="nc-dot" />
+                {{ $t('Production environment') }}
+            </label>
+            <template v-if="!compact">
+                <FieldError :message="errorOf('isProduction')" />
+                <div
+                    v-if="!errorOf('isProduction')"
+                    class="nc-t-2xs nc-tone-faint mt-1"
+                >
+                    {{
+                        $t(
+                            'Hidden from members who see everything except production.',
+                        )
+                    }}
+                </div>
+            </template>
+        </div>
+    </DefineProduction>
 
     <div v-if="compact">
         <div
@@ -290,9 +351,11 @@ const [DefineCollect, CollectField] = createReusableTemplate();
         >
             <IntervalField />
             <CollectField />
+            <ProductionField />
         </div>
         <FieldError :message="errorOf('pollIntervalSeconds')" />
         <FieldError :message="errorOf('pollingEnabled')" />
+        <FieldError :message="errorOf('isProduction')" />
     </div>
 
     <div v-else class="flex flex-col" style="gap: var(--nc-space-4)">
@@ -321,5 +384,6 @@ const [DefineCollect, CollectField] = createReusableTemplate();
         </div>
 
         <CollectField />
+        <ProductionField />
     </div>
 </template>

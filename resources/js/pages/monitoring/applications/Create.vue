@@ -125,10 +125,12 @@ const {
                 <EnvironmentForm
                     v-model="form.environments[index]"
                     v-model:auth="rows[index].auth"
+                    v-model:production-edited="rows[index].productionEdited"
                     :colors="page.colors"
                     :errors="errors"
                     :prefix="`environments.${index}.`"
                     compact
+                    suggest-production
                     @url-input="onUrlInput(index)"
                 >
                     <template #actions>

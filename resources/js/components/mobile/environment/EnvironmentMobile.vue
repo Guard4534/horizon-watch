@@ -112,6 +112,7 @@ const tiles = computed(() => [
                 <EnvPill
                     :name="environment.name"
                     :color="environment.color"
+                    :production="environment.isProduction"
                     :size="13"
                     class="mt-[2px]"
                 />

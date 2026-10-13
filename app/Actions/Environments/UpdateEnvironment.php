@@ -29,6 +29,7 @@ class UpdateEnvironment
             'basic_auth_user' => $data->basicAuthUser,
             'poll_interval_seconds' => $data->pollIntervalSeconds,
             'polling_enabled' => $data->pollingEnabled,
+            'is_production' => $data->isProduction,
         ];
 
         if ($data->basicAuthUser === null) {

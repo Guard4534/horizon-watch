@@ -656,6 +656,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             applicationName: $environment->application->name,
             name: $environment->name,
             color: $environment->color,
+            isProduction: $environment->is_production,
             horizonUrl: EnvironmentFormData::withoutUserinfo($environment->horizon_url),
             status: match (true) {
                 ! $watched => null,

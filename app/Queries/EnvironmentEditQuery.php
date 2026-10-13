@@ -21,6 +21,7 @@ class EnvironmentEditQuery
                 basicAuthUser: $environment->basic_auth_user,
                 pollIntervalSeconds: $environment->poll_interval_seconds,
                 pollingEnabled: $environment->polling_enabled,
+                isProduction: $environment->is_production,
             ),
             application: ApplicationFormData::from($environment->application),
             colors: EnvironmentColor::options(),

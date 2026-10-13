@@ -119,12 +119,14 @@ const { canManageApplications } = useVisibility();
                                 <EnvPill
                                     :name="environment.name"
                                     :color="environment.color"
+                                    :production="environment.isProduction"
                                 />
                             </Link>
                             <EnvPill
                                 v-else
                                 :name="environment.name"
                                 :color="environment.color"
+                                :production="environment.isProduction"
                             />
                         </td>
                         <td

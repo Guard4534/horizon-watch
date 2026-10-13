@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
-import { PhDotsThree } from '@phosphor-icons/vue';
+import { PhDotsThree, PhShieldCheck } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import {
@@ -278,12 +278,31 @@ function confirmRemove() {
                                                 )
                                             "
                                         >
-                                            {{ visibilityLabel(visibility)
-                                            }}{{
-                                                visibility === 'manual'
-                                                    ? '…'
-                                                    : ''
-                                            }}
+                                            <div class="flex flex-col">
+                                                <span
+                                                    >{{
+                                                        visibilityLabel(
+                                                            visibility,
+                                                        )
+                                                    }}{{
+                                                        visibility === 'manual'
+                                                            ? '…'
+                                                            : ''
+                                                    }}</span
+                                                >
+                                                <span
+                                                    v-if="
+                                                        visibility ===
+                                                        'non_production'
+                                                    "
+                                                    class="nc-t-2xs nc-tone-faint max-w-[240px]"
+                                                    >{{
+                                                        $t(
+                                                            'Hides every environment marked as production.',
+                                                        )
+                                                    }}</span
+                                                >
+                                            </div>
                                         </DropdownMenuItem>
                                     </template>
                                     <template v-if="canTransferOwnership">
@@ -344,6 +363,15 @@ function confirmRemove() {
                         :value="environment.id"
                     />
                     {{ environment.name }}
+                    <span
+                        v-if="environment.isProduction"
+                        class="nc-tone-muted inline-flex"
+                        role="img"
+                        :title="$t('Production environment')"
+                        :aria-label="$t('Production environment')"
+                    >
+                        <PhShieldCheck :size="14" weight="bold" />
+                    </span>
                 </label>
                 <div v-if="!environments.length" class="nc-t-xs nc-tone-muted">
                     {{

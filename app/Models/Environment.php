@@ -29,6 +29,7 @@ use Illuminate\Support\Str;
  * @property string|null $basic_auth_password
  * @property int $poll_interval_seconds
  * @property bool $polling_enabled
+ * @property bool $is_production
  * @property CarbonImmutable|null $last_polled_at
  * @property CarbonImmutable|null $next_poll_at
  * @property Carbon|null $created_at
@@ -46,6 +47,7 @@ use Illuminate\Support\Str;
     'basic_auth_password',
     'poll_interval_seconds',
     'polling_enabled',
+    'is_production',
 ])]
 #[Hidden(['basic_auth_password'])]
 class Environment extends Model
@@ -68,6 +70,10 @@ class Environment extends Model
             $application = $environment->application ?? Application::findOrFail($environment->application_id);
 
             $environment->team_id = $application->team_id;
+
+            if (! array_key_exists('is_production', $environment->getAttributes())) {
+                $environment->is_production = static::looksLikeProduction($environment->name);
+            }
 
             if (empty($environment->slug)) {
                 $environment->slug = static::generateUniqueSlug($application, $environment->name);
@@ -108,9 +114,15 @@ class Environment extends Model
             'color' => EnvironmentColor::class,
             'basic_auth_password' => 'encrypted',
             'polling_enabled' => 'boolean',
+            'is_production' => 'boolean',
             'last_polled_at' => 'immutable_datetime',
             'next_poll_at' => 'immutable_datetime',
         ];
+    }
+
+    public static function looksLikeProduction(string $name): bool
+    {
+        return preg_match('/^(production|prod|prd|live)([-_.\s].*)?$/i', trim($name)) === 1;
     }
 
     public function getRouteKeyName(): string

@@ -23,6 +23,10 @@ export function envColor(color: App.Enums.EnvironmentColor): string {
     return `var(--env-${color})`;
 }
 
+export function looksLikeProduction(name: string): boolean {
+    return /^(production|prod|prd|live)([-_.\s].*)?$/i.test(name.trim());
+}
+
 export function statusLabel(status: App.Enums.EnvironmentStatus): string {
     switch (status) {
         case 'active':

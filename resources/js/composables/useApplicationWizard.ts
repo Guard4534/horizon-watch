@@ -4,12 +4,14 @@ import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch, watchEffect } from 'vue';
 import type { ConnectionOutcome } from '@/components/monitoring/applications/ConnectionTest.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { looksLikeProduction } from '@/lib/monitoring';
 import { store } from '@/routes/applications';
 
 export type WizardRow = {
     key: number;
     auth: boolean;
     urlEdited: boolean;
+    productionEdited: boolean;
     outcome: ConnectionOutcome;
     testedSignature: string;
     autoTest: boolean;
@@ -72,8 +74,10 @@ export function useApplicationWizard(
                 !taken.includes(name) && available.includes(color),
         );
 
+        const name = suggestion?.[0] ?? '';
+
         return {
-            name: suggestion?.[0] ?? '',
+            name,
             color: (suggestion?.[1] ??
                 colors[index % colors.length]
                     .value) as App.Enums.EnvironmentColor,
@@ -82,6 +86,7 @@ export function useApplicationWizard(
             basicAuthPassword: null,
             pollIntervalSeconds: 15,
             pollingEnabled: true,
+            isProduction: looksLikeProduction(name),
         };
     };
 
@@ -89,6 +94,7 @@ export function useApplicationWizard(
         key: nextKey++,
         auth: false,
         urlEdited: false,
+        productionEdited: false,
         outcome: { state: 'idle' },
         testedSignature: '',
         autoTest: true,

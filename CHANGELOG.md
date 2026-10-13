@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `HORIZON_WATCH_ORG_CREATION` (`admins` or `everyone`) decides who may create organizations.
 - The owner of an organization can transfer ownership to another member from the Members
   page; the previous owner becomes an admin.
+- A **Production environment** checkbox on environments, ticked for you when the label is
+  `production`, `prod`, `prd` or `live`, alone or followed by a separator. The production mark
+  shows next to the environment wherever it appears.
 
 ### Changed
 
@@ -37,12 +40,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   organization; this cannot be undone by a rollback. Before upgrading, demote to member anyone
   who must stay limited. Promoting someone to admin now lifts their limit, and an admin
   invitation always grants every environment.
+- **Upgrade note:** upgrading marks as production every environment labelled `production`,
+  `prod`, `prd` or `live`, alone or followed by a separator (such as `prod-eu` or
+  `live-preview`). Members who see everything except production stop seeing those
+  environments and stop receiving their alert emails. After upgrading, review the
+  **Production environment** box on each environment.
 
 ### Fixed
 
 - A name made only of symbols no longer gives an organization or application an empty slug,
   and very long names no longer overflow the slug column.
 - An organization name whose slug would be a reserved address (such as `Settings!`) is refused.
+- "Everything except production" hid only an environment labelled exactly `production`; it now
+  hides every environment marked as production.
 
 ## [0.1.0] - 2026-09-29
 

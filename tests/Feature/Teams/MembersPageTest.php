@@ -119,6 +119,16 @@ test('pending invitations and the environment picker stay out of the props witho
             ->has('page.environments', 0));
 });
 
+test('the environment picker marks the production environments', function () {
+    $this->actingAs($this->admin)
+        ->get(route('members.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.environments.0.name', 'Billing / production')
+            ->where('page.environments.0.isProduction', true)
+            ->where('page.environments.1.name', 'Billing / staging')
+            ->where('page.environments.1.isProduction', false));
+});
+
 test('a manual member lists the environments they can actually see', function () {
     grantManually($this->team, $this->member, $this->staging);
 

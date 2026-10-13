@@ -89,7 +89,11 @@ const silence = computed<string | null>(() => {
         <EnvSwatch :color="environment.color" shape="edge" :size="4" />
         <span class="flex items-center gap-[7px]">
             <span class="min-w-0 flex-1">
-                <EnvPill :name="environment.name" :color="environment.color" />
+                <EnvPill
+                    :name="environment.name"
+                    :color="environment.color"
+                    :production="environment.isProduction"
+                />
             </span>
             <StatusLamp :status="environment.status" glow />
         </span>

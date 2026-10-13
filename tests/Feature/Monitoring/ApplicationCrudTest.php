@@ -317,6 +317,23 @@ test('the wizard stores each row\'s collection switch, on by default', function 
         ->toBe(['production' => true, 'staging' => false]);
 });
 
+test('the wizard stores each row\'s production flag', function () {
+    $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
+        'application' => ['name' => 'Flags', 'host' => 'flags.example.com'],
+        'environments' => [
+            ($this->environmentPayload)('prod'),
+            [...($this->environmentPayload)('blue'), 'isProduction' => true],
+            [...($this->environmentPayload)('production'), 'isProduction' => false],
+            ($this->environmentPayload)('staging'),
+        ],
+    ])->assertRedirect();
+
+    $application = Application::where('team_id', $this->team->id)->where('name', 'Flags')->firstOrFail();
+
+    expect($application->environments()->orderBy('name')->pluck('is_production', 'name')->all())
+        ->toBe(['blue' => true, 'prod' => true, 'production' => false, 'staging' => false]);
+});
+
 test('a wizard row whose URL carries credentials is refused on that row', function () {
     $this->actingAs($this->admin)
         ->post(route('applications.store', ['current_team' => $this->team->slug]), [

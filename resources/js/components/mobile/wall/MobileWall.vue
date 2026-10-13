@@ -136,6 +136,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                         <EnvPill
                             :name="environment.name"
                             :color="environment.color"
+                            :production="environment.isProduction"
                             :size="11"
                             style="margin-top: 3px"
                         />

@@ -32,6 +32,7 @@ const form = useForm<{
         basicAuthPassword: null,
         pollIntervalSeconds: 15,
         pollingEnabled: true,
+        isProduction: false,
     },
 });
 
@@ -92,6 +93,7 @@ const submit = () => {
                 :colors="page.colors"
                 :errors="errors"
                 :has-password="page.hasPassword"
+                suggest-production
             />
             <div
                 class="mt-[var(--nc-space-4)] flex flex-wrap items-center"

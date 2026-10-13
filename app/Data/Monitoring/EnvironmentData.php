@@ -16,6 +16,7 @@ class EnvironmentData extends Data
         public string $applicationName,
         public string $name,
         public EnvironmentColor $color,
+        public bool $isProduction,
         public string $horizonUrl,
         public ?EnvironmentStatus $status,
         public int $pending,

@@ -73,7 +73,10 @@ Then, in order:
    installation's Horizon dashboard (for example `https://shop.example.com/horizon`), the
    basic-auth user and password if the dashboard is behind one, and how often to poll it
    (15 to 300 seconds). **Test connection** reads the dashboard once and tells you what it
-   found before you save.
+   found before you save. Tick **Production environment** on every production installation:
+   members who see everything except production never see those environments. The box is
+   ticked for you when the label is `production`, `prod`, `prd` or `live`, alone or followed
+   by a suffix such as `production-eu`.
 3. **Alert rules** → review the thresholds. Every organization starts with sensible defaults
    and you can override any rule for a single environment.
 4. **Alert rules → Notifications** → add the email recipients, and the webhook URL if you

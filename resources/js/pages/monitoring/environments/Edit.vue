@@ -35,6 +35,7 @@ const form = useForm<{
         basicAuthPassword: null,
         pollIntervalSeconds: page.environment?.pollIntervalSeconds ?? 15,
         pollingEnabled: page.environment?.pollingEnabled ?? true,
+        isProduction: page.environment?.isProduction ?? false,
     },
 });
 

@@ -62,7 +62,7 @@ test('all sees every environment of the organization, ordered by application the
     ]);
 });
 
-test('non_production excludes every environment named production', function () {
+test('non_production excludes every environment flagged as production', function () {
     $ids = $this->filter->query($this->team, $this->userNonProduction)->pluck('id')->all();
 
     expect($ids)->toEqualCanonicalizing([
@@ -174,4 +174,31 @@ test('the ids of a membership are null for everything, or the environments it se
             $this->alphaProduction->id,
             $this->charlieTesting->id,
         ]);
+});
+
+test('non_production follows the production flag, not the environment name', function () {
+    $prodEu = Environment::factory()->for($this->appCharlie)->create(['name' => 'prod-eu']);
+    $live = Environment::factory()->for($this->appCharlie)->create(['name' => 'live']);
+    $flagged = Environment::factory()->for($this->appCharlie)->create(['name' => 'blue', 'is_production' => true]);
+    $unflagged = Environment::factory()->for($this->appCharlie)->create(['name' => 'production-archive', 'is_production' => false]);
+    $membership = $this->userNonProduction->teamMemberships()->where('team_id', $this->team->id)->sole();
+
+    $ids = $this->filter->query($this->team, $this->userNonProduction)->pluck('id')->all();
+    $batched = $this->filter->idsForAllOf($this->team, [$membership])[$membership->id];
+
+    expect($ids)->toContain($unflagged->id)
+        ->and($ids)->not->toContain($prodEu->id)
+        ->and($ids)->not->toContain($live->id)
+        ->and($ids)->not->toContain($flagged->id)
+        ->and($batched)->toEqualCanonicalizing($ids)
+        ->and($this->filter->idsFor($this->team, $membership))->toEqualCanonicalizing($ids)
+        ->and($this->filter->sees($this->team, $this->userNonProduction, $flagged->id))->toBeFalse()
+        ->and($this->filter->sees($this->team, $this->userNonProduction, $unflagged->id))->toBeTrue();
+});
+
+test('unflagging an environment shows it to non_production members', function () {
+    $this->alphaProduction->update(['is_production' => false]);
+
+    expect($this->filter->sees($this->team, $this->userNonProduction, $this->alphaProduction->id))->toBeTrue()
+        ->and($this->filter->sees($this->team, $this->userNonProduction, $this->bravoProduction->id))->toBeFalse();
 });

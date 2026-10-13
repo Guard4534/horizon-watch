@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form } from '@inertiajs/vue3';
-import { PhPaperPlaneTilt } from '@phosphor-icons/vue';
+import { PhPaperPlaneTilt, PhShieldCheck } from '@phosphor-icons/vue';
 import { ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
@@ -101,6 +101,12 @@ function reset() {
                     </option>
                 </select>
                 <InputError :message="errors.visibility" />
+                <div
+                    v-if="visibility === 'non_production' && !errors.visibility"
+                    class="nc-t-2xs nc-tone-faint mt-1"
+                >
+                    {{ $t('Hides every environment marked as production.') }}
+                </div>
             </div>
 
             <div
@@ -124,6 +130,15 @@ function reset() {
                             :value="environment.id"
                         />
                         {{ environment.name }}
+                        <span
+                            v-if="environment.isProduction"
+                            class="nc-tone-muted inline-flex"
+                            role="img"
+                            :title="$t('Production environment')"
+                            :aria-label="$t('Production environment')"
+                        >
+                            <PhShieldCheck :size="14" weight="bold" />
+                        </span>
                     </label>
                     <div
                         v-if="!environments.length"

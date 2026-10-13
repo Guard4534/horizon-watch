@@ -14,5 +14,6 @@ class EnvironmentSummaryData extends Data
         public ?string $basicAuthUser,
         public int $pollIntervalSeconds,
         public bool $pollingEnabled,
+        public bool $isProduction,
     ) {}
 }

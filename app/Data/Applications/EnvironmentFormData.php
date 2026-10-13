@@ -26,6 +26,7 @@ class EnvironmentFormData extends Data
         public ?string $basicAuthUser = null,
         public ?string $basicAuthPassword = null,
         public bool $pollingEnabled = true,
+        public bool $isProduction = false,
     ) {}
 
     /**
@@ -36,6 +37,13 @@ class EnvironmentFormData extends Data
     {
         if (! array_key_exists('pollIntervalSeconds', $properties)) {
             $properties['pollIntervalSeconds'] = config()->integer('horizon-watch.readings.poll_interval_seconds.default');
+        }
+
+        if (! array_key_exists('isProduction', $properties)) {
+            $stored = self::environmentBeingUpdated();
+
+            $properties['isProduction'] = ($stored !== null && $stored->is_production)
+                || (is_string($properties['name'] ?? null) && Environment::looksLikeProduction($properties['name']));
         }
 
         return $properties;
@@ -54,6 +62,7 @@ class EnvironmentFormData extends Data
             'basicAuthPassword' => ['nullable', 'string', ...self::passwordRequiredWithUsernameRules($context)],
             'pollIntervalSeconds' => ['integer', 'between:'.config()->integer('horizon-watch.readings.poll_interval_seconds.min').','.config()->integer('horizon-watch.readings.poll_interval_seconds.max')],
             'pollingEnabled' => ['boolean'],
+            'isProduction' => ['boolean'],
         ];
     }
 

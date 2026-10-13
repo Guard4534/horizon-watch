@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { PhArrowSquareOut } from '@phosphor-icons/vue';
+import { PhArrowSquareOut, PhShieldCheck } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import EnvironmentMobile from '@/components/mobile/environment/EnvironmentMobile.vue';
@@ -162,8 +162,20 @@ const tiles = computed<Tile[]>(() => [
                         >{{ environment.applicationName }}</Link
                     >
                 </div>
-                <div style="font-size: 24px; line-height: 1.15">
+                <div
+                    class="flex items-center"
+                    style="font-size: 24px; line-height: 1.15; gap: 8px"
+                >
                     {{ environment.name }}
+                    <span
+                        v-if="environment.isProduction"
+                        class="nc-tone-muted inline-flex"
+                        role="img"
+                        :title="$t('Production environment')"
+                        :aria-label="$t('Production environment')"
+                    >
+                        <PhShieldCheck :size="20" weight="bold" />
+                    </span>
                 </div>
             </div>
             <StatusPill

@@ -73,7 +73,11 @@ defineExpose({
         />
         <div class="min-w-0 flex-1">
             <div class="flex items-center" style="gap: 8px">
-                <EnvPill :name="environment.name" :color="environment.color" />
+                <EnvPill
+                    :name="environment.name"
+                    :color="environment.color"
+                    :production="environment.isProduction"
+                />
                 <span
                     class="ml-auto flex-none"
                     :style="{ fontSize: '11px', color: tone }"

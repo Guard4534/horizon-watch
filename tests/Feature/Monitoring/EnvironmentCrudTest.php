@@ -614,6 +614,50 @@ test('collection must be a boolean', function () {
     expect(Environment::where('application_id', $this->application->id)->exists())->toBeFalse();
 });
 
+test('the production flag is stored as the form sends it, and follows the name when the form leaves it out', function () {
+    $store = route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]);
+
+    $this->actingAs($this->admin)->post($store, ($this->validPayload)(['name' => 'prod-eu']))->assertRedirect();
+    $this->actingAs($this->admin)->post($store, ($this->validPayload)(['name' => 'qa']))->assertRedirect();
+    $this->actingAs($this->admin)->post($store, ($this->validPayload)(['name' => 'blue', 'isProduction' => true]))->assertRedirect();
+    $this->actingAs($this->admin)->post($store, ($this->validPayload)(['name' => 'live', 'isProduction' => false]))->assertRedirect();
+
+    expect($this->application->environments()->orderBy('name')->pluck('is_production', 'name')->all())
+        ->toBe(['blue' => true, 'live' => false, 'prod-eu' => true, 'qa' => false]);
+});
+
+test('editing an environment shows and changes its production flag', function () {
+    $environment = Environment::factory()->for($this->application)->create(['name' => 'production']);
+    $update = route('environments.update', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+    $edit = route('environments.edit', ['current_team' => $this->team->slug, 'environment' => $environment->slug]);
+    $payload = ($this->validPayload)(['basicAuthPassword' => null]);
+
+    $this->actingAs($this->admin)->get($edit)
+        ->assertInertia(fn (Assert $page) => $page->where('page.environment.isProduction', true));
+
+    $this->actingAs($this->admin)->patch($update, [...$payload, 'name' => 'blue'])->assertRedirect();
+
+    expect($environment->fresh()->is_production)->toBeTrue();
+
+    $this->actingAs($this->admin)->patch($update, [...$payload, 'name' => 'blue', 'isProduction' => false])->assertRedirect();
+
+    expect($environment->fresh()->is_production)->toBeFalse();
+
+    $this->actingAs($this->admin)->get($edit)
+        ->assertInertia(fn (Assert $page) => $page->where('page.environment.isProduction', false));
+});
+
+test('the production flag must be a boolean', function () {
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+            ($this->validPayload)(['isProduction' => 'sometimes']),
+        )
+        ->assertSessionHasErrors('isProduction');
+
+    expect(Environment::where('application_id', $this->application->id)->exists())->toBeFalse();
+});
+
 dataset('urls carrying credentials', [
     'user and password' => ['https://ops:url-secret@horizon.example.com/horizon'],
     'user only' => ['https://url-secret@horizon.example.com/horizon'],
