@@ -38,6 +38,9 @@ load_app_key() {
     chown www-data:www-data /data
     local key_file=/data/app-key
 
+    exec 9>/data/app-key.lock
+    flock 9
+
     if [ ! -s "$key_file" ]; then
         local tmp_key_file
         tmp_key_file="$(mktemp /data/app-key.XXXXXX)"
@@ -48,6 +51,8 @@ load_app_key() {
     fi
 
     export APP_KEY="$(cat "$key_file")"
+
+    exec 9>&-
 }
 
 migrate() {
@@ -81,7 +86,7 @@ case "$role" in
         wait_for_database
         load_app_key
         as_app php artisan optimize
-        exec setpriv --reuid=www-data --regid=www-data --init-groups php artisan queue:work --max-time=3600 --tries=3
+        exec setpriv --reuid=www-data --regid=www-data --init-groups php artisan queue:work --queue="${2:-notifications,polls,default}" --max-time=3600 --tries=3
         ;;
     artisan)
         shift

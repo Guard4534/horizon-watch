@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A **Production environment** checkbox on environments, ticked for you when the label is
   `production`, `prod`, `prd` or `live`, alone or followed by a separator. The production mark
   shows next to the environment wherever it appears.
+- A `notifier` service in `compose.prod.yaml` sends alert emails, webhooks, invitations and
+  password-reset emails from their own `notifications` queue, while the `worker`s read Horizon
+  from the `polls` queue.
+- `MAIL_TIMEOUT` (10 seconds by default) bounds how long an unresponsive SMTP server can hold a
+  send.
+- Failed queue jobs are pruned after 7 days.
 
 ### Changed
 
@@ -32,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   declining an invitation. The navigation leaves out the organization pages until they join one.
 - Renaming an organization or an environment keeps its slug, so bookmarks, open walls and the
   links in alerts already sent keep working.
+- **Upgrade note:** download the new `compose.prod.yaml` to get the `notifier` service. With
+  the previous file every worker serves every queue, notifications first.
+- Containers get 40 seconds to stop and run under an init process, so a worker finishes the job
+  it holds and php-fpm and nginx shut down gracefully.
+- `HORIZON_WATCH_RETENTION_DAYS` is at least 7 and `HORIZON_WATCH_ALERT_RETENTION_DAYS` at
+  least 1; lower values are raised to those.
 - Switching organization opens the same section of the new one (wall, applications, alerts,
   alert rules, members) instead of rewriting the address of the page you were on.
 - **Upgrade note:** admins and the owner always see every environment. Upgrading lifts the
@@ -53,6 +65,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An organization name whose slug would be a reserved address (such as `Settings!`) is refused.
 - "Everything except production" hid only an environment labelled exactly `production`; it now
   hides every environment marked as production.
+- A reading that crashed or ran past its time limit left nothing behind, so the
+  endpoint-unreachable rule never fired; it is now stored as unreachable.
+- A reading dropped because it waited in the queue longer than its interval is now logged.
+- A single connection error or 502, 503 or 504 from Horizon no longer turns the tile red: the
+  request is tried once more.
+- Pruning no longer deletes the last reading of an environment paused for longer than the
+  retention, which made its tile show zeros.
 
 ## [0.1.0] - 2026-09-29
 

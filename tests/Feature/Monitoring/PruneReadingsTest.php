@@ -45,6 +45,40 @@ test('readings older than the retention are deleted and newer ones kept', functi
         ->and(EnvironmentState::query()->count())->toBe(1);
 });
 
+test('the newest reading of each environment stays however old it is', function () {
+    $paused = Environment::factory()->create();
+
+    ($this->snapshotAt)('2026-01-01 00:00:00', $paused);
+    $last = ($this->snapshotAt)('2026-01-02 00:00:00', $paused);
+    $tie = ($this->snapshotAt)('2026-01-02 00:00:00', $paused);
+    ($this->snapshotAt)('2026-08-01 00:00:00');
+    $recent = ($this->snapshotAt)('2026-09-17 09:59:45');
+
+    $this->artisan('monitoring:prune')->expectsOutput('Deleted 3 readings.')->assertSuccessful();
+
+    expect(EnvironmentSnapshot::query()->orderBy('id')->pluck('id')->all())->toBe([$tie->id, $recent->id])
+        ->and($last->id)->toBeLessThan($tie->id);
+});
+
+test('the retention periods cannot be set below a week of readings and a day of alerts', function () {
+    putenv('HORIZON_WATCH_RETENTION_DAYS=0');
+    putenv('HORIZON_WATCH_ALERT_RETENTION_DAYS=-5');
+    $_ENV['HORIZON_WATCH_RETENTION_DAYS'] = '0';
+    $_ENV['HORIZON_WATCH_ALERT_RETENTION_DAYS'] = '-5';
+
+    try {
+        $config = require base_path('config/horizon-watch.php');
+    } finally {
+        putenv('HORIZON_WATCH_RETENTION_DAYS');
+        putenv('HORIZON_WATCH_ALERT_RETENTION_DAYS');
+        unset($_ENV['HORIZON_WATCH_RETENTION_DAYS'], $_ENV['HORIZON_WATCH_ALERT_RETENTION_DAYS']);
+    }
+
+    expect($config['retention_days'])->toBe(7)
+        ->and($config['alert_retention_days'])->toBe(1)
+        ->and((require base_path('config/horizon-watch.php'))['retention_days'])->toBe(30);
+});
+
 test('the retention period comes from the configuration', function () {
     config(['horizon-watch.retention_days' => 7]);
 

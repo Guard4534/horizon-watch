@@ -176,5 +176,9 @@ export function readingProblemLabel(
             return trans('The answer is a web page, not the Horizon API');
         case 'unexpected_json':
             return trans('The answer is JSON, but not what Horizon sends');
+        case 'poll_failed':
+            return trans(
+                "The reading did not finish: see the log of the panel's worker",
+            );
     }
 }

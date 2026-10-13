@@ -15,6 +15,7 @@ enum ReadingCause: string
     case Compressed = 'compressed';
     case NotJson = 'not_json';
     case UnexpectedJson = 'unexpected_json';
+    case PollFailed = 'poll_failed';
 
     private const array TLS_ERRORS = [35, 51, 53, 54, 58, 59, 60, 64, 66, 77, 80, 82, 83, 90, 91, 98];
 

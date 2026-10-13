@@ -37,10 +37,16 @@ curl -fsS "$base/up" >/dev/null || fail "/up is not healthy"
 [[ "$(curl -s -o /dev/null -w '%{http_code}' "$base/setup")" == 200 ]] || fail "/setup should answer 200"
 
 running="$("${compose[@]}" ps --status running --services | sort | tr '\n' ' ')"
-[[ "$running" == "postgres scheduler web worker " ]] || fail "unexpected running services: $running"
+[[ "$running" == "notifier postgres scheduler web worker " ]] || fail "unexpected running services: $running"
 
 workers="$("${compose[@]}" ps --status running -q worker | wc -l)"
 [[ "$workers" -eq "${HORIZON_WATCH_WORKERS:-2}" ]] || fail "expected ${HORIZON_WATCH_WORKERS:-2} running workers, found $workers"
+
+notifiers="$("${compose[@]}" ps --status running -q notifier | wc -l)"
+[[ "$notifiers" -eq 1 ]] || fail "expected 1 running notifier, found $notifiers"
+
+"${compose[@]}" exec -T worker pgrep -f 'artisan queue:work --queue=polls,default ' >/dev/null || fail "the worker does not serve the polls queue"
+"${compose[@]}" exec -T notifier pgrep -f 'artisan queue:work --queue=notifications,default ' >/dev/null || fail "the notifier does not serve the notifications queue"
 
 "${compose[@]}" exec -T web test -s /data/app-key || fail "the app key was not persisted"
 

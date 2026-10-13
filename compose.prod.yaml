@@ -1,6 +1,8 @@
 x-app: &app
     image: ${HORIZON_WATCH_IMAGE:-ghcr.io/guard4534/horizon-watch:latest}
     restart: unless-stopped
+    init: true
+    stop_grace_period: 40s
     # The container starts as root to own the app-data volume and to let nginx and
     # php-fpm fork their workers as www-data; everything else runs as www-data.
     security_opt:
@@ -35,6 +37,7 @@ x-app: &app
         MAIL_USERNAME: ${MAIL_USERNAME:-}
         MAIL_PASSWORD: ${MAIL_PASSWORD:-}
         MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-horizon-watch@example.com}
+        MAIL_TIMEOUT: ${MAIL_TIMEOUT:-10}
         HORIZON_WATCH_RETENTION_DAYS: ${HORIZON_WATCH_RETENTION_DAYS:-30}
         HORIZON_WATCH_ALERT_RETENTION_DAYS: ${HORIZON_WATCH_ALERT_RETENTION_DAYS:-90}
         HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS: ${HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS:-false}
@@ -74,9 +77,22 @@ services:
 
     worker:
         <<: *app
-        command: ['worker']
+        command: ['worker', 'polls,default']
         deploy:
             replicas: ${HORIZON_WATCH_WORKERS:-2}
+        depends_on:
+            web:
+                condition: service_healthy
+        healthcheck:
+            test: ['CMD', 'pgrep', '-f', 'artisan queue:work']
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 60s
+
+    notifier:
+        <<: *app
+        command: ['worker', 'notifications,default']
         depends_on:
             web:
                 condition: service_healthy

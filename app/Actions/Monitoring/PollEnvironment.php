@@ -8,6 +8,7 @@ use App\Alerts\RuleSet;
 use App\Data\Monitoring\ReadingProblemData;
 use App\Enums\AlertRuleMetric;
 use App\Enums\HorizonStatus;
+use App\Enums\ReadingCause;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
@@ -63,6 +64,11 @@ class PollEnvironment
         }
 
         return $this->storeReading($environment, $capturedAt, $reading, $rules);
+    }
+
+    public function recordFailure(Environment $environment, ReadingCause $cause): ?EnvironmentSnapshot
+    {
+        return $this->storeFailure($environment, CarbonImmutable::now(), ReadingError::Unreachable, new ReadingProblemData($cause, null, null));
     }
 
     /**

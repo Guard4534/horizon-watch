@@ -41,10 +41,11 @@ docker compose -f compose.prod.yaml up -d
 `compose.prod.yaml` is also attached to every release, if you would rather take it from
 there.
 
-That starts four containers: `web` (nginx and php-fpm), `scheduler`, two `worker`s and
-`postgres`. Settings go in a `.env` file next to `compose.prod.yaml`, or in your shell
-environment; see [Configuration](#configuration). At the very least, change `DB_PASSWORD`
-and set the mail server.
+That starts five services: `web` (nginx and php-fpm), `scheduler`, two `worker`s that read
+Horizon, a `notifier` that sends emails and webhooks, and `postgres`. Settings go in a `.env`
+file next to `compose.prod.yaml`, or in your shell environment; see
+[Configuration](#configuration). At the very least, change `DB_PASSWORD` and set the mail
+server.
 
 Serve the panel over HTTPS in production, behind a reverse proxy that terminates TLS. Set
 `APP_URL` to the `https://` address, have the proxy pass the original `Host` header through,
@@ -109,7 +110,9 @@ Every read is a plain `GET`; nothing Horizon Watch sends changes state. Reads fo
 redirects, time out after a few seconds, stop at 2 MB per response, ask for and accept only
 uncompressed answers, ignore any proxy configured in the environment and connect to the
 address the name resolved to, so a name that changes between the safety check and the request
-cannot redirect the read elsewhere. A reading keeps at most 500 queues (the longest) and 200
+cannot redirect the read elsewhere. When `stats`, `masters` or `workload` cannot connect or
+answer 502, 503 or 504, they are asked once more after 400 ms, so a restart of the monitored
+application does not turn its tile red. A reading keeps at most 500 queues (the longest) and 200
 masters, supervisors and jobs per list.
 
 Horizon lists jobs 50 at a time, newest first. Horizon Watch pages through the failed jobs
@@ -130,9 +133,9 @@ the environment of the containers. Everything has a default except the mail serv
 | -------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `HORIZON_WATCH_IMAGE`                  | `ghcr.io/guard4534/horizon-watch:latest` | Image to run; pin a version tag in production                                            |
 | `HORIZON_WATCH_PORT`                   | `8080`                                   | Port published on the host; `127.0.0.1:8080` publishes it on loopback only               |
-| `HORIZON_WATCH_WORKERS`                | `2`                                      | Queue workers (readings, notifications)                                                  |
-| `HORIZON_WATCH_RETENTION_DAYS`         | `30`                                     | Days of readings kept before pruning                                                     |
-| `HORIZON_WATCH_ALERT_RETENTION_DAYS`   | `90`                                     | Days resolved alerts are kept before pruning                                             |
+| `HORIZON_WATCH_WORKERS`                | `2`                                      | Queue workers that read Horizon; see [Workers](#workers)                                 |
+| `HORIZON_WATCH_RETENTION_DAYS`         | `30`                                     | Days of readings kept before pruning, at least 7                                         |
+| `HORIZON_WATCH_ALERT_RETENTION_DAYS`   | `90`                                     | Days resolved alerts are kept before pruning, at least 1                                 |
 | `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` | `false`                                  | Refuse Horizon addresses that resolve to a private network                               |
 | `HORIZON_WATCH_ORG_CREATION`           | `admins`                                 | Who may create organizations: `admins` (instance admins only) or `everyone`              |
 | `HORIZON_WATCH_DEFAULT_TIMEZONE`       | `UTC`                                    | Time zone new organizations start with                                                   |
@@ -148,6 +151,11 @@ the environment of the containers. Everything has a default except the mail serv
 | `MAIL_USERNAME`                        | _(empty)_                                | SMTP user, when the server asks for one                                                  |
 | `MAIL_PASSWORD`                        | _(empty)_                                | SMTP password, when the server asks for one                                              |
 | `MAIL_FROM_ADDRESS`                    | `horizon-watch@example.com`              | Sender of invitations and alert emails                                                   |
+| `MAIL_TIMEOUT`                         | `10`                                     | Seconds an unresponsive SMTP server may hold a send; keep it below 30                    |
+
+Readings and resolved alerts are pruned once a day. The newest reading of each environment is
+never pruned, so an environment paused for longer than the retention still shows its last
+numbers.
 
 `TRUSTED_PROXIES` decides which addresses may tell the panel the client's address and scheme
 (`X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Port`). The default trusts loopback
@@ -164,6 +172,27 @@ proxy must pass the original one through. Caddy and Traefik do so by default; ng
 `proxy_set_header Host $host;`. Links in emails, password reset links included, are always
 built from `APP_URL`.
 
+### Workers
+
+Readings and notifications go through separate queues: the `worker`s read Horizon (queue
+`polls`), the `notifier` sends alert emails, webhooks, invitations and password-reset emails
+(queue `notifications`). A slow mail server therefore never holds up a reading, and a backlog of
+readings never holds up an alert.
+
+A worker reads one environment at a time, usually in well under a second, but in up to 20
+seconds when Horizon is slow or does not answer. To keep up even when endpoints are that slow,
+set `HORIZON_WATCH_WORKERS` to about `(20 × unresponsive + healthy) / interval`, rounded up,
+where `interval` is the poll interval in seconds. For 30 environments polled every 15 seconds,
+the default of 2 workers is enough while they all answer, 9 keep up with 5 of them down, and 40
+with all of them down: size it for how many endpoints may go dark at the same time. A reading
+that waits in the queue longer than its environment's poll interval is dropped, and the worker
+log says so (`A poll waited in the queue longer than its interval and was dropped.`): when that
+line keeps coming back, raise `HORIZON_WATCH_WORKERS`. A reading that crashes or runs past its
+30-second limit is stored as unreachable, so the endpoint-unreachable rule still fires.
+
+Failed jobs are kept for 7 days (`artisan queue:failed`, see
+[Running commands](#running-commands)) and then pruned.
+
 ## Notifications
 
 Critical alerts are sent as they open, repeat while they stay open (every 15, 30 or 60
@@ -173,8 +202,8 @@ its own webhook.
 
 Email goes out only through the SMTP server you configure. Until `MAIL_HOST` is set, every
 email — invitations and alerts — fails: the panel lists alert emails as not delivered, and
-invitations stay in the failed jobs of the queue. There is deliberately no fallback that
-writes emails to the log, because the log would then hold recipients and links.
+invitations stay in the failed jobs of the queue for 7 days. There is deliberately no fallback
+that writes emails to the log, because the log would then hold recipients and links.
 
 ### Webhook
 
@@ -265,13 +294,13 @@ Every container logs to standard output, so `docker compose logs` is the whole s
 
 ```bash
 docker compose -f compose.prod.yaml logs -f web
-docker compose -f compose.prod.yaml logs -f worker
+docker compose -f compose.prod.yaml logs -f worker notifier
 ```
 
-`web` carries the nginx access log, the php-fpm log and the application log; `worker` carries
-the queue. Nothing that could be a credential is ever logged: an unexpected failure inside
-the Horizon reader is reported by class, file and line only, because its message could hold a
-URL with credentials or a slice of a response body.
+`web` carries the nginx access log, the php-fpm log and the application log; `worker` and
+`notifier` carry the queues. Nothing that could be a credential is ever logged: an unexpected
+failure inside the Horizon reader is reported by class, file and line only, because its message
+could hold a URL with credentials or a slice of a response body.
 
 ## Upgrading
 
@@ -281,7 +310,8 @@ docker compose -f compose.prod.yaml up -d
 ```
 
 Migrations run when the `web` container starts, under an advisory lock, so several replicas
-can start at once. Read [CHANGELOG.md](CHANGELOG.md) before a major version.
+can start at once. Containers get 40 seconds to stop, so each worker finishes the job it holds
+and php-fpm the requests it serves. Read [CHANGELOG.md](CHANGELOG.md) before a major version.
 
 ## Backup and restore
 

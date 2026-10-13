@@ -12,3 +12,6 @@ services:
 
     worker:
         <<: *build
+
+    notifier:
+        <<: *build

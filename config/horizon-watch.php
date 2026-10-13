@@ -1,9 +1,11 @@
 <?php
 
 return [
-    'retention_days' => (int) env('HORIZON_WATCH_RETENTION_DAYS', 30),
+    'retention_days' => max(7, (int) env('HORIZON_WATCH_RETENTION_DAYS', 30)),
 
-    'alert_retention_days' => (int) env('HORIZON_WATCH_ALERT_RETENTION_DAYS', 90),
+    'alert_retention_days' => max(1, (int) env('HORIZON_WATCH_ALERT_RETENTION_DAYS', 90)),
+
+    'failed_job_retention_hours' => 168,
 
     'block_private_networks' => (bool) env('HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS', false),
 

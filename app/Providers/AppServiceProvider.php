@@ -2,12 +2,20 @@
 
 namespace App\Providers;
 
+use App\Jobs\DeliverAlert;
+use App\Jobs\PollEnvironmentJob;
+use App\Listeners\Alerts\SendOnAlert;
+use App\Notifications\Auth\EmailChanged;
+use App\Notifications\Auth\ResetPassword;
+use App\Notifications\Teams\TeamInvitation;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
 use Illuminate\Mail\Markdown;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -17,7 +25,22 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureQueues();
         $this->configureRateLimiting();
+    }
+
+    protected function configureQueues(): void
+    {
+        Queue::route([
+            PollEnvironmentJob::class => 'polls',
+            DeliverAlert::class => 'notifications',
+            SendOnAlert::class => 'notifications',
+            TeamInvitation::class => 'notifications',
+            ResetPassword::class => 'notifications',
+            EmailChanged::class => 'notifications',
+        ]);
+
+        DevCommands::artisan('queue:listen --queue=notifications,polls,default --tries=1 --timeout=0', 'queue');
     }
 
     protected function configureRateLimiting(): void

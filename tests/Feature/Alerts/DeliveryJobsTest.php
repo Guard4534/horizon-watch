@@ -169,7 +169,7 @@ function closedSmtpPort(): void
 
 function workOneEmail(): void
 {
-    Artisan::call('queue:work', ['connection' => 'database', '--once' => true, '--queue' => 'default', '--sleep' => 0]);
+    Artisan::call('queue:work', ['connection' => 'database', '--once' => true, '--queue' => 'notifications', '--sleep' => 0]);
 }
 
 test('a mail failure is retried by the worker with its backoff, then logged once as failed without the address', function () {

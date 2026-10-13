@@ -26,6 +26,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Psr\Http\Message\RequestInterface;
 use Throwable;
@@ -39,6 +40,12 @@ final readonly class HorizonClient implements HorizonReader
     private const int MAX_NAME_LENGTH = 255;
 
     private const int MAX_TIMESTAMP = 253_402_300_799;
+
+    private const array MAIN_PATHS = ['stats', 'masters', 'workload'];
+
+    private const array TRANSIENT_STATUSES = [502, 503, 504];
+
+    private const int RETRY_DELAY_MS = 400;
 
     public function __construct(
         private SafeUrlGuard $guard,
@@ -81,6 +88,14 @@ final readonly class HorizonClient implements HorizonReader
 
         $started = hrtime(true);
         $answers = $this->pool($target, $resolved, $paths, count($paths));
+
+        if ($this->worthRetrying($answers) && $this->millisecondsLeft($deadline) > $this->timeoutSeconds * 1000 + self::RETRY_DELAY_MS) {
+            Sleep::for(self::RETRY_DELAY_MS)->milliseconds();
+
+            $started = hrtime(true);
+            $answers = $this->pool($target, $resolved, $paths, count($paths), $deadline);
+        }
+
         $elapsed = hrtime(true) - $started;
 
         $stats = $this->stats($answers['stats']);
@@ -275,6 +290,38 @@ final readonly class HorizonClient implements HorizonReader
         }
 
         return $decoded;
+    }
+
+    /**
+     * @param  array<string, array{response: mixed, watch: TransferWatch}>  $answers
+     */
+    private function worthRetrying(array $answers): bool
+    {
+        $transient = array_map(fn (string $key): ?bool => $this->transient($answers[$key]), self::MAIN_PATHS);
+
+        return in_array(true, $transient, true) && ! in_array(false, $transient, true);
+    }
+
+    /**
+     * @param  array{response: mixed, watch: TransferWatch}  $answer
+     */
+    private function transient(array $answer): ?bool
+    {
+        ['response' => $response, 'watch' => $watch] = $answer;
+
+        if ($watch->tooLarge) {
+            return false;
+        }
+
+        if (! $response instanceof Response || $watch->failed) {
+            return ! in_array(ReadingCause::fromCurlError($watch->errno), [ReadingCause::Timeout, ReadingCause::Tls, ReadingCause::Dns], true);
+        }
+
+        if (in_array($response->status(), self::TRANSIENT_STATUSES, true)) {
+            return true;
+        }
+
+        return $response->status() === 200 ? null : false;
     }
 
     private function location(Response $response): ?string

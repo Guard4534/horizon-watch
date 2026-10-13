@@ -12,6 +12,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Str;
 
 #[Signature('monitoring:prune {--chunk= : Rows deleted per statement}')]
@@ -28,7 +29,12 @@ class PruneReadings extends Command
         $this->info("Resolved {$orphans} orphaned ".Str::plural('alert', $orphans).'.');
 
         $this->report('reading', $this->prune(
-            EnvironmentSnapshot::query()->where('captured_at', '<', $readingCutoff),
+            EnvironmentSnapshot::query()
+                ->where('captured_at', '<', $readingCutoff)
+                ->whereExists(fn (QueryBuilder $newer) => $newer
+                    ->from('environment_snapshots', 'newer')
+                    ->whereColumn('newer.environment_id', 'environment_snapshots.environment_id')
+                    ->whereRaw('(newer.captured_at, newer.id) > (environment_snapshots.captured_at, environment_snapshots.id)')),
             $chunk,
         ));
 

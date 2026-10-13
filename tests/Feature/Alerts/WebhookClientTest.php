@@ -282,7 +282,7 @@ function webhookJobTeam(string $url): Team
 
 function runQueuedJob(): void
 {
-    Artisan::call('queue:work', ['connection' => 'database', '--once' => true, '--queue' => 'default', '--sleep' => 0]);
+    Artisan::call('queue:work', ['connection' => 'database', '--once' => true, '--queue' => 'notifications', '--sleep' => 0]);
 }
 
 test('the webhook job stamps the send time and logs the host only', function () {

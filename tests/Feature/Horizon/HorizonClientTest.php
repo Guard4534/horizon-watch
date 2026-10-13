@@ -18,8 +18,10 @@ use App\Models\Environment;
 use App\Models\EnvironmentState;
 use App\Monitoring\StatusEvaluator;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterval;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Tests\Fixtures\Horizon\FakeResolver;
 use Tests\Support\TraceArguments;
@@ -110,7 +112,14 @@ beforeEach(function () {
     ]);
 
     $this->app->instance(Resolver::class, $this->resolver);
+
+    Sleep::fake();
 });
+
+function mainCalls(string $path): int
+{
+    return Http::recorded(fn (Request $request) => str_ends_with((string) parse_url($request->url(), PHP_URL_PATH), '/horizon/api/'.$path))->count();
+}
 
 test('the container hands out the real client and the system resolver', function () {
     $this->app->forgetInstance(Resolver::class);
@@ -258,6 +267,81 @@ test('a failed main call fails the whole reading', function (string $path, Closu
     'json of the wrong shape' => [fn () => fn () => Http::response(['message' => 'Hello'], 200), ReadingError::NotHorizon],
     'json scalar' => [fn () => fn () => Http::response('42', 200, ['Content-Type' => 'application/json']), ReadingError::NotHorizon],
 ]);
+
+test('a main call that could not connect or met a restarting server is asked once more', function (string $path, Closure $failure) {
+    $calls = 0;
+    fakeHorizonApi([$path => function () use (&$calls, $failure, $path) {
+        return ++$calls === 1 ? $failure() : clientJson($path.'.json')();
+    }]);
+
+    $reading = app(HorizonReader::class)->read(clientTarget());
+
+    expect($reading->stats->status)->toBe('running')
+        ->and($calls)->toBe(2)
+        ->and(mainCalls('workload'))->toBe(2);
+
+    Sleep::assertSleptTimes(1);
+    Sleep::assertSlept(fn (CarbonInterval $duration) => (int) $duration->totalMilliseconds === 400);
+})->with([
+    'stats' => ['stats'],
+    'masters' => ['masters'],
+])->with([
+    'connection refused' => [fn () => Http::failedConnection('cURL error 7: Failed to connect')],
+    '502' => [fn () => Http::response('Bad gateway', 502)],
+    '503' => [fn () => Http::response('Service unavailable', 503)],
+    '504' => [fn () => Http::response('Gateway timeout', 504)],
+]);
+
+test('a main call that fails twice fails the reading', function () {
+    fakeHorizonApi(['stats' => fn () => Http::response('Service unavailable', 503)]);
+
+    expect(clientFailure(fn () => app(HorizonReader::class)->read(clientTarget()))->status)->toBe(503)
+        ->and(mainCalls('stats'))->toBe(2);
+});
+
+test('a failure that asking again cannot fix is not retried', function (string $path, Closure $response) {
+    fakeHorizonApi([$path => $response]);
+
+    clientFailure(fn () => app(HorizonReader::class)->read(clientTarget()));
+
+    expect(mainCalls('stats'))->toBe(1);
+
+    Sleep::assertNeverSlept();
+})->with(['stats', 'workload'])->with([
+    '429' => [fn () => Http::response('Too many requests', 429)],
+    '500' => [fn () => Http::response('Server error', 500)],
+    '401' => [fn () => Http::response('Unauthorized', 401)],
+    '404' => [fn () => Http::response('Not found', 404)],
+    'a web page' => [fn () => Http::response(clientFixture('dashboard.html'), 200, ['Content-Type' => 'text/html'])],
+]);
+
+test('a transient failure next to one that asking again cannot fix is not retried', function () {
+    fakeHorizonApi([
+        'stats' => fn () => Http::response('Service unavailable', 503),
+        'masters' => fn () => Http::response('Unauthorized', 401),
+    ]);
+
+    clientFailure(fn () => app(HorizonReader::class)->read(clientTarget()));
+
+    expect(mainCalls('stats'))->toBe(1);
+});
+
+test('the connection test does not retry', function () {
+    fakeHorizonApi(['stats' => fn () => Http::response('Service unavailable', 503)]);
+
+    clientFailure(fn () => app(HorizonReader::class)->probe(clientTarget()));
+
+    expect(mainCalls('stats'))->toBe(1);
+});
+
+test('the retry is skipped when the read budget could not cover it', function () {
+    config(['horizon-watch.read_budget_seconds' => 5]);
+    fakeHorizonApi(['stats' => fn () => Http::response('Service unavailable', 503)]);
+
+    clientFailure(fn () => app(HorizonReader::class)->read(clientTarget()));
+
+    expect(mainCalls('stats'))->toBe(1);
+});
 
 test('stats that are not what horizon sends are refused', function (array $stats) {
     fakeHorizonApi(['stats' => fn () => Http::response($stats)]);

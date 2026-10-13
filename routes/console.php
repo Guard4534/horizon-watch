@@ -35,3 +35,8 @@ Schedule::command('monitoring:prune')
     ->withoutOverlapping()
     ->onOneServer()
     ->runInBackground();
+
+Schedule::command('queue:prune-failed', ['--hours' => config()->integer('horizon-watch.failed_job_retention_hours')])
+    ->daily()
+    ->withoutOverlapping()
+    ->onOneServer();

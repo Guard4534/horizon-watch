@@ -18,6 +18,7 @@ use App\Externals\Horizon\HorizonReader;
 use App\Externals\Horizon\HorizonReading;
 use App\Externals\Horizon\HorizonTarget;
 use App\Jobs\PollEnvironmentJob;
+use App\Models\Alert;
 use App\Models\AlertRule;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
@@ -25,8 +26,11 @@ use App\Models\EnvironmentState;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
@@ -697,6 +701,119 @@ test('the job is unique per environment, never retried and bounded in time', fun
         ->and($job->tries)->toBe(1)
         ->and($job->timeout)->toBe(30)
         ->and($job->uniqueFor)->toBe(60);
+});
+
+test('a job dropped for its age says so in the log', function () {
+    Log::spy();
+
+    PollEnvironmentJob::dispatchSync($this->environment->id, now()->getTimestamp() - 40);
+
+    Log::shouldHaveReceived('warning')->once()->with(
+        'A poll waited in the queue longer than its interval and was dropped.',
+        ['environment' => $this->environment->id, 'waited_seconds' => 40],
+    );
+});
+
+test('a job killed by its timeout stores an unreachable reading that says so', function () {
+    (new PollEnvironmentJob($this->environment->id))->failed(new TimeoutExceededException('Poll has timed out.'));
+
+    $snapshot = EnvironmentSnapshot::query()->sole();
+    $state = EnvironmentState::query()->sole();
+
+    expect($snapshot->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($snapshot->error)->toBe(ReadingError::Unreachable)
+        ->and($state->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($state->error_detail)->toBe(['cause' => ReadingCause::Timeout->value, 'status' => null, 'location' => null])
+        ->and($this->environment->fresh()->last_polled_at->toDateTimeString())->toBe('2026-09-17 10:00:00');
+});
+
+test('a job that throws stores an unreachable reading blaming the poll, and still fails', function () {
+    Exceptions::fake();
+
+    DB::table('environments')->where('id', $this->environment->id)->update(['basic_auth_password' => 'not-an-encrypted-value']);
+
+    expect(fn () => PollEnvironmentJob::dispatchSync($this->environment->id))->toThrow(DecryptException::class);
+
+    expect($this->reader->passwords)->toBe([])
+        ->and(EnvironmentSnapshot::query()->sole()->error)->toBe(ReadingError::Unreachable)
+        ->and(EnvironmentState::query()->sole()->error_detail['cause'] ?? null)->toBe(ReadingCause::PollFailed->value);
+});
+
+test('polls killed in a row open the unreachable alert like failed readings do', function () {
+    $kill = function () {
+        app()->forgetScopedInstances();
+        (new PollEnvironmentJob($this->environment->id))->failed(new TimeoutExceededException('Poll has timed out.'));
+    };
+
+    $kill();
+
+    foreach (range(1, 7) as $ignored) {
+        $this->travel(15)->seconds();
+        $kill();
+    }
+
+    expect(Alert::query()->count())->toBe(0);
+
+    $this->travel(15)->seconds();
+    $kill();
+
+    expect(Alert::query()->sole()->metric)->toBe(AlertRuleMetric::EndpointUnreachable);
+});
+
+test('a failed job of a paused or deleted environment stores nothing', function (Closure $leave) {
+    $leave($this->environment);
+
+    (new PollEnvironmentJob($this->environment->id))->failed(new RuntimeException('Boom.'));
+
+    expect(EnvironmentSnapshot::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->count())->toBe(0);
+})->with([
+    'paused' => [fn (Environment $environment) => $environment->update(['polling_enabled' => false])],
+    'deleted' => [fn (Environment $environment) => $environment->delete()],
+]);
+
+test('a failed job that a newer reading has replaced stores nothing', function () {
+    $job = new PollEnvironmentJob($this->environment->id);
+
+    $this->travel(20)->seconds();
+    $this->environment->forceFill(['last_polled_at' => now()])->save();
+
+    $this->travel(70)->seconds();
+    $job->failed(new MaxAttemptsExceededException('Poll has been attempted too many times.'));
+
+    expect(EnvironmentSnapshot::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->count())->toBe(0)
+        ->and($this->environment->fresh()->last_polled_at->toDateTimeString())->toBe('2026-09-17 10:00:20');
+});
+
+test('a failed job older than its interval and timeout stores nothing', function () {
+    $job = new PollEnvironmentJob($this->environment->id);
+
+    $this->travel($this->environment->poll_interval_seconds + 31)->seconds();
+    $job->failed(new MaxAttemptsExceededException('Poll has been attempted too many times.'));
+
+    expect(EnvironmentSnapshot::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->count())->toBe(0);
+});
+
+test('a job killed at the end of its wait and timeout still stores its reading', function () {
+    $job = new PollEnvironmentJob($this->environment->id);
+
+    $this->travel($this->environment->poll_interval_seconds + 30)->seconds();
+    $job->failed(new TimeoutExceededException('Poll has timed out.'));
+
+    expect(EnvironmentSnapshot::query()->sole()->error)->toBe(ReadingError::Unreachable);
+});
+
+test('a failed job that cannot store its reading reports it without throwing', function () {
+    Exceptions::fake();
+
+    $this->mock(PollEnvironment::class)->shouldReceive('recordFailure')->andThrow(new RuntimeException('Database is gone for https://monitor:super-secret-value@example.com'));
+
+    (new PollEnvironmentJob($this->environment->id))->failed(new RuntimeException('Boom.'));
+
+    Exceptions::assertReported(fn (RuntimeException $exception) => str_starts_with($exception->getMessage(), 'Recording a failed poll threw '.RuntimeException::class)
+        && ! str_contains($exception->getMessage(), 'super-secret-value'));
 });
 
 test('the state remembers since when its status holds, across readings of the same status', function () {
