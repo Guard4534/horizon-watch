@@ -1,9 +1,12 @@
+import type { HttpExceptionResponse } from '@inertiajs/core';
 import { router } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, watch } from 'vue';
 import { liveRefreshFailed } from '@/composables/useLiveConnection';
 import { useRefreshInterval } from '@/composables/useRefreshInterval';
 
 type Poll = ReturnType<typeof router.poll>;
+
+const GONE = [403, 404];
 
 export function useLivePoll(
     only: string[] = ['page', 'openAlertCount', 'panelHealth'],
@@ -14,13 +17,25 @@ export function useLivePoll(
     let poll: Poll | null = null;
     let mounted = false;
 
+    function failed(response: HttpExceptionResponse): boolean | void {
+        if (!mounted) {
+            return false;
+        }
+
+        if (GONE.includes(response.status) && response.headers['x-inertia']) {
+            return;
+        }
+
+        return liveRefreshFailed();
+    }
+
     function begin(ms: number): void {
         poll?.destroy();
         poll = router.poll(
             ms,
             {
                 only,
-                onHttpException: liveRefreshFailed,
+                onHttpException: failed,
                 onNetworkError: liveRefreshFailed,
             },
             { autoStart: false, mode: 'rest' },

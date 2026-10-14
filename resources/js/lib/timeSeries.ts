@@ -61,7 +61,7 @@ function formatDay(at: Date, locale: string): string {
     return `${part('weekday')} ${part('day')}`;
 }
 
-function formatClock(at: Date, locale: string): string {
+export function formatClock(at: Date, locale: string): string {
     return new Intl.DateTimeFormat(locale, {
         hour: '2-digit',
         minute: '2-digit',

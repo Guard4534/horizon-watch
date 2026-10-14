@@ -503,7 +503,7 @@ test('failed jobs and long-running jobs are dated from the stored timestamps', f
         'pending_jobs' => [
             ['job' => 'App\\Jobs\\ShortOne', 'queue' => 'default', 'reservedAt' => '2026-09-17T09:58:00+00:00'],
             ['job' => 'App\\Jobs\\ExportLedger', 'queue' => 'reports', 'reservedAt' => '2026-09-17T09:57:59+00:00'],
-            ['job' => 'App\\Jobs\\RebuildIndex', 'queue' => 'default', 'reservedAt' => '2026-09-17T09:40:00+00:00'],
+            ['job' => 'App\\Jobs\\RebuildIndex', 'queue' => 'default', 'reservedAt' => '2026-09-17T11:40:00+02:00'],
         ],
     ]);
 
@@ -520,8 +520,8 @@ test('failed jobs and long-running jobs are dated from the stored timestamps', f
         ]);
 
     expect(array_map(fn ($job) => $job->toArray(), $running))->toBe([
-        ['job' => 'App\\Jobs\\RebuildIndex', 'queue' => 'default', 'elapsedSeconds' => 1200, 'startedAt' => '09:40'],
-        ['job' => 'App\\Jobs\\ExportLedger', 'queue' => 'reports', 'elapsedSeconds' => 121, 'startedAt' => '09:57'],
+        ['job' => 'App\\Jobs\\RebuildIndex', 'queue' => 'default', 'elapsedSeconds' => 1200, 'startedAt' => '2026-09-17T09:40:00+00:00'],
+        ['job' => 'App\\Jobs\\ExportLedger', 'queue' => 'reports', 'elapsedSeconds' => 121, 'startedAt' => '2026-09-17T09:57:59+00:00'],
     ]);
 });
 
@@ -606,7 +606,7 @@ test('the stored states are read once per view, however many panels ask', functi
     $this->repository->queues($this->team, $slug);
     $this->repository->failedJobs($this->team, $slug);
     $this->repository->longRunningJobs($this->team, $slug);
-    $this->repository->openAlertIn($this->team, $slug);
+    $this->repository->liveAlertsIn($this->team, $slug);
     $this->repository->alertRules($this->team, 'production');
 
     $states = fn () => collect(DB::getQueryLog())->pluck('query')->filter(fn (string $query) => str_contains($query, 'from "environment_states"'));
@@ -623,7 +623,7 @@ test('the stored states are read once per view, however many panels ask', functi
 
     expect($states())->toHaveCount(2)
         ->and($trends())->toHaveCount(2)
-        ->and(collect(DB::getQueryLog())->pluck('query')->filter(fn (string $query) => str_contains($query, 'from "alerts" where "alerts"."team_id"') && ! str_contains($query, 'limit 1')))->toHaveCount(1);
+        ->and(collect(DB::getQueryLog())->pluck('query')->filter(fn (string $query) => str_contains($query, 'from "alerts" where "alerts"."team_id"') && ! str_contains($query, '"alerts"."environment_id" = ?')))->toHaveCount(1);
 });
 
 test('with zero applications every method returns an empty result without error', function () {
@@ -879,14 +879,17 @@ test('the rule scopes need the environment names, not their readings', function 
         ->and($queries->filter(fn (string $query) => str_contains($query, 'from "environments"')))->toHaveCount(1);
 });
 
-test('the open alert of an environment is its most severe one, whatever the other environments hold', function () {
+test('the live alerts of an environment put its most severe open one first and its muted ones last, whatever the other environments hold', function () {
     $application = Application::factory()->for($this->team)->create();
     [$production, $staging] = Environment::factory()->for($application)->count(2)->sequence(['name' => 'production'], ['name' => 'staging'])->create()->all();
-    Alert::factory()->for($production)->warning()->create(['metric' => AlertRuleMetric::QueuePending, 'opened_at' => now()->subMinute()]);
+    $warning = Alert::factory()->for($production)->warning()->create(['metric' => AlertRuleMetric::QueuePending, 'opened_at' => now()->subMinute()]);
     $critical = Alert::factory()->for($production)->critical()->create(['metric' => AlertRuleMetric::QueueMaxWait, 'opened_at' => now()->subMinutes(5)]);
+    $muted = Alert::factory()->for($production)->critical()->create(['metric' => AlertRuleMetric::EndpointUnreachable, 'muted_indefinitely' => true]);
     Alert::factory()->for($staging)->critical()->create(['metric' => AlertRuleMetric::QueueMaxWait]);
 
-    expect($this->repository->openAlertIn($this->team, $production->slug)?->id)->toBe($critical->id)
-        ->and($this->repository->openAlertIn($this->team, $production->slug)?->environmentId)->toBe($production->slug)
-        ->and($this->repository->openAlertIn($this->team, 'nowhere'))->toBeNull();
+    $alerts = $this->repository->liveAlertsIn($this->team, $production->slug);
+
+    expect(array_map(fn ($alert) => $alert->id, $alerts))->toBe([$critical->id, $warning->id, $muted->id])
+        ->and(array_unique(array_map(fn ($alert) => $alert->environmentId, $alerts)))->toBe([$production->slug])
+        ->and($this->repository->liveAlertsIn($this->team, 'nowhere'))->toBe([]);
 });

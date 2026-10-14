@@ -22,7 +22,10 @@ const { waitThreshold } = defineProps<{
                 note
             }}</span>
         </template>
-        <div class="overflow-x-auto">
+        <div v-if="!queues.length" class="nc-t-xs nc-tone-muted">
+            {{ $t('No queue in the latest reading.') }}
+        </div>
+        <div v-else class="overflow-x-auto">
             <table class="nc-table">
                 <thead>
                     <tr>

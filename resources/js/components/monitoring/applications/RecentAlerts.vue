@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { PhCheckCircle } from '@phosphor-icons/vue';
+import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { ruleIcon, ruleLabel } from '@/lib/alertRules';
@@ -56,9 +57,11 @@ const slug = useTeamSlug();
                         color:
                             alert.state === 'resolved'
                                 ? 'var(--st-ok)'
-                                : alert.environmentStatus
-                                  ? statusColor(alert.environmentStatus)
-                                  : severityColor(alert.severity),
+                                : alert.state === 'muted'
+                                  ? 'var(--nc-neutral-500)'
+                                  : alert.environmentStatus
+                                    ? statusColor(alert.environmentStatus)
+                                    : severityColor(alert.severity),
                     }"
                 />
                 <div class="min-w-0">
@@ -84,6 +87,11 @@ const slug = useTeamSlug();
                                   })
                         }}
                     </div>
+                    <AlertMarks
+                        v-if="alert.state === 'muted'"
+                        :alert="alert"
+                        class="mt-[3px]"
+                    />
                 </div>
             </div>
         </div>

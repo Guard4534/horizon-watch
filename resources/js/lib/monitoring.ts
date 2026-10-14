@@ -70,8 +70,27 @@ export function formatCount(value: number): string {
     return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
 }
 
+function compact(
+    major: number,
+    majorUnit: string,
+    minor: number,
+    minorUnit: string,
+): string {
+    return minor > 0
+        ? `${major}${majorUnit} ${minor}${minorUnit}`
+        : `${major}${majorUnit}`;
+}
+
 export function formatWait(seconds: number): string {
-    return seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`;
+    if (seconds < 60) {
+        return `${Math.round(seconds)}s`;
+    }
+
+    const minutes = Math.round(seconds / 60);
+
+    return minutes < 60
+        ? `${minutes}m`
+        : compact(Math.floor(minutes / 60), 'h', minutes % 60, 'm');
 }
 
 export function exceeds(value: number, threshold: number | null): boolean {
@@ -109,14 +128,20 @@ export function formatElapsed(minutes: number): string {
 }
 
 export function formatDuration(seconds: number): string {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
+    if (seconds < 60) {
+        return `${seconds}s`;
     }
 
-    return `${minutes}m ${seconds % 60}s`;
+    if (seconds < 3600) {
+        return compact(Math.floor(seconds / 60), 'm', seconds % 60, 's');
+    }
+
+    return compact(
+        Math.floor(seconds / 3600),
+        'h',
+        Math.floor((seconds % 3600) / 60),
+        'm',
+    );
 }
 
 export function seriesRefreshInterval(ms: number, stepSeconds: number): number {

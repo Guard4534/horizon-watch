@@ -8,6 +8,7 @@ import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
 import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EffectiveRules from '@/components/monitoring/environment/EffectiveRules.vue';
+import EnvironmentAlerts from '@/components/monitoring/environment/EnvironmentAlerts.vue';
 import FailedJobTable from '@/components/monitoring/environment/FailedJobTable.vue';
 import IncidentBanner from '@/components/monitoring/environment/IncidentBanner.vue';
 import LongRunningJobs from '@/components/monitoring/environment/LongRunningJobs.vue';
@@ -58,9 +59,8 @@ useLivePoll(['series'], (ms) =>
 
 const slug = useTeamSlug();
 const isMobile = useIsMobile();
-const { environment, threshold, incident, lastKnown } = useEnvironmentDetail(
-    () => page,
-);
+const { environment, threshold, incident, incidentAlert, lastKnown } =
+    useEnvironmentDetail(() => page);
 
 const longRunningUnknown = computed(
     () =>
@@ -271,9 +271,11 @@ const tiles = computed<Tile[]>(() => [
             :status="incident"
             :reading-error="environment.readingError"
             :reading-problem="environment.readingProblem"
-            :alert="page.openAlert"
+            :alert="incidentAlert"
             :has-earlier-reading="page.nodes.length + page.queues.length > 0"
         />
+
+        <EnvironmentAlerts v-if="page.alerts.length" :alerts="page.alerts" />
 
         <div
             class="grid"
@@ -332,13 +334,7 @@ const tiles = computed<Tile[]>(() => [
             </div>
         </section>
 
-        <div
-            class="mt-[var(--nc-space-2)] grid items-start"
-            style="
-                grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-                gap: var(--nc-space-6);
-            "
-        >
+        <div class="detail-grid mt-[var(--nc-space-2)]">
             <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
                 <TrendChart
                     :throughput="series.throughput"
@@ -367,3 +363,18 @@ const tiles = computed<Tile[]>(() => [
         </div>
     </div>
 </template>
+
+<style scoped>
+.detail-grid {
+    display: grid;
+    align-items: start;
+    gap: var(--nc-space-6);
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+}
+
+@media (max-width: 1023px) {
+    .detail-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+</style>

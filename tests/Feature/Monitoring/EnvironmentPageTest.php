@@ -39,7 +39,7 @@ test('a down environment carries its incident', function () {
         ->get(route('environments.show', ['current_team' => $this->slug, 'environment' => 'invoice-desk-production']))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environment.status', 'inactive')
-            ->where('page.openAlert.metric', 'horizon.master_inactive')
+            ->where('page.alerts.0.metric', 'horizon.master_inactive')
             ->has('page.failedJobs', 5)
             ->has('page.longRunningJobs', 3)
             ->has('series.throughput', 48)
@@ -54,7 +54,7 @@ test('a healthy environment has no incident', function () {
 
     $this->actingAs($this->user)
         ->get(route('environments.show', ['current_team' => $this->slug, 'environment' => $healthy->id]))
-        ->assertInertia(fn (Assert $page) => $page->where('page.openAlert', null));
+        ->assertInertia(fn (Assert $page) => $page->where('page.alerts', []));
 });
 
 test('switching the range reloads only the series', function () {

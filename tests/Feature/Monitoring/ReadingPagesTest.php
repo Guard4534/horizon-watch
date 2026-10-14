@@ -159,7 +159,7 @@ test('a failed reading carries its reason, zero counters and the last known deta
             ->where('page.nodes.0.status', 'unreachable')
             ->has('page.queues', 3)
             ->where('page.longRunningJobs', [])
-            ->where('page.openAlert.metric', 'endpoint.unreachable'));
+            ->where('page.alerts.0.metric', 'endpoint.unreachable'));
 });
 
 test('a stored problem of an unknown cause is left out', function () {
@@ -188,7 +188,7 @@ test('an environment without readings says nothing yet', function () {
             ->where('page.environment.horizonStatus', null)
             ->where('page.nodes', [])
             ->where('page.queues', [])
-            ->where('page.openAlert', null));
+            ->where('page.alerts', []));
 
     $this->get(readingApplicationUrl($this->application))
         ->assertInertia(fn (Assert $page) => $page

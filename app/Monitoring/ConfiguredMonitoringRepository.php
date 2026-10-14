@@ -296,7 +296,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
                 job: $job['job'],
                 queue: $job['queue'],
                 elapsedSeconds: $elapsed,
-                startedAt: $reservedAt->setTimezone(config()->string('app.timezone'))->format('H:i'),
+                startedAt: $reservedAt->utc()->toIso8601String(),
             );
         }
 
@@ -354,18 +354,20 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             ??= $this->toAlertData($team, $this->alertsIn($team, AlertState::Open)->get());
     }
 
-    public function openAlertIn(Team $team, string $environmentId): ?AlertData
+    public function liveAlertsIn(Team $team, string $environmentId): array
     {
         $environment = $this->findEnvironment($team, $environmentId);
 
         if ($environment === null) {
-            return null;
+            return [];
         }
 
-        return $this->toAlertData($team, $this->alertsIn($team, AlertState::Open)
-            ->where('alerts.environment_id', $environment->id)
-            ->limit(1)
-            ->get())[0] ?? null;
+        return $this->liveAlerts($team, environment: $environment);
+    }
+
+    public function liveAlertsOf(Team $team, string $application): array
+    {
+        return $this->liveAlerts($team, $application);
     }
 
     public function latestResolvedAlerts(Team $team, string $application, int $limit): array
@@ -849,6 +851,18 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     private function snapshotNumber(?EnvironmentState $state, string $column): int
     {
         return (int) $state?->getAttribute("snapshot_{$column}");
+    }
+
+    /**
+     * @return array<int, AlertData>
+     */
+    private function liveAlerts(Team $team, ?string $application = null, ?Environment $environment = null): array
+    {
+        $in = fn (AlertState $state) => $this->alertsIn($team, $state, $application)
+            ->when($environment, fn (Builder $query, Environment $environment) => $query->where('alerts.environment_id', $environment->id))
+            ->get();
+
+        return $this->toAlertData($team, $in(AlertState::Open)->concat($in(AlertState::Muted)));
     }
 
     /**

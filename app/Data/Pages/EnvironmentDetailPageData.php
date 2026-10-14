@@ -15,7 +15,8 @@ class EnvironmentDetailPageData extends Data
 {
     public function __construct(
         public EnvironmentData $environment,
-        public ?AlertData $openAlert,
+        /** @var array<int, AlertData> */
+        public array $alerts,
         /** @var array<int, NodeData> */
         public array $nodes,
         /** @var array<int, QueueData> */

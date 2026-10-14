@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import { PhBellSimpleSlash } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
@@ -17,6 +17,7 @@ import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { useVisibility } from '@/composables/useVisibility';
 import { pageCount } from '@/lib/alerts';
+import { replaceVisit } from '@/lib/visits';
 import { index as alertsIndex } from '@/routes/alerts';
 
 defineOptions({
@@ -40,8 +41,6 @@ function visit(next: {
     application?: string | null;
     number?: number;
 }): void {
-    router.cancelAll({ sync: false, prefetch: false });
-
     const state = next.state ?? page.state;
     const application =
         next.application === undefined ? page.application : next.application;
@@ -52,16 +51,7 @@ function visit(next: {
     if (application) query.application = application;
     if (number > 1) query.page = number;
 
-    router.get(
-        alertsIndex(slug.value, { query }).url,
-        {},
-        {
-            only: ['page'],
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
-        },
-    );
+    replaceVisit(alertsIndex(slug.value, { query }).url, ['page']);
 }
 
 const state = computed({

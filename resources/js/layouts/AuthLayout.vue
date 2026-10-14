@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import LocaleSwitch from '@/components/LocaleSwitch.vue';
 import BrandMark from '@/components/nocturne/BrandMark.vue';
+import { Toaster } from '@/components/ui/sonner';
 
 const {
     title = '',
@@ -51,5 +52,6 @@ const {
         </section>
 
         <LocaleSwitch name="auth-locale" />
+        <Toaster :container-aria-label="$t('Notifications')" />
     </div>
 </template>

@@ -78,7 +78,11 @@ interface MonitoringRepository
     /** @return array<int, AlertData> */
     public function openAlerts(Team $team): array;
 
-    public function openAlertIn(Team $team, string $environmentId): ?AlertData;
+    /** @return array<int, AlertData> */
+    public function liveAlertsIn(Team $team, string $environmentId): array;
+
+    /** @return array<int, AlertData> */
+    public function liveAlertsOf(Team $team, string $application): array;
 
     /** @return array<int, AlertData> */
     public function latestResolvedAlerts(Team $team, string $application, int $limit): array;

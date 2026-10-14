@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { router } from '@inertiajs/vue3';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
@@ -8,6 +7,7 @@ import TimeSeriesChart from '@/components/nocturne/TimeSeriesChart.vue';
 import { useCurrentPath } from '@/composables/useCurrentPath';
 import { formatCount, formatWait } from '@/lib/monitoring';
 import { rangeLabel } from '@/lib/timeSeries';
+import { replaceVisit } from '@/lib/visits';
 
 const { throughput, maxWait, range, grid } = defineProps<{
     throughput: number[];
@@ -34,16 +34,7 @@ const describeWait = (value: number) =>
 const selected = computed({
     get: () => range,
     set: (next: App.Enums.SeriesRange) =>
-        router.get(
-            path.value,
-            { range: next },
-            {
-                only: ['series'],
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-            },
-        ),
+        replaceVisit(path.value, ['series'], { range: next }),
 });
 </script>
 

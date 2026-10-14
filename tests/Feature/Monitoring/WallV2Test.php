@@ -148,7 +148,7 @@ test('an application first appears on the wall at its worst environment', functi
         ]);
 });
 
-test('the phone counts only active environments as up', function () {
+test('the phone counts only active environments as healthy', function () {
     Readings::record($this->production, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending]);
     Readings::record($this->staging);
 

@@ -70,7 +70,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
             <KpiCard
                 compact
                 class="flex-1"
-                :label="$t('Up')"
+                :label="$t('Healthy')"
                 :value="`${kpis.environmentsActive}/${kpis.environmentsTotal}`"
             />
             <KpiCard

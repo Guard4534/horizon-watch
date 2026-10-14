@@ -82,7 +82,10 @@ const groups = computed(() => {
                       )
             "
         />
-        <ApplicationList v-if="isMobile" :groups="groups" />
+        <p v-else-if="groups.length === 0" class="nc-t-sm nc-tone-muted">
+            {{ $t('No application matches this search.') }}
+        </p>
+        <ApplicationList v-else-if="isMobile" :groups="groups" />
         <template v-else>
             <ApplicationSection
                 v-for="group in groups"

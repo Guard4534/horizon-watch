@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Enums\Locale;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
@@ -22,13 +23,19 @@ class SetLocale
 
     protected function locale(Request $request): Locale
     {
-        $supported = array_column(Locale::cases(), 'value');
+        return self::resolve($request, $request->user());
+    }
 
-        $userLocale = $request->user()?->locale;
+    public static function resolve(Request $request, ?User $user): Locale
+    {
+        return $user->locale
+            ?? ($request->hasSession() ? Locale::tryFrom((string) $request->session()->get('locale')) : null)
+            ?? self::preferred($request);
+    }
 
-        return $userLocale
-            ?? Locale::tryFrom((string) $request->session()->get('locale'))
-            ?? Locale::tryFrom((string) $request->getPreferredLanguage($supported))
+    public static function preferred(Request $request): Locale
+    {
+        return Locale::tryFrom((string) $request->getPreferredLanguage(array_column(Locale::cases(), 'value')))
             ?? Locale::tryFrom((string) config('app.locale'))
             ?? Locale::En;
     }

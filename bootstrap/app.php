@@ -4,6 +4,7 @@ use App\Http\Controllers\HealthController;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\SetTeamUrlDefaults;
+use App\Models\User;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -12,7 +13,10 @@ use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\AuthenticateSession;
+use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Inertia\ExceptionResponse;
 use Inertia\Inertia;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
@@ -64,9 +68,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'recipients',
         ]);
 
-        $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
-        );
+        $rendersJson = fn (Request $request) => $request->is('api/*') || $request->expectsJson();
+
+        $exceptions->shouldRenderJsonWhen($rendersJson);
 
         $exceptions->render(function (DecryptException $exception, Request $request): ?RedirectResponse {
             if (! $request->routeIs('two-factor.login.store')) {
@@ -85,6 +89,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
             $message = match ($exception->getStatusCode()) {
                 409, 410 => __('That is no longer possible: the page was out of date.'),
+                419 => __('The page had expired. Try again.'),
                 429 => __('Too many attempts. Wait a minute and try again.'),
                 default => null,
             };
@@ -96,5 +101,38 @@ return Application::configure(basePath: dirname(__DIR__))
             Inertia::flash('toast', ['type' => 'error', 'message' => $message]);
 
             return back(303);
+        });
+
+        Inertia::handleExceptionsUsing(function (ExceptionResponse $response) use ($rendersJson): ExceptionResponse|RedirectResponse|null {
+            $status = $response->statusCode();
+
+            if ($rendersJson($response->request) || ! in_array($status, [403, 404, 419, 500, 503], true)) {
+                return null;
+            }
+
+            if ($status === 500 && config()->boolean('app.debug')) {
+                return null;
+            }
+
+            $request = $response->request;
+
+            if ($request->header('X-Inertia') !== null && ! $request->isMethodSafe() && $request->hasSession()) {
+                Inertia::flash('toast', ['type' => 'error', 'message' => match ($status) {
+                    403 => __('You are not allowed to do that.'),
+                    404 => __('That is no longer possible: the page was out of date.'),
+                    503 => __('Horizon Watch is being updated and will be back in a few minutes.'),
+                    default => __('Something went wrong. Try again in a moment.'),
+                }]);
+
+                return back(303);
+            }
+
+            $user = Auth::hasUser() ? Auth::user() : null;
+
+            App::setLocale(SetLocale::resolve($request, $user instanceof User ? $user : null)->value);
+
+            Inertia::flushShared();
+
+            return $response->render('Error', ['status' => $status, 'locale' => App::getLocale()]);
         });
     })->create();

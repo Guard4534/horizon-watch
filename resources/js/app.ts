@@ -21,6 +21,7 @@ void createInertiaApp({
     layout: (name) => {
         switch (true) {
             case name.startsWith('auth/'):
+            case name === 'Error':
                 return AuthLayout;
             case name.startsWith('settings/'):
             case name.startsWith('teams/'):

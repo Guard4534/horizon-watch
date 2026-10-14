@@ -350,9 +350,9 @@ test('the alert log reads the latest states and trends once, for every environme
         ->and(array_filter($queries, fn (string $sql) => str_contains($sql, 'date_bin')))->toHaveCount(1);
 });
 
-test('the application page lists its open alerts and its five latest resolutions', function () {
+test('the application page lists its open alerts, then the muted ones, then its five latest resolutions', function () {
     $open = Alert::factory()->for($this->production)->critical()->create(['metric' => AlertRuleMetric::EndpointUnreachable]);
-    Alert::factory()->for($this->production)->create(['muted_indefinitely' => true]);
+    $muted = Alert::factory()->for($this->production)->create(['muted_indefinitely' => true]);
     Alert::factory()->for($this->shopProduction)->create();
     $resolved = collect(range(1, 6))->map(fn (int $hours) => Alert::factory()->for($this->staging)->create([
         'resolved_at' => now()->subHours($hours),
@@ -361,25 +361,35 @@ test('the application page lists its open alerts and its five latest resolutions
 
     $this->actingAs($this->admin)
         ->get(route('applications.show', ['current_team' => $this->team->slug, 'application' => $this->billing->slug]))
-        ->assertInertia(fn (Assert $page) => $page->where(
-            'page.recentAlerts',
-            fn ($alerts) => collect($alerts)->pluck('id')->all() === [$open->id, ...$resolved->take(5)->pluck('id')->all()],
-        ));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where(
+                'page.recentAlerts',
+                fn ($alerts) => collect($alerts)->pluck('id')->all() === [$open->id, $muted->id, ...$resolved->take(5)->pluck('id')->all()],
+            )
+            ->where('page.recentAlerts.1.state', 'muted'));
 });
 
-test('the environment page carries its most urgent open alert', function () {
-    Alert::factory()->for($this->production)->create(['opened_at' => now()->subMinute()]);
+test('the environment page lists every live alert of the environment, the muted ones last', function () {
+    $recent = Alert::factory()->for($this->production)->create(['opened_at' => now()->subMinute()]);
     $critical = Alert::factory()->for($this->production)->critical()->create([
         'metric' => AlertRuleMetric::EndpointUnreachable,
         'opened_at' => now()->subHour(),
     ]);
+    $muted = Alert::factory()->for($this->production)->critical()->create([
+        'metric' => AlertRuleMetric::JobsFailedPerHour,
+        'muted_until' => now()->addHour(),
+        'muted_by' => $this->admin->id,
+    ]);
+    Alert::factory()->for($this->production)->create(['metric' => AlertRuleMetric::QueuePending, 'resolved_at' => now()->subMinute()]);
     Alert::factory()->for($this->staging)->critical()->create(['metric' => AlertRuleMetric::EndpointUnreachable]);
 
     $this->actingAs($this->admin)
         ->get(route('environments.show', ['current_team' => $this->team->slug, 'environment' => $this->production->slug]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.openAlert.id', $critical->id)
-            ->where('page.openAlert.canMute', true));
+            ->where('page.alerts', fn ($alerts) => collect($alerts)->pluck('id')->all() === [$critical->id, $recent->id, $muted->id])
+            ->where('page.alerts.0.canMute', true)
+            ->where('page.alerts.2.state', 'muted')
+            ->where('page.alerts.2.mutedBy.name', 'Ada Admin'));
 });
 
 test('the sidebar badge counts the open alerts the viewer sees, muted ones aside', function () {

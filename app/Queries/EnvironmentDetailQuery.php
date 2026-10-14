@@ -21,7 +21,7 @@ class EnvironmentDetailQuery
 
         return new EnvironmentDetailPageData(
             environment: $environment,
-            openAlert: $this->monitoring->openAlertIn($team, $environment->id),
+            alerts: $this->monitoring->liveAlertsIn($team, $environment->id),
             nodes: $this->monitoring->nodes($team, $environment->id),
             queues: $this->monitoring->queues($team, $environment->id),
             failedJobs: $this->monitoring->failedJobs($team, $environment->id),

@@ -5,7 +5,7 @@ import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
 import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
-import MuteMenu from '@/components/monitoring/alerts/MuteMenu.vue';
+import EnvironmentAlerts from '@/components/monitoring/environment/EnvironmentAlerts.vue';
 import IncidentBanner from '@/components/monitoring/environment/IncidentBanner.vue';
 import SilenceMenu from '@/components/monitoring/environment/SilenceMenu.vue';
 import {
@@ -33,9 +33,8 @@ const { page } = defineProps<{
 }>();
 
 const slug = useTeamSlug();
-const { environment, threshold, incident, lastKnown } = useEnvironmentDetail(
-    () => page,
-);
+const { environment, threshold, incident, incidentAlert, lastKnown } =
+    useEnvironmentDetail(() => page);
 
 const tiles = computed(() => [
     {
@@ -159,10 +158,17 @@ const tiles = computed(() => [
                 :status="incident"
                 :reading-error="environment.readingError"
                 :reading-problem="environment.readingProblem"
-                :alert="page.openAlert"
+                :alert="incidentAlert"
                 :has-earlier-reading="
                     page.nodes.length + page.queues.length > 0
                 "
+            />
+
+            <EnvironmentAlerts
+                v-if="page.alerts.length"
+                class="mobile-card"
+                :alerts="page.alerts"
+                compact
             />
 
             <div class="grid grid-cols-3" style="gap: var(--nc-space-2)">
@@ -262,12 +268,6 @@ const tiles = computed(() => [
             </div>
 
             <div class="flex flex-wrap" style="gap: var(--nc-space-2)">
-                <MuteMenu
-                    v-if="page.openAlert?.canMute"
-                    :alert="page.openAlert"
-                    block
-                    large
-                />
                 <SilenceMenu
                     v-if="page.canSilence"
                     :environment-id="environment.id"

@@ -6,7 +6,7 @@ import {
     PhLockKey,
     PhArrowsClockwise,
 } from '@phosphor-icons/vue';
-import { nextTick, onMounted, ref, useTemplateRef } from 'vue';
+import { nextTick, onUnmounted, ref, useTemplateRef } from 'vue';
 import AlertError from '@/components/AlertError.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,26 +21,41 @@ import { regenerateRecoveryCodes } from '@/routes/two-factor';
 
 const { recoveryCodesList, fetchRecoveryCodes, errors } = useTwoFactorAuth();
 const isRecoveryCodesVisible = ref<boolean>(false);
+const confirmingRegeneration = ref<boolean>(false);
 const recoveryCodeSectionRef = useTemplateRef('recoveryCodeSectionRef');
 
-const toggleRecoveryCodesVisibility = async () => {
-    if (!isRecoveryCodesVisible.value && !recoveryCodesList.value.length) {
-        await fetchRecoveryCodes();
-    }
-
-    isRecoveryCodesVisible.value = !isRecoveryCodesVisible.value;
-
-    if (isRecoveryCodesVisible.value) {
-        await nextTick();
-        recoveryCodeSectionRef.value?.scrollIntoView({ behavior: 'smooth' });
-    }
+const hideRecoveryCodes = () => {
+    isRecoveryCodesVisible.value = false;
+    confirmingRegeneration.value = false;
+    recoveryCodesList.value = [];
 };
 
-onMounted(async () => {
-    if (!recoveryCodesList.value.length) {
-        await fetchRecoveryCodes();
+const toggleRecoveryCodesVisibility = async () => {
+    if (isRecoveryCodesVisible.value) {
+        hideRecoveryCodes();
+
+        return;
     }
-});
+
+    isRecoveryCodesVisible.value = true;
+    await fetchRecoveryCodes();
+
+    if (!isRecoveryCodesVisible.value) {
+        recoveryCodesList.value = [];
+
+        return;
+    }
+
+    await nextTick();
+    recoveryCodeSectionRef.value?.scrollIntoView({ behavior: 'smooth' });
+};
+
+const regenerated = async () => {
+    confirmingRegeneration.value = false;
+    await fetchRecoveryCodes();
+};
+
+onUnmounted(hideRecoveryCodes);
 </script>
 
 <template>
@@ -73,16 +88,47 @@ onMounted(async () => {
                     }}
                 </Button>
 
+                <Button
+                    v-if="
+                        isRecoveryCodesVisible &&
+                        recoveryCodesList.length &&
+                        !confirmingRegeneration
+                    "
+                    variant="secondary"
+                    @click="confirmingRegeneration = true"
+                >
+                    <PhArrowsClockwise /> {{ $t('Regenerate codes') }}
+                </Button>
+            </div>
+            <div
+                v-if="confirmingRegeneration"
+                class="mt-3 flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+                <p class="text-sm">
+                    {{
+                        $t(
+                            'The codes you have now stop working at once, and new ones replace them.',
+                        )
+                    }}
+                </p>
                 <Form
-                    v-if="isRecoveryCodesVisible && recoveryCodesList.length"
                     v-bind="regenerateRecoveryCodes.form()"
                     method="post"
                     :options="{ preserveScroll: true }"
-                    @success="fetchRecoveryCodes"
+                    class="flex flex-none gap-2"
+                    @success="regenerated"
                     #default="{ processing }"
                 >
                     <Button
                         variant="secondary"
+                        type="button"
+                        :disabled="processing"
+                        @click="confirmingRegeneration = false"
+                    >
+                        {{ $t('Cancel') }}
+                    </Button>
+                    <Button
+                        variant="destructive"
                         type="submit"
                         :disabled="processing"
                     >
@@ -90,14 +136,7 @@ onMounted(async () => {
                     </Button>
                 </Form>
             </div>
-            <div
-                :class="[
-                    'relative overflow-hidden transition-all duration-300',
-                    isRecoveryCodesVisible
-                        ? 'h-auto opacity-100'
-                        : 'h-0 opacity-0',
-                ]"
-            >
+            <div v-if="isRecoveryCodesVisible">
                 <div v-if="errors?.length" class="mt-6">
                     <AlertError :errors="errors" />
                 </div>

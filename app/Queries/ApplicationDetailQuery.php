@@ -2,7 +2,6 @@
 
 namespace App\Queries;
 
-use App\Data\Monitoring\AlertData;
 use App\Data\Monitoring\EnvironmentData;
 use App\Data\Pages\ApplicationDetailPageData;
 use App\Models\Team;
@@ -20,12 +19,6 @@ class ApplicationDetailQuery
             $this->monitoring->configurableEnvironments($team),
             fn (EnvironmentData $environment) => $environment->applicationId === $application->id,
         ));
-        $environmentIds = array_map(fn (EnvironmentData $environment) => $environment->id, $environments);
-
-        $open = array_filter(
-            $this->monitoring->openAlerts($team),
-            fn (AlertData $alert) => in_array($alert->environmentId, $environmentIds, true),
-        );
         $resolved = $this->monitoring->latestResolvedAlerts($team, $application->id, config()->integer('horizon-watch.pages.resolved_alerts'));
 
         $worstEnvironments = array_values(array_filter(
@@ -37,7 +30,7 @@ class ApplicationDetailQuery
         return new ApplicationDetailPageData(
             application: $application,
             environments: $environments,
-            recentAlerts: [...array_values($open), ...$resolved],
+            recentAlerts: [...$this->monitoring->liveAlertsOf($team, $application->id), ...$resolved],
             worstStatus: $worstEnvironments[0]->status ?? null,
         );
     }

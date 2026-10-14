@@ -38,6 +38,10 @@ const onOpenChange = (next: boolean) => {
 };
 
 const submit = () => {
+    if (!matches.value || form.processing) {
+        return;
+    }
+
     form.delete(url, {
         preserveScroll: true,
         onSuccess: () => onOpenChange(false),

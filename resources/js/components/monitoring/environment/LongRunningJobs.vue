@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import SectionCard from '@/components/nocturne/SectionCard.vue';
+import { useLocale } from '@/composables/useLocale';
 import { formatDuration } from '@/lib/monitoring';
+import { formatClock } from '@/lib/timeSeries';
 
 const {
     jobs,
@@ -11,6 +13,8 @@ const {
     thresholdSeconds: number | null;
     unknown?: boolean;
 }>();
+
+const { locale } = useLocale();
 
 function color(seconds: number): string {
     if (thresholdSeconds === null) return 'var(--nc-neutral-400)';
@@ -77,7 +81,11 @@ function width(seconds: number): string {
                 </div>
                 <div class="nc-tone-faint mt-1">
                     queue {{ job.queue }} ·
-                    {{ $t('started at :time', { time: job.startedAt }) }}
+                    {{
+                        $t('started at :time', {
+                            time: formatClock(new Date(job.startedAt), locale),
+                        })
+                    }}
                 </div>
             </div>
         </div>
