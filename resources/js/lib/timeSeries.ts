@@ -127,7 +127,7 @@ function localTicks(from: number, until: number, minutes: number): number[] {
             return ticks;
         }
 
-        if (at >= from) {
+        if (at >= from && at > (ticks[ticks.length - 1] ?? -Infinity)) {
             ticks.push(at);
         }
     }

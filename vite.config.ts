@@ -36,6 +36,12 @@ export default defineConfig({
             ],
         },
     },
+    test: {
+        include: ['resources/js/**/*.test.ts'],
+        env: {
+            TZ: 'Europe/Rome',
+        },
+    },
     lint: {
         ignorePatterns: [
             'vendor/**',

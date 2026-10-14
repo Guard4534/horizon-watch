@@ -83,7 +83,7 @@ switch ($scenario) {
         break;
 
     case 'slow':
-        sleep(2);
+        sleep(4);
         http_response_code(200);
         break;
 

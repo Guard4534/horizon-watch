@@ -65,6 +65,12 @@
             "@php artisan config:clear --ansi",
             "@php artisan test --compact"
         ],
+        "test:coverage": [
+            "Composer\\Config::disableProcessTimeout",
+            "@putenv XDEBUG_MODE=coverage",
+            "@php artisan config:clear --ansi",
+            "@php artisan test --compact --coverage --min=95"
+        ],
         "ci:check": [
             "Composer\\Config::disableProcessTimeout",
             "@lint:check",
@@ -73,6 +79,7 @@
             "@php artisan wayfinder:generate --with-form --ansi",
             "npm run check",
             "npm run types:check",
+            "npm run test",
             "@test"
         ],
         "post-autoload-dump": [

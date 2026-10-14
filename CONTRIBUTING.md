@@ -49,17 +49,21 @@ That creates a demo organization with a few weeks of readings and an administrat
 ## Commands
 
 ```bash
-./vendor/bin/sail composer ci:check     # everything CI runs
-./vendor/bin/sail composer lint         # Pint, writing
-./vendor/bin/sail composer test         # Pest only
-./vendor/bin/sail npm run check         # front-end lint and formatting
-./vendor/bin/sail npm run types:check   # regenerates TS types, then vue-tsc
+./vendor/bin/sail composer ci:check      # everything CI runs
+./vendor/bin/sail composer lint          # Pint, writing
+./vendor/bin/sail composer test          # Pest only
+./vendor/bin/sail composer test:coverage # Pest with the coverage floor CI applies
+./vendor/bin/sail npm run check          # front-end lint and formatting
+./vendor/bin/sail npm run types:check    # regenerates TS types, then vue-tsc
+./vendor/bin/sail npm run test           # front-end unit tests (Vitest through vp test)
 ./vendor/bin/sail npm run build
-./bin/smoke-prod.sh                     # builds the production image, checks a fresh install
+./bin/smoke-prod.sh                      # builds the production image, checks a fresh install
 ```
 
 `composer ci:check` is the single entry point: Pint, Larastan, the front-end lint, the
-front-end type check and the Pest suite, in that order. Run it before opening a pull request.
+front-end type check, the front-end unit tests and the Pest suite, in that order. Run it before
+opening a pull request. CI also runs the Pest suite with coverage in a job of its own and fails
+below the floor set in `composer test:coverage`.
 
 ## Where code goes
 
@@ -113,6 +117,15 @@ another one, point it at a database of its own:
 ./vendor/bin/sail exec pgsql createdb -U sail testing_two
 docker compose exec -u sail -e DB_DATABASE=testing_two laravel.test php artisan test
 ```
+
+Front-end unit tests sit next to the module they test, as `*.test.ts`, and import from
+`vite-plus/test`. They cover pure logic in `resources/js/lib`, the helpers next to components
+and the composables; nothing is mounted. They run in the `Europe/Rome` time zone (set in
+`vite.config.ts`), so date arithmetic meets a daylight-saving change.
+
+Monitoring tests build the few applications and environments they need with factories and
+`Tests\Support\Readings::record()`. The demo organization of `DatabaseSeeder` is pinned only by
+`tests/Feature/Seeders/DatabaseSeederTest.php`.
 
 `tests/Feature/Horizon/LiveHorizonTest.php` is skipped unless `HORIZON_WATCH_LIVE_URL` points
 at a real Horizon dashboard. Never set it in CI.

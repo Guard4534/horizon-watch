@@ -5,6 +5,7 @@ use App\Alerts\Events\AlertResolved;
 use App\Enums\AlertRuleMetric;
 use App\Models\Alert;
 use App\Models\AlertNotification;
+use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
@@ -26,6 +27,7 @@ test('the demo environments are not polled and carry a day of readings', functio
     $dayAgo = now()->subDay();
 
     expect($environments)->toHaveCount(29)
+        ->and(Application::query()->count())->toBe(9)
         ->and($environments->every(fn (Environment $environment) => $environment->polling_enabled === false))->toBeTrue()
         ->and($environments->every(fn (Environment $environment) => $environment->state?->captured_at->equalTo(now())))->toBeTrue()
         ->and($environments->every(fn (Environment $environment) => $environment->snapshots_count === 480))->toBeTrue()

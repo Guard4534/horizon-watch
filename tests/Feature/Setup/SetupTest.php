@@ -61,6 +61,24 @@ test('the action itself refuses a second setup', function () {
     app(CompleteSetup::class)->handle(SetupData::from(setupPayload()));
 })->throws(SetupAlreadyCompleted::class);
 
+test('setup takes its advisory lock inside the transaction before it looks for an account', function () {
+    $outer = DB::transactionLevel();
+    $statements = [];
+
+    DB::beforeExecuting(function (string $sql) use (&$statements, $outer) {
+        $statements[] = [$sql, DB::transactionLevel() > $outer];
+    });
+
+    app(CompleteSetup::class)->handle(SetupData::from(setupPayload()));
+
+    $lock = collect($statements)->search(fn (array $statement) => str_contains($statement[0], 'pg_advisory_xact_lock'));
+    $lookup = collect($statements)->search(fn (array $statement) => str_starts_with($statement[0], 'select exists(select * from "users"'));
+
+    expect($lock)->toBeInt()
+        ->and($statements[$lock][1])->toBeTrue()
+        ->and($lookup)->toBeInt()->toBeGreaterThan($lock);
+});
+
 test('passwords need at least ten characters and a matching confirmation', function () {
     $this->post(route('setup.store'), setupPayload(['password' => 'short', 'password_confirmation' => 'short']))
         ->assertSessionHasErrors('password');

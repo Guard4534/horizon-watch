@@ -1,10 +1,11 @@
 <?php
 
+use App\Enums\AlertRuleMetric;
+use App\Enums\EnvironmentStatus;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\Application;
 use App\Models\Environment;
 use App\Models\User;
-use App\Monitoring\MonitoringRepository;
-use Database\Seeders\DatabaseSeeder;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\Readings;
@@ -12,8 +13,11 @@ use Tests\Support\Readings;
 beforeEach(function () {
     $this->user = User::factory()->create();
     $this->slug = $this->user->currentTeam->slug;
-    (new DatabaseSeeder)->seedMockupOrganization($this->user->currentTeam);
-    Readings::mockup($this->user->currentTeam);
+
+    $invoices = Application::factory()->for($this->user->currentTeam)->create(['name' => 'Invoice Desk']);
+
+    Readings::record(Environment::factory()->for($invoices)->production()->create(), EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
+    Readings::record(Environment::factory()->for($invoices)->staging()->create());
 });
 
 test('a down environment carries its incident', function () {
@@ -47,14 +51,11 @@ test('a down environment carries its incident', function () {
 });
 
 test('a healthy environment has no incident', function () {
-    $this->actingAs($this->user);
-
-    $healthy = collect(app(MonitoringRepository::class)->environments($this->user->currentTeam))
-        ->first(fn ($environment) => $environment->status->isHealthy());
-
     $this->actingAs($this->user)
-        ->get(route('environments.show', ['current_team' => $this->slug, 'environment' => $healthy->id]))
-        ->assertInertia(fn (Assert $page) => $page->where('page.alerts', []));
+        ->get(route('environments.show', ['current_team' => $this->slug, 'environment' => 'invoice-desk-staging']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.environment.status', 'active')
+            ->where('page.alerts', []));
 });
 
 test('switching the range reloads only the series', function () {

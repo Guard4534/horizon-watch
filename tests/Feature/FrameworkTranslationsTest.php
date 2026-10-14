@@ -61,10 +61,7 @@ test('a wrong password confirmation is reported in italian', function () {
 test('a wrong two-factor code is reported in italian', function (string $field, string $message) {
     $this->skipUnlessFortifyHas(Features::twoFactorAuthentication());
 
-    $user = User::factory()->withTwoFactor()->create([
-        'locale' => Locale::It,
-        'two_factor_secret' => encrypt('JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'),
-    ]);
+    $user = User::factory()->withTwoFactor()->create(['locale' => Locale::It]);
 
     $this->post(route('login'), ['email' => $user->email, 'password' => 'password'])
         ->assertRedirect(route('two-factor.login'));

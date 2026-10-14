@@ -14,7 +14,7 @@ function interfaceFiles(): array
 {
     $files = [];
 
-    foreach (Finder::create()->files()->in(resource_path('js'))->name(['*.vue', '*.ts'])->exclude(['generated', 'routes', 'actions', 'wayfinder', 'components/ui']) as $file) {
+    foreach (Finder::create()->files()->in(resource_path('js'))->name(['*.vue', '*.ts'])->notName('*.test.ts')->exclude(['generated', 'routes', 'actions', 'wayfinder', 'components/ui']) as $file) {
         $files[$file->getRelativePathname()] = $file->getContents();
     }
 

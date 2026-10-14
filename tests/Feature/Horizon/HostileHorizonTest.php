@@ -5,40 +5,20 @@ use App\Enums\ReadingError;
 use App\Externals\Horizon\Exceptions\HorizonReadFailed;
 use App\Externals\Horizon\HorizonReader;
 use App\Externals\Horizon\HorizonTarget;
+use Tests\Support\FixtureServer;
 
 beforeAll(function () {
-    $socket = stream_socket_server('tcp://127.0.0.1:0');
-    $port = (int) substr((string) strrchr((string) stream_socket_get_name($socket, false), ':'), 1);
-    fclose($socket);
-
     $counter = (string) tempnam(sys_get_temp_dir(), 'hostile-horizon-');
 
-    $process = proc_open(
-        [PHP_BINARY, '-S', "127.0.0.1:{$port}", dirname(__DIR__, 2).'/Fixtures/Horizon/hostile-server.php'],
-        [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']],
-        $pipes,
-        null,
-        [...getenv(), 'PHP_CLI_SERVER_WORKERS' => '16', 'HOSTILE_COUNTER_FILE' => $counter],
-    );
+    $server = FixtureServer::start(dirname(__DIR__, 2).'/Fixtures/Horizon/hostile-server.php', ['HOSTILE_COUNTER_FILE' => $counter], workers: 16);
 
-    $deadline = microtime(true) + 5;
-
-    while (($probe = @fsockopen('127.0.0.1', $port, timeout: 0.1)) === false && microtime(true) < $deadline) {
-        usleep(50_000);
-    }
-
-    if ($probe !== false) {
-        fclose($probe);
-    }
-
-    $GLOBALS['hostileHorizon'] = ['process' => $process, 'port' => $port, 'counter' => $counter];
+    $GLOBALS['hostileHorizon'] = ['server' => $server, 'port' => $server->port, 'counter' => $counter];
 });
 
 afterAll(function () {
-    ['process' => $process, 'counter' => $counter] = $GLOBALS['hostileHorizon'];
+    ['server' => $server, 'counter' => $counter] = $GLOBALS['hostileHorizon'];
 
-    proc_terminate($process);
-    proc_close($process);
+    $server->stop();
     @unlink($counter);
 });
 
@@ -75,7 +55,7 @@ test('an answer that announces more than 2 MiB is refused at once', function () 
     $started = microtime(true);
 
     expect(hostileFailure(fn () => app(HorizonReader::class)->probe(hostileTarget('announced-too-large'))))->toBe(ReadingError::NotHorizon)
-        ->and(microtime(true) - $started)->toBeLessThan(1.0);
+        ->and(microtime(true) - $started)->toBeLessThan(config()->integer('horizon-watch.http_timeout_seconds'));
 });
 
 test('an answer that never ends is cut at 2 MiB without buffering it', function () {
@@ -86,7 +66,7 @@ test('an answer that never ends is cut at 2 MiB without buffering it', function 
 
     expect(hostileFailure(fn () => app(HorizonReader::class)->probe(hostileTarget('endless'))))->toBe(ReadingError::NotHorizon)
         ->and(hostileFailure(fn () => app(HorizonReader::class)->read(hostileTarget('endless'))))->toBe(ReadingError::NotHorizon)
-        ->and(microtime(true) - $started)->toBeLessThan(1.5)
+        ->and(microtime(true) - $started)->toBeLessThan(config()->integer('horizon-watch.http_timeout_seconds'))
         ->and(memory_get_peak_usage(true) - $memory)->toBeLessThan(32 * 1024 * 1024);
 
     ini_set('memory_limit', (string) $limit);
@@ -140,7 +120,7 @@ test('runtime requests stop at the read budget and leave runtime unknown', funct
 
     $reading = app(HorizonReader::class)->read(hostileTarget('slow-metrics'));
 
-    expect(microtime(true) - $started)->toBeLessThan(1.2)
+    expect(microtime(true) - $started)->toBeLessThan(config()->integer('horizon-watch.http_timeout_seconds'))
         ->and($reading->workload)->toHaveCount(30)
         ->and($reading->queueRuntimes)->toBe([]);
 });

@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Fortify\Features;
+use PragmaRX\Google2FA\Google2FA;
 
 test('security page is displayed', function () {
     $this->skipUnlessFortifyHas(Features::twoFactorAuthentication());
@@ -246,3 +247,73 @@ test('changing the password keeps remember-me working on this device', function 
     $this->withCookie($recaller, (string) $renewed)->get(route('profile.edit'))->assertOk();
     $this->assertAuthenticatedAs($user);
 });
+
+test('two-factor authentication is set up, confirmed, given new recovery codes and turned off', function () {
+    $this->skipUnlessFortifyHas(Features::twoFactorAuthentication());
+
+    $user = User::factory()->create();
+    $this->actingAs($user)->withSession(['auth.password_confirmed_at' => time()]);
+
+    $this->post(route('two-factor.enable'))->assertRedirect();
+
+    $user->refresh();
+    $secret = decrypt($user->two_factor_secret);
+
+    expect($user->two_factor_confirmed_at)->toBeNull()
+        ->and($user->hasEnabledTwoFactorAuthentication())->toBeFalse()
+        ->and($user->recoveryCodes())->toHaveCount(8);
+
+    $this->getJson(route('two-factor.secret-key'))->assertOk()->assertJson(['secretKey' => $secret]);
+    $this->getJson(route('two-factor.qr-code'))->assertOk()->assertJsonStructure(['svg', 'url']);
+
+    $code = app(Google2FA::class)->getCurrentOtp($secret);
+
+    $this->from(route('security.edit'))
+        ->post(route('two-factor.confirm'), ['code' => $code === '000000' ? '111111' : '000000'])
+        ->assertSessionHasErrors('code', errorBag: 'confirmTwoFactorAuthentication');
+
+    expect($user->refresh()->two_factor_confirmed_at)->toBeNull();
+
+    $this->post(route('two-factor.confirm'), ['code' => $code])->assertSessionHasNoErrors();
+
+    expect($user->refresh()->hasEnabledTwoFactorAuthentication())->toBeTrue();
+
+    $this->get(route('security.edit'))
+        ->assertInertia(fn (Assert $page) => $page->where('twoFactorEnabled', true));
+
+    $codes = $this->getJson(route('two-factor.recovery-codes'))->assertOk()->json();
+
+    $this->post(route('two-factor.regenerate-recovery-codes'))->assertRedirect();
+
+    expect($user->refresh()->recoveryCodes())->toHaveCount(8)
+        ->and(array_intersect($codes, $user->recoveryCodes()))->toBe([]);
+
+    $this->delete(route('two-factor.disable'))->assertRedirect();
+
+    $user->refresh();
+
+    expect($user->two_factor_secret)->toBeNull()
+        ->and($user->two_factor_recovery_codes)->toBeNull()
+        ->and($user->two_factor_confirmed_at)->toBeNull();
+});
+
+test('managing two-factor authentication needs a recently confirmed password', function (string $method, string $route) {
+    $this->skipUnlessFortifyHas(Features::twoFactorAuthentication());
+
+    $user = User::factory()->withTwoFactor()->create();
+    $secret = $user->two_factor_secret;
+
+    $this->actingAs($user)
+        ->{$method}(route($route))
+        ->assertRedirect(route('password.confirm'));
+
+    expect($user->refresh()->two_factor_secret)->toBe($secret);
+})->with([
+    'enable' => ['post', 'two-factor.enable'],
+    'confirm' => ['post', 'two-factor.confirm'],
+    'show the QR code' => ['get', 'two-factor.qr-code'],
+    'disable' => ['delete', 'two-factor.disable'],
+    'show the secret' => ['get', 'two-factor.secret-key'],
+    'show the recovery codes' => ['get', 'two-factor.recovery-codes'],
+    'new recovery codes' => ['post', 'two-factor.regenerate-recovery-codes'],
+]);

@@ -9,7 +9,7 @@ function literalTranslationKeys(string $directory, string $pattern, array $names
 {
     $keys = [];
 
-    foreach (Finder::create()->files()->in(base_path($directory))->name($names)->exclude(['generated', 'routes', 'actions', 'wayfinder', 'components/ui']) as $file) {
+    foreach (Finder::create()->files()->in(base_path($directory))->name($names)->notName('*.test.ts')->exclude(['generated', 'routes', 'actions', 'wayfinder', 'components/ui']) as $file) {
         preg_match_all($pattern, $file->getContents(), $matches, PREG_SET_ORDER);
 
         foreach ($matches as $match) {
@@ -94,7 +94,7 @@ test('the framework strings that reach people have an italian translation', func
 test('every italian translation is still used', function () {
     $source = '';
 
-    foreach (Finder::create()->files()->in(array_map(base_path(...), ['app', 'bootstrap', 'resources/js', 'resources/views']))->name(['*.php', '*.vue', '*.ts'])->exclude(['generated', 'routes', 'actions', 'wayfinder']) as $file) {
+    foreach (Finder::create()->files()->in(array_map(base_path(...), ['app', 'bootstrap', 'resources/js', 'resources/views']))->name(['*.php', '*.vue', '*.ts'])->notName('*.test.ts')->exclude(['generated', 'routes', 'actions', 'wayfinder']) as $file) {
         $source .= $file->getContents();
     }
 

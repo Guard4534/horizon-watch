@@ -11,6 +11,7 @@ use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\Team;
 use App\Models\User;
+use App\Queries\WallQuery;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\Readings;
@@ -243,4 +244,43 @@ test('the poll reload answers with only the props it asks for, and with the new 
         ->assertJsonPath('props.openAlertCount', 0)
         ->assertJsonMissingPath('props.teams')
         ->assertJsonMissingPath('props.canManageApplications');
+});
+
+test('filters in the query string do not change what the server sends', function () {
+    Readings::record($this->production, EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
+    Readings::record($this->staging);
+
+    $this->actingAs($this->admin)
+        ->get(route('wall', ['current_team' => $this->team->slug, 'filter' => 'problems', 'environment' => 'production', 'q' => 'nothing-matches']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('monitoring/Wall')
+            ->has('page.environments', 2));
+});
+
+test('the wall lists the most severe environments first, then the busiest', function () {
+    $other = Application::factory()->for($this->team)->create(['name' => 'Billing']);
+    $environments = [
+        [$this->production, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending], 40],
+        [$this->staging, EnvironmentStatus::Active, [], 900],
+        [Environment::factory()->for($other)->production()->create(), EnvironmentStatus::Active, [], 30],
+        [Environment::factory()->for($other)->staging()->create(), EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused], 5],
+        [Environment::factory()->for($other)->preprod()->create(), EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending], 400],
+    ];
+
+    foreach ($environments as [$environment, $status, $breaches, $pending]) {
+        Readings::record($environment, $status, $breaches, snapshot: ['pending' => $pending]);
+    }
+
+    $this->actingAs($this->admin);
+
+    $rows = app(WallQuery::class)->handle($this->team, $this->admin)->environments;
+
+    expect(array_map(fn ($row) => [$row->status->value, $row->pending], $rows))->toBe([
+        ['paused', 5],
+        ['degraded', 400],
+        ['degraded', 40],
+        ['active', 900],
+        ['active', 30],
+    ]);
 });

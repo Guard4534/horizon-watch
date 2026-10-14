@@ -177,6 +177,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The browser tab kept the name the image was built with instead of following `APP_NAME`.
 - Controls drawn by the browser, such as scrollbars, checkboxes and autofilled fields, were
   light on the dark pages.
+- On the day the clocks go forward, the time axis of the charts showed the first hour after the
+  change twice.
 
 ## [0.1.0] - 2026-09-29
 

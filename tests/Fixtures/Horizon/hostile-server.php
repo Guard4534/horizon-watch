@@ -25,7 +25,7 @@ if ($rest === 'horizon/api/workload' && $scenario === 'slow-metrics') {
 if (str_starts_with($rest, 'horizon/api/metrics/queues/') && $scenario === 'slow-metrics') {
     header('Content-Type: application/json');
 
-    for ($i = 0; $i < 15 && ! connection_aborted(); $i++) {
+    for ($i = 0; $i < 30 && ! connection_aborted(); $i++) {
         usleep(100_000);
         echo ' ';
         flush();

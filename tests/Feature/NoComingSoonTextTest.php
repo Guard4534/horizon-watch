@@ -5,7 +5,7 @@ use Symfony\Component\Finder\Finder;
 test('the interface promises nothing for a later release', function () {
     $found = [];
 
-    foreach (Finder::create()->files()->in(resource_path('js'))->name(['*.vue', '*.ts'])->exclude(['generated']) as $file) {
+    foreach (Finder::create()->files()->in(resource_path('js'))->name(['*.vue', '*.ts'])->notName('*.test.ts')->exclude(['generated']) as $file) {
         foreach (['available soon', 'next release', 'coming soon'] as $phrase) {
             if (str_contains(strtolower($file->getContents()), $phrase)) {
                 $found[] = $file->getRelativePathname().': '.$phrase;

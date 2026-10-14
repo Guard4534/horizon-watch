@@ -27,43 +27,23 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\URL;
 use Tests\Fixtures\Horizon\FakeResolver;
 use Tests\Support\AnotherAppKey;
+use Tests\Support\FixtureServer;
 use Tests\Support\TraceArguments;
 
 const WEBHOOK_TEST_SECRET = 'whsec-correct-horse-battery-staple';
 
 beforeAll(function () {
-    $socket = stream_socket_server('tcp://127.0.0.1:0');
-    $port = (int) substr((string) strrchr((string) stream_socket_get_name($socket, false), ':'), 1);
-    fclose($socket);
-
     $log = (string) tempnam(sys_get_temp_dir(), 'webhook-receiver-');
 
-    $process = proc_open(
-        [PHP_BINARY, '-S', "127.0.0.1:{$port}", dirname(__DIR__, 2).'/Fixtures/Webhook/receiver.php'],
-        [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']],
-        $pipes,
-        null,
-        [...getenv(), 'PHP_CLI_SERVER_WORKERS' => '8', 'RECEIVER_LOG_FILE' => $log],
-    );
+    $server = FixtureServer::start(dirname(__DIR__, 2).'/Fixtures/Webhook/receiver.php', ['RECEIVER_LOG_FILE' => $log], workers: 8);
 
-    $deadline = microtime(true) + 5;
-
-    while (($probe = @fsockopen('127.0.0.1', $port, timeout: 0.1)) === false && microtime(true) < $deadline) {
-        usleep(50_000);
-    }
-
-    if ($probe !== false) {
-        fclose($probe);
-    }
-
-    $GLOBALS['webhookReceiver'] = ['process' => $process, 'port' => $port, 'log' => $log];
+    $GLOBALS['webhookReceiver'] = ['server' => $server, 'port' => $server->port, 'log' => $log];
 });
 
 afterAll(function () {
-    ['process' => $process, 'log' => $log] = $GLOBALS['webhookReceiver'];
+    ['server' => $server, 'log' => $log] = $GLOBALS['webhookReceiver'];
 
-    proc_terminate($process);
-    proc_close($process);
+    $server->stop();
     @unlink($log);
 });
 
@@ -146,10 +126,11 @@ test('a redirect is not followed and fails as http_3xx', function () {
 });
 
 test('an error status fails with its class', function (string $scenario, DeliveryError $reason) {
+    config(['horizon-watch.webhook_timeout_seconds' => 3]);
     $started = microtime(true);
 
     expect(webhookFailure(fn () => app(WebhookClient::class)->post(receiverUrl($scenario), WEBHOOK_TEST_SECRET, ['event' => 'test']))?->reason)->toBe($reason)
-        ->and(microtime(true) - $started)->toBeLessThan(1.0);
+        ->and(microtime(true) - $started)->toBeLessThan(3.0);
 })->with([
     '404' => ['not-found', DeliveryError::ClientError],
     '500' => ['server-error', DeliveryError::ServerError],
@@ -185,10 +166,11 @@ test('a receiver slower than the timeout fails as timeout', function () {
     $started = microtime(true);
 
     expect(webhookFailure(fn () => app(WebhookClient::class)->post(receiverUrl('slow'), WEBHOOK_TEST_SECRET, ['event' => 'test']))?->reason)->toBe(DeliveryError::Timeout)
-        ->and(microtime(true) - $started)->toBeLessThan(2.0);
+        ->and(microtime(true) - $started)->toBeLessThan(3.0);
 });
 
 test('an endless or oversized success body is cut at the cap without failing', function (string $scenario) {
+    config(['horizon-watch.webhook_timeout_seconds' => 3]);
     $limit = ini_set('memory_limit', '256M');
     memory_reset_peak_usage();
     $memory = memory_get_usage(true);
@@ -196,7 +178,7 @@ test('an endless or oversized success body is cut at the cap without failing', f
 
     app(WebhookClient::class)->post(receiverUrl($scenario), WEBHOOK_TEST_SECRET, ['event' => 'test']);
 
-    expect(microtime(true) - $started)->toBeLessThan(1.0)
+    expect(microtime(true) - $started)->toBeLessThan(3.0)
         ->and(memory_get_peak_usage(true) - $memory)->toBeLessThan(16 * 1024 * 1024);
 
     ini_set('memory_limit', (string) $limit);

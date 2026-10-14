@@ -647,7 +647,7 @@ composer install
 ```
 
 `./vendor/bin/sail composer ci:check` runs everything CI runs: Pint, Larastan, the front-end
-lint and type check, and the Pest suite.
+lint, type check and unit tests, and the Pest suite.
 
 `./vendor/bin/sail php artisan migrate:fresh --seed` fills the database with a demo
 organization and a few weeks of readings, and creates an administrator:
