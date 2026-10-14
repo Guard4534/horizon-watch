@@ -57,13 +57,28 @@ That creates a demo organization with a few weeks of readings and an administrat
 ./vendor/bin/sail npm run types:check    # regenerates TS types, then vue-tsc
 ./vendor/bin/sail npm run test           # front-end unit tests (Vitest through vp test)
 ./vendor/bin/sail npm run build
-./bin/smoke-prod.sh                      # builds the production image, checks a fresh install
+./bin/smoke-prod.sh fresh                # builds the production image, checks a fresh install
+./bin/smoke-prod.sh upgrade              # installs the last release, then upgrades it to this build
+./bin/release-notes.sh v1.2.0            # prints the CHANGELOG.md section of a release
 ```
 
 `composer ci:check` is the single entry point: Pint, Larastan, the front-end lint, the
 front-end type check, the front-end unit tests and the Pest suite, in that order. Run it before
 opening a pull request. CI also runs the Pest suite with coverage in a job of its own and fails
-below the floor set in `composer test:coverage`.
+below the floor set in `composer test:coverage`, and builds the production image to run both
+smoke tests.
+
+The fresh smoke test brings up `compose.prod.yaml` on an empty volume, checks the redirects to
+`/setup`, the services, the headers and the persisted key, then creates an account and an
+environment and waits for the scheduler and a worker to store a successful reading. The
+environment points at a `horizon` service (`docker/smoke/horizon.yaml`), an nginx that answers
+Horizon's API with the JSON of `tests/Fixtures/Horizon`, so the reading goes through the HTTP
+client, the address guard and the parsing of the production image. The upgrade smoke test
+starts the newest earlier release (the latest `v*` tag that does not contain `HEAD`, with that
+tag's `compose.prod.yaml` and image), creates the same data, switches to the new image and
+checks that no migration is pending, the key and the data survived, the basic-auth password
+still decrypts and readings go on. It needs the tags: `git fetch --tags`, or set
+`HORIZON_WATCH_PREVIOUS` to the tag to start from.
 
 ## Where code goes
 
@@ -128,7 +143,20 @@ Monitoring tests build the few applications and environments they need with fact
 `tests/Feature/Seeders/DatabaseSeederTest.php`.
 
 `tests/Feature/Horizon/LiveHorizonTest.php` is skipped unless `HORIZON_WATCH_LIVE_URL` points
-at a real Horizon dashboard. Never set it in CI.
+at a real Horizon dashboard (`HORIZON_WATCH_LIVE_USERNAME` and `HORIZON_WATCH_LIVE_PASSWORD` for
+basic auth). CI does not run it: that would mean keeping a second Laravel application with
+Horizon and Redis in this repository, with its own dependencies to upgrade, for one test. Run it
+by hand before a release against a Horizon prepared to exercise what the fixtures cannot:
+
+- fail more than 50 jobs within the hour, then set `HORIZON_WATCH_LIVE_EXPECT_FAILED` to how
+  many failed, so the test checks that the 50-per-page paging of failed jobs reaches them all;
+- keep one long job running (a `sleep(600)` job is enough) and set
+  `HORIZON_WATCH_LIVE_EXPECT_RESERVED=1`, so it checks that a reserved job and its start time
+  are read;
+- run it once more after `php artisan horizon:pause` with `HORIZON_WATCH_LIVE_EXPECT_PAUSED=1`.
+
+Without those variables it still checks that the status, the masters, the failed and pending
+lists and the queue runtimes of the busiest queues are read.
 
 ## Traps
 
@@ -208,5 +236,35 @@ These have all cost someone an afternoon.
 
 - One topic per pull request, with `composer ci:check` green.
 - Say what changed and why in the description; the code stays free of prose comments.
-- Update `CHANGELOG.md` under `Unreleased` when the change is visible to an operator.
+- Update `CHANGELOG.md` under `Unreleased` when the change is visible to an operator, with an
+  **Upgrade note** when an operator has to do something.
 - New user-facing strings need their Italian translation in `lang/it.json`.
+- Never edit a migration that has been released: add a new one.
+
+## Compatibility
+
+Horizon Watch follows Semantic Versioning. Within a major version, these keep working as the
+README documents them, and a change that breaks one of them waits for the next major version:
+
+- the environment variables and their defaults, and the services of `compose.prod.yaml`;
+- the `artisan` commands the README documents, and the roles of the image's entrypoint;
+- `GET /health` and `/up`;
+- version 1 of the webhook payload, its headers and its signature: fields may be added, never
+  removed, renamed or given another meaning;
+- the upgrade path: every release migrates a database of any earlier release of the same major
+  version, and the upgrade smoke test proves it from the previous one.
+
+## Releasing
+
+1. Move the `Unreleased` entries of `CHANGELOG.md` under a new `## [x.y.z] - YYYY-MM-DD`
+   heading, start an empty `Unreleased` section and update the links at the bottom.
+2. Run the live Horizon test by hand (see [Tests](#tests)), then merge to `main`.
+3. Tag the merge commit `vx.y.z` and push the tag. A tag with a suffix, such as `v1.1.0-rc.1`, is
+   a pre-release.
+
+The release workflow then runs every CI job on the tag, including both smoke tests, and stops
+if one fails or if a stable tag has no `CHANGELOG.md` section (a pre-release falls back to
+`Unreleased`). Only then does it push the image as `x.y.z` and, for a stable release, also as
+`x.y`, `x` and `latest`, and publish the GitHub release with that section as its notes and a
+`compose.prod.yaml` pinned to `x.y.z`. Check that the release page, the image tags and the
+pinned compose file are there.

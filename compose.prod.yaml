@@ -3,6 +3,11 @@ x-app: &app
     restart: unless-stopped
     init: true
     stop_grace_period: 40s
+    logging: &logging
+        driver: json-file
+        options:
+            max-size: 10m
+            max-file: '5'
     # The container starts as root to own the app-data volume and to let nginx and
     # php-fpm fork their workers as www-data; everything else runs as www-data.
     security_opt:
@@ -23,21 +28,26 @@ x-app: &app
         APP_PREVIOUS_KEYS: ${APP_PREVIOUS_KEYS:-}
         TRUSTED_PROXIES: ${TRUSTED_PROXIES:-private}
         SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-null}
+        LOG_LEVEL: ${LOG_LEVEL:-info}
         DB_CONNECTION: pgsql
-        DB_HOST: postgres
-        DB_PORT: '5432'
-        DB_DATABASE: horizon_watch
-        DB_USERNAME: horizon_watch
-        DB_PASSWORD: ${DB_PASSWORD:-horizon_watch}
+        DB_HOST: ${DB_HOST:-postgres}
+        DB_PORT: ${DB_PORT:-5432}
+        DB_DATABASE: ${DB_DATABASE:-horizon_watch}
+        DB_USERNAME: ${DB_USERNAME:-horizon_watch}
+        DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the .env file next to compose.prod.yaml}
+        DB_SSLMODE: ${DB_SSLMODE:-prefer}
         SESSION_DRIVER: database
+        SESSION_LIFETIME: ${SESSION_LIFETIME:-120}
         CACHE_STORE: database
         QUEUE_CONNECTION: database
         MAIL_MAILER: smtp
+        MAIL_SCHEME: ${MAIL_SCHEME:-}
         MAIL_HOST: ${MAIL_HOST:-}
         MAIL_PORT: ${MAIL_PORT:-587}
         MAIL_USERNAME: ${MAIL_USERNAME:-}
         MAIL_PASSWORD: ${MAIL_PASSWORD:-}
         MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-horizon-watch@example.com}
+        MAIL_FROM_NAME: ${MAIL_FROM_NAME:-${APP_NAME:-Horizon Watch}}
         MAIL_TIMEOUT: ${MAIL_TIMEOUT:-10}
         HORIZON_WATCH_RETENTION_DAYS: ${HORIZON_WATCH_RETENTION_DAYS:-30}
         HORIZON_WATCH_ALERT_RETENTION_DAYS: ${HORIZON_WATCH_ALERT_RETENTION_DAYS:-90}
@@ -45,6 +55,7 @@ x-app: &app
         HORIZON_WATCH_ORG_CREATION: ${HORIZON_WATCH_ORG_CREATION:-admins}
         HORIZON_WATCH_DEFAULT_TIMEZONE: ${HORIZON_WATCH_DEFAULT_TIMEZONE:-UTC}
         HORIZON_WATCH_HEARTBEAT_URL: ${HORIZON_WATCH_HEARTBEAT_URL:-}
+        HORIZON_WATCH_SETUP_TOKEN: ${HORIZON_WATCH_SETUP_TOKEN:-}
     volumes:
         - app-data:/data
 
@@ -108,6 +119,7 @@ services:
     postgres:
         image: postgres:18-alpine
         restart: unless-stopped
+        logging: *logging
         security_opt:
             - 'no-new-privileges:true'
         cap_drop:
@@ -119,9 +131,9 @@ services:
             - SETGID
             - SETUID
         environment:
-            POSTGRES_DB: horizon_watch
-            POSTGRES_USER: horizon_watch
-            POSTGRES_PASSWORD: ${DB_PASSWORD:-horizon_watch}
+            POSTGRES_DB: ${DB_DATABASE:-horizon_watch}
+            POSTGRES_USER: ${DB_USERNAME:-horizon_watch}
+            POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the .env file next to compose.prod.yaml}
         volumes:
             - postgres-data:/var/lib/postgresql
         healthcheck:
@@ -131,9 +143,9 @@ services:
                     'pg_isready',
                     '-q',
                     '-d',
-                    'horizon_watch',
+                    '${DB_DATABASE:-horizon_watch}',
                     '-U',
-                    'horizon_watch',
+                    '${DB_USERNAME:-horizon_watch}',
                 ]
             interval: 5s
             timeout: 5s

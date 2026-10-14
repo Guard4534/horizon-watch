@@ -186,6 +186,7 @@ return [
         'password' => 'password',
         'pollIntervalSeconds' => 'intervallo di polling',
         'role' => 'ruolo',
+        'setupToken' => 'token di configurazione',
         'visibility' => 'visibilità',
     ],
 ];

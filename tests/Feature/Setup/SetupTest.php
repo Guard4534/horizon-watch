@@ -116,3 +116,71 @@ test('the administrator address is stored canonically and signs in under either 
         $this->post(route('logout'));
     }
 });
+
+test('the setup page asks for no token unless one is configured', function () {
+    $this->get(route('setup.create'))
+        ->assertInertia(fn (Assert $page) => $page->where('page.requiresToken', false));
+
+    config(['horizon-watch.setup_token' => 'a-long-setup-token']);
+
+    $this->get(route('setup.create'))
+        ->assertInertia(fn (Assert $page) => $page->where('page.requiresToken', true));
+});
+
+test('a configured setup token is required to claim the panel', function (?string $token) {
+    config(['horizon-watch.setup_token' => 'a-long-setup-token']);
+
+    $this->post(route('setup.store'), setupPayload(['setupToken' => $token]))
+        ->assertSessionHasErrors('setupToken')
+        ->assertSessionMissing('_old_input.setupToken');
+
+    $this->assertGuest();
+    expect(User::count())->toBe(0);
+})->with([
+    'missing' => [null],
+    'wrong' => ['another-setup-token'],
+    'a prefix' => ['a-long-setup'],
+]);
+
+test('the configured setup token lets setup through', function () {
+    config(['horizon-watch.setup_token' => 'a-long-setup-token']);
+
+    $this->post(route('setup.store'), setupPayload(['setupToken' => 'a-long-setup-token']))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    $this->assertAuthenticatedAs(User::sole());
+});
+
+test('a configured setup token shorter than 16 characters refuses every setup', function () {
+    config(['horizon-watch.setup_token' => '0123456789abcde']);
+
+    $this->post(route('setup.store'), setupPayload(['setupToken' => '0123456789abcde']))
+        ->assertSessionHasErrors(['setupToken' => 'HORIZON_WATCH_SETUP_TOKEN is too short: set at least 16 characters and restart the panel.']);
+
+    $this->assertGuest();
+    expect(User::count())->toBe(0);
+});
+
+test('a setup token sent while none is configured is ignored', function () {
+    $this->post(route('setup.store'), setupPayload(['setupToken' => 'anything']))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect(User::count())->toBe(1);
+});
+
+test('the setup token comes from the environment, trimmed', function () {
+    putenv('HORIZON_WATCH_SETUP_TOKEN=  a-long-setup-token  ');
+    $_ENV['HORIZON_WATCH_SETUP_TOKEN'] = '  a-long-setup-token  ';
+
+    try {
+        $config = require base_path('config/horizon-watch.php');
+    } finally {
+        putenv('HORIZON_WATCH_SETUP_TOKEN');
+        unset($_ENV['HORIZON_WATCH_SETUP_TOKEN']);
+    }
+
+    expect($config['setup_token'])->toBe('a-long-setup-token')
+        ->and((require base_path('config/horizon-watch.php'))['setup_token'])->toBe('');
+});

@@ -15,17 +15,29 @@ publishing anything.
 
 ## Supported versions
 
-This project is at `0.x`. Only the latest release is supported: fixes go into a new patch
-release of the current minor version, and there are no backports. Pin an image tag in
-production and read [CHANGELOG.md](CHANGELOG.md) before upgrading.
+Horizon Watch follows [Semantic Versioning](https://semver.org/). Security fixes go into a new
+patch release of the latest minor version of the current major version; there are no backports
+to earlier minor versions, because upgrading within a major version needs no change on your side.
+
+| Version               | Security fixes                |
+| --------------------- | ----------------------------- |
+| `1.x`, latest minor   | yes                           |
+| `1.x`, earlier minors | no: upgrade to the latest 1.x |
+| `0.x`                 | no: upgrade to 1.x            |
+
+Pin an image tag in production, as the `compose.prod.yaml` of each release does, and read
+[CHANGELOG.md](CHANGELOG.md) before upgrading. A security release says so in its notes.
 
 ## Threat model
 
 Horizon Watch is invite-only and has no anonymous surface beyond the login and password reset
-pages and the `/setup` page, which is open only while no account exists. Deleting the last
-account opens it again, and whoever reaches the panel first then claims the instance: delete the
-last account only on a panel nobody else can reach. What follows is what the project protects,
-and what it deliberately does not.
+pages, the invitation pages, `GET /health` and the `/setup` page, which is open only while no
+account exists. Deleting the last account opens it again. Whoever reaches `/setup` first claims
+the instance, so a panel reachable by others before its administrator exists should set
+`HORIZON_WATCH_SETUP_TOKEN`: `/setup` then refuses anyone who does not type that token, compared
+in constant time and rate limited, and refuses everyone while the token is shorter than 16
+characters, since a client on a trusted network can spread its attempts over forged addresses. Without it, keep the panel unreachable until setup is done.
+What follows is what the project protects, and what it deliberately does not.
 
 ### The application key and the stored secrets
 
@@ -69,7 +81,7 @@ showing its link issues a new code, and the earlier link stops working.
 
 Every URL the panel reads is under the control of a member of an organization, so the reader
 is the one place where a user can make the server talk to an address of their choosing.
-`App\Externals\Horizon\SafeUrlGuard` stands in front of every read:
+`App\Externals\Http\SafeUrlGuard` stands in front of every read:
 
 - Only `http` and `https`; no credentials in the URL, no query string, no fragment, no
   non-printable characters.
@@ -152,7 +164,11 @@ for one account are likewise capped at five an hour.
 
 nginx sends `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`,
 `Permissions-Policy` and a Content-Security-Policy that allows scripts only from the panel's
-own origin.
+own origin. It does not send `Strict-Transport-Security`: the panel's nginx speaks plain HTTP
+behind your proxy, and the header would cover every port of the host name, which only you know
+to be HTTPS. Send it from the TLS-terminating proxy, and set `SESSION_SECURE_COOKIE=true` so the
+session cookie is never sent over HTTP even when a forwarded scheme is wrong; the README has
+Caddy and nginx examples.
 
 ### Accounts
 
@@ -172,5 +188,11 @@ own origin.
   which case every account can become the owner of one and point the reader anywhere.
 - It does not audit the Horizon installations it watches: it reads them, and whatever they
   answer is what you see.
-- There is no built-in TLS, no rate limiting beyond the authentication, account and setup
-  endpoints, and no protection against a host operator who can read the volumes.
+- There is no built-in TLS and no protection against a host operator who can read the volumes.
+- Rate limits cover these endpoints, not the rest of the panel: sign-in (5 a minute per address
+  and account, 30 failures an hour per account), the two-factor challenge (5 a minute),
+  password reset requests (5 a minute per address, 5 an hour per account), every form that
+  checks the current password and password changes (6 a minute per user), setup (10 a minute),
+  invitations and invitation links (6 a minute), test connections (10 a minute), test
+  notifications (5 a minute) and language changes (30 a minute). The numbers are in
+  `config/horizon-watch.php`.

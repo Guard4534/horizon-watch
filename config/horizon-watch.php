@@ -11,6 +11,8 @@ return [
 
     'organization_creation' => (string) env('HORIZON_WATCH_ORG_CREATION', 'admins'),
 
+    'setup_token' => trim((string) env('HORIZON_WATCH_SETUP_TOKEN', '')),
+
     'demo_horizon_url' => env('HORIZON_WATCH_DEMO_HORIZON_URL'),
 
     'http_timeout_seconds' => 5,

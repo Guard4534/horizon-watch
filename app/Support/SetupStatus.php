@@ -24,6 +24,11 @@ class SetupStatus
         return $complete;
     }
 
+    public static function requiresToken(): bool
+    {
+        return config()->string('horizon-watch.setup_token') !== '';
+    }
+
     public static function forget(): void
     {
         Cache::forget(self::CACHE_KEY);

@@ -68,6 +68,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'webhookUrl',
             'webhookSecret',
             'recipients',
+            'setupToken',
         ]);
 
         $rendersJson = fn (Request $request) => $request->is('api/*') || $request->expectsJson();

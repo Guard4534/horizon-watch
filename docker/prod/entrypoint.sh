@@ -18,7 +18,7 @@ wait_for_database() {
     local attempts=60
 
     until php -r '
-        $dsn = sprintf("pgsql:host=%s;port=%s;dbname=%s", getenv("DB_HOST"), getenv("DB_PORT") ?: "5432", getenv("DB_DATABASE"));
+        $dsn = sprintf("pgsql:host=%s;port=%s;dbname=%s;sslmode=%s", getenv("DB_HOST"), getenv("DB_PORT") ?: "5432", getenv("DB_DATABASE"), getenv("DB_SSLMODE") ?: "prefer");
         new PDO($dsn, getenv("DB_USERNAME"), getenv("DB_PASSWORD"));
     ' >/dev/null 2>&1; do
         attempts=$((attempts - 1))
@@ -57,7 +57,7 @@ load_app_key() {
 
 migrate() {
     as_app php -r '
-        $dsn = sprintf("pgsql:host=%s;port=%s;dbname=%s", getenv("DB_HOST"), getenv("DB_PORT") ?: "5432", getenv("DB_DATABASE"));
+        $dsn = sprintf("pgsql:host=%s;port=%s;dbname=%s;sslmode=%s", getenv("DB_HOST"), getenv("DB_PORT") ?: "5432", getenv("DB_DATABASE"), getenv("DB_SSLMODE") ?: "prefer");
         $pdo = new PDO($dsn, getenv("DB_USERNAME"), getenv("DB_PASSWORD"), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
         $lock = $pdo->prepare("select pg_advisory_lock(?)");
         $lock->execute([(int) getenv("MIGRATION_LOCK_KEY")]);

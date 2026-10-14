@@ -1,0 +1,39 @@
+name: Feature request
+description: Something the panel should do and does not.
+labels: [enhancement]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Horizon Watch only ever reads Horizon. Requests to retry, delete or change jobs belong
+        in each application's own Horizon dashboard.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How the panel could help. Screens, settings or payload fields you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do instead
+      description: Any workaround you use now.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown at the bottom of the sidebar and by `GET /health`.
+      placeholder: v1.0.0

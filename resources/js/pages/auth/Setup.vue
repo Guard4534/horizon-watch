@@ -14,6 +14,10 @@ defineOptions({
             'Create the administrator account and the first organization',
     },
 });
+
+defineProps<{
+    page: App.Data.Pages.SetupPageData;
+}>();
 </script>
 
 <template>
@@ -21,10 +25,33 @@ defineOptions({
 
     <Form
         v-bind="store.form()"
-        :reset-on-success="['password', 'password_confirmation']"
+        :reset-on-success="['password', 'password_confirmation', 'setupToken']"
         v-slot="{ errors, processing }"
         class="flex flex-col gap-[var(--nc-space-3)]"
     >
+        <div v-if="page.requiresToken" class="nc-field">
+            <label for="setupToken">{{ $t('Setup token') }}</label>
+            <input
+                id="setupToken"
+                class="nc-input"
+                type="password"
+                name="setupToken"
+                required
+                autofocus
+                autocomplete="off"
+                spellcheck="false"
+                v-bind="invalidField('setupToken', errors.setupToken)"
+            />
+            <div class="nc-t-2xs nc-tone-faint">
+                {{
+                    $t(
+                        'The value of HORIZON_WATCH_SETUP_TOKEN in the configuration of the panel.',
+                    )
+                }}
+            </div>
+            <InputError field="setupToken" :message="errors.setupToken" />
+        </div>
+
         <div class="nc-field">
             <label for="name">{{ $t('Full name') }}</label>
             <input
@@ -32,7 +59,7 @@ defineOptions({
                 class="nc-input"
                 name="name"
                 required
-                autofocus
+                :autofocus="!page.requiresToken"
                 autocomplete="name"
                 v-bind="invalidField('name', errors.name)"
             />
