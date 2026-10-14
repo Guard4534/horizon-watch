@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Teams;
 
 use App\Actions\Teams\InviteMember;
+use App\Actions\Teams\IssueInvitationLink;
 use App\Actions\Teams\ResendInvitation;
 use App\Actions\Teams\RevokeInvitation;
 use App\Data\Teams\InviteMemberData;
@@ -39,14 +40,12 @@ class TeamInvitationController extends Controller
         return back();
     }
 
-    public function link(Team $current_team, TeamInvitation $invitation): JsonResponse
+    public function link(Team $current_team, TeamInvitation $invitation, IssueInvitationLink $issueInvitationLink): JsonResponse
     {
         $this->ensureBelongsToTeam($invitation, $current_team);
         Gate::authorize('copyInvitationLink', $current_team);
 
-        abort_unless($invitation->isPending(), 404);
-
-        return response()->json(['url' => $invitation->url()], 200, ['Cache-Control' => 'no-store']);
+        return response()->json(['url' => $issueInvitationLink->handle($invitation)], 200, ['Cache-Control' => 'no-store']);
     }
 
     public function destroy(Team $current_team, TeamInvitation $invitation, RevokeInvitation $revokeInvitation): RedirectResponse

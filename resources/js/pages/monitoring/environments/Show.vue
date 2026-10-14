@@ -245,12 +245,9 @@ const tiles = computed<Tile[]>(() => [
             style="gap: 0 6px; letter-spacing: 0.01em"
         >
             <span class="min-w-0 break-all">{{ environment.horizonUrl }}</span>
-            <template v-if="environment.basicAuthUser">
+            <template v-if="environment.usesBasicAuth">
                 <span>·</span>
-                <span
-                    >{{ $t('basic auth') }}:
-                    {{ environment.basicAuthUser }}</span
-                >
+                <span>{{ $t('basic auth') }}</span>
             </template>
             <span>·</span>
             <ReadingFreshness

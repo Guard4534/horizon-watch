@@ -28,10 +28,18 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureMail();
         $this->configureQueues();
         $this->configureRateLimiting();
 
         AboutCommand::add('Horizon Watch', fn (): array => ['Version' => Version::current()]);
+    }
+
+    protected function configureMail(): void
+    {
+        if ($this->app->isProduction()) {
+            config(['mail.default' => 'smtp']);
+        }
     }
 
     protected function configureQueues(): void
@@ -58,6 +66,10 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('test-notification', fn (Request $request): Limit => Limit::perMinute(
             config()->integer('horizon-watch.rate_limits.test_notification_per_minute'),
+        )->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
+
+        RateLimiter::for('invitation-link', fn (Request $request): Limit => Limit::perMinute(
+            config()->integer('horizon-watch.rate_limits.invitations_per_minute'),
         )->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
     }
 

@@ -18,20 +18,22 @@ class InviteMember
         $visibility = $data->role->seesEveryEnvironment() ? MemberVisibility::All : $data->visibility;
 
         return DB::transaction(function () use ($team, $inviter, $data, $visibility) {
-            $invitation = $team->invitations()->create([
+            $invitation = $team->invitations()->make([
                 'email' => $data->email,
                 'role' => $data->role,
                 'visibility' => $visibility,
                 'invited_by' => $inviter->id,
                 'expires_at' => now()->addDays(TeamInvitation::lifetimeDays()),
             ]);
+            $code = $invitation->issueCode();
+            $invitation->save();
 
             if ($visibility === MemberVisibility::Manual) {
                 $invitation->environments()->sync($data->environmentIds);
             }
 
             Notification::route('mail', $invitation->email)
-                ->notify(new TeamInvitationNotification($invitation));
+                ->notify(new TeamInvitationNotification($invitation, $code));
 
             return $invitation;
         });

@@ -30,7 +30,7 @@ class EnvironmentData extends Data
         public int $workers,
         public int $jobsPerMinute,
         public int $nodeCount,
-        public ?string $basicAuthUser,
+        public bool $usesBasicAuth,
         public ?int $latencyMs,
         public bool $watched,
         public ?string $lastReadingAt,

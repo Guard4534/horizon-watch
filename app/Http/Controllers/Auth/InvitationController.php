@@ -28,7 +28,7 @@ class InvitationController extends Controller
 
         return Inertia::render('auth/Invitation', [
             'page' => new InvitationPageData(
-                code: $invitation->code,
+                code: $code,
                 organizationName: $canSeeDetails ? $invitation->team->name : null,
                 roleLabel: $canSeeDetails ? $invitation->role->label() : null,
                 visibilityLabel: $canSeeDetails ? $invitation->visibility->label() : null,
@@ -93,7 +93,7 @@ class InvitationController extends Controller
     {
         return TeamInvitation::query()
             ->with(['team', 'environments'])
-            ->where('code', $code)
+            ->withCode($code)
             ->firstOr(fn () => abort(404));
     }
 

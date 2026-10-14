@@ -830,7 +830,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             workers: $this->snapshotNumber($state, 'workers'),
             jobsPerMinute: $this->snapshotNumber($state, 'jobs_per_minute'),
             nodeCount: $this->snapshotNumber($state, 'node_count'),
-            basicAuthUser: $environment->basic_auth_user,
+            usesBasicAuth: $environment->basic_auth_user !== null,
             latencyMs: $state?->latency_ms,
             watched: $watched,
             lastReadingAt: $state?->captured_at->toIso8601String(),

@@ -51,27 +51,42 @@ const http = useHttp();
 
 const shown = ref<{
     invitation: App.Data.Teams.InvitationData;
-    url: string;
+    url: string | null;
 } | null>(null);
 
 const { copy, copied } = useClipboard({ copiedDuring: 2000, legacy: true });
 
-async function showLink(
-    invitation: App.Data.Teams.InvitationData,
-): Promise<void> {
-    busy.value = invitation.id;
+function askLink(invitation: App.Data.Teams.InvitationData): void {
+    shown.value = { invitation, url: null };
+}
+
+async function createLink(): Promise<void> {
+    const target = shown.value;
+
+    if (!target) {
+        return;
+    }
+
+    busy.value = target.invitation.id;
 
     try {
         const { url } = (await http.submit(
-            invitationLink([slug.value, invitation.id]),
+            invitationLink([slug.value, target.invitation.id]),
         )) as { url: string };
 
-        shown.value = { invitation, url };
-    } catch {
+        if (shown.value === target) {
+            shown.value = { ...target, url };
+        }
+    } catch (error) {
+        const status = (error as { response?: { status?: number } } | null)
+            ?.response?.status;
+
         toast.error(
-            trans(
-                'The invitation link could not be loaded. Reload the page and try again.',
-            ),
+            status === 429
+                ? trans('Too many attempts. Wait a minute and try again.')
+                : trans(
+                      'The invitation link could not be loaded. Reload the page and try again.',
+                  ),
         );
     } finally {
         busy.value = null;
@@ -120,9 +135,9 @@ async function showLink(
                                 type="button"
                                 class="nc-btn nc-btn-ghost nc-t-xs"
                                 :disabled="busy === invitation.id"
-                                @click="showLink(invitation)"
+                                @click="askLink(invitation)"
                             >
-                                {{ $t('Show link') }}
+                                {{ $t('New link') }}
                             </button>
                             <button
                                 type="button"
@@ -153,10 +168,21 @@ async function showLink(
             <DialogContent v-if="shown">
                 <DialogHeader>
                     <DialogTitle>{{ $t('Invitation link') }}</DialogTitle>
-                    <DialogDescription>
+                    <DialogDescription v-if="shown.url === null">
                         {{
                             $t(
-                                'Whoever opens this link can join as :role with the address :email until the invitation expires. Send it to that person only.',
+                                'A new link replaces every earlier link to this invitation, the one in the email included. Whoever opens it can join as :role with the address :email until the invitation expires.',
+                                {
+                                    role: shown.invitation.roleLabel,
+                                    email: shown.invitation.email,
+                                },
+                            )
+                        }}
+                    </DialogDescription>
+                    <DialogDescription v-else>
+                        {{
+                            $t(
+                                'Whoever opens this link can join as :role with the address :email until the invitation expires. Send it to that person only. Earlier links to this invitation no longer work.',
                                 {
                                     role: shown.invitation.roleLabel,
                                     email: shown.invitation.email,
@@ -165,7 +191,7 @@ async function showLink(
                         }}
                     </DialogDescription>
                 </DialogHeader>
-                <div class="flex items-center gap-2">
+                <div v-if="shown.url !== null" class="flex items-center gap-2">
                     <input
                         class="nc-input nc-code nc-t-sm"
                         :value="shown.url"
@@ -185,7 +211,24 @@ async function showLink(
                         {{ copied ? $t('Copied') : $t('Copy') }}
                     </button>
                 </div>
-                <DialogFooter>
+                <DialogFooter v-if="shown.url === null">
+                    <button
+                        type="button"
+                        class="nc-btn nc-btn-secondary"
+                        @click="shown = null"
+                    >
+                        {{ $t('Cancel') }}
+                    </button>
+                    <button
+                        type="button"
+                        class="nc-btn nc-btn-primary"
+                        :disabled="busy === shown.invitation.id"
+                        @click="createLink"
+                    >
+                        {{ $t('Create new link') }}
+                    </button>
+                </DialogFooter>
+                <DialogFooter v-else>
                     <button
                         type="button"
                         class="nc-btn nc-btn-secondary"

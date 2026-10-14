@@ -95,10 +95,11 @@ Then, in order:
    warning looks only at who could be told: it stays quiet when you turn email off on every
    rule, or when the only members with alert emails see none of the environments.
 5. **Members** → invite the rest of the team and pick which environments each person sees.
-   While no SMTP server is set, an admin can also copy the link of a pending invitation
-   (**Show link**) and hand it over. Whoever opens that link creates the account for the
+   While no SMTP server is set, an admin can also create a link for a pending invitation
+   (**New link**) and hand it over. Whoever opens that link creates the account for the
    invited address without proving they own the mailbox, so once mail is set up only instance
-   admins can still copy links.
+   admins can still create links. The panel keeps only a hash of each invitation code, so
+   **New link** and **Resend** issue a new link each time, and the earlier one stops working.
 
 Readings start within a minute of saving an environment; the wall fills itself as they
 arrive.
@@ -161,7 +162,6 @@ the environment of the containers. Everything has a default except the mail serv
 | `TRUSTED_PROXIES`                      | `private`                                | `private` (loopback and RFC 1918), `*`, or a comma-separated list of addresses and CIDRs |
 | `SESSION_SECURE_COOKIE`                | `null`                                   | `null` follows the request scheme; force it with `true` or `false`                       |
 | `DB_PASSWORD`                          | `horizon_watch`                          | PostgreSQL password. Change it                                                           |
-| `MAIL_MAILER`                          | `smtp`                                   | Mail transport                                                                           |
 | `MAIL_HOST`                            | _(empty)_                                | SMTP host. Without it every email fails                                                  |
 | `MAIL_PORT`                            | `587`                                    | SMTP port                                                                                |
 | `MAIL_USERNAME`                        | _(empty)_                                | SMTP user, when the server asks for one                                                  |
@@ -593,7 +593,7 @@ the old key from `APP_PREVIOUS_KEYS` and restart.
 **Every alert email is listed as not delivered, and invitations never arrive.** `MAIL_HOST`
 is empty, or the server refuses the panel (_mail server refused the login_: check
 `MAIL_USERNAME` and `MAIL_PASSWORD`). Set the SMTP settings and restart the stack; there is no
-log fallback by design. Until then, admins can hand over invitations with **Show link** on the
+log fallback by design. Until then, admins can hand over invitations with **New link** on the
 Members page.
 
 **`/setup` keeps appearing.** No user exists yet, so every route redirects there. If you have

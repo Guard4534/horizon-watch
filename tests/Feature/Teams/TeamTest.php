@@ -533,7 +533,7 @@ test('the organizations page carries no invitation detail at all', function () {
         ->get(route('teams.index'))
         ->assertOk()
         ->assertDontSee($invitation->email)
-        ->assertDontSee($invitation->code, escape: false);
+        ->assertDontSee($invitation->plainCode, escape: false);
 });
 
 test('deleting an organization deletes its applications, environments and environment grants', function () {

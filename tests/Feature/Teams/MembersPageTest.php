@@ -401,8 +401,8 @@ test('the invite form still gets the environments without the member-management 
             ->has('page.environments', 2));
 });
 
-test('no invitation prop carries the join code', function () {
-    TeamInvitation::factory()->create([
+test('no invitation prop carries the join code or its hash', function () {
+    $invitation = TeamInvitation::factory()->create([
         'team_id' => $this->team->id,
         'invited_by' => $this->owner->id,
         'expires_at' => now()->addDays(7),
@@ -413,9 +413,8 @@ test('no invitation prop carries the join code', function () {
 
     $response->assertInertia(fn (Assert $page) => $page->has('page.invitations', 1));
 
-    $code = TeamInvitation::where('team_id', $this->team->id)->firstOrFail()->code;
-
-    $response->assertDontSee($code, escape: false);
+    $response->assertDontSee($invitation->plainCode, escape: false)
+        ->assertDontSee($invitation->code_hash, escape: false);
 });
 
 test('an admin removes themselves from the members view and lands on the home route', function () {

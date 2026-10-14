@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Providers\AppServiceProvider;
 use App\Support\MailStatus;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -37,3 +38,15 @@ test('guest pages do not share whether mail is set up', function () {
 
     $this->get(route('login'))->assertInertia(fn (Assert $page) => $page->where('mailConfigured', null));
 });
+
+test('production sends mail only over smtp, whatever MAIL_MAILER says', function (string $environment, string $mailer) {
+    config(['mail.default' => 'log']);
+    app()->detectEnvironment(fn () => $environment);
+
+    (fn () => $this->configureMail())->call(new AppServiceProvider(app()));
+
+    expect(config('mail.default'))->toBe($mailer);
+})->with([
+    'production' => ['production', 'smtp'],
+    'local' => ['local', 'log'],
+]);

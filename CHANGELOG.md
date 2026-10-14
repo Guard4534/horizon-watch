@@ -44,8 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The running version shows at the bottom of the sidebar, in `artisan about` and in
   `GET /health`, and Horizon reads, webhooks and heartbeats identify themselves as
   `HorizonWatch/<version>`.
-- While no SMTP server is set, admins can copy the link of a pending invitation from the
-  Members page and hand it over themselves; instance admins can do so at any time.
+- While no SMTP server is set, admins can create a new link for a pending invitation from the
+  Members page and hand it over themselves; instance admins can do so at any time. Each new
+  link replaces the earlier ones, the emailed one included.
 - The Members page and the notification settings warn while no SMTP server is set.
 - The wall, the alerts page and the notification settings warn when alerts reach nobody: no
   member receives alert emails, and there is neither an extra address nor a webhook. The
@@ -100,6 +101,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Horizon reads used Guzzle's default and the other two sent `HorizonWatch`: update any
   allowlist or firewall rule that matched the old value.
 - Without `MAIL_HOST`, the SMTP mailer has no host instead of falling back to `127.0.0.1`.
+- **Upgrade note:** invitation codes are stored as SHA-256 hashes. Upgrading hashes the
+  pending ones, so the links already sent keep working, but invitation emails still waiting in
+  the queue fail. Let the queue drain before upgrading, or afterwards look for
+  `App\Notifications\Teams\TeamInvitation` in `php artisan queue:failed` and resend those
+  invitations. **Resend** now issues a new link each time, and the earlier one stops working.
+- **Upgrade note:** in production the panel sends mail only over SMTP and `compose.prod.yaml`
+  no longer passes `MAIL_MAILER` on, so no other transport, the log mailer included, can be
+  chosen.
+- Pages that show an environment say only whether it uses basic auth; the user name appears
+  only in the edit forms.
 
 ### Fixed
 

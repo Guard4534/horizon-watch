@@ -69,7 +69,8 @@ test('a fresh reading reaches the environment page with its age, interval and no
             ->where('page.environment.failedInWindow', 12)
             ->where('page.environment.failedWindowMinutes', 1440)
             ->where('page.environment.horizonStatus', 'running')
-            ->where('page.environment.basicAuthUser', 'monitor')
+            ->where('page.environment.usesBasicAuth', true)
+            ->missing('page.environment.basicAuthUser')
             ->where('page.nodes.0.seenSecondsAgo', 40)
             ->where('page.nodes.0.supervisorCount', 2)
             ->where('page.nodes.0.queueCount', 3)
@@ -261,17 +262,21 @@ test('only people who may test a connection get the button', function (TeamRole 
     'viewer' => [TeamRole::Viewer, false],
 ]);
 
-test('no reading page carries the stored password', function (string $page) {
+test('no reading page carries the stored credentials', function (string $page) {
+    $this->environment->update(['basic_auth_user' => 'hidden-user-5c1e']);
     Readings::record($this->environment);
 
     $url = match ($page) {
+        'wall' => route('wall', ['current_team' => $this->team->slug]),
         'environment' => readingEnvironmentUrl($this->environment),
         'application' => readingApplicationUrl($this->application),
         'applications' => route('applications.index', ['current_team' => $this->team->slug]),
     };
 
-    $this->get($url)
+    $this->actingAs(readingTeamMember($this->user, TeamRole::Viewer))
+        ->get($url)
         ->assertOk()
         ->assertDontSee('never-shown-7f3a', false)
+        ->assertDontSee('hidden-user-5c1e', false)
         ->assertInertia(fn (Assert $assert) => $assert->has('page'));
-})->with(['environment', 'application', 'applications']);
+})->with(['wall', 'environment', 'application', 'applications']);

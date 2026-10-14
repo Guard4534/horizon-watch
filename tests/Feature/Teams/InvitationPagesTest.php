@@ -25,13 +25,13 @@ test('a guest sees the registration state with the organization, the role and th
         'expires_at' => now()->addDays(7),
     ]);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('auth/Invitation')
             ->where('page.state', 'open')
             ->where('page.authenticated', false)
-            ->where('page.code', $invitation->code)
+            ->where('page.code', $invitation->plainCode)
             ->where('page.organizationName', 'Acme Group')
             ->where('page.roleLabel', 'Member')
             ->where('page.visibilityLabel', 'All environments')
@@ -51,7 +51,7 @@ test('the invited user, already signed in, sees the accept and decline state', f
     ]);
 
     $this->actingAs($invitedUser)
-        ->get(route('invitations.show', $invitation->code))
+        ->get(route('invitations.show', $invitation->plainCode))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('auth/Invitation')
@@ -74,7 +74,7 @@ test('someone signed in with another address sees only the wrong account message
     ]);
 
     $this->actingAs($otherUser)
-        ->get(route('invitations.show', $invitation->code))
+        ->get(route('invitations.show', $invitation->plainCode))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('auth/Invitation')
@@ -93,7 +93,7 @@ test('a closed invitation says only what happened', function (string $factorySta
         'invited_by' => $this->owner->id,
     ]);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('auth/Invitation')
@@ -129,7 +129,7 @@ test('a manual invitation names the environments the invitee will see', function
     ]);
     $invitation->environments()->sync([$staging->id]);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.state', 'open')
@@ -149,7 +149,7 @@ test('a guest whose address already has an account is asked to sign in, not to r
         'expires_at' => now()->addDays(7),
     ]);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('auth/Invitation')
@@ -170,7 +170,7 @@ test('the login page carries no invitation context', function () {
         'expires_at' => now()->addDays(7),
     ]);
 
-    $this->get(route('login', ['invitation' => $invitation->code]))
+    $this->get(route('login', ['invitation' => $invitation->plainCode]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('auth/Login')

@@ -56,7 +56,14 @@ Consequences to take seriously:
   as sensitive as the new one.
 
 The stored password is never shown again, never logged, never included in an exception and
-never sent to the browser. `HorizonTarget` redacts itself when it is serialised or dumped.
+never sent to the browser. `HorizonTarget` redacts itself when it is serialised or dumped. The
+basic-auth user is sent only to the edit forms, which only the people who may manage
+applications open; every other page says only that the environment uses basic auth.
+
+Invitation codes are not secrets the panel needs to read back, so they are not encrypted but
+hashed: the database keeps the SHA-256 of each code, and the plain code exists only in the
+link. The invitation email carries it through the queue encrypted. Resending an invitation or
+showing its link issues a new code, and the earlier link stops working.
 
 ### Outbound requests (SSRF)
 
@@ -119,8 +126,9 @@ attached to an exception, or rendered:
   redaction.
 - Exception reports flash no input for the fields that carry URLs, secrets, recipients or
   passwords.
-- There is no mail transport that writes messages to a log file, because the log would then
-  hold recipients and invitation links.
+- In production the panel sends mail only over SMTP, whatever `MAIL_MAILER` says, so no mail
+  transport writes messages to a log file: the log would then hold recipients and invitation
+  links.
 
 ### Sessions and transport
 

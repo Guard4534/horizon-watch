@@ -61,7 +61,7 @@ test('invitations and account emails go on the notifications queue', function (C
 
     Queue::assertPushedOn('notifications', SendQueuedNotifications::class);
 })->with([
-    'invitation' => [fn () => new TeamInvitation(TeamInvitationModel::factory()->create())],
+    'invitation' => [fn () => new TeamInvitation(TeamInvitationModel::factory()->create(), 'code')],
     'password reset' => [fn () => new ResetPassword('token')],
     'email changed' => [fn () => new EmailChanged('ada@example.com', 'ada@example.org')],
 ]);

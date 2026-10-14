@@ -4,15 +4,16 @@ namespace App\Notifications\Teams;
 
 use App\Models\TeamInvitation as TeamInvitationModel;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class TeamInvitation extends Notification implements ShouldQueue
+class TeamInvitation extends Notification implements ShouldBeEncrypted, ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public TeamInvitationModel $invitation) {}
+    public function __construct(public TeamInvitationModel $invitation, public string $code) {}
 
     /**
      * @return array<int, string>
@@ -32,7 +33,7 @@ class TeamInvitation extends Notification implements ShouldQueue
                 'teamName' => $team->name,
                 'role' => $this->invitation->role->label(),
             ]))
-            ->action(__('Join the organization'), $this->invitation->url())
+            ->action(__('Join the organization'), TeamInvitationModel::urlFor($this->code))
             ->line(__('This invitation expires in :days days.', ['days' => TeamInvitationModel::lifetimeDays()]));
     }
 

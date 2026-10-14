@@ -12,10 +12,11 @@ class ResendInvitation
     {
         abort_unless($invitation->isPending(), 409);
 
+        $code = $invitation->issueCode();
         $invitation->update(['expires_at' => now()->addDays(TeamInvitation::lifetimeDays())]);
 
         Notification::route('mail', $invitation->email)
-            ->notify(new TeamInvitationNotification($invitation));
+            ->notify(new TeamInvitationNotification($invitation, $code));
 
         return $invitation;
     }
