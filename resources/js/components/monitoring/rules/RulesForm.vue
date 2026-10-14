@@ -171,7 +171,7 @@ function confirmReset(): void {
         >
             {{
                 $t(
-                    'Dashed values come from the organization: use the pencil to override one, the arrow to inherit it again.',
+                    'Dashed values come from the organization. Turn on Customize to change a rule for these environments; turn it off to follow the organization again.',
                 )
             }}
         </div>

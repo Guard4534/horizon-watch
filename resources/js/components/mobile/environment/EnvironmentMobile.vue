@@ -107,7 +107,7 @@ const tiles = computed(() => [
             <span class="min-w-0">
                 <span
                     class="nc-tone-faint block truncate"
-                    style="font-size: 10px"
+                    style="font-size: 11px"
                     >{{ environment.applicationName }}</span
                 >
                 <EnvPill
@@ -120,7 +120,7 @@ const tiles = computed(() => [
             </span>
             <span
                 class="ml-auto inline-flex flex-none items-center gap-[5px]"
-                style="font-size: 10px"
+                style="font-size: 11px"
                 :style="{ color: statusTone(environment) }"
             >
                 <StatusLamp :status="environment.status" :size="6" />{{
@@ -188,13 +188,13 @@ const tiles = computed(() => [
                     <span
                         v-if="lastKnown"
                         class="ml-auto"
-                        style="font-size: 10px; color: var(--st-warn)"
+                        style="font-size: 11px; color: var(--st-warn)"
                         >{{ lastKnown }}</span
                     >
                     <span
                         v-else
                         class="nc-tone-faint ml-auto"
-                        style="font-size: 10px"
+                        style="font-size: 11px"
                         >{{ $t('pending · wait') }}</span
                     >
                 </div>
@@ -240,7 +240,7 @@ const tiles = computed(() => [
                     <span
                         v-if="lastKnown"
                         class="ml-auto"
-                        style="font-size: 10px; color: var(--st-warn)"
+                        style="font-size: 11px; color: var(--st-warn)"
                         >{{ lastKnown }}</span
                     >
                 </div>

@@ -70,10 +70,10 @@ export function needsAttention(
     return environment.status !== null && environment.status !== 'active';
 }
 
-export function troubledStyle(tone: string, ring = 4): Record<string, string> {
+export function troubledStyle(tone: string): Record<string, string> {
     return {
-        background: `color-mix(in srgb, ${tone} 15%, var(--nc-surface))`,
-        boxShadow: `var(--nc-shadow-sm), 0 0 0 ${ring}px color-mix(in srgb, ${tone} 18%, transparent)`,
+        background: `color-mix(in srgb, ${tone} 13%, var(--nc-surface))`,
+        boxShadow: `0 0 0 1px color-mix(in srgb, ${tone} 38%, transparent)`,
     };
 }
 

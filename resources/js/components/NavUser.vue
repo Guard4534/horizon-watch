@@ -31,7 +31,7 @@ const user = computed(() => page.props.auth.user);
                 <Avatar :name="user.name" :size="24" />
                 <span class="min-w-0">
                     <span class="nc-t-xs block truncate">{{ user.name }}</span>
-                    <span class="nc-tone-faint block" style="font-size: 10px">{{
+                    <span class="nc-tone-faint block" style="font-size: 11px">{{
                         page.props.currentTeam?.roleLabel
                     }}</span>
                 </span>

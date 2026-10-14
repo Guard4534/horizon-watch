@@ -65,7 +65,7 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
                     />
                     <span
                         class="nc-num nc-tone-faint"
-                        style="margin-left: 6px; font-size: 10px"
+                        style="margin-left: 6px; font-size: 11px"
                         >{{
                             $tChoice(
                                 ':count environment|:count environments',
@@ -78,7 +78,7 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
             <span
                 class="nc-num flex-none"
                 style="
-                    font-size: 10px;
+                    font-size: 11px;
                     padding: 1px 7px;
                     border-radius: var(--nc-radius-sm);
                 "

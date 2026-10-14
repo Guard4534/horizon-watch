@@ -9,7 +9,6 @@ import { update } from '@/routes/password';
 
 defineOptions({
     layout: {
-        kicker: 'Sign in',
         title: 'Choose a new password',
         description: '',
     },

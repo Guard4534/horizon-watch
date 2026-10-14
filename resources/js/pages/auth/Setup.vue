@@ -8,7 +8,6 @@ import { store } from '@/routes/setup';
 
 defineOptions({
     layout: {
-        kicker: 'First run',
         title: 'Set up Horizon Watch',
         description:
             'Create the administrator account and the first organization',

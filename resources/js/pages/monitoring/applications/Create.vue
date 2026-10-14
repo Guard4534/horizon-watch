@@ -5,7 +5,6 @@ import ApplicationForm from '@/components/monitoring/applications/ApplicationFor
 import ConnectionCheckRow from '@/components/monitoring/applications/ConnectionCheckRow.vue';
 import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
 import WizardSteps from '@/components/monitoring/applications/WizardSteps.vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useApplicationWizard } from '@/composables/useApplicationWizard';
 import { useTeamSlug } from '@/composables/useTeamSlug';
@@ -120,8 +119,6 @@ const {
                 :key="rows[index].key"
                 class="nc-card row"
             >
-                <EnvSwatch :color="environment.color" shape="edge" :size="4" />
-
                 <EnvironmentForm
                     v-model="form.environments[index]"
                     v-model:auth="rows[index].auth"

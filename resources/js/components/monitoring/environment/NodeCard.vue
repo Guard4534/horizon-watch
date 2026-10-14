@@ -44,7 +44,7 @@ const figures = computed(() => [
             >
             <span
                 class="ml-auto flex-none"
-                style="font-size: 10px"
+                style="font-size: 11px"
                 :style="{ color }"
                 >{{ statusLabel(node.status) }}</span
             >

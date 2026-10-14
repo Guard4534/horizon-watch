@@ -10,8 +10,6 @@ import {
     troubledStyle,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
-import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { thresholdOf } from '@/lib/alertRules';
@@ -47,7 +45,6 @@ const hasNumbers = computed(() => hasMeasurement(environment));
         :class="{ 'env-card-link': environment.watched }"
         :style="cardStyle"
     >
-        <EnvSwatch :color="environment.color" shape="edge" :size="4" />
         <span class="flex items-center gap-2">
             <span class="min-w-0">
                 <EnvPill
@@ -57,7 +54,6 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                     :size="13"
                 />
             </span>
-            <StatusLamp :status="environment.status" />
             <span class="nc-t-2xs ml-auto flex-none" :style="{ color: tone }">{{
                 statusText(environment)
             }}</span>
@@ -84,12 +80,7 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                 :values="environment.trend"
                 :width="190"
                 :height="26"
-                :color="
-                    environment.status === 'active' ||
-                    environment.status === null
-                        ? 'var(--nc-accent)'
-                        : tone
-                "
+                color="var(--nc-neutral-400)"
                 fill
             />
         </span>

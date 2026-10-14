@@ -162,14 +162,14 @@ const kpis = computed(() => [
         color:
             page.kpis.environmentsUp + waitingCount.value ===
             page.kpis.environmentsTotal
-                ? 'var(--st-ok)'
+                ? 'var(--nc-text)'
                 : 'var(--st-warn)',
         note: trans('across all applications'),
     },
     {
         label: trans('Anomalies'),
         value: String(page.kpis.openAnomalies),
-        color: page.kpis.openAnomalies ? 'var(--st-down)' : 'var(--st-ok)',
+        color: page.kpis.openAnomalies ? 'var(--st-down)' : 'var(--nc-text)',
         note: trans('to triage'),
     },
     {
@@ -199,7 +199,6 @@ const kpis = computed(() => [
     <div v-else-if="nothingVisible" class="nc-page">
         <VisibilityEmptyState
             :icon="PhStackSimple"
-            :kicker="$t('Nothing connected')"
             :title="$t('No environments yet')"
             :body="
                 needsEnvironment

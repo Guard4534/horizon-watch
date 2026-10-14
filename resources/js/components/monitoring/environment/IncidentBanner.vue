@@ -141,7 +141,9 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
                 class="nc-t-2xs nc-tone-muted mt-[5px]"
             >
                 {{ $t('Rule:') }}
-                {{ formatRule(alert.metric, alert.threshold, alert.unit) }}
+                <span :title="alert.metric">{{
+                    formatRule(alert.metric, alert.threshold, alert.unit)
+                }}</span>
             </div>
         </div>
     </div>

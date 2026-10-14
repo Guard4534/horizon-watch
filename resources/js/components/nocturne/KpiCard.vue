@@ -17,19 +17,9 @@ const { color = 'var(--nc-text)', compact = false } = defineProps<{
             </div>
         </template>
         <template v-else>
-            <span
-                class="absolute top-0 bottom-0 left-0 w-[3px]"
-                :style="{ background: color }"
-            />
-            <div class="nc-label nc-tone-muted flex items-center gap-[7px]">
-                <span
-                    class="size-[7px] flex-none rounded-full"
-                    :style="{ background: color }"
-                />
-                {{ label }}
-            </div>
+            <div class="nc-label">{{ label }}</div>
             <div class="nc-num value" :style="{ color }">{{ value }}</div>
-            <div v-if="note" class="nc-t-2xs nc-tone-muted">{{ note }}</div>
+            <div v-if="note" class="nc-t-xs nc-tone-faint">{{ note }}</div>
         </template>
     </div>
 </template>
@@ -37,7 +27,6 @@ const { color = 'var(--nc-text)', compact = false } = defineProps<{
 <style scoped>
 .kpi {
     position: relative;
-    overflow: hidden;
 }
 
 .kpi-compact {
@@ -46,9 +35,11 @@ const { color = 'var(--nc-text)', compact = false } = defineProps<{
 }
 
 .value {
-    font-size: 38px;
+    font-size: 34px;
+    font-weight: 500;
     line-height: 1.05;
-    margin-top: 6px;
+    letter-spacing: -0.02em;
+    margin-top: 4px;
 }
 
 .value-compact {

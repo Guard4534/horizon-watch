@@ -52,10 +52,7 @@ const copy = computed(() => {
 const transient = computed(() => status >= 500);
 
 watchEffect(() => {
-    setLayoutProps({
-        kicker: trans('Error :status', { status: String(status) }),
-        ...copy.value,
-    });
+    setLayoutProps(copy.value);
 });
 
 function reload(): void {
@@ -83,4 +80,10 @@ function reload(): void {
             <PhHouse :size="14" />{{ $t('Go to the home page') }}
         </Link>
     </div>
+    <p
+        class="nc-t-2xs nc-tone-faint nc-num"
+        style="margin: var(--nc-space-3) 0 0"
+    >
+        {{ $t('Error :status', { status: String(status) }) }}
+    </p>
 </template>

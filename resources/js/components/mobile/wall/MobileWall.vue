@@ -3,9 +3,7 @@ import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import KpiCard from '@/components/nocturne/KpiCard.vue';
-import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
 import {
     calmStyle,
@@ -22,6 +20,7 @@ import {
     formatCount,
     formatWait,
     statusColor,
+    statusIcon,
     statusLabel,
     waitColor,
 } from '@/lib/monitoring';
@@ -59,7 +58,7 @@ const narrowing = computed(() =>
 
 function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
     return needsAttention(environment)
-        ? troubledStyle(statusTone(environment), 3)
+        ? troubledStyle(statusTone(environment))
         : calmStyle();
 }
 </script>
@@ -78,7 +77,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                 class="flex-1"
                 :label="$t('Issues')"
                 :value="String(problemCount)"
-                :color="problemCount ? 'var(--st-down)' : 'var(--st-ok)'"
+                :color="problemCount ? 'var(--st-down)' : undefined"
             />
             <KpiCard
                 compact
@@ -127,9 +126,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                 class="row"
                 :style="rowStyle(environment)"
             >
-                <EnvSwatch :color="environment.color" shape="edge" :size="4" />
                 <span class="flex items-center gap-[9px]">
-                    <StatusLamp :status="environment.status" glow />
                     <span class="min-w-0 flex-1">
                         <span class="nc-t-sm block truncate">{{
                             environment.applicationName
@@ -145,7 +142,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                     <span class="flex-none text-right">
                         <span
                             class="nc-num block"
-                            style="font-size: 16px; line-height: 1.2"
+                            style="font-size: 18px; line-height: 1.2"
                             :style="{
                                 color: pendingTone(
                                     environment.pending,
@@ -154,18 +151,26 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                             }"
                             >{{ formatCount(environment.pending) }}</span
                         >
-                        <span class="nc-micro nc-tone-faint block truncate">{{
-                            $t('Pending')
+                        <span class="nc-micro nc-tone-faint block">{{
+                            $t('pending')
                         }}</span>
                     </span>
                 </span>
                 <span
-                    class="nc-num nc-t-2xs nc-tone-faint mt-2 flex items-center gap-2"
+                    class="nc-num nc-t-2xs nc-tone-faint mt-2 flex flex-wrap items-center"
+                    style="gap: 2px 8px"
                 >
                     <span
                         v-if="environment.status !== null"
+                        class="inline-flex items-center gap-[4px]"
+                        style="font-weight: 500"
                         :style="{ color: statusColor(environment.status) }"
-                        >{{ statusLabel(environment.status) }}</span
+                        ><component
+                            :is="statusIcon(environment.status)"
+                            v-if="needsAttention(environment)"
+                            :size="13"
+                            weight="bold"
+                        />{{ statusLabel(environment.status) }}</span
                     >
                     <span v-else>{{ $t('No reading yet') }}</span>
                     <MaintenanceBadge
@@ -251,12 +256,10 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
     position: relative;
     display: block;
     width: 100%;
-    padding: var(--nc-space-3) var(--nc-space-3) var(--nc-space-3)
-        var(--nc-space-4);
+    padding: var(--nc-space-3);
     border-radius: var(--nc-radius-md);
     color: inherit;
     text-decoration: none;
-    overflow: hidden;
 }
 
 .row:hover {

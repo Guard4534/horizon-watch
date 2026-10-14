@@ -1,43 +1,27 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { trans } from 'laravel-vue-i18n';
-import { needsAttention } from '@/components/monitoring/environment/readings';
 import { statusColor, statusLabel } from '@/lib/monitoring';
 
-const {
-    status,
-    size = 9,
-    glow = false,
-} = defineProps<{
+const { status, size = 8 } = defineProps<{
     status: App.Enums.EnvironmentStatus | null;
     size?: number;
-    glow?: boolean;
 }>();
-
-const troubled = computed(() => needsAttention({ status }));
 
 const label = computed(() =>
     status === null ? trans('No reading yet') : statusLabel(status),
 );
 
-const style = computed(() => {
-    const color =
-        status === null ? 'var(--nc-neutral-600)' : statusColor(status);
-    const px = glow && troubled.value ? 11 : size;
-
-    return {
-        width: `${px}px`,
-        height: `${px}px`,
-        background: color,
-        boxShadow: glow && troubled.value ? `0 0 10px ${color}` : undefined,
-    };
-});
+const style = computed(() => ({
+    width: `${size}px`,
+    height: `${size}px`,
+    background: status === null ? 'var(--nc-neutral-600)' : statusColor(status),
+}));
 </script>
 
 <template>
     <span
         class="inline-block flex-none rounded-full"
-        :class="{ 'nc-pulse': troubled }"
         :style="style"
         role="img"
         :aria-label="label"

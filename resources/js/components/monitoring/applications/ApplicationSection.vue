@@ -3,6 +3,7 @@ import { Link } from '@inertiajs/vue3';
 import { PhGearSix, PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
 import {
     statusText,
+    needsAttention,
     statusTone,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
@@ -157,7 +158,11 @@ const { canManageApplications } = useVisibility();
                         <td>
                             <span
                                 class="nc-t-xs inline-flex items-center gap-[5px]"
-                                :style="{ color: statusTone(environment) }"
+                                :style="{
+                                    color: needsAttention(environment)
+                                        ? statusTone(environment)
+                                        : 'var(--nc-neutral-400)',
+                                }"
                             >
                                 <template v-if="environment.watched">
                                     <span

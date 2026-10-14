@@ -127,7 +127,7 @@ const header = computed(() => {
                                     v-if="windows.size > 1"
                                     style="
                                         margin-left: 4px;
-                                        font-size: 10px;
+                                        font-size: 11px;
                                         color: var(--nc-neutral-500);
                                     "
                                     >{{

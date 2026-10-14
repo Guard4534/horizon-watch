@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
 
-const { size = 16, withName = true } = defineProps<{
+const { size = 22, withName = true } = defineProps<{
     size?: number;
     withName?: boolean;
 }>();
@@ -10,21 +10,37 @@ const page = usePage();
 </script>
 
 <template>
-    <span class="inline-flex items-center gap-[9px]">
-        <span
+    <span class="inline-flex items-center gap-[10px]">
+        <svg
             class="flex-none"
-            :style="{
-                width: `${size}px`,
-                height: `${size}px`,
-                borderRadius: '5px',
-                background: 'var(--nc-accent)',
-                boxShadow:
-                    'inset 0 0 0 3px var(--nc-bg), 0 0 14px color-mix(in srgb, var(--nc-accent) 45%, transparent)',
-            }"
-        />
+            :width="size"
+            :height="size"
+            viewBox="0 0 32 32"
+            aria-hidden="true"
+        >
+            <rect width="32" height="32" rx="8" fill="var(--nc-accent-800)" />
+            <path d="M8.5 17.5a7.5 7.5 0 0 1 15 0z" fill="var(--nc-accent)" />
+            <rect
+                x="5"
+                y="19.5"
+                width="22"
+                height="2.5"
+                rx="1.25"
+                fill="var(--nc-accent-200)"
+            />
+            <rect
+                x="10"
+                y="24"
+                width="12"
+                height="2"
+                rx="1"
+                fill="var(--nc-accent)"
+                opacity="0.55"
+            />
+        </svg>
         <span
             v-if="withName"
-            style="font-size: 15px; font-weight: 500; letter-spacing: -0.01em"
+            style="font-size: 15px; font-weight: 600; letter-spacing: -0.015em"
             >{{ page.props.name }}</span
         >
     </span>

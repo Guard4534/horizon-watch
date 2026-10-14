@@ -14,7 +14,6 @@ import { accept, decline, register } from '@/routes/invitations';
 
 defineOptions({
     layout: {
-        kicker: 'Invitation',
         title: 'You have been invited',
     },
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
+    formatCondition,
     formatRule,
     formatThreshold,
     overriddenFieldCount,
@@ -31,21 +32,30 @@ const rule = (
 
 describe('formatRule', () => {
     it.each<[App.Enums.AlertRuleMetric, number, string, string]>([
-        ['queue.pending', 100, 'job', 'queue.pending > 100'],
-        ['queue.max_wait', 90, 's', 'queue.max_wait > 90s'],
-        ['job.runtime', 10, 'min', 'job.runtime > 10 min'],
-        ['jobs.failed_per_hour', 2.5, '', 'jobs.failed_per_hour > 2.5'],
-        ['workers.missing', 1, '', 'workers.missing ≥ 1'],
-        [
-            'horizon.master_inactive',
-            5,
-            'min',
-            'horizon.master_inactive ≥ 5 min',
-        ],
-        ['endpoint.unreachable', 3, 'min', 'endpoint.unreachable ≥ 3 min'],
-        ['horizon.paused', 15, 'min', 'horizon.paused ≥ 15 min'],
-    ])('writes %s', (metric, threshold, unit, expected) => {
-        expect(formatRule(metric, threshold, unit)).toBe(expected);
+        ['queue.pending', 100, 'job', 'Pending jobs > 100'],
+        ['queue.max_wait', 90, 's', 'Max wait > 90s'],
+        ['job.runtime', 10, 'min', 'Job runtime > 10 min'],
+        ['jobs.failed_per_hour', 2.5, '', 'Failed jobs / hour > 2.5'],
+        ['workers.missing', 1, '', 'Missing workers ≥ 1'],
+        ['horizon.master_inactive', 5, 'min', 'Horizon inactive ≥ 5 min'],
+        ['endpoint.unreachable', 3, 'min', 'Endpoint unreachable ≥ 3 min'],
+        ['horizon.paused', 15, 'min', 'Horizon paused ≥ 15 min'],
+    ])(
+        'writes %s with its readable name',
+        (metric, threshold, unit, expected) => {
+            expect(formatRule(metric, threshold, unit)).toBe(expected);
+        },
+    );
+});
+
+describe('formatCondition', () => {
+    it('describes the threshold in words, without the rule id', () => {
+        expect(formatCondition('horizon.master_inactive', 2, 'min')).toBe(
+            'no active master supervisor for 2 min',
+        );
+        expect(formatCondition('queue.pending', 2000, 'job')).toBe(
+            'total across all queues above 2000',
+        );
     });
 });
 

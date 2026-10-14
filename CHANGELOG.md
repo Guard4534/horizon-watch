@@ -88,6 +88,13 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
 
 ### Changed
 
+- A calmer interface. Environment colours now come from a cool range (violet, indigo, blue,
+  cyan, slate), so red, amber and green only ever mean down, warning and healthy. Status is
+  shown once per tile and card, in words with an icon, without side stripes or glowing lamps;
+  healthy readings stay neutral. Text is never smaller than 11px and uses fewer uppercase
+  labels. Rules are shown by name ("Horizon inactive ≥ 2 min") instead of their id, the
+  throughput and max-wait chart is split into two charts with one scale each, environment
+  overrides use one Customize switch per rule, and the panel has a new brand mark and icons.
 - **Upgrade note:** `compose.prod.yaml` refuses to start without `DB_PASSWORD`, which used to
   default to `horizon_watch`. If you never set it, put `DB_PASSWORD=horizon_watch` in `.env`
   before upgrading, then change it as the README describes.

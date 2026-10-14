@@ -121,9 +121,7 @@ const current = (on: boolean) => (on ? ('page' as const) : undefined);
 }
 
 .tab-label {
-    font-size: 10px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font-size: 11px;
 }
 
 .tab-icon {

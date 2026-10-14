@@ -122,15 +122,24 @@ export function formatDuration(minutes: number): string {
     return trans('for :minutes min', { minutes: String(minutes) });
 }
 
+function comparison(metric: App.Enums.AlertRuleMetric): string {
+    return isStateMetric(metric) || metric === 'workers.missing' ? '≥' : '>';
+}
+
 export function formatRule(
     metric: App.Enums.AlertRuleMetric,
     threshold: number,
     unit: string,
 ): string {
-    const comparison =
-        isStateMetric(metric) || metric === 'workers.missing' ? '≥' : '>';
+    return `${ruleLabel(metric)} ${comparison(metric)} ${formatThreshold(threshold, unit)}`;
+}
 
-    return `${metric} ${comparison} ${formatThreshold(threshold, unit)}`;
+export function formatCondition(
+    metric: App.Enums.AlertRuleMetric,
+    threshold: number,
+    unit: string,
+): string {
+    return `${ruleHint(metric)} ${formatThreshold(threshold, unit)}`;
 }
 
 export type RuleField =

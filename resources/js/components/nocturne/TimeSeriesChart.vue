@@ -15,22 +15,22 @@ import {
 
 const {
     values,
-    secondary = null,
     startsAt,
     stepSeconds,
     height,
     label,
     describe,
-    describeSecondary = null,
+    unit = 'count',
+    color = 'var(--nc-accent)',
 } = defineProps<{
     values: number[];
-    secondary?: number[] | null;
     startsAt: string;
     stepSeconds: number;
     height: number;
     label: string;
     describe: (value: number) => string;
-    describeSecondary?: ((value: number) => string) | null;
+    unit?: 'count' | 'seconds';
+    color?: string;
 }>();
 
 const TOP = 8;
@@ -51,24 +51,17 @@ const lastIndex = computed(() => Math.max(values.length - 1, 1));
 const until = computed(() => from.value + lastIndex.value * stepSeconds * 1000);
 const withDay = computed(() => spansDays(lastIndex.value * stepSeconds));
 
-const primaryMax = computed(() => niceCountMax(Math.max(0, ...values)));
-const secondaryMax = computed(() =>
-    secondary ? niceSecondsMax(Math.max(0, ...secondary)) : null,
+const primaryMax = computed(() =>
+    unit === 'seconds'
+        ? niceSecondsMax(Math.max(0, ...values))
+        : niceCountMax(Math.max(0, ...values)),
 );
 
 const leftTicks = computed(() =>
     axisTicks(primaryMax.value).map((value) => ({
         value,
-        text: formatAxisCount(value),
+        text: unit === 'seconds' ? formatWait(value) : formatAxisCount(value),
     })),
-);
-const rightTicks = computed(() =>
-    secondaryMax.value === null
-        ? []
-        : axisTicks(secondaryMax.value).map((value) => ({
-              value,
-              text: formatWait(value),
-          })),
 );
 
 let context: CanvasRenderingContext2D | null | undefined;
@@ -78,7 +71,7 @@ function textWidth(text: string): number {
         context = document.createElement('canvas').getContext('2d');
 
         if (context) {
-            context.font = `10px ${getComputedStyle(document.body).fontFamily}`;
+            context.font = `11px ${getComputedStyle(document.body).fontFamily}`;
         }
     }
 
@@ -91,12 +84,8 @@ const axisWidth = (texts: string[]) =>
         : Math.ceil(Math.max(...texts.map(textWidth))) + GAP + 2;
 
 const left = computed(() => axisWidth(leftTicks.value.map((t) => t.text)));
-const right = computed(() =>
-    Math.max(axisWidth(rightTicks.value.map((t) => t.text)), 4),
-);
-const plotWidth = computed(() =>
-    Math.max(width.value - left.value - right.value, 1),
-);
+const right = 4;
+const plotWidth = computed(() => Math.max(width.value - left.value - right, 1));
 const plotHeight = computed(() => Math.max(height - TOP - BOTTOM, 1));
 
 const xAt = (index: number) =>
@@ -118,11 +107,6 @@ const primaryArea = computed(() =>
     values.length === 0
         ? ''
         : `${primaryLine.value} L${xAt(values.length - 1).toFixed(1)} ${TOP + plotHeight.value} L${left.value} ${TOP + plotHeight.value} Z`,
-);
-const secondaryLine = computed(() =>
-    secondary && secondaryMax.value !== null
-        ? path(secondary, secondaryMax.value)
-        : '',
 );
 
 const xTicks = computed(() => {
@@ -171,14 +155,6 @@ const readout = computed(() => {
         time: bucketTime(index),
         primary: describe(values[index]),
         primaryY: yAt(values[index], primaryMax.value),
-        secondary:
-            secondary && describeSecondary && index < secondary.length
-                ? describeSecondary(secondary[index])
-                : null,
-        secondaryY:
-            secondary && secondaryMax.value !== null && index < secondary.length
-                ? yAt(secondary[index], secondaryMax.value)
-                : null,
         style: onLeft
             ? { left: `${x + 10}px` }
             : { right: `${width.value - x + 10}px` },
@@ -186,17 +162,7 @@ const readout = computed(() => {
 });
 
 const points = computed(() =>
-    values.map((value, index) =>
-        [
-            bucketTime(index),
-            describe(value),
-            secondary && describeSecondary && index < secondary.length
-                ? describeSecondary(secondary[index])
-                : null,
-        ]
-            .filter((part) => part !== null)
-            .join(', '),
-    ),
+    values.map((value, index) => `${bucketTime(index)}, ${describe(value)}`),
 );
 
 const announcement = computed(() =>
@@ -285,7 +251,7 @@ function step(event: KeyboardEvent): void {
             @blur="blur"
             @keydown="step"
         >
-            <g class="nc-num" style="font-size: 10px">
+            <g class="nc-num" style="font-size: 11px">
                 <template v-for="tick in leftTicks" :key="`l${tick.value}`">
                     <line
                         :x1="left"
@@ -308,18 +274,6 @@ function step(event: KeyboardEvent): void {
                     </text>
                 </template>
                 <text
-                    v-for="tick in rightTicks"
-                    :key="`r${tick.value}`"
-                    :x="left + plotWidth + GAP"
-                    :y="yAt(tick.value, secondaryMax ?? 1)"
-                    text-anchor="start"
-                    dominant-baseline="middle"
-                    fill="var(--st-warn)"
-                    fill-opacity="0.75"
-                >
-                    {{ tick.text }}
-                </text>
-                <text
                     v-for="tick in xTicks"
                     :key="`x${tick.at}`"
                     :x="tick.x"
@@ -330,24 +284,11 @@ function step(event: KeyboardEvent): void {
                     {{ tick.label }}
                 </text>
             </g>
-            <path
-                :d="primaryArea"
-                fill="var(--nc-accent)"
-                opacity="0.12"
-                stroke="none"
-            />
+            <path :d="primaryArea" :fill="color" opacity="0.12" stroke="none" />
             <path
                 :d="primaryLine"
                 fill="none"
-                stroke="var(--nc-accent)"
-                stroke-width="1.5"
-                stroke-linejoin="round"
-            />
-            <path
-                v-if="secondaryLine"
-                :d="secondaryLine"
-                fill="none"
-                stroke="var(--st-warn)"
+                :stroke="color"
                 stroke-width="1.5"
                 stroke-linejoin="round"
             />
@@ -365,16 +306,7 @@ function step(event: KeyboardEvent): void {
                     :cx="readout.x"
                     :cy="readout.primaryY"
                     r="3"
-                    fill="var(--nc-accent)"
-                    stroke="var(--nc-surface)"
-                    stroke-width="1.5"
-                />
-                <circle
-                    v-if="readout.secondaryY !== null"
-                    :cx="readout.x"
-                    :cy="readout.secondaryY"
-                    r="3"
-                    fill="var(--st-warn)"
+                    :fill="color"
                     stroke="var(--nc-surface)"
                     stroke-width="1.5"
                 />
@@ -396,21 +328,7 @@ function step(event: KeyboardEvent): void {
             }"
         >
             <span class="nc-tone-soft">{{ readout.time }}</span>
-            <span class="inline-flex items-center gap-[5px]">
-                <span
-                    class="h-[2px] w-[10px]"
-                    style="background: var(--nc-accent)"
-                />{{ readout.primary }}
-            </span>
-            <span
-                v-if="readout.secondary !== null"
-                class="inline-flex items-center gap-[5px]"
-            >
-                <span
-                    class="h-[2px] w-[10px]"
-                    style="background: var(--st-warn)"
-                />{{ readout.secondary }}
-            </span>
+            <span>{{ readout.primary }}</span>
         </div>
         <ol class="sr-only">
             <li v-for="(point, index) in points" :key="index">{{ point }}</li>

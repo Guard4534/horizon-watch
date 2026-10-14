@@ -4,7 +4,7 @@ import { useLocale } from '@/composables/useLocale';
 const {
     name,
     padding = '1px 7px',
-    fontSize = '10px',
+    fontSize = '11px',
     long = false,
 } = defineProps<{
     name: string;

@@ -23,6 +23,7 @@ import {
     pendingTone,
     statusText,
 } from '@/components/monitoring/environment/readings';
+import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import MetricTile from '@/components/nocturne/MetricTile.vue';
 import StatusPill from '@/components/nocturne/StatusPill.vue';
 import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
@@ -31,7 +32,6 @@ import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
 import {
-    envColor,
     formatCount,
     formatWait,
     seriesRefreshInterval,
@@ -166,10 +166,6 @@ const tiles = computed<Tile[]>(() => [
         style="padding: var(--nc-space-6); gap: var(--nc-space-4)"
     >
         <div class="flex flex-wrap items-center" style="gap: var(--nc-space-3)">
-            <span
-                class="h-[38px] w-1 flex-none rounded-[2px]"
-                :style="{ background: envColor(environment.color) }"
-            />
             <div class="min-w-0">
                 <div class="nc-t-2xs nc-tone-muted">
                     <Link :href="applicationsIndex(slug)">{{
@@ -190,6 +186,7 @@ const tiles = computed<Tile[]>(() => [
                     class="flex items-center"
                     style="font-size: 24px; line-height: 1.15; gap: 8px"
                 >
+                    <EnvSwatch :color="environment.color" :size="12" />
                     {{ environment.name }}
                     <span
                         v-if="environment.isProduction"

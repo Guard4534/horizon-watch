@@ -72,7 +72,6 @@ const groups = computed(() => {
         <VisibilityEmptyState
             v-if="nothingVisible"
             :icon="PhStackSimple"
-            :kicker="$t('Nothing connected')"
             :title="$t('No applications yet')"
             :body="
                 canManageApplications

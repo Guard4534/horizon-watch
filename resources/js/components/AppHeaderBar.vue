@@ -42,7 +42,7 @@ function choose(event: Event): void {
 
 <template>
     <header class="bar">
-        <BrandMark class="phone-only" :size="14" :with-name="false" />
+        <BrandMark class="phone-only" :size="20" :with-name="false" />
         <div class="min-w-0">
             <h1 class="title truncate">
                 {{ title ? $t(title) : '' }}

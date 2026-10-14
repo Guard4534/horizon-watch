@@ -14,7 +14,6 @@ import type { TwoFactorConfigContent } from '@/types';
 
 defineOptions({
     layout: {
-        kicker: 'Sign in',
         title: 'Two-factor authentication',
     },
 });

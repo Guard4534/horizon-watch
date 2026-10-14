@@ -57,10 +57,7 @@ const environmentHref = useEnvironmentHref();
                             {{ severityLabel(alert.severity) }}
                         </span>
                     </td>
-                    <td
-                        class="nc-t-xs whitespace-nowrap"
-                        style="letter-spacing: 0.01em"
-                    >
+                    <td class="nc-t-xs whitespace-nowrap" :title="alert.metric">
                         {{
                             formatRule(
                                 alert.metric,
@@ -75,11 +72,7 @@ const environmentHref = useEnvironmentHref();
                             :href="environmentHref(alert.environmentId)"
                             class="nc-t-xs env-link inline-flex items-center gap-[7px]"
                         >
-                            <EnvSwatch
-                                :color="alert.color"
-                                shape="bar"
-                                :size="14"
-                            />
+                            <EnvSwatch :color="alert.color" :size="8" />
                             {{ alert.applicationName }} /
                             {{ alert.environmentName }}
                         </Link>
@@ -88,11 +81,7 @@ const environmentHref = useEnvironmentHref();
                             class="nc-t-xs nc-tone-soft inline-flex items-center gap-[7px]"
                             :title="$t('This environment has been deleted')"
                         >
-                            <EnvSwatch
-                                :color="alert.color"
-                                shape="bar"
-                                :size="14"
-                            />
+                            <EnvSwatch :color="alert.color" :size="8" />
                             {{ alert.applicationName }} /
                             {{ alert.environmentName }}
                         </span>

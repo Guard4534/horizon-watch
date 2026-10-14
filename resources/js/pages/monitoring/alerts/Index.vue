@@ -109,7 +109,6 @@ const previewed = computed(
     <div v-if="nothingVisible" class="nc-page">
         <VisibilityEmptyState
             :icon="PhBellSimpleSlash"
-            :kicker="$t('Nothing to watch')"
             :title="$t('No alerts yet')"
             :body="
                 canManageApplications

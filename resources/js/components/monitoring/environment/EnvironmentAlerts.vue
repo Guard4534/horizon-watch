@@ -4,7 +4,7 @@ import AlertActions from '@/components/monitoring/alerts/AlertActions.vue';
 import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatRule, ruleIcon, ruleLabel } from '@/lib/alertRules';
+import { formatCondition, ruleIcon, ruleLabel } from '@/lib/alertRules';
 import { isMuted, severityColor } from '@/lib/alerts';
 import { formatElapsed } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
@@ -53,9 +53,12 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                                 })
                             }}</span>
                         </div>
-                        <div class="nc-code nc-t-2xs nc-tone-faint mt-[3px]">
+                        <div
+                            class="nc-t-2xs nc-tone-faint mt-[3px]"
+                            :title="alert.metric"
+                        >
                             {{
-                                formatRule(
+                                formatCondition(
                                     alert.metric,
                                     alert.threshold,
                                     alert.unit,

@@ -9,7 +9,6 @@ import { email } from '@/routes/password';
 
 defineOptions({
     layout: {
-        kicker: 'Sign in',
         title: 'Forgot your password?',
         description: 'Enter your email to receive a password reset link',
     },

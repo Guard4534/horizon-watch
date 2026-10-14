@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, useId } from 'vue';
-import InheritToggle from '@/components/monitoring/rules/InheritToggle.vue';
+import { computed, ref, useId, watch } from 'vue';
 import type { RuleField, RuleValues } from '@/lib/alertRules';
 import {
+    RULE_FIELDS,
     formatDuration,
     formatThreshold,
     overriddenFieldCount,
@@ -37,6 +37,21 @@ const environmentScope = computed(() => inherited !== null);
 
 const fallback = computed<RuleValues>(() => ruleValues(inherited ?? rule));
 
+const opened = ref(false);
+
+watch(
+    () => rule,
+    () => (opened.value = false),
+);
+
+const customized = computed(
+    () =>
+        environmentScope.value &&
+        (opened.value || overriddenFieldCount(fields.value) > 0),
+);
+
+const locked = computed(() => environmentScope.value && !customized.value);
+
 const hasOverride = computed(() =>
     editable
         ? environmentScope.value && overriddenFieldCount(fields.value) > 0
@@ -58,18 +73,23 @@ const shown = computed<RuleValues>(() => {
     };
 });
 
-function isInherited(field: RuleField): boolean {
-    return environmentScope.value && fields.value[field] === null;
-}
-
 function update(patch: Partial<App.Data.Alerts.AlertRuleInputData>): void {
     fields.value = { ...fields.value, ...patch };
 }
 
-function toggleInheritance(field: RuleField): void {
-    update({
-        [field]: isInherited(field) ? fallback.value[field] : null,
-    });
+function toggleCustomized(): void {
+    if (!customized.value) {
+        opened.value = true;
+
+        return;
+    }
+
+    opened.value = false;
+    update(
+        Object.fromEntries(
+            RULE_FIELDS.map((field) => [field, null]),
+        ) as Partial<App.Data.Alerts.AlertRuleInputData>,
+    );
 }
 
 function readNumber(event: Event): number | null {
@@ -121,11 +141,11 @@ function readNumber(event: Event): number | null {
                         inputmode="numeric"
                         step="1"
                         class="nc-input nc-num nc-right"
-                        :class="{ 'is-inherited': isInherited('threshold') }"
+                        :class="{ 'is-inherited': locked }"
                         :min="rule.minimum"
                         :max="rule.maximum"
                         :value="shown.threshold"
-                        :disabled="isInherited('threshold')"
+                        :disabled="locked"
                         :aria-label="
                             $t(':rule threshold', {
                                 rule: ruleLabel(rule.metric),
@@ -139,11 +159,6 @@ function readNumber(event: Event): number | null {
                     <span class="nc-t-2xs nc-tone-muted flex-none">{{
                         unitLabel(rule.unit)
                     }}</span>
-                    <InheritToggle
-                        v-if="environmentScope"
-                        :inherited="isInherited('threshold')"
-                        @toggle="toggleInheritance('threshold')"
-                    />
                 </div>
                 <div
                     v-if="errors.threshold"
@@ -171,10 +186,10 @@ function readNumber(event: Event): number | null {
                         step="1"
                         min="0"
                         class="nc-input nc-num nc-right"
-                        :class="{ 'is-inherited': isInherited('forMinutes') }"
+                        :class="{ 'is-inherited': locked }"
                         :max="rule.maximumForMinutes"
                         :value="shown.forMinutes"
-                        :disabled="isInherited('forMinutes')"
+                        :disabled="locked"
                         :aria-label="
                             $t(':rule duration', {
                                 rule: ruleLabel(rule.metric),
@@ -188,11 +203,6 @@ function readNumber(event: Event): number | null {
                     <span class="nc-t-2xs nc-tone-muted flex-none">{{
                         unitLabel('min')
                     }}</span>
-                    <InheritToggle
-                        v-if="environmentScope"
-                        :inherited="isInherited('forMinutes')"
-                        @toggle="toggleInheritance('forMinutes')"
-                    />
                 </div>
                 <div
                     v-if="errors.forMinutes"
@@ -208,9 +218,9 @@ function readNumber(event: Event): number | null {
                 <div class="flex items-center gap-[6px]">
                     <select
                         class="nc-input nc-t-xs"
-                        :class="{ 'is-inherited': isInherited('severity') }"
+                        :class="{ 'is-inherited': locked }"
                         :value="shown.severity"
-                        :disabled="isInherited('severity')"
+                        :disabled="locked"
                         :aria-label="
                             $t(':rule severity', {
                                 rule: ruleLabel(rule.metric),
@@ -227,11 +237,6 @@ function readNumber(event: Event): number | null {
                         <option value="warning">{{ $t('Warning') }}</option>
                         <option value="critical">{{ $t('Critical') }}</option>
                     </select>
-                    <InheritToggle
-                        v-if="environmentScope"
-                        :inherited="isInherited('severity')"
-                        @toggle="toggleInheritance('severity')"
-                    />
                 </div>
                 <div
                     v-if="errors.severity"
@@ -246,15 +251,15 @@ function readNumber(event: Event): number | null {
             <div class="cell">
                 <div class="flex items-center gap-[6px]">
                     <label
-                        class="nc-radio check nc-t-xs"
-                        :class="{
-                            'is-inherited': isInherited('notifyByEmail'),
-                        }"
+                        class="nc-switch check nc-t-xs"
+                        :class="{ 'is-inherited': locked }"
                     >
                         <input
                             type="checkbox"
+                            role="switch"
                             :checked="shown.notifyByEmail"
-                            :disabled="isInherited('notifyByEmail')"
+                            :aria-checked="shown.notifyByEmail"
+                            :disabled="locked"
                             v-bind="
                                 invalidField(
                                     `${id}-notifyByEmail`,
@@ -269,14 +274,9 @@ function readNumber(event: Event): number | null {
                                 })
                             "
                         />
-                        <span class="nc-dot" />
+                        <span class="nc-track" />
                         {{ $t('Email') }}
                     </label>
-                    <InheritToggle
-                        v-if="environmentScope"
-                        :inherited="isInherited('notifyByEmail')"
-                        @toggle="toggleInheritance('notifyByEmail')"
-                    />
                 </div>
                 <div
                     v-if="errors.notifyByEmail"
@@ -291,15 +291,15 @@ function readNumber(event: Event): number | null {
             <div class="cell">
                 <div class="flex items-center gap-[6px]">
                     <label
-                        class="nc-radio check nc-t-xs"
-                        :class="{ 'is-inherited': isInherited('enabled') }"
+                        class="nc-switch check nc-t-xs"
+                        :class="{ 'is-inherited': locked }"
                     >
                         <input
                             type="checkbox"
                             role="switch"
                             :checked="shown.enabled"
                             :aria-checked="shown.enabled"
-                            :disabled="isInherited('enabled')"
+                            :disabled="locked"
                             v-bind="
                                 invalidField(`${id}-enabled`, errors.enabled)
                             "
@@ -310,14 +310,9 @@ function readNumber(event: Event): number | null {
                                 })
                             "
                         />
-                        <span class="nc-dot" />
+                        <span class="nc-track" />
                         {{ $t('Active') }}
                     </label>
-                    <InheritToggle
-                        v-if="environmentScope"
-                        :inherited="isInherited('enabled')"
-                        @toggle="toggleInheritance('enabled')"
-                    />
                 </div>
                 <div
                     v-if="errors.enabled"
@@ -327,6 +322,25 @@ function readNumber(event: Event): number | null {
                 >
                     {{ errors.enabled }}
                 </div>
+            </div>
+
+            <div v-if="environmentScope" class="cell">
+                <label class="nc-switch check nc-t-xs">
+                    <input
+                        type="checkbox"
+                        role="switch"
+                        :checked="customized"
+                        :aria-checked="customized"
+                        :aria-label="
+                            $t('Customize :rule for this scope', {
+                                rule: ruleLabel(rule.metric),
+                            })
+                        "
+                        @change="toggleCustomized"
+                    />
+                    <span class="nc-track" />
+                    {{ $t('Customize') }}
+                </label>
             </div>
         </template>
 
@@ -376,7 +390,7 @@ function readNumber(event: Event): number | null {
 }
 
 .rule-row.is-editable.inherits {
-    grid-template-columns: minmax(0, 1fr) 162px 150px 114px 114px;
+    grid-template-columns: minmax(0, 1fr) 128px 122px 88px 88px 112px;
 }
 
 .rule-row.is-editable > :first-child {
@@ -408,13 +422,8 @@ function readNumber(event: Event): number | null {
     cursor: default;
 }
 
-.check.is-inherited .nc-dot {
-    border-style: dashed;
-}
-
-.check.is-inherited input:checked + .nc-dot {
-    background: var(--nc-neutral-600);
-    border-color: var(--nc-neutral-600);
+.check.is-inherited input:checked + .nc-track {
+    background: var(--nc-neutral-700);
 }
 
 .field-error {
