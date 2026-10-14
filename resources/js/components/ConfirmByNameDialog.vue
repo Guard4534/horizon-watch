@@ -12,6 +12,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { invalidField } from '@/lib/fieldErrors';
 
 const open = defineModel<boolean>('open', { required: true });
 
@@ -104,8 +105,12 @@ const submit = () => {
                     type="text"
                     autocomplete="off"
                     spellcheck="false"
+                    v-bind="invalidField('confirm-by-name', form.errors.name)"
                 />
-                <FieldError :message="form.errors.name" />
+                <FieldError
+                    field="confirm-by-name"
+                    :message="form.errors.name"
+                />
             </form>
 
             <DialogFooter>

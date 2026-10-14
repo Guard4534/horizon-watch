@@ -56,8 +56,10 @@ const groups = computed(() => {
             </div>
             <input
                 v-model="search"
+                type="search"
                 class="nc-input search ml-auto"
                 :placeholder="$t('Search application')"
+                :aria-label="$t('Search application')"
             />
             <Link
                 v-if="canManageApplications"

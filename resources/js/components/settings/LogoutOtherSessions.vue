@@ -17,6 +17,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { invalidField } from '@/lib/fieldErrors';
 
 const open = ref(false);
 const passwordInput = useTemplateRef('passwordInput');
@@ -76,8 +77,17 @@ const passwordInput = useTemplateRef('passwordInput');
                             ref="passwordInput"
                             autocomplete="current-password"
                             :placeholder="$t('Password')"
+                            v-bind="
+                                invalidField(
+                                    'other-sessions-password',
+                                    errors.password,
+                                )
+                            "
                         />
-                        <InputError :message="errors.password" />
+                        <InputError
+                            field="other-sessions-password"
+                            :message="errors.password"
+                        />
                     </div>
 
                     <DialogFooter class="gap-2">

@@ -17,7 +17,7 @@ const selected = computed(
 </script>
 
 <template>
-    <div class="flex flex-wrap items-center" style="gap: 6px">
+    <div class="flex flex-wrap items-center" style="gap: 6px" role="radiogroup">
         <label
             v-for="color in colors"
             :key="color.value"

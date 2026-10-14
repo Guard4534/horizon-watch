@@ -67,13 +67,15 @@ export function formatCount(value: number): string {
         return String(value);
     }
 
-    const digits = value >= 10000 ? 0 : 1;
+    const [divisor, suffix] = value >= 999500 ? [1000000, 'M'] : [1000, 'k'];
+    const scaled = value / divisor;
+    const digits = scaled >= 10 ? 0 : 1;
 
     return `${new Intl.NumberFormat(getActiveLanguage(), {
         minimumFractionDigits: digits,
         maximumFractionDigits: digits,
         useGrouping: false,
-    }).format(value / 1000)}k`;
+    }).format(scaled)}${suffix}`;
 }
 
 function compact(

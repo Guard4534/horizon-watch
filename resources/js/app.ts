@@ -26,7 +26,14 @@ const initialLanguage = document.documentElement.lang || 'en';
 
 void loadMessages(initialLanguage).then((initialMessages) =>
     createInertiaApp({
-        title: (title) => (title ? `${title} - ${appName}` : appName),
+        title: (title, page) => {
+            const full = title ? `${title} - ${appName}` : appName;
+            const open = page.props.openAlertCount;
+
+            return typeof open === 'number' && open > 0
+                ? `(${open}) ${full}`
+                : full;
+        },
         layout: (name) => {
             switch (true) {
                 case name.startsWith('auth/'):

@@ -2,6 +2,7 @@
     --nc-bg: #161826;
     --nc-surface: #232532;
     --nc-text: #e9e9ed;
+    --nc-text-faint: #8d91a5;
     --nc-accent: #9184d9;
     --nc-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
 
@@ -62,6 +63,22 @@
     animation: nc-pulse 1.6s ease-in-out infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .animate-spin {
+        animation-duration: 1s !important;
+        animation-iteration-count: infinite !important;
+    }
+}
+
 ::selection {
     background: color-mix(in srgb, var(--nc-accent) 30%, transparent);
 }
@@ -107,7 +124,7 @@ samp,
     font-size: 10px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--nc-neutral-600);
+    color: var(--nc-text-faint);
 }
 
 .nc-page {
@@ -203,6 +220,9 @@ samp,
 .nc-input:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+}
+input[type='search'].nc-input {
+    color-scheme: dark;
 }
 select.nc-input {
     appearance: none;
@@ -392,7 +412,7 @@ select.nc-input option {
 }
 
 .nc-micro {
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
@@ -414,7 +434,7 @@ select.nc-input option {
     color: var(--nc-neutral-500);
 }
 .nc-tone-faint {
-    color: var(--nc-neutral-600);
+    color: var(--nc-text-faint);
 }
 .nc-tone-down {
     color: var(--st-down);

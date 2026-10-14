@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import FieldError from '@/components/FieldError.vue';
+import { invalidField } from '@/lib/fieldErrors';
 
 const model = defineModel<App.Data.Applications.ApplicationFormData>({
     required: true,
@@ -35,8 +36,12 @@ const {
                 type="text"
                 autocomplete="off"
                 placeholder="Invoicer"
+                v-bind="invalidField(`${prefix}name`, errors[`${prefix}name`])"
             />
-            <FieldError :message="errors[`${prefix}name`]" />
+            <FieldError
+                :field="`${prefix}name`"
+                :message="errors[`${prefix}name`]"
+            />
         </div>
 
         <div class="nc-field">
@@ -51,9 +56,11 @@ const {
                 autocomplete="off"
                 spellcheck="false"
                 placeholder="invoicer.example.com"
+                v-bind="invalidField(`${prefix}host`, errors[`${prefix}host`])"
             />
             <FieldError
                 v-if="errors[`${prefix}host`]"
+                :field="`${prefix}host`"
                 :message="errors[`${prefix}host`]"
             />
             <div v-else-if="wizard" class="nc-t-2xs nc-tone-faint mt-1">

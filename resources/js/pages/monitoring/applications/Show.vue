@@ -196,7 +196,10 @@ const stats = computed(() => [
                 v-if="page.environments.length"
                 :environments="page.environments"
             />
-            <RecentAlerts :alerts="page.recentAlerts" />
+            <RecentAlerts
+                :application-id="page.application.id"
+                :alerts="page.recentAlerts"
+            />
         </div>
     </div>
 </template>

@@ -8,6 +8,7 @@ import PasswordInput from '@/components/PasswordInput.vue';
 import TeamInvitationAlert from '@/components/TeamInvitationAlert.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Spinner } from '@/components/ui/spinner';
+import { invalidField } from '@/lib/fieldErrors';
 import { login, logout } from '@/routes';
 import { accept, decline, register } from '@/routes/invitations';
 
@@ -75,8 +76,9 @@ const flushOnSignOut = () => router.flushAll();
                     required
                     autofocus
                     autocomplete="name"
+                    v-bind="invalidField('name', errors.name)"
                 />
-                <InputError :message="errors.name" />
+                <InputError field="name" :message="errors.name" />
             </div>
 
             <div class="nc-field">
@@ -88,8 +90,9 @@ const flushOnSignOut = () => router.flushAll();
                     required
                     autocomplete="new-password"
                     :placeholder="$t('at least 10 characters')"
+                    v-bind="invalidField('password', errors.password)"
                 />
-                <InputError :message="errors.password" />
+                <InputError field="password" :message="errors.password" />
             </div>
 
             <div class="nc-field">

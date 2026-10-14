@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import InheritToggle from '@/components/monitoring/rules/InheritToggle.vue';
 import type { RuleField, RuleValues } from '@/lib/alertRules';
 import {
@@ -13,6 +13,7 @@ import {
     unitLabel,
 } from '@/lib/alertRules';
 import { severityColor, severityLabel } from '@/lib/alerts';
+import { errorId, invalidField } from '@/lib/fieldErrors';
 
 const {
     rule,
@@ -29,6 +30,8 @@ const {
 const fields = defineModel<App.Data.Alerts.AlertRuleInputData>({
     required: true,
 });
+
+const id = useId();
 
 const environmentScope = computed(() => inherited !== null);
 
@@ -128,7 +131,9 @@ function readNumber(event: Event): number | null {
                                 rule: ruleLabel(rule.metric),
                             })
                         "
-                        :aria-invalid="errors.threshold ? true : undefined"
+                        v-bind="
+                            invalidField(`${id}-threshold`, errors.threshold)
+                        "
                         @input="update({ threshold: readNumber($event) })"
                     />
                     <span class="nc-t-2xs nc-tone-muted flex-none">{{
@@ -140,7 +145,12 @@ function readNumber(event: Event): number | null {
                         @toggle="toggleInheritance('threshold')"
                     />
                 </div>
-                <div v-if="errors.threshold" class="field-error">
+                <div
+                    v-if="errors.threshold"
+                    :id="errorId(`${id}-threshold`)"
+                    class="field-error"
+                    role="alert"
+                >
                     {{ errors.threshold }}
                 </div>
                 <div
@@ -170,7 +180,9 @@ function readNumber(event: Event): number | null {
                                 rule: ruleLabel(rule.metric),
                             })
                         "
-                        :aria-invalid="errors.forMinutes ? true : undefined"
+                        v-bind="
+                            invalidField(`${id}-forMinutes`, errors.forMinutes)
+                        "
                         @input="update({ forMinutes: readNumber($event) })"
                     />
                     <span class="nc-t-2xs nc-tone-muted flex-none">{{
@@ -182,7 +194,12 @@ function readNumber(event: Event): number | null {
                         @toggle="toggleInheritance('forMinutes')"
                     />
                 </div>
-                <div v-if="errors.forMinutes" class="field-error">
+                <div
+                    v-if="errors.forMinutes"
+                    :id="errorId(`${id}-forMinutes`)"
+                    class="field-error"
+                    role="alert"
+                >
                     {{ errors.forMinutes }}
                 </div>
             </div>
@@ -199,6 +216,7 @@ function readNumber(event: Event): number | null {
                                 rule: ruleLabel(rule.metric),
                             })
                         "
+                        v-bind="invalidField(`${id}-severity`, errors.severity)"
                         @change="
                             update({
                                 severity: ($event.target as HTMLSelectElement)
@@ -215,7 +233,12 @@ function readNumber(event: Event): number | null {
                         @toggle="toggleInheritance('severity')"
                     />
                 </div>
-                <div v-if="errors.severity" class="field-error">
+                <div
+                    v-if="errors.severity"
+                    :id="errorId(`${id}-severity`)"
+                    class="field-error"
+                    role="alert"
+                >
                     {{ errors.severity }}
                 </div>
             </div>
@@ -232,6 +255,12 @@ function readNumber(event: Event): number | null {
                             type="checkbox"
                             :checked="shown.notifyByEmail"
                             :disabled="isInherited('notifyByEmail')"
+                            v-bind="
+                                invalidField(
+                                    `${id}-notifyByEmail`,
+                                    errors.notifyByEmail,
+                                )
+                            "
                             @change="
                                 update({
                                     notifyByEmail: (
@@ -249,7 +278,12 @@ function readNumber(event: Event): number | null {
                         @toggle="toggleInheritance('notifyByEmail')"
                     />
                 </div>
-                <div v-if="errors.notifyByEmail" class="field-error">
+                <div
+                    v-if="errors.notifyByEmail"
+                    :id="errorId(`${id}-notifyByEmail`)"
+                    class="field-error"
+                    role="alert"
+                >
                     {{ errors.notifyByEmail }}
                 </div>
             </div>
@@ -266,6 +300,9 @@ function readNumber(event: Event): number | null {
                             :checked="shown.enabled"
                             :aria-checked="shown.enabled"
                             :disabled="isInherited('enabled')"
+                            v-bind="
+                                invalidField(`${id}-enabled`, errors.enabled)
+                            "
                             @change="
                                 update({
                                     enabled: ($event.target as HTMLInputElement)
@@ -282,7 +319,12 @@ function readNumber(event: Event): number | null {
                         @toggle="toggleInheritance('enabled')"
                     />
                 </div>
-                <div v-if="errors.enabled" class="field-error">
+                <div
+                    v-if="errors.enabled"
+                    :id="errorId(`${id}-enabled`)"
+                    class="field-error"
+                    role="alert"
+                >
                     {{ errors.enabled }}
                 </div>
             </div>

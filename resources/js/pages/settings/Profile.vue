@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AlertEmailsToggle from '@/components/settings/AlertEmailsToggle.vue';
+import { invalidField } from '@/lib/fieldErrors';
 
 defineOptions({
     layout: { title: 'Profile settings' },
@@ -31,8 +32,6 @@ const changesEmail = computed(
 
 <template>
     <Head :title="$t('Profile settings')" />
-
-    <h1 class="sr-only">{{ $t('Profile settings') }}</h1>
 
     <div class="flex flex-col space-y-6">
         <Heading
@@ -58,8 +57,9 @@ const changesEmail = computed(
                     required
                     autocomplete="name"
                     :placeholder="$t('Full name')"
+                    v-bind="invalidField('name', errors.name)"
                 />
-                <InputError class="mt-2" :message="errors.name" />
+                <InputError field="name" class="mt-2" :message="errors.name" />
             </div>
 
             <div class="grid gap-2">
@@ -73,8 +73,13 @@ const changesEmail = computed(
                     required
                     autocomplete="username"
                     :placeholder="$t('Email address')"
+                    v-bind="invalidField('email', errors.email)"
                 />
-                <InputError class="mt-2" :message="errors.email" />
+                <InputError
+                    field="email"
+                    class="mt-2"
+                    :message="errors.email"
+                />
             </div>
 
             <div v-if="changesEmail" class="grid gap-2">
@@ -88,6 +93,12 @@ const changesEmail = computed(
                     required
                     autocomplete="current-password"
                     :placeholder="$t('Current password')"
+                    v-bind="
+                        invalidField(
+                            'current_password',
+                            errors.current_password,
+                        )
+                    "
                 />
                 <p class="text-muted-foreground text-sm">
                     {{
@@ -96,7 +107,11 @@ const changesEmail = computed(
                         )
                     }}
                 </p>
-                <InputError class="mt-2" :message="errors.current_password" />
+                <InputError
+                    field="current_password"
+                    class="mt-2"
+                    :message="errors.current_password"
+                />
             </div>
 
             <div class="flex items-center gap-4">

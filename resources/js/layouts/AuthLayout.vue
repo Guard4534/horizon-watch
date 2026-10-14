@@ -32,7 +32,7 @@ const {
             >
                 {{ $t(kicker) }}
             </div>
-            <h3
+            <h1
                 style="
                     font-size: 25px;
                     line-height: 1.12;
@@ -40,7 +40,7 @@ const {
                 "
             >
                 {{ $t(title) }}
-            </h3>
+            </h1>
             <p
                 v-if="description"
                 class="nc-t-sm nc-tone-soft"

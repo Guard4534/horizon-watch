@@ -47,7 +47,7 @@ const trend = computed(() => {
     if (percent === null || percent === 0) {
         return {
             icon: PhMinus,
-            color: 'var(--nc-neutral-600)',
+            color: 'var(--nc-text-faint)',
             label: percent === 0 ? '0%' : '',
         };
     }

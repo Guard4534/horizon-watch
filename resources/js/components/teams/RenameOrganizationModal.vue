@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { invalidField } from '@/lib/fieldErrors';
 import { update } from '@/routes/teams';
 
 const organization = defineModel<App.Data.Teams.UserTeamData | null>(
@@ -57,8 +58,14 @@ const organization = defineModel<App.Data.Teams.UserTeamData | null>(
                         data-test="rename-team-name"
                         :default-value="organization.name"
                         required
+                        v-bind="
+                            invalidField('rename-organization', errors.name)
+                        "
                     />
-                    <InputError :message="errors.name" />
+                    <InputError
+                        field="rename-organization"
+                        :message="errors.name"
+                    />
                 </div>
 
                 <DialogFooter class="gap-2">

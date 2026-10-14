@@ -37,9 +37,9 @@ const PALETTE = [
                         :style="{ background: `var(--env-${color})` }"
                     />
                 </div>
-                <h3 style="margin: 0 0 var(--nc-space-2); font-size: 25px">
+                <h2 style="margin: 0 0 var(--nc-space-2); font-size: 25px">
                     {{ $t('You are not monitoring anything yet') }}
-                </h3>
+                </h2>
                 <p class="lead">
                     {{
                         $t(
@@ -180,6 +180,6 @@ ol {
     margin: 0;
     font-size: 12px;
     line-height: 1.55;
-    color: var(--nc-neutral-600);
+    color: var(--nc-text-faint);
 }
 </style>

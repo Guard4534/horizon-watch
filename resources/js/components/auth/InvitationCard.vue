@@ -55,7 +55,7 @@ const initials = computed(() => getInitials(props.organizationName));
                 v-if="visibleEnvironmentNames.length > 0"
                 style="
                     font-size: 11px;
-                    color: var(--nc-neutral-600);
+                    color: var(--nc-text-faint);
                     margin-top: 2px;
                     overflow-wrap: anywhere;
                 "

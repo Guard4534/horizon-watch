@@ -3,6 +3,7 @@ import { Form, Head } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Spinner } from '@/components/ui/spinner';
+import { invalidField } from '@/lib/fieldErrors';
 import { store } from '@/routes/password/confirm';
 
 defineOptions({
@@ -33,8 +34,9 @@ defineOptions({
                 required
                 autocomplete="current-password"
                 autofocus
+                v-bind="invalidField('password', errors.password)"
             />
-            <InputError :message="errors.password" />
+            <InputError field="password" :message="errors.password" />
         </div>
 
         <button

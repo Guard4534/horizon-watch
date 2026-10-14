@@ -116,12 +116,12 @@ const current = (on: boolean) => (on ? ('page' as const) : undefined);
     align-items: center;
     gap: 3px;
     padding: var(--nc-space-3) 0;
-    color: var(--nc-neutral-600);
+    color: var(--nc-text-faint);
     text-decoration: none;
 }
 
 .tab-label {
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
 }
@@ -140,7 +140,7 @@ const current = (on: boolean) => (on ? ('page' as const) : undefined);
     border-radius: 99px;
     background: var(--nc-accent-800);
     color: var(--nc-accent-100);
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 600;
     line-height: 12px;
     text-align: center;

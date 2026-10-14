@@ -44,6 +44,7 @@ const box = useTemplateRef<HTMLDivElement>('box');
 const { width: measured } = useElementSize(box);
 const width = computed(() => Math.round(measured.value) || FALLBACK_WIDTH);
 const hovered = ref<number | null>(null);
+const keyboard = ref(false);
 
 const from = computed(() => new Date(startsAt).getTime());
 const lastIndex = computed(() => Math.max(values.length - 1, 1));
@@ -184,7 +185,29 @@ const readout = computed(() => {
     };
 });
 
+const points = computed(() =>
+    values.map((value, index) =>
+        [
+            bucketTime(index),
+            describe(value),
+            secondary && describeSecondary && index < secondary.length
+                ? describeSecondary(secondary[index])
+                : null,
+        ]
+            .filter((part) => part !== null)
+            .join(', '),
+    ),
+);
+
+const announcement = computed(() =>
+    keyboard.value && hovered.value !== null
+        ? (points.value[hovered.value] ?? '')
+        : '',
+);
+
 function track(event: PointerEvent): void {
+    keyboard.value = false;
+
     const bounds = (event.currentTarget as SVGElement).getBoundingClientRect();
     const offset = event.clientX - bounds.left - left.value;
     const index = Math.round((offset / plotWidth.value) * lastIndex.value);
@@ -200,6 +223,46 @@ function leave(event: PointerEvent): void {
         hovered.value = null;
     }
 }
+
+function focus(event: FocusEvent): void {
+    if (
+        values.length === 0 ||
+        !(event.currentTarget as SVGElement).matches(':focus-visible')
+    ) {
+        return;
+    }
+
+    keyboard.value = true;
+    hovered.value ??= values.length - 1;
+}
+
+function blur(): void {
+    keyboard.value = false;
+    hovered.value = null;
+}
+
+function step(event: KeyboardEvent): void {
+    if (values.length === 0) {
+        return;
+    }
+
+    const last = values.length - 1;
+    const current = hovered.value ?? last;
+    const next: Record<string, number> = {
+        ArrowLeft: current - 1,
+        ArrowRight: current + 1,
+        Home: 0,
+        End: last,
+    };
+
+    if (!(event.key in next)) {
+        return;
+    }
+
+    event.preventDefault();
+    keyboard.value = true;
+    hovered.value = Math.min(Math.max(next[event.key], 0), last);
+}
 </script>
 
 <template>
@@ -210,12 +273,17 @@ function leave(event: PointerEvent): void {
             :viewBox="`0 0 ${width} ${height}`"
             role="img"
             :aria-label="label"
+            aria-keyshortcuts="ArrowLeft ArrowRight Home End"
+            :tabindex="values.length ? 0 : undefined"
             class="block"
             style="touch-action: pan-y"
             @pointerdown="track"
             @pointermove="track"
             @pointerleave="leave"
             @pointercancel="hovered = null"
+            @focus="focus"
+            @blur="blur"
+            @keydown="step"
         >
             <g class="nc-num" style="font-size: 10px">
                 <template v-for="tick in leftTicks" :key="`l${tick.value}`">
@@ -344,5 +412,9 @@ function leave(event: PointerEvent): void {
                 />{{ readout.secondary }}
             </span>
         </div>
+        <ol class="sr-only">
+            <li v-for="(point, index) in points" :key="index">{{ point }}</li>
+        </ol>
+        <div class="sr-only" aria-live="polite">{{ announcement }}</div>
     </div>
 </template>

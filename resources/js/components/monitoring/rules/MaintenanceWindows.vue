@@ -7,6 +7,7 @@ import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { errorId, invalidField } from '@/lib/fieldErrors';
 import {
     formatMaintenanceTime,
     fromLocalInput,
@@ -141,7 +142,7 @@ function period(
                     :id="`${id}-target`"
                     v-model="form.target"
                     class="nc-input"
-                    :aria-invalid="targetError ? true : undefined"
+                    v-bind="invalidField(`${id}-target`, targetError)"
                 >
                     <option value="" disabled>
                         {{ $t('Choose…') }}
@@ -154,7 +155,12 @@ function period(
                         {{ targetLabel(target) }}
                     </option>
                 </select>
-                <div v-if="targetError" class="field-error">
+                <div
+                    v-if="targetError"
+                    :id="errorId(`${id}-target`)"
+                    class="field-error"
+                    role="alert"
+                >
                     {{ targetError }}
                 </div>
             </div>
@@ -169,9 +175,14 @@ function period(
                     maxlength="255"
                     autocomplete="off"
                     :placeholder="$t('Deploy, database upgrade…')"
-                    :aria-invalid="errors.reason ? true : undefined"
+                    v-bind="invalidField(`${id}-reason`, errors.reason)"
                 />
-                <div v-if="errors.reason" class="field-error">
+                <div
+                    v-if="errors.reason"
+                    :id="errorId(`${id}-reason`)"
+                    class="field-error"
+                    role="alert"
+                >
                     {{ errors.reason }}
                 </div>
             </div>
@@ -183,9 +194,14 @@ function period(
                     v-model="form.startsAt"
                     class="nc-input nc-num"
                     type="datetime-local"
-                    :aria-invalid="errors.startsAt ? true : undefined"
+                    v-bind="invalidField(`${id}-starts`, errors.startsAt)"
                 />
-                <div v-if="errors.startsAt" class="field-error">
+                <div
+                    v-if="errors.startsAt"
+                    :id="errorId(`${id}-starts`)"
+                    class="field-error"
+                    role="alert"
+                >
                     {{ errors.startsAt }}
                 </div>
             </div>
@@ -197,9 +213,14 @@ function period(
                     v-model="form.endsAt"
                     class="nc-input nc-num"
                     type="datetime-local"
-                    :aria-invalid="errors.endsAt ? true : undefined"
+                    v-bind="invalidField(`${id}-ends`, errors.endsAt)"
                 />
-                <div v-if="errors.endsAt" class="field-error">
+                <div
+                    v-if="errors.endsAt"
+                    :id="errorId(`${id}-ends`)"
+                    class="field-error"
+                    role="alert"
+                >
                     {{ errors.endsAt }}
                 </div>
                 <div v-else class="field-hint">
@@ -383,7 +404,7 @@ function period(
 .field-hint {
     margin-top: 4px;
     font-size: 11px;
-    color: var(--nc-neutral-600);
+    color: var(--nc-text-faint);
 }
 
 .field-error {

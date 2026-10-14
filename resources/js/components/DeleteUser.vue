@@ -17,6 +17,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { invalidField } from '@/lib/fieldErrors';
 
 const { deletion } = defineProps<{
     deletion: App.Data.Settings.AccountDeletionData;
@@ -138,8 +139,14 @@ const passwordInput = useTemplateRef('passwordInput');
                                 name="password"
                                 ref="passwordInput"
                                 :placeholder="$t('Password')"
+                                v-bind="
+                                    invalidField('password', errors.password)
+                                "
                             />
-                            <InputError :message="errors.password" />
+                            <InputError
+                                field="password"
+                                :message="errors.password"
+                            />
                             <InputError :message="errors.account" />
                         </div>
 

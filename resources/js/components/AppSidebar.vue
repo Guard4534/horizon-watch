@@ -40,8 +40,13 @@ const { startsWith } = useCurrentPath();
             <BrandMark />
         </div>
 
-        <nav v-if="slug" class="flex flex-col gap-[2px]">
+        <nav
+            v-if="slug"
+            class="flex flex-col gap-[2px]"
+            aria-labelledby="sidebar-monitoring"
+        >
             <div
+                id="sidebar-monitoring"
                 class="nc-label"
                 style="padding: 0 var(--nc-space-2) var(--nc-space-2)"
             >
@@ -70,8 +75,13 @@ const { startsWith } = useCurrentPath();
             />
         </nav>
 
-        <nav v-if="slug" class="flex flex-col gap-[2px]">
+        <nav
+            v-if="slug"
+            class="flex flex-col gap-[2px]"
+            aria-labelledby="sidebar-organization"
+        >
             <div
+                id="sidebar-organization"
                 class="nc-label"
                 style="padding: 0 var(--nc-space-2) var(--nc-space-2)"
             >

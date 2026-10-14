@@ -10,6 +10,7 @@ import { formatElapsed, statusColor } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 
 defineProps<{
+    applicationId: string;
     alerts: App.Data.Monitoring.AlertData[];
 }>();
 
@@ -19,9 +20,13 @@ const slug = useTeamSlug();
 <template>
     <SectionCard :title="$t('Recent alerts')">
         <template #actions>
-            <Link :href="alertsIndex(slug)" class="nc-t-2xs">{{
-                $t('Full log')
-            }}</Link>
+            <Link
+                :href="
+                    alertsIndex(slug, { query: { application: applicationId } })
+                "
+                class="nc-t-2xs"
+                >{{ $t('Full log') }}</Link
+            >
         </template>
         <div
             v-if="!alerts.length"

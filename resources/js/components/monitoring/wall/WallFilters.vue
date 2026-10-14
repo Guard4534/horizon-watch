@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import { envColor } from '@/lib/monitoring';
 
@@ -13,6 +13,8 @@ const environmentName = defineModel<string>('environmentName', {
     required: true,
 });
 const search = defineModel<string>('search', { required: true });
+
+const id = useId();
 
 const ORDER = [
     'production',
@@ -69,19 +71,30 @@ const chips = computed(() => {
             />
             <input
                 v-model="search"
+                type="search"
                 class="nc-input"
                 style="max-width: 250px"
                 :placeholder="$t('Filter by application or environment')"
+                :aria-label="$t('Filter by application or environment')"
             />
         </div>
-        <div class="flex flex-wrap items-center" style="gap: var(--nc-space-2)">
-            <span class="nc-label" style="margin-right: var(--nc-space-1)">{{
-                $t('Environment')
-            }}</span>
+        <div
+            class="flex flex-wrap items-center"
+            style="gap: var(--nc-space-2)"
+            role="group"
+            :aria-labelledby="`${id}-environment`"
+        >
+            <span
+                :id="`${id}-environment`"
+                class="nc-label"
+                style="margin-right: var(--nc-space-1)"
+                >{{ $t('Environment') }}</span
+            >
             <button
                 type="button"
                 class="chip"
                 :class="{ 'is-active': environmentName === '' }"
+                :aria-pressed="environmentName === ''"
                 @click="environmentName = ''"
             >
                 <span
@@ -99,6 +112,7 @@ const chips = computed(() => {
                 type="button"
                 class="chip"
                 :class="{ 'is-active': environmentName === chip.name }"
+                :aria-pressed="environmentName === chip.name"
                 @click="environmentName = chip.name"
             >
                 <span

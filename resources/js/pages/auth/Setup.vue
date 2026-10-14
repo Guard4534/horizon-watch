@@ -3,6 +3,7 @@ import { Form, Head } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Spinner } from '@/components/ui/spinner';
+import { invalidField } from '@/lib/fieldErrors';
 import { store } from '@/routes/setup';
 
 defineOptions({
@@ -33,8 +34,9 @@ defineOptions({
                 required
                 autofocus
                 autocomplete="name"
+                v-bind="invalidField('name', errors.name)"
             />
-            <InputError :message="errors.name" />
+            <InputError field="name" :message="errors.name" />
         </div>
 
         <div class="nc-field">
@@ -47,8 +49,9 @@ defineOptions({
                 required
                 autocomplete="email"
                 placeholder="email@example.com"
+                v-bind="invalidField('email', errors.email)"
             />
-            <InputError :message="errors.email" />
+            <InputError field="email" :message="errors.email" />
         </div>
 
         <div class="nc-field">
@@ -60,8 +63,9 @@ defineOptions({
                 required
                 autocomplete="new-password"
                 :placeholder="$t('at least 10 characters')"
+                v-bind="invalidField('password', errors.password)"
             />
-            <InputError :message="errors.password" />
+            <InputError field="password" :message="errors.password" />
         </div>
 
         <div class="nc-field">
@@ -84,8 +88,9 @@ defineOptions({
                 class="nc-input"
                 name="organization"
                 required
+                v-bind="invalidField('organization', errors.organization)"
             />
-            <InputError :message="errors.organization" />
+            <InputError field="organization" :message="errors.organization" />
         </div>
 
         <button

@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/input-otp';
 import { Spinner } from '@/components/ui/spinner';
 import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
+import { invalidField } from '@/lib/fieldErrors';
 import { confirm } from '@/routes/two-factor';
 import type { TwoFactorConfigContent } from '@/types';
 
@@ -210,10 +211,17 @@ watch(
                                         type="text"
                                         readonly
                                         :value="manualSetupKey"
+                                        :aria-label="$t('Setup key')"
                                         class="bg-background text-foreground h-full w-full p-3"
                                     />
                                     <button
+                                        type="button"
                                         @click="copy(manualSetupKey || '')"
+                                        :aria-label="
+                                            copied
+                                                ? $t('Copied')
+                                                : $t('Copy setup key')
+                                        "
                                         class="border-border hover:bg-muted relative block h-auto border-l px-3"
                                     >
                                         <PhCheck
@@ -251,6 +259,9 @@ watch(
                                     :maxlength="6"
                                     :disabled="processing"
                                     autofocus
+                                    autocomplete="one-time-code"
+                                    :aria-label="$t('Authentication code')"
+                                    v-bind="invalidField('otp', errors?.code)"
                                 >
                                     <InputOTPGroup>
                                         <InputOTPSlot
@@ -260,7 +271,10 @@ watch(
                                         />
                                     </InputOTPGroup>
                                 </InputOTP>
-                                <InputError :message="errors?.code" />
+                                <InputError
+                                    field="otp"
+                                    :message="errors?.code"
+                                />
                             </div>
 
                             <div class="flex w-full items-center space-x-5">

@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Spinner } from '@/components/ui/spinner';
+import { invalidField } from '@/lib/fieldErrors';
 import { update } from '@/routes/password';
 
 defineOptions({
@@ -43,8 +44,9 @@ const inputEmail = ref(props.email);
                 autocomplete="email"
                 v-model="inputEmail"
                 readonly
+                v-bind="invalidField('email', errors.email)"
             />
-            <InputError :message="errors.email" />
+            <InputError field="email" :message="errors.email" />
         </div>
 
         <div class="nc-field">
@@ -56,8 +58,9 @@ const inputEmail = ref(props.email);
                 autocomplete="new-password"
                 autofocus
                 :passwordrules="passwordRules"
+                v-bind="invalidField('password', errors.password)"
             />
-            <InputError :message="errors.password" />
+            <InputError field="password" :message="errors.password" />
         </div>
 
         <div class="nc-field">
@@ -70,8 +73,17 @@ const inputEmail = ref(props.email);
                 name="password_confirmation"
                 autocomplete="new-password"
                 :passwordrules="passwordRules"
+                v-bind="
+                    invalidField(
+                        'password_confirmation',
+                        errors.password_confirmation,
+                    )
+                "
             />
-            <InputError :message="errors.password_confirmation" />
+            <InputError
+                field="password_confirmation"
+                :message="errors.password_confirmation"
+            />
         </div>
 
         <button

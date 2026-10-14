@@ -6,6 +6,7 @@ import InputError from '@/components/InputError.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { Spinner } from '@/components/ui/spinner';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { invalidField } from '@/lib/fieldErrors';
 import { ASSIGNABLE_ROLES, VISIBILITIES, visibilityLabel } from '@/lib/members';
 import { store as storeInvitation } from '@/routes/members/invitations';
 
@@ -48,15 +49,19 @@ function reset() {
                     name="email"
                     required
                     placeholder="name@example.com"
+                    v-bind="invalidField('invite-email', errors.email)"
                 />
-                <InputError :message="errors.email" />
+                <InputError field="invite-email" :message="errors.email" />
             </div>
 
             <div class="nc-field">
-                <label>{{ $t('Role') }}</label>
+                <label id="invite-role">{{ $t('Role') }}</label>
                 <div
                     class="flex flex-col"
                     style="gap: var(--nc-space-2); margin-top: 5px"
+                    role="radiogroup"
+                    aria-labelledby="invite-role"
+                    v-bind="invalidField('invite-role', errors.role)"
                 >
                     <label
                         v-for="option in ASSIGNABLE_ROLES"
@@ -72,7 +77,7 @@ function reset() {
                         <span class="nc-dot"></span>{{ option }}
                     </label>
                 </div>
-                <InputError :message="errors.role" />
+                <InputError field="invite-role" :message="errors.role" />
             </div>
 
             <div v-if="role === 'admin'" class="nc-field">
@@ -91,6 +96,9 @@ function reset() {
                     v-model="visibility"
                     class="nc-input"
                     name="visibility"
+                    v-bind="
+                        invalidField('invite-visibility', errors.visibility)
+                    "
                 >
                     <option
                         v-for="option in VISIBILITIES"
@@ -100,7 +108,10 @@ function reset() {
                         {{ visibilityLabel(option) }}
                     </option>
                 </select>
-                <InputError :message="errors.visibility" />
+                <InputError
+                    field="invite-visibility"
+                    :message="errors.visibility"
+                />
                 <div
                     v-if="visibility === 'non_production' && !errors.visibility"
                     class="nc-t-2xs nc-tone-faint mt-1"
@@ -113,10 +124,18 @@ function reset() {
                 v-if="role !== 'admin' && visibility === 'manual'"
                 class="nc-field"
             >
-                <label>{{ $t('Environments') }}</label>
+                <label id="invite-environments">{{ $t('Environments') }}</label>
                 <div
                     class="flex max-h-[220px] flex-col overflow-y-auto"
                     style="gap: 6px; margin-top: 5px"
+                    role="group"
+                    aria-labelledby="invite-environments"
+                    v-bind="
+                        invalidField(
+                            'invite-environments',
+                            errors.environmentIds,
+                        )
+                    "
                 >
                     <label
                         v-for="environment in environments"
@@ -151,7 +170,10 @@ function reset() {
                         }}
                     </div>
                 </div>
-                <InputError :message="errors.environmentIds" />
+                <InputError
+                    field="invite-environments"
+                    :message="errors.environmentIds"
+                />
             </div>
 
             <button

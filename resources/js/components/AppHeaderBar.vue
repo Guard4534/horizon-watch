@@ -44,9 +44,9 @@ function choose(event: Event): void {
     <header class="bar">
         <BrandMark class="phone-only" :size="14" :with-name="false" />
         <div class="min-w-0">
-            <h4 class="title truncate">
+            <h1 class="title truncate">
                 {{ title ? $t(title) : '' }}
-            </h4>
+            </h1>
             <div class="subtitle truncate">
                 {{ subtitle ? $t(subtitle) : secondLine }}
             </div>

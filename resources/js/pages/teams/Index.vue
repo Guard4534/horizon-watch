@@ -49,8 +49,6 @@ function switchTo(team: Organization): void {
 <template>
     <Head :title="$t('Organizations')" />
 
-    <h1 class="sr-only">{{ $t('Organizations') }}</h1>
-
     <div class="flex flex-col space-y-6">
         <div class="flex items-center justify-between">
             <Heading

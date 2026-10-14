@@ -4,6 +4,7 @@ import { PhLockSimple, PhLockSimpleOpen, PhWarning } from '@phosphor-icons/vue';
 import { createReusableTemplate } from '@vueuse/core';
 import { computed, watch } from 'vue';
 import ColorPicker from '@/components/monitoring/applications/ColorPicker.vue';
+import { invalidField } from '@/lib/fieldErrors';
 import { looksLikeProduction } from '@/lib/monitoring';
 
 const model = defineModel<App.Data.Applications.EnvironmentFormData>({
@@ -92,8 +93,9 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                 autocomplete="off"
                 spellcheck="false"
                 placeholder="production"
+                v-bind="invalidField(fieldId('name'), errorOf('name'))"
             />
-            <FieldError :message="errorOf('name')" />
+            <FieldError :field="fieldId('name')" :message="errorOf('name')" />
             <div
                 v-if="!compact && !errorOf('name')"
                 class="nc-t-2xs nc-tone-faint mt-1"
@@ -109,13 +111,15 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
 
     <DefineColor>
         <div class="nc-field">
-            <label>{{ $t('Color') }}</label>
+            <label :id="fieldId('color')">{{ $t('Color') }}</label>
             <ColorPicker
                 v-model="model.color"
                 :colors="colors"
                 :name="fieldId('color')"
+                :aria-labelledby="fieldId('color')"
+                v-bind="invalidField(fieldId('color'), errorOf('color'))"
             />
-            <FieldError :message="errorOf('color')" />
+            <FieldError :field="fieldId('color')" :message="errorOf('color')" />
         </div>
     </DefineColor>
 
@@ -136,8 +140,14 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                         : 'https://production.invoicer.example.com/horizon'
                 "
                 @input="$emit('urlInput')"
+                v-bind="
+                    invalidField(fieldId('horizonUrl'), errorOf('horizonUrl'))
+                "
             />
-            <FieldError :message="errorOf('horizonUrl')" />
+            <FieldError
+                :field="fieldId('horizonUrl')"
+                :message="errorOf('horizonUrl')"
+            />
             <div
                 v-if="credentialsInClear && !errorOf('horizonUrl')"
                 class="nc-t-2xs mt-1 flex items-start"
@@ -178,9 +188,16 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                     :aria-label="
                         compact ? $t('Basic-auth username') : undefined
                     "
+                    v-bind="
+                        invalidField(
+                            fieldId('basicAuthUser'),
+                            errorOf('basicAuthUser'),
+                        )
+                    "
                 />
                 <FieldError
                     v-if="!compact"
+                    :field="fieldId('basicAuthUser')"
                     :message="errorOf('basicAuthUser')"
                 />
             </div>
@@ -202,9 +219,18 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                     :aria-label="
                         compact ? $t('Basic-auth password') : undefined
                     "
+                    v-bind="
+                        invalidField(
+                            fieldId('basicAuthPassword'),
+                            errorOf('basicAuthPassword'),
+                        )
+                    "
                 />
                 <template v-if="!compact">
-                    <FieldError :message="errorOf('basicAuthPassword')" />
+                    <FieldError
+                        :field="fieldId('basicAuthPassword')"
+                        :message="errorOf('basicAuthPassword')"
+                    />
                     <div
                         v-if="!errorOf('basicAuthPassword')"
                         class="nc-t-2xs nc-tone-faint mt-1 inline-flex items-center gap-[5px]"
@@ -250,6 +276,12 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                     min="15"
                     max="300"
                     step="15"
+                    v-bind="
+                        invalidField(
+                            fieldId('pollIntervalSeconds'),
+                            errorOf('pollIntervalSeconds'),
+                        )
+                    "
                 />
                 <span
                     :class="
@@ -262,6 +294,7 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
             </div>
             <FieldError
                 v-if="!compact"
+                :field="fieldId('pollIntervalSeconds')"
                 :message="errorOf('pollIntervalSeconds')"
             />
         </div>
@@ -285,12 +318,21 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                     type="checkbox"
                     role="switch"
                     :aria-checked="model.pollingEnabled"
+                    v-bind="
+                        invalidField(
+                            fieldId('pollingEnabled'),
+                            errorOf('pollingEnabled'),
+                        )
+                    "
                 />
                 <span class="nc-dot" />
                 {{ $t('Collect readings') }}
             </label>
             <template v-if="!compact">
-                <FieldError :message="errorOf('pollingEnabled')" />
+                <FieldError
+                    :field="fieldId('pollingEnabled')"
+                    :message="errorOf('pollingEnabled')"
+                />
                 <div
                     v-if="!errorOf('pollingEnabled')"
                     class="nc-t-2xs nc-tone-faint mt-1"
@@ -313,12 +355,21 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                     v-model="model.isProduction"
                     type="checkbox"
                     @change="productionEdited = true"
+                    v-bind="
+                        invalidField(
+                            fieldId('isProduction'),
+                            errorOf('isProduction'),
+                        )
+                    "
                 />
                 <span class="nc-dot" />
                 {{ $t('Production environment') }}
             </label>
             <template v-if="!compact">
-                <FieldError :message="errorOf('isProduction')" />
+                <FieldError
+                    :field="fieldId('isProduction')"
+                    :message="errorOf('isProduction')"
+                />
                 <div
                     v-if="!errorOf('isProduction')"
                     class="nc-t-2xs nc-tone-faint mt-1"
@@ -360,8 +411,14 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
             </label>
             <CredentialFields v-if="auth" />
         </div>
-        <FieldError :message="errorOf('basicAuthUser')" />
-        <FieldError :message="errorOf('basicAuthPassword')" />
+        <FieldError
+            :field="fieldId('basicAuthUser')"
+            :message="errorOf('basicAuthUser')"
+        />
+        <FieldError
+            :field="fieldId('basicAuthPassword')"
+            :message="errorOf('basicAuthPassword')"
+        />
 
         <div
             class="mt-[var(--nc-space-3)] flex flex-wrap items-center"
@@ -371,9 +428,18 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
             <CollectField />
             <ProductionField />
         </div>
-        <FieldError :message="errorOf('pollIntervalSeconds')" />
-        <FieldError :message="errorOf('pollingEnabled')" />
-        <FieldError :message="errorOf('isProduction')" />
+        <FieldError
+            :field="fieldId('pollIntervalSeconds')"
+            :message="errorOf('pollIntervalSeconds')"
+        />
+        <FieldError
+            :field="fieldId('pollingEnabled')"
+            :message="errorOf('pollingEnabled')"
+        />
+        <FieldError
+            :field="fieldId('isProduction')"
+            :message="errorOf('isProduction')"
+        />
     </div>
 
     <div v-else class="flex flex-col" style="gap: var(--nc-space-4)">

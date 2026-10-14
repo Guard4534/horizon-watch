@@ -47,7 +47,11 @@ const toggleRecoveryCodesVisibility = async () => {
     }
 
     await nextTick();
-    recoveryCodeSectionRef.value?.scrollIntoView({ behavior: 'smooth' });
+    recoveryCodeSectionRef.value?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? 'auto'
+            : 'smooth',
+    });
 };
 
 const regenerated = async () => {

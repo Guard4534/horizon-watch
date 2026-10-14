@@ -39,7 +39,6 @@ defineExpose({
             :aria-label="
                 showPassword ? $t('Hide password') : $t('Show password')
             "
-            :tabindex="-1"
         >
             <PhEyeSlash v-if="showPassword" class="size-4" />
             <PhEye v-else class="size-4" />

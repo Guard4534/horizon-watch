@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import type { Props as ManageTwoFactorProps } from '@/components/ManageTwoFactor.vue';
 import ManageTwoFactor from '@/components/ManageTwoFactor.vue';
 import LogoutOtherSessions from '@/components/settings/LogoutOtherSessions.vue';
+import { invalidField } from '@/lib/fieldErrors';
 
 // oxfmt-ignore
 type Props = {
@@ -25,8 +26,6 @@ defineOptions({
 
 <template>
     <Head :title="$t('Security settings')" />
-
-    <h1 class="sr-only">{{ $t('Security settings') }}</h1>
 
     <div class="space-y-6">
         <Heading
@@ -63,8 +62,17 @@ defineOptions({
                     class="mt-1 block w-full"
                     autocomplete="current-password"
                     :placeholder="$t('Current password')"
+                    v-bind="
+                        invalidField(
+                            'current_password',
+                            errors.current_password,
+                        )
+                    "
                 />
-                <InputError :message="errors.current_password" />
+                <InputError
+                    field="current_password"
+                    :message="errors.current_password"
+                />
             </div>
 
             <div class="grid gap-2">
@@ -76,8 +84,9 @@ defineOptions({
                     autocomplete="new-password"
                     :placeholder="$t('New password')"
                     :passwordrules="props.passwordRules"
+                    v-bind="invalidField('password', errors.password)"
                 />
-                <InputError :message="errors.password" />
+                <InputError field="password" :message="errors.password" />
             </div>
 
             <div class="grid gap-2">
@@ -91,8 +100,17 @@ defineOptions({
                     autocomplete="new-password"
                     :placeholder="$t('Confirm password')"
                     :passwordrules="props.passwordRules"
+                    v-bind="
+                        invalidField(
+                            'password_confirmation',
+                            errors.password_confirmation,
+                        )
+                    "
                 />
-                <InputError :message="errors.password_confirmation" />
+                <InputError
+                    field="password_confirmation"
+                    :message="errors.password_confirmation"
+                />
             </div>
 
             <div class="flex items-center gap-4">

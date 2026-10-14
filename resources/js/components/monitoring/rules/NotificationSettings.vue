@@ -7,6 +7,7 @@ import WarningNotice from '@/components/monitoring/WarningNotice.vue';
 import WebhookSecret from '@/components/monitoring/rules/WebhookSecret.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { errorId, invalidField } from '@/lib/fieldErrors';
 import {
     test as testNotification,
     update as updateSettings,
@@ -197,16 +198,25 @@ const movesHost = computed(
                         autocomplete="off"
                         spellcheck="false"
                         placeholder="ops@example.com, oncall@example.com"
-                        :aria-invalid="
-                            recipientErrors.length ? true : undefined
+                        v-bind="
+                            invalidField(
+                                `${id}-recipients`,
+                                recipientErrors.join(' '),
+                            )
                         "
                     />
                     <div
-                        v-for="message in recipientErrors"
-                        :key="message"
-                        class="field-error"
+                        v-if="recipientErrors.length"
+                        :id="errorId(`${id}-recipients`)"
+                        role="alert"
                     >
-                        {{ message }}
+                        <div
+                            v-for="message in recipientErrors"
+                            :key="message"
+                            class="field-error"
+                        >
+                            {{ message }}
+                        </div>
                     </div>
                     <div class="field-hint">
                         {{
@@ -236,9 +246,16 @@ const movesHost = computed(
                         autocomplete="off"
                         spellcheck="false"
                         placeholder="https://hooks.example.com/horizon"
-                        :aria-invalid="errors.webhookUrl ? true : undefined"
+                        v-bind="
+                            invalidField(`${id}-webhook`, errors.webhookUrl)
+                        "
                     />
-                    <div v-if="errors.webhookUrl" class="field-error">
+                    <div
+                        v-if="errors.webhookUrl"
+                        :id="errorId(`${id}-webhook`)"
+                        class="field-error"
+                        role="alert"
+                    >
                         {{ errors.webhookUrl }}
                     </div>
                     <div class="field-hint">
@@ -273,7 +290,12 @@ const movesHost = computed(
                             autocomplete="off"
                             placeholder="23:00"
                             :aria-label="$t('Quiet hours start')"
-                            :aria-invalid="errors.quietFrom ? true : undefined"
+                            v-bind="
+                                invalidField(
+                                    `${id}-quiet-from`,
+                                    errors.quietFrom,
+                                )
+                            "
                         />
                         <span class="nc-t-xs nc-tone-muted">→</span>
                         <input
@@ -286,13 +308,25 @@ const movesHost = computed(
                             autocomplete="off"
                             placeholder="07:00"
                             :aria-label="$t('Quiet hours end')"
-                            :aria-invalid="errors.quietTo ? true : undefined"
+                            v-bind="
+                                invalidField(`${id}-quiet-to`, errors.quietTo)
+                            "
                         />
                     </div>
-                    <div v-if="errors.quietFrom" class="field-error">
+                    <div
+                        v-if="errors.quietFrom"
+                        :id="errorId(`${id}-quiet-from`)"
+                        class="field-error"
+                        role="alert"
+                    >
                         {{ errors.quietFrom }}
                     </div>
-                    <div v-if="errors.quietTo" class="field-error">
+                    <div
+                        v-if="errors.quietTo"
+                        :id="errorId(`${id}-quiet-to`)"
+                        class="field-error"
+                        role="alert"
+                    >
                         {{ errors.quietTo }}
                     </div>
                     <div class="field-hint">
@@ -310,7 +344,7 @@ const movesHost = computed(
                         autocomplete="off"
                         spellcheck="false"
                         :list="`${id}-timezones`"
-                        :aria-invalid="errors.timezone ? true : undefined"
+                        v-bind="invalidField(`${id}-timezone`, errors.timezone)"
                     />
                     <datalist :id="`${id}-timezones`">
                         <option
@@ -319,7 +353,12 @@ const movesHost = computed(
                             :value="zone"
                         />
                     </datalist>
-                    <div v-if="errors.timezone" class="field-error">
+                    <div
+                        v-if="errors.timezone"
+                        :id="errorId(`${id}-timezone`)"
+                        class="field-error"
+                        role="alert"
+                    >
                         {{ errors.timezone }}
                     </div>
                     <div class="field-hint">
@@ -335,7 +374,9 @@ const movesHost = computed(
                         :id="`${id}-repeat`"
                         v-model="form.repeatMinutes"
                         class="nc-input"
-                        :aria-invalid="errors.repeatMinutes ? true : undefined"
+                        v-bind="
+                            invalidField(`${id}-repeat`, errors.repeatMinutes)
+                        "
                     >
                         <option
                             v-for="minutes in repeatChoices"
@@ -352,7 +393,12 @@ const movesHost = computed(
                             {{ $t('first detection only') }}
                         </option>
                     </select>
-                    <div v-if="errors.repeatMinutes" class="field-error">
+                    <div
+                        v-if="errors.repeatMinutes"
+                        :id="errorId(`${id}-repeat`)"
+                        class="field-error"
+                        role="alert"
+                    >
                         {{ errors.repeatMinutes }}
                     </div>
                     <div class="field-hint">{{ $t('criticals only') }}</div>
@@ -546,7 +592,7 @@ const movesHost = computed(
 .field-hint {
     margin-top: 4px;
     font-size: 11px;
-    color: var(--nc-neutral-600);
+    color: var(--nc-text-faint);
 }
 
 .field-error {

@@ -24,17 +24,24 @@ const { locale, setLocale } = useLocale();
 </script>
 
 <template>
-    <div class="nc-seg" style="border-radius: var(--nc-radius-sm)">
+    <div
+        class="nc-seg"
+        style="border-radius: var(--nc-radius-sm)"
+        role="radiogroup"
+        :aria-label="$t('Language')"
+    >
         <label
             v-for="option in options"
             :key="option"
             class="nc-seg-opt"
             :style="{ padding, fontSize }"
+            :lang="option"
         >
             <input
                 type="radio"
                 :name="name"
                 :checked="locale === option"
+                :aria-label="long ? undefined : names[option]"
                 @change="setLocale(option)"
             />
             {{ long ? names[option] : option.toUpperCase() }}
