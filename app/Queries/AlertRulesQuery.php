@@ -46,6 +46,9 @@ class AlertRulesQuery
             maxRecipients: config()->integer('horizon-watch.notifications.max_recipients'),
             previousSecretHours: config()->integer('horizon-watch.notifications.previous_webhook_secret_hours'),
             timezones: $canManage ? DateTimeZone::listIdentifiers() : [],
+            maintenanceWindows: $this->monitoring->maintenanceWindows($team),
+            maintenanceTargets: $this->monitoring->maintenanceTargets($team),
+            maintenanceMaxDays: config()->integer('horizon-watch.alerts.maintenance_max_days'),
         );
     }
 

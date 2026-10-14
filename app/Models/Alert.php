@@ -35,6 +35,7 @@ use Illuminate\Support\Carbon;
  * @property CarbonImmutable|null $muted_until
  * @property bool $muted_indefinitely
  * @property int|null $muted_by
+ * @property int|null $maintenance_window_id
  * @property CarbonImmutable|null $handled_at
  * @property int|null $handled_by
  * @property CarbonImmutable|null $last_notified_at
@@ -66,6 +67,7 @@ use Illuminate\Support\Carbon;
     'muted_until',
     'muted_indefinitely',
     'muted_by',
+    'maintenance_window_id',
     'handled_at',
     'handled_by',
     'last_notified_at',

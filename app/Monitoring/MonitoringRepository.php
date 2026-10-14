@@ -9,6 +9,8 @@ use App\Data\Monitoring\ApplicationData;
 use App\Data\Monitoring\EnvironmentData;
 use App\Data\Monitoring\FailedJobData;
 use App\Data\Monitoring\LongRunningJobData;
+use App\Data\Monitoring\MaintenanceTargetData;
+use App\Data\Monitoring\MaintenanceWindowData;
 use App\Data\Monitoring\NodeData;
 use App\Data\Monitoring\NotificationSettingsData;
 use App\Data\Monitoring\QueueData;
@@ -94,4 +96,10 @@ interface MonitoringRepository
     public function alertRules(Team $team, string $scope): array;
 
     public function notificationSettings(Team $team): NotificationSettingsData;
+
+    /** @return array<int, MaintenanceWindowData> */
+    public function maintenanceWindows(Team $team): array;
+
+    /** @return array<int, MaintenanceTargetData> */
+    public function maintenanceTargets(Team $team): array;
 }

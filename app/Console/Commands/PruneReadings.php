@@ -7,6 +7,7 @@ use App\Alerts\AlertEngine;
 use App\Models\Alert;
 use App\Models\AlertNotification;
 use App\Models\EnvironmentSnapshot;
+use App\Models\MaintenanceWindow;
 use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Support\ChunkedDelete;
@@ -18,7 +19,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Str;
 
 #[Signature('monitoring:prune {--chunk= : Rows deleted per statement}')]
-#[Description('Delete the readings and the resolved alerts older than their retention periods, what deleted organizations left behind, and replaced webhook secrets past their overlap')]
+#[Description('Delete the readings, the resolved alerts and the ended maintenance windows older than their retention periods, what deleted organizations left behind, and replaced webhook secrets past their overlap')]
 class PruneReadings extends Command
 {
     public function handle(AlertEngine $alerts, DeleteTeamApplications $deleteApplications): int
@@ -47,6 +48,11 @@ class PruneReadings extends Command
 
         $this->report('notification', ChunkedDelete::run(
             AlertNotification::query()->whereNull('alert_id')->where('sent_at', '<', $alertCutoff),
+            $chunk,
+        ));
+
+        $this->report('maintenance window', ChunkedDelete::run(
+            MaintenanceWindow::query()->where('ends_at', '<', $alertCutoff),
             $chunk,
         ));
 

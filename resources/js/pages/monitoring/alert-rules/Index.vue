@@ -2,6 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import { PhInfo } from '@phosphor-icons/vue';
 import { computed } from 'vue';
+import MaintenanceWindows from '@/components/monitoring/rules/MaintenanceWindows.vue';
 import NotificationSettings from '@/components/monitoring/rules/NotificationSettings.vue';
 import RulesForm from '@/components/monitoring/rules/RulesForm.vue';
 import ScopeList from '@/components/monitoring/rules/ScopeList.vue';
@@ -68,6 +69,12 @@ const nothingVisible = computed(
                 :max-recipients="page.maxRecipients"
                 :previous-secret-hours="page.previousSecretHours"
                 :timezones="page.timezones"
+            />
+
+            <MaintenanceWindows
+                :windows="page.maintenanceWindows"
+                :targets="page.maintenanceTargets"
+                :max-days="page.maintenanceMaxDays"
             />
         </div>
     </div>

@@ -13,6 +13,8 @@ use App\Data\Monitoring\ApplicationData;
 use App\Data\Monitoring\EnvironmentData;
 use App\Data\Monitoring\FailedJobData;
 use App\Data\Monitoring\LongRunningJobData;
+use App\Data\Monitoring\MaintenanceTargetData;
+use App\Data\Monitoring\MaintenanceWindowData;
 use App\Data\Monitoring\NodeData;
 use App\Data\Monitoring\NotificationSettingsData;
 use App\Data\Monitoring\QueueData;
@@ -26,6 +28,7 @@ use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
 use App\Enums\DeliveryStatus;
 use App\Enums\EnvironmentStatus;
+use App\Enums\MaintenanceScope;
 use App\Enums\NotificationChannel;
 use App\Enums\SentNotificationKind;
 use App\Enums\SeriesRange;
@@ -37,6 +40,7 @@ use App\Models\AlertRule;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\EnvironmentState;
+use App\Models\MaintenanceWindow;
 use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
@@ -122,6 +126,11 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
      * @var array<int, array<int, RuleScopeData>>
      */
     private array $ruleScopesByTeam = [];
+
+    /**
+     * @var array<int, EloquentCollection<int, MaintenanceWindow>>
+     */
+    private array $activeMaintenanceByTeam = [];
 
     public function __construct(
         private readonly Guard $auth,
@@ -519,6 +528,110 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         );
     }
 
+    public function maintenanceWindows(Team $team): array
+    {
+        $now = $this->now();
+        $relations = ['application:id,name', 'environment:id,application_id,name,color', 'environment.application:id,name', 'creator:id,name'];
+
+        $current = $this->visibleMaintenance($team)
+            ->where('ends_at', '>', $now->utc())
+            ->with($relations)
+            ->orderBy('starts_at')
+            ->orderBy('id')
+            ->get();
+
+        $ended = $this->visibleMaintenance($team)
+            ->where('ends_at', '<=', $now->utc())
+            ->with($relations)
+            ->orderByDesc('ends_at')
+            ->orderByDesc('id')
+            ->limit(config()->integer('horizon-watch.pages.ended_maintenance_windows'))
+            ->get();
+
+        $abilities = $this->alertAbilities($team);
+        $visible = array_flip($this->visibleEnvironmentModels($team)->modelKeys());
+
+        return $current->concat($ended)
+            ->map(fn (MaintenanceWindow $window) => new MaintenanceWindowData(
+                id: $window->id,
+                scope: $window->scope,
+                applicationName: $window->application->name ?? $window->environment?->application->name,
+                environmentName: $window->environment?->name,
+                color: $window->environment?->color,
+                startsAt: $window->starts_at->toIso8601String(),
+                endsAt: $window->ends_at->toIso8601String(),
+                active: $window->isActiveAt($now),
+                ended: $window->ends_at->lte($now),
+                reason: $window->reason,
+                createdBy: $window->creator === null ? null : new AlertActorData($window->creator->name),
+                canDelete: $abilities['mute'] && ($abilities['all'] || ($window->scope === MaintenanceScope::Environment && isset($visible[$window->environment_id]))),
+            ))
+            ->values()
+            ->all();
+    }
+
+    public function maintenanceTargets(Team $team): array
+    {
+        $abilities = $this->alertAbilities($team);
+
+        if (! $abilities['mute']) {
+            return [];
+        }
+
+        $targets = [];
+
+        if ($abilities['all']) {
+            $targets[] = new MaintenanceTargetData(MaintenanceScope::Organization, null, null, null, null);
+
+            foreach ($this->visibleApplications($team)->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE) as $application) {
+                $targets[] = new MaintenanceTargetData(MaintenanceScope::Application, $application->slug, $application->name, null, null);
+            }
+        }
+
+        foreach ($this->visibleEnvironmentModels($team) as $environment) {
+            $targets[] = new MaintenanceTargetData(
+                MaintenanceScope::Environment,
+                $environment->slug,
+                $environment->application->name,
+                $environment->name,
+                $environment->color,
+            );
+        }
+
+        return $targets;
+    }
+
+    /**
+     * @return Builder<MaintenanceWindow>
+     */
+    private function visibleMaintenance(Team $team): Builder
+    {
+        $query = MaintenanceWindow::query()->where('maintenance_windows.team_id', $team->id);
+
+        if ($this->alertAbilities($team)['all']) {
+            return $query;
+        }
+
+        $environments = $this->visibleEnvironmentModels($team);
+
+        return $query->where(fn (Builder $visible) => $visible
+            ->where('maintenance_windows.scope', MaintenanceScope::Organization)
+            ->orWhereIn('maintenance_windows.application_id', $environments->pluck('application_id')->unique()->values()->all())
+            ->orWhereIn('maintenance_windows.environment_id', $environments->modelKeys()));
+    }
+
+    private function maintenanceOf(Environment $environment): ?MaintenanceWindow
+    {
+        $windows = $this->activeMaintenanceByTeam[$environment->team_id] ??= MaintenanceWindow::query()
+            ->where('team_id', $environment->team_id)
+            ->activeAt($this->now())
+            ->orderByDesc('ends_at')
+            ->orderBy('id')
+            ->get();
+
+        return $windows->first(fn (MaintenanceWindow $window) => $window->covers($environment));
+    }
+
     private function clockTime(?string $time): ?string
     {
         return $time === null ? null : substr($time, 0, 5);
@@ -683,6 +796,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         $stale = $watched
             && $environment->polling_enabled
             && $this->readings->isStale($environment, $state, $this->now());
+        $maintenance = $watched ? $this->maintenanceOf($environment) : null;
 
         return new EnvironmentData(
             id: $environment->slug,
@@ -718,6 +832,8 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             readingProblem: $state?->error === null ? null : ReadingProblemData::fromStored($state->error_detail),
             horizonStatus: $state?->horizon_status,
             thresholds: $this->thresholdsOf($environment),
+            maintenanceUntil: $maintenance?->ends_at->toIso8601String(),
+            maintenanceReason: $maintenance?->reason,
         );
     }
 
@@ -875,6 +991,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             mutedUntil: $muted && ! $alert->muted_indefinitely ? $alert->muted_until?->toIso8601String() : null,
             mutedUntilResolved: $alert->muted_indefinitely,
             mutedBy: $muted && $alert->mutedBy !== null ? new AlertActorData($alert->mutedBy->name) : null,
+            mutedForMaintenance: $muted && ! $alert->muted_indefinitely && $alert->muted_by === null && $alert->maintenance_window_id !== null,
             handledBy: $alert->handledBy !== null ? new AlertActorData($alert->handledBy->name) : null,
             handledMinutesAgo: $minutes($alert->handled_at),
             channels: $channels,

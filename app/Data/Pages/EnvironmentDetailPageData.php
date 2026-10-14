@@ -27,5 +27,8 @@ class EnvironmentDetailPageData extends Data
         /** @var array<int, AlertRuleData> */
         public array $rules,
         public bool $canTestConnection,
+        public bool $canSilence,
+        /** @var array<int, int> */
+        public array $silenceChoices,
     ) {}
 }

@@ -76,7 +76,7 @@ final readonly class DeliveryPolicy
         $now = $now->utc();
         $minute = $now->startOfMinute()->toIso8601String();
 
-        $alerts = $this->deliverable($now)
+        $alerts = Maintenance::outside($this->deliverable($now), $now)
             ->where('alerts.severity', AlertSeverity::Critical)
             ->whereNull('alerts.resolved_at')
             ->whereNull('alerts.handled_at')
@@ -213,10 +213,10 @@ final readonly class DeliveryPolicy
         return $query
             ->where('alerts.severity', AlertSeverity::Warning)
             ->where(fn (Builder $pending) => $pending
-                ->where(fn (Builder $open) => $open
+                ->where(fn (Builder $open) => Maintenance::outside($open
                     ->whereNull('alerts.resolved_at')
                     ->whereNull('alerts.digested_at')
-                    ->unmutedAt($now))
+                    ->unmutedAt($now), $now))
                 ->orWhere(fn (Builder $resolved) => $resolved
                     ->whereNotNull('alerts.resolved_at')
                     ->where(fn (Builder $undigested) => $undigested

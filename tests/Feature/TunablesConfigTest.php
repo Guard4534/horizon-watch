@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Fixtures\Horizon\FakeResolver;
 
 beforeEach(function () {
@@ -112,6 +113,21 @@ test('alerts: the queues listed in an alert email follow the configuration', fun
     config(['horizon-watch.alerts.listed_queues' => 2]);
 
     expect(AlertMail::detail($alert))->toContain('alpha, beta')->not->toContain('gamma');
+});
+
+test('alerts: the silence durations follow the configuration', function () {
+    config(['horizon-watch.alerts.silence_minutes' => [15]]);
+    $silence = fn (int $minutes) => $this->actingAs($this->admin)->post(route('environments.silence', [
+        'current_team' => $this->team->slug,
+        'environment' => $this->environment->slug,
+    ]), ['minutes' => $minutes]);
+
+    $silence(30)->assertSessionHasErrors('minutes');
+    $silence(15)->assertSessionHasNoErrors();
+
+    $this->actingAs($this->admin)
+        ->get(route('environments.show', ['current_team' => $this->team->slug, 'environment' => $this->environment->slug]))
+        ->assertInertia(fn (Assert $page) => $page->where('page.silenceChoices', [15]));
 });
 
 test('notifications: the recipients cap follows the configuration', function () {

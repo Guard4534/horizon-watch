@@ -140,7 +140,7 @@ the environment of the containers. Everything has a default except the mail serv
 | `HORIZON_WATCH_PORT`                   | `8080`                                   | Port published on the host; `127.0.0.1:8080` publishes it on loopback only               |
 | `HORIZON_WATCH_WORKERS`                | `2`                                      | Queue workers that read Horizon; see [Workers](#workers)                                 |
 | `HORIZON_WATCH_RETENTION_DAYS`         | `30`                                     | Days of readings kept before pruning, at least 7                                         |
-| `HORIZON_WATCH_ALERT_RETENTION_DAYS`   | `90`                                     | Days resolved alerts are kept before pruning, at least 1                                 |
+| `HORIZON_WATCH_ALERT_RETENTION_DAYS`   | `90`                                     | Days resolved alerts and finished maintenance windows are kept, at least 1               |
 | `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` | `false`                                  | Refuse Horizon addresses that resolve to a private network                               |
 | `HORIZON_WATCH_ORG_CREATION`           | `admins`                                 | Who may create organizations: `admins` (instance admins only) or `everyone`              |
 | `HORIZON_WATCH_DEFAULT_TIMEZONE`       | `UTC`                                    | Time zone new organizations start with                                                   |
@@ -160,7 +160,7 @@ the environment of the containers. Everything has a default except the mail serv
 | `MAIL_FROM_ADDRESS`                    | `horizon-watch@example.com`              | Sender of invitations and alert emails                                                   |
 | `MAIL_TIMEOUT`                         | `10`                                     | Seconds an unresponsive SMTP server may hold a send; keep it below 30                    |
 
-Readings and resolved alerts are pruned once a day. The newest reading of each environment is
+Readings, resolved alerts and finished maintenance windows are pruned once a day. The newest reading of each environment is
 never pruned, so an environment paused for longer than the retention still shows its last
 numbers. The same daily run forgets replaced webhook secrets whose overlap has ended.
 
@@ -226,6 +226,27 @@ An alert email that does not go out is listed with the reason: _mail server unre
 (connection, TLS or timeout; tried three times), _mail server refused the login_ or _refused by
 the mail server_ (a permanent 5xx answer; both logged at once, without retrying). The worker
 log names the exception class behind each failure, never the address.
+
+### Maintenance windows
+
+Before a deploy or a planned Horizon restart, silence what you are about to touch instead of
+pausing its collection. A maintenance window covers one environment, one application or the
+whole organization, from a start to an end (at most 31 days later), with an optional reason.
+Schedule one under Alert settings → Maintenance windows, or use **Silence for…** on an
+environment page to start one at once for 30 minutes to 4 hours.
+
+During a window the readings go on, so the charts and the history stay complete, but every
+alert of what it covers is muted until the window ends: one that opens is created muted, one
+that was already open is held back from the moment the window starts and marked muted at the
+next reading, and nothing is sent for either, their resolutions included. A mute set by hand
+that is still running is kept, and an alert unmuted by hand stays unmuted for the rest of that
+window. When the window ends, an alert still open follows the usual rules: a critical is sent
+then, a warning goes into the next digest. Ending a window early lifts its mute at once, unless
+another window still covers the alert. The wall and the environment page mark an environment
+in maintenance.
+
+Anyone who may mute an alert may plan a window; a member who sees only some environments may
+plan one only for an environment they see. Finished windows are pruned with the resolved alerts.
 
 ### Webhook
 
@@ -360,7 +381,7 @@ The webhook gets every alert the panel announces, whatever the rule's **Email** 
 setting only decides whether the alert is also emailed. The rest of the delivery policy applies
 to the webhook as to email: during quiet hours criticals still go out and the digest waits
 for the end of the window; a muted alert sends nothing, its resolution included, and a muted
-warning is left out of the digest; a handled alert stops repeating but still sends its
+warning is left out of the digest, which also holds for an alert muted by a maintenance window; a handled alert stops repeating but still sends its
 resolution; an environment whose collection is paused sends nothing.
 
 `delivery_id` names one delivery and stays the same when a failed delivery is tried again,

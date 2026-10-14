@@ -190,7 +190,7 @@ class MembersQuery
             TeamPermission::ManageApplications => __('Create and edit applications and environments'),
             TeamPermission::ManageCredentials => __('Manage the credentials'),
             TeamPermission::ManageAlertRules => __('Edit thresholds and recipients'),
-            TeamPermission::MuteAlert => __('Mute an alert'),
+            TeamPermission::MuteAlert => __('Mute an alert or plan maintenance'),
             TeamPermission::HandleAnomaly => __('Mark an anomaly handled'),
             TeamPermission::TestConnection => __('Test the connection'),
         };

@@ -4,6 +4,7 @@ import { PhArrowSquareOut, PhShieldCheck } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import EnvironmentMobile from '@/components/mobile/environment/EnvironmentMobile.vue';
+import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
 import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EffectiveRules from '@/components/monitoring/environment/EffectiveRules.vue';
@@ -12,6 +13,7 @@ import IncidentBanner from '@/components/monitoring/environment/IncidentBanner.v
 import LongRunningJobs from '@/components/monitoring/environment/LongRunningJobs.vue';
 import NodeCard from '@/components/monitoring/environment/NodeCard.vue';
 import QueueTable from '@/components/monitoring/environment/QueueTable.vue';
+import SilenceMenu from '@/components/monitoring/environment/SilenceMenu.vue';
 import TrendChart from '@/components/monitoring/environment/TrendChart.vue';
 import {
     failedTone,
@@ -202,10 +204,20 @@ const tiles = computed<Tile[]>(() => [
                 "
                 >{{ statusText(environment) }}</span
             >
+            <MaintenanceBadge
+                v-if="environment.maintenanceUntil"
+                :until="environment.maintenanceUntil"
+                :reason="environment.maintenanceReason"
+            />
             <div
                 class="ml-auto flex flex-wrap items-center justify-end"
                 style="gap: var(--nc-space-2)"
             >
+                <SilenceMenu
+                    v-if="page.canSilence"
+                    :environment-id="environment.id"
+                    :choices="page.silenceChoices"
+                />
                 <ConnectionTest
                     v-if="page.canTestConnection"
                     class="flex-row-reverse"

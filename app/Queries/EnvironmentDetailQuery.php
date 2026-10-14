@@ -28,6 +28,8 @@ class EnvironmentDetailQuery
             longRunningJobs: $this->monitoring->longRunningJobs($team, $environment->id),
             rules: $this->monitoring->alertRules($team, Str::lower($environment->name)),
             canTestConnection: $viewer->hasTeamPermission($team, TeamPermission::TestConnection),
+            canSilence: $viewer->hasTeamPermission($team, TeamPermission::MuteAlert),
+            silenceChoices: array_values(array_map(intval(...), config()->array('horizon-watch.alerts.silence_minutes'))),
         );
     }
 

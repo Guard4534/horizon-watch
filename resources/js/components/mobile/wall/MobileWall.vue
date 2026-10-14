@@ -6,6 +6,7 @@ import EnvPill from '@/components/nocturne/EnvPill.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import KpiCard from '@/components/nocturne/KpiCard.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
+import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
 import {
     calmStyle,
     failedTone,
@@ -167,6 +168,12 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                         >{{ statusLabel(environment.status) }}</span
                     >
                     <span v-else>{{ $t('No reading yet') }}</span>
+                    <MaintenanceBadge
+                        v-if="environment.maintenanceUntil"
+                        :until="environment.maintenanceUntil"
+                        :reason="environment.maintenanceReason"
+                        compact
+                    />
                     <span
                         class="ml-auto"
                         :style="{

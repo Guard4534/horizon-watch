@@ -11,6 +11,7 @@ use App\Models\Alert;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
+use App\Models\MaintenanceWindow;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,7 @@ final class AlertEngine
     {
         $rules = $this->rules->forEnvironment($environment);
         $at = $snapshot->captured_at;
+        $maintenance = Maintenance::windowFor($environment, $at);
         $open = Alert::query()
             ->open()
             ->where('environment_id', $environment->id)
@@ -32,6 +34,10 @@ final class AlertEngine
             ->get()
             ->keyBy(fn (Alert $alert) => $alert->metric->value);
         $runs = $this->breachRuns($environment, $rules, $snapshot, $state, $at);
+
+        if ($maintenance !== null && $open->isNotEmpty()) {
+            Maintenance::silence(Alert::query()->whereKey($open->modelKeys()), $maintenance, $at);
+        }
 
         foreach (AlertRuleMetric::cases() as $metric) {
             $rule = $rules->for($metric);
@@ -52,7 +58,7 @@ final class AlertEngine
                 $this->touch($alert, $rule, $at, $value, $detail);
             } elseif ($rule->enabled && $violating && $this->lastsLongEnough($rule, $state, $runs, $at)) {
                 [$value, $detail] = $this->measure($metric, $snapshot, $state, $at);
-                $this->open($environment, $rule, $at, $value, $detail);
+                $this->open($environment, $rule, $at, $value, $detail, $maintenance);
             }
         }
 
@@ -235,7 +241,7 @@ final class AlertEngine
     /**
      * @param  array<string, mixed>  $detail
      */
-    private function open(Environment $environment, EffectiveRule $rule, CarbonImmutable $at, float $value, array $detail): void
+    private function open(Environment $environment, EffectiveRule $rule, CarbonImmutable $at, float $value, array $detail, ?MaintenanceWindow $maintenance): void
     {
         $model = new Alert;
         $id = $model->newUniqueId();
@@ -256,7 +262,9 @@ final class AlertEngine
             'detail' => $detail,
             'opened_at' => $at,
             'last_seen_at' => $at,
+            'muted_until' => $maintenance?->ends_at,
             'muted_indefinitely' => false,
+            'maintenance_window_id' => $maintenance?->id,
             'notified' => false,
             'created_at' => $timestamp,
             'updated_at' => $timestamp,

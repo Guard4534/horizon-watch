@@ -59,6 +59,7 @@ class DeleteTeam
 
             $team->alertNotifications()->delete();
             $team->alerts()->delete();
+            $team->maintenanceWindows()->delete();
             $team->alertRules()->delete();
             $team->notificationSetting()->delete();
 

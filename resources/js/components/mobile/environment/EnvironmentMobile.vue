@@ -3,9 +3,11 @@ import { Link } from '@inertiajs/vue3';
 import { PhArrowSquareOut, PhCaretLeft } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
+import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
 import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
 import MuteMenu from '@/components/monitoring/alerts/MuteMenu.vue';
 import IncidentBanner from '@/components/monitoring/environment/IncidentBanner.vue';
+import SilenceMenu from '@/components/monitoring/environment/SilenceMenu.vue';
 import {
     failedTone,
     pendingTone,
@@ -144,6 +146,13 @@ const tiles = computed(() => [
                 />
             </div>
 
+            <div v-if="environment.maintenanceUntil">
+                <MaintenanceBadge
+                    :until="environment.maintenanceUntil"
+                    :reason="environment.maintenanceReason"
+                />
+            </div>
+
             <IncidentBanner
                 v-if="incident"
                 compact
@@ -252,12 +261,18 @@ const tiles = computed(() => [
                 </div>
             </div>
 
-            <div class="flex" style="gap: var(--nc-space-2)">
+            <div class="flex flex-wrap" style="gap: var(--nc-space-2)">
                 <MuteMenu
                     v-if="page.openAlert?.canMute"
                     :alert="page.openAlert"
                     block
                     large
+                />
+                <SilenceMenu
+                    v-if="page.canSilence"
+                    :environment-id="environment.id"
+                    :choices="page.silenceChoices"
+                    block
                 />
                 <a
                     :href="environment.horizonUrl"

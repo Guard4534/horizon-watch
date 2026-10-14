@@ -6,6 +6,7 @@ import EnvPill from '@/components/nocturne/EnvPill.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
+import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
 import {
     calmStyle,
     failedTone,
@@ -95,6 +96,12 @@ const silence = computed<string | null>(() => {
                     :production="environment.isProduction"
                 />
             </span>
+            <MaintenanceBadge
+                v-if="environment.maintenanceUntil"
+                :until="environment.maintenanceUntil"
+                :reason="environment.maintenanceReason"
+                compact
+            />
             <StatusLamp :status="environment.status" glow />
         </span>
         <span class="nc-num mt-[11px] flex items-baseline gap-[5px]">

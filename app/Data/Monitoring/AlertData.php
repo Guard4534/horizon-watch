@@ -36,6 +36,7 @@ class AlertData extends Data
         public ?string $mutedUntil,
         public bool $mutedUntilResolved,
         public ?AlertActorData $mutedBy,
+        public bool $mutedForMaintenance,
         public ?AlertActorData $handledBy,
         public ?int $handledMinutesAgo,
         /** @var array<int, NotificationChannel> */

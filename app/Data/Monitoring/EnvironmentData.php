@@ -42,6 +42,8 @@ class EnvironmentData extends Data
         public ?HorizonStatus $horizonStatus,
         /** @var array<string, float> */
         public array $thresholds,
+        public ?string $maintenanceUntil,
+        public ?string $maintenanceReason,
     ) {}
 
     public static function compareBySeverityThenPending(self $a, self $b): int

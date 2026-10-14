@@ -1,5 +1,7 @@
 <?php
 
+use App\Actions\Alerts\MuteAlert;
+use App\Actions\Alerts\UnmuteAlert;
 use App\Actions\Environments\UpdateEnvironment;
 use App\Actions\Monitoring\PollEnvironment;
 use App\Alerts\AlertEngine;
@@ -9,8 +11,10 @@ use App\Alerts\Events\AlertResolved;
 use App\Data\Applications\EnvironmentFormData;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
+use App\Enums\AlertState;
 use App\Enums\EnvironmentColor;
 use App\Enums\MemberVisibility;
+use App\Enums\MuteDuration;
 use App\Enums\ReadingError;
 use App\Enums\SentNotificationKind;
 use App\Enums\TeamRole;
@@ -33,6 +37,7 @@ use App\Models\Application;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
+use App\Models\MaintenanceWindow;
 use App\Models\NotificationSetting;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -823,9 +828,11 @@ test('deleting an organization removes its alerts, rules, settings and log, and 
     AlertNotification::factory()->create(['alert_id' => null, 'team_id' => $this->team->id, 'kind' => SentNotificationKind::Test]);
     ($this->rule)('organization', AlertRuleMetric::QueuePending, ['threshold' => 10]);
     NotificationSetting::factory()->for($this->team)->create();
+    MaintenanceWindow::factory()->for($this->team)->create();
 
     $survivor = Alert::factory()->for(Environment::factory())->create();
     AlertNotification::factory()->for($survivor)->create();
+    MaintenanceWindow::factory()->for($survivor->team)->create();
     AlertRule::factory()->for($survivor->team)->create();
     NotificationSetting::factory()->for($survivor->team)->create();
 
@@ -836,6 +843,7 @@ test('deleting an organization removes its alerts, rules, settings and log, and 
     $this->assertSoftDeleted('teams', ['id' => $this->team->id]);
 
     expect(Alert::query()->pluck('id')->all())->toBe([$survivor->id])
+        ->and(MaintenanceWindow::query()->pluck('team_id')->all())->toBe([$survivor->team_id])
         ->and(AlertNotification::query()->pluck('team_id')->unique()->all())->toBe([$survivor->team_id])
         ->and(AlertRule::query()->pluck('team_id')->all())->toBe([$survivor->team_id])
         ->and(NotificationSetting::query()->pluck('team_id')->all())->toBe([$survivor->team_id]);
@@ -1448,4 +1456,247 @@ test('a disabled rule keeps no run, so enabling it starts the wait at the next r
     ($this->poll)(($this->pending)(2500));
 
     expect(Alert::query()->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:04:00');
+});
+
+test('an alert that opens during a maintenance window opens muted until the window ends, while the readings go on', function () {
+    $window = MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 09:30:00', '2026-09-17 11:00:00')->create();
+
+    ($this->poll)(($this->pending)(2500));
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->muted_until->toDateTimeString())->toBe('2026-09-17 11:00:00')
+        ->and($alert->muted_indefinitely)->toBeFalse()
+        ->and($alert->muted_by)->toBeNull()
+        ->and($alert->maintenance_window_id)->toBe($window->id)
+        ->and($alert->state(CarbonImmutable::now()))->toBe(AlertState::Muted)
+        ->and(EnvironmentSnapshot::query()->sole()->pending)->toBe(2500);
+
+    Event::assertDispatchedTimes(AlertOpened::class, 1);
+});
+
+test('a window covers the environment through its application or its organization, and only while it lasts', function (string $case, bool $muted) {
+    $other = Environment::factory()->for($this->application)->staging()->create();
+    $factory = MaintenanceWindow::factory();
+
+    match ($case) {
+        'environment' => $factory->forEnvironment($this->environment)->create(),
+        'application' => $factory->forApplication($this->application)->create(),
+        'organization' => $factory->for($this->team)->create(),
+        'another environment' => $factory->forEnvironment($other)->create(),
+        'another application' => $factory->forApplication(Application::factory()->for($this->team)->create())->create(),
+        'another organization' => $factory->create(),
+        'planned' => $factory->for($this->team)->between('2026-09-17 10:30:00', '2026-09-17 11:00:00')->create(),
+        'ended' => $factory->for($this->team)->between('2026-09-17 09:00:00', '2026-09-17 10:00:00')->create(),
+    };
+
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->state(CarbonImmutable::now()))->toBe($muted ? AlertState::Muted : AlertState::Open);
+})->with([
+    'environment' => ['environment', true],
+    'application' => ['application', true],
+    'organization' => ['organization', true],
+    'another environment' => ['another environment', false],
+    'another application' => ['another application', false],
+    'another organization' => ['another organization', false],
+    'planned' => ['planned', false],
+    'ended' => ['ended', false],
+]);
+
+test('overlapping windows mute until the latest end', function () {
+    MaintenanceWindow::factory()->for($this->team)->between('2026-09-17 09:00:00', '2026-09-17 10:30:00')->create();
+    $longest = MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 09:30:00', '2026-09-17 12:00:00')->create();
+
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->muted_until->toDateTimeString())->toBe('2026-09-17 12:00:00')
+        ->and(Alert::query()->sole()->maintenance_window_id)->toBe($longest->id);
+});
+
+test('an alert already open when a window starts is muted until its end at the next reading', function () {
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->state(CarbonImmutable::now()))->toBe(AlertState::Open);
+
+    $window = MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 10:00:10', '2026-09-17 11:00:00')->create();
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->unreachable)());
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->muted_until->toDateTimeString())->toBe('2026-09-17 11:00:00')
+        ->and($alert->maintenance_window_id)->toBe($window->id)
+        ->and($alert->value)->toBe(2500.0);
+});
+
+test('an alert unmuted by hand during the window stays unmuted until the next window', function () {
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 09:30:00', '2026-09-17 10:30:00')->create();
+    ($this->poll)(($this->pending)(2500));
+
+    app(UnmuteAlert::class)->handle(Alert::query()->sole());
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    expect(Alert::query()->sole()->state(CarbonImmutable::now()))->toBe(AlertState::Open);
+
+    $next = MaintenanceWindow::factory()->for($this->team)->between('2026-09-17 10:30:00', '2026-09-17 11:00:00')->create();
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:30:00'));
+    ($this->poll)(($this->pending)(2700));
+
+    expect(Alert::query()->sole()->maintenance_window_id)->toBe($next->id)
+        ->and(Alert::query()->sole()->muted_until->toDateTimeString())->toBe('2026-09-17 11:00:00');
+});
+
+test('a mute by hand that lasts longer than the window is kept', function (MuteDuration $duration) {
+    ($this->poll)(($this->pending)(2500));
+    $user = User::factory()->create();
+    app(MuteAlert::class)->handle(Alert::query()->sole(), $user, $duration);
+    $before = Alert::query()->sole();
+
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 10:00:00', '2026-09-17 11:00:00')->create();
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->muted_until?->toDateTimeString())->toBe($before->muted_until?->toDateTimeString())
+        ->and($alert->muted_indefinitely)->toBe($before->muted_indefinitely)
+        ->and($alert->muted_by)->toBe($user->id)
+        ->and($alert->maintenance_window_id)->toBeNull();
+})->with([MuteDuration::OneDay, MuteDuration::UntilResolved]);
+
+test('nothing goes out during a window, and an alert still open when it ends follows the usual rules', function () {
+    Queue::fake();
+    AlertTeam::member($this->team, 'admin@example.com', TeamRole::Admin);
+    NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com']]);
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 09:30:00', '2026-09-17 10:30:00')->create();
+
+    ($this->poll)(($this->pending)(2500));
+
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->onOpened(Alert::query()->sole());
+    $this->travel(20)->minutes();
+    ($this->poll)(($this->pending)(2600));
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+
+    Queue::assertNothingPushed();
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:30:00'));
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+
+    Queue::assertPushed(SendAlertEmail::class, fn (SendAlertEmail $job) => $job->kind === SentNotificationKind::CriticalAlert);
+    Queue::assertPushedTimes(SendAlertWebhook::class, 1);
+});
+
+test('an alert that opens and resolves within a window, or a notified one that resolves in it, is never told', function (bool $notifiedBefore) {
+    Queue::fake();
+    AlertTeam::member($this->team, 'admin@example.com', TeamRole::Admin);
+    NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com']]);
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+
+    ($this->poll)(($this->pending)(2500));
+
+    if ($notifiedBefore) {
+        Alert::query()->update(['notified' => true, 'last_notified_at' => now()]);
+    }
+
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 10:00:00', '2026-09-17 10:30:00')->create();
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(10));
+
+    expect(Alert::query()->sole()->resolved_at)->not->toBeNull();
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:31:00'));
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->onResolved(Alert::query()->sole());
+    app(DeliveryPolicy::class)->resolutionsDue(CarbonImmutable::now());
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+    app(DeliveryPolicy::class)->digestDue(CarbonImmutable::now());
+
+    Queue::assertNothingPushed();
+})->with(['opened in the window' => [false], 'notified before it' => [true]]);
+
+test('a reading reads the maintenance windows before it locks the open alerts', function () {
+    $statements = [];
+    DB::listen(function (QueryExecuted $query) use (&$statements) {
+        $statements[] = $query->sql;
+    });
+
+    ($this->poll)(($this->pending)(2500));
+
+    expect(firstStatementIndex($statements, 'from "maintenance_windows"', 'for share'))
+        ->toBeLessThan(firstStatementIndex($statements, 'from "alerts"', 'for update'));
+});
+
+test('a window that starts between two readings holds back the repeats and the digest of the alerts already open', function () {
+    Queue::fake();
+    AlertTeam::member($this->team, 'admin@example.com', TeamRole::Admin);
+    NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com']]);
+    Alert::factory()->for($this->environment)->critical()->create([
+        'metric' => AlertRuleMetric::EndpointUnreachable,
+        'notified' => true,
+        'last_notified_at' => now()->subHours(2),
+    ]);
+    Alert::factory()->for($this->environment)->warning()->create();
+    MaintenanceWindow::factory()->forApplication($this->application)->between('2026-09-17 09:59:00', '2026-09-17 11:00:00')->create();
+
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+    app(DeliveryPolicy::class)->digestDue(CarbonImmutable::now());
+
+    Queue::assertNothingPushed();
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 11:00:00'));
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+    app(DeliveryPolicy::class)->digestDue(CarbonImmutable::now());
+
+    Queue::assertPushed(SendAlertEmail::class, fn (SendAlertEmail $job) => $job->kind === SentNotificationKind::CriticalRepeated);
+    Queue::assertPushed(SendAlertEmail::class, fn (SendAlertEmail $job) => $job->kind === SentNotificationKind::WarningDigest);
+});
+
+test('an alert unmuted by hand during its window is sent, unless another window covers it', function (bool $another) {
+    Queue::fake();
+    AlertTeam::member($this->team, 'admin@example.com', TeamRole::Admin);
+    NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com']]);
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 09:30:00', '2026-09-17 10:30:00')->create();
+
+    if ($another) {
+        MaintenanceWindow::factory()->for($this->team)->between('2026-09-17 09:30:00', '2026-09-17 10:20:00')->create();
+    }
+
+    ($this->poll)(($this->pending)(2500));
+    app(UnmuteAlert::class)->handle(Alert::query()->sole());
+
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+
+    $another
+        ? Queue::assertNothingPushed()
+        : Queue::assertPushed(SendAlertEmail::class, fn (SendAlertEmail $job) => $job->kind === SentNotificationKind::CriticalAlert);
+})->with(['alone' => [false], 'under another window' => [true]]);
+
+test('a mute by hand still running when a window starts is left as it is', function () {
+    ($this->poll)(($this->pending)(2500));
+    $user = User::factory()->create();
+    app(MuteAlert::class)->handle(Alert::query()->sole(), $user, MuteDuration::OneHour);
+
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 10:00:00', '2026-09-17 13:00:00')->create();
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    expect(Alert::query()->sole()->muted_until->toDateTimeString())->toBe('2026-09-17 11:00:00')
+        ->and(Alert::query()->sole()->muted_by)->toBe($user->id)
+        ->and(Alert::query()->sole()->maintenance_window_id)->toBeNull();
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 11:05:00'));
+    ($this->poll)(($this->pending)(2700));
+
+    expect(Alert::query()->sole()->muted_until->toDateTimeString())->toBe('2026-09-17 13:00:00')
+        ->and(Alert::query()->sole()->muted_by)->toBeNull();
 });

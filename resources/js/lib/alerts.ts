@@ -85,6 +85,10 @@ export function mutedText(
 
     const time = formatMutedUntil(alert.mutedUntil, locale);
 
+    if (alert.mutedForMaintenance) {
+        return trans('Muted for maintenance until :time', { time });
+    }
+
     return name
         ? trans('Muted by :name until :time', { name, time })
         : trans('Muted until :time', { time });

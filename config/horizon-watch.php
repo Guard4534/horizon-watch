@@ -68,6 +68,8 @@ return [
 
     'alerts' => [
         'listed_queues' => 10,
+        'silence_minutes' => [30, 60, 120, 240],
+        'maintenance_max_days' => 31,
     ],
 
     'notifications' => [
@@ -91,6 +93,7 @@ return [
         'resolved_alerts' => 5,
         'sent_notifications' => 6,
         'wall_anomalies' => 5,
+        'ended_maintenance_windows' => 5,
     ],
 
     'invitations' => [

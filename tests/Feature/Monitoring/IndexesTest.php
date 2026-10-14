@@ -13,4 +13,9 @@ test('the lookups behind cascades, sweeps and prunes are indexed', function (str
     'alerts muted by a user' => ['alerts', 'alerts_muted_by_index'],
     'alerts handled by a user' => ['alerts', 'alerts_handled_by_index'],
     'grants by user' => ['environment_user', 'environment_user_user_id_index'],
+    'alerts muted by a maintenance window' => ['alerts', 'alerts_maintenance_window_id_index'],
+    'maintenance windows by application' => ['maintenance_windows', 'maintenance_windows_application_id_index'],
+    'maintenance windows by environment' => ['maintenance_windows', 'maintenance_windows_environment_id_index'],
+    'maintenance windows by creator' => ['maintenance_windows', 'maintenance_windows_created_by_index'],
+    'ended maintenance windows' => ['maintenance_windows', 'maintenance_windows_ends_at_index'],
 ]);
