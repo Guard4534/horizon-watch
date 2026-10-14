@@ -190,6 +190,8 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
 
 ### Fixed
 
+- Reloading `/setup` is no longer rate limited: only submitting it is, so a few refreshes on a
+  fresh install no longer end in an HTTP 429 page.
 - Horizon inactive and Horizon paused alerts resolved when a single reading failed, and their
   clock started again; a failed reading now leaves them as they are.
 - Quiet hours that covered the whole day silently turned quiet hours off; they are refused.

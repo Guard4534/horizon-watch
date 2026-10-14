@@ -30,6 +30,14 @@ test('the setup page is shown while nobody has an account', function () {
         ->assertInertia(fn (Assert $page) => $page->component('auth/Setup'));
 });
 
+test('reloading the setup page is never rate limited, only submitting it', function () {
+    for ($attempt = 0; $attempt <= config()->integer('horizon-watch.rate_limits.setup_per_minute') + 2; $attempt++) {
+        $this->get(route('setup.create'))->assertOk();
+    }
+
+    $this->post(route('setup.store'), ['name' => 'Ada'])->assertStatus(302);
+});
+
 test('setup creates the administrator, who receives alert emails, and the organization and signs in', function () {
     $response = $this->post(route('setup.store'), setupPayload());
 
