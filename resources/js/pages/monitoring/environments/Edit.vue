@@ -158,8 +158,7 @@ const submit = () => {
             </div>
             <button
                 type="button"
-                class="nc-btn nc-t-xs nc-tone-down mt-[var(--nc-space-3)]"
-                style="border-color: var(--st-down)"
+                class="nc-btn nc-btn-danger nc-t-xs mt-[var(--nc-space-3)]"
                 @click="confirming = true"
             >
                 <PhTrashSimple :size="13" />{{ $t('Delete environment') }}

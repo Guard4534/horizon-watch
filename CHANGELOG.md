@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The wall, the alerts page and the notification settings warn when alerts reach nobody: no
   member receives alert emails, and there is neither an extra address nor a webhook. The
   delivery policy says how many members receive alert emails.
+- A web app manifest and icons of the panel's own, so it can be added to a phone's home screen.
+  `APP_NAME` names the panel in the browser tab, the sidebar and the installed app, and
+  `compose.prod.yaml` passes it on.
 
 ### Changed
 
@@ -116,6 +119,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Abbreviated counts use the decimal separator of the language, such as `1,2k` in Italian.
 - The wall calls its pending total **Pending jobs**, like the alert rule, instead of
   **Queued jobs**.
+- The favicon and the home-screen icon are the mark of the panel instead of the Laravel logo.
+- Search engines are asked to stay out: `robots.txt` disallows everything and every page says
+  `noindex`.
+- PostgreSQL is the only database the configuration offers, and `DB_CONNECTION` defaults to
+  `pgsql`. The polling times of environments and the times of invitations are stored with
+  their time zone, like every other time.
+- The settings, organization and two-factor screens use the same fields, buttons and cards as
+  the rest of the panel.
 
 ### Fixed
 
@@ -163,6 +174,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The environment page named the masters endpoint `/horizon/api/masters` even when Horizon
   lives under another path; it now follows the environment's Horizon URL.
 - The two-factor setup errors and the loading indicator were always in English.
+- The browser tab kept the name the image was built with instead of following `APP_NAME`.
+- Controls drawn by the browser, such as scrollbars, checkboxes and autofilled fields, were
+  light on the dark pages.
 
 ## [0.1.0] - 2026-09-29
 

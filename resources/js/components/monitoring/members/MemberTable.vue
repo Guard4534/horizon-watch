@@ -2,6 +2,7 @@
 import { useForm } from '@inertiajs/vue3';
 import { PhDotsThree, PhShieldCheck } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
+import Avatar from '@/components/nocturne/Avatar.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import {
     Dialog,
@@ -186,19 +187,7 @@ function confirmRemove() {
                     <tr v-for="member in members" :key="member.id">
                         <td>
                             <div class="flex items-center gap-[9px]">
-                                <span
-                                    class="grid place-items-center"
-                                    style="
-                                        width: 26px;
-                                        height: 26px;
-                                        flex: none;
-                                        border-radius: 50%;
-                                        background: var(--nc-neutral-800);
-                                        color: var(--nc-neutral-200);
-                                        font-size: 10px;
-                                    "
-                                    >{{ member.initials }}</span
-                                >
+                                <Avatar :name="member.name" />
                                 <div>
                                     <div
                                         class="nc-t-sm flex items-center gap-2"
@@ -457,8 +446,7 @@ function confirmRemove() {
                 </button>
                 <button
                     type="button"
-                    class="nc-btn nc-btn-primary"
-                    style="background: var(--st-down)"
+                    class="nc-btn nc-btn-danger"
                     :disabled="form.processing"
                     @click="confirmRemove"
                 >

@@ -16,7 +16,7 @@ x-app: &app
         - SETGID
         - SETUID
     environment:
-        APP_NAME: Horizon Watch
+        APP_NAME: ${APP_NAME:-Horizon Watch}
         APP_URL: ${APP_URL:-http://localhost:8080}
         APP_LOCALE: ${APP_LOCALE:-en}
         APP_KEY: ${APP_KEY:-}

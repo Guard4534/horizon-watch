@@ -80,3 +80,11 @@ test('the scheduler and the workers are healthy only while they keep working, an
         ->and($dockerfile)->toContain('COPY --chmod=755 docker/prod/supervisor-fatal.sh /usr/local/bin/supervisor-fatal')
         ->toContain('ENV HORIZON_WATCH_VERSION=${VERSION}');
 });
+
+test('the name of the panel can be changed without building the image again', function () {
+    $compose = (string) file_get_contents(dirname(__DIR__, 2).'/compose.prod.yaml');
+    $readme = (string) file_get_contents(dirname(__DIR__, 2).'/README.md');
+
+    expect($compose)->toContain('APP_NAME: ${APP_NAME:-Horizon Watch}')
+        ->and($readme)->toContain('| `APP_NAME`');
+});

@@ -53,7 +53,6 @@ const inputEmail = ref(props.email);
             <label for="password">{{ $t('Password') }}</label>
             <PasswordInput
                 id="password"
-                class="nc-input"
                 name="password"
                 autocomplete="new-password"
                 autofocus
@@ -69,7 +68,6 @@ const inputEmail = ref(props.email);
             }}</label>
             <PasswordInput
                 id="password_confirmation"
-                class="nc-input"
                 name="password_confirmation"
                 autocomplete="new-password"
                 :passwordrules="passwordRules"

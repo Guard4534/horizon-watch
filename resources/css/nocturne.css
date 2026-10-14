@@ -1,4 +1,6 @@
 :root {
+    color-scheme: dark;
+
     --nc-bg: #161826;
     --nc-surface: #232532;
     --nc-text: #e9e9ed;
@@ -186,6 +188,16 @@ samp,
 .nc-btn-ghost:not(:disabled):active {
     background: color-mix(in srgb, var(--nc-accent) 18%, transparent);
 }
+.nc-btn-danger {
+    color: var(--st-down);
+    border-color: var(--st-down);
+}
+.nc-btn-danger:not(:disabled):hover {
+    background: color-mix(in srgb, var(--st-down) 12%, transparent);
+}
+.nc-btn-danger:not(:disabled):active {
+    background: color-mix(in srgb, var(--st-down) 22%, transparent);
+}
 .nc-btn-block {
     width: 100%;
     margin-top: var(--nc-space-2);
@@ -221,12 +233,8 @@ samp,
     opacity: 0.45;
     cursor: not-allowed;
 }
-input[type='search'].nc-input {
-    color-scheme: dark;
-}
 select.nc-input {
     appearance: none;
-    color-scheme: dark;
     padding-right: 28px;
     cursor: pointer;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='%23b2b6ca'%3E%3Cpath d='M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z'/%3E%3C/svg%3E");

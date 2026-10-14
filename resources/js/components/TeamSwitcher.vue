@@ -55,7 +55,7 @@ const switchTeam = (team: App.Data.Teams.UserTeamData) => {
             align="start"
             :side-offset="4"
         >
-            <DropdownMenuLabel class="text-muted-foreground text-xs">
+            <DropdownMenuLabel class="nc-t-xs nc-tone-muted">
                 {{ $t('Organizations') }}
             </DropdownMenuLabel>
             <DropdownMenuItem
@@ -76,7 +76,7 @@ const switchTeam = (team: App.Data.Teams.UserTeamData) => {
                     @select.prevent
                 >
                     <PhPlus class="h-4 w-4" />
-                    <span class="text-muted-foreground">{{
+                    <span class="nc-tone-muted">{{
                         $t('New organization')
                     }}</span>
                 </DropdownMenuItem>

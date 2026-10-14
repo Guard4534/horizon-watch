@@ -67,7 +67,7 @@ export default defineConfig({
             'tests/Fixtures/Horizon/dashboard.html',
         ],
         sortTailwindcss: {
-            functions: ['clsx', 'cn', 'cva'],
+            functions: ['clsx', 'cn'],
             entryPoint: 'resources/css/app.css',
         },
     },

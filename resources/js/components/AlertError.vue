@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { PhWarningCircle } from '@phosphor-icons/vue';
 import { computed } from 'vue';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type Props = {
     errors: string[];
@@ -16,15 +15,24 @@ const uniqueErrors = computed(() => Array.from(new Set(props.errors)));
 </script>
 
 <template>
-    <Alert variant="destructive">
-        <PhWarningCircle class="size-4" />
-        <AlertTitle>{{ $t(title) }}</AlertTitle>
-        <AlertDescription>
-            <ul class="list-inside list-disc text-sm">
+    <div
+        role="alert"
+        class="nc-t-sm nc-tone-down flex w-full gap-3"
+        style="
+            padding: var(--nc-space-3) var(--nc-space-4);
+            border: 1px solid var(--st-down);
+            border-radius: var(--nc-radius-md);
+            background: color-mix(in srgb, var(--st-down) 10%, transparent);
+        "
+    >
+        <PhWarningCircle :size="16" class="mt-0.5 flex-none" />
+        <div>
+            <p>{{ $t(title) }}</p>
+            <ul class="list-inside list-disc">
                 <li v-for="(error, index) in uniqueErrors" :key="index">
                     {{ error }}
                 </li>
             </ul>
-        </AlertDescription>
-    </Alert>
+        </div>
+    </div>
 </template>

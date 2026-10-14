@@ -58,7 +58,6 @@ defineOptions({
             <label for="password">{{ $t('Password') }}</label>
             <PasswordInput
                 id="password"
-                class="nc-input"
                 name="password"
                 required
                 autocomplete="new-password"
@@ -74,7 +73,6 @@ defineOptions({
             }}</label>
             <PasswordInput
                 id="password_confirmation"
-                class="nc-input"
                 name="password_confirmation"
                 required
                 autocomplete="new-password"

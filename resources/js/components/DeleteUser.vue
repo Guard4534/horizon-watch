@@ -5,7 +5,6 @@ import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileCo
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
-import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogClose,
@@ -16,7 +15,6 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { invalidField } from '@/lib/fieldErrors';
 
 const { deletion } = defineProps<{
@@ -34,15 +32,17 @@ const passwordInput = useTemplateRef('passwordInput');
             :description="$t('Delete your account for good')"
         />
         <div
-            class="space-y-4 rounded-lg p-4"
+            class="space-y-4"
             style="
+                padding: var(--nc-space-4);
+                border-radius: var(--nc-radius-md);
                 border: 1px solid var(--st-down);
                 background: color-mix(in srgb, var(--st-down) 10%, transparent);
             "
         >
             <div class="nc-tone-down relative space-y-0.5">
-                <p class="font-medium">{{ $t('Caution') }}</p>
-                <p class="text-sm">
+                <p>{{ $t('Caution') }}</p>
+                <p class="nc-t-sm">
                     {{
                         $t(
                             'Please proceed with caution, this cannot be undone.',
@@ -52,7 +52,7 @@ const passwordInput = useTemplateRef('passwordInput');
             </div>
             <div
                 v-if="deletion.sharedOrganizations.length"
-                class="nc-tone-down space-y-2 text-sm"
+                class="nc-tone-down nc-t-sm space-y-2"
                 data-test="delete-user-blocked"
             >
                 <p>
@@ -75,11 +75,13 @@ const passwordInput = useTemplateRef('passwordInput');
             </div>
             <Dialog v-else>
                 <DialogTrigger as-child>
-                    <Button
-                        variant="destructive"
+                    <button
+                        type="button"
+                        class="nc-btn nc-btn-danger"
                         data-test="delete-user-button"
-                        >{{ $t('Delete account') }}</Button
                     >
+                        {{ $t('Delete account') }}
+                    </button>
                 </DialogTrigger>
                 <DialogContent>
                     <Form
@@ -109,7 +111,7 @@ const passwordInput = useTemplateRef('passwordInput');
 
                         <div
                             v-if="deletion.soleOrganizations.length"
-                            class="space-y-2 text-sm"
+                            class="nc-t-sm space-y-2"
                         >
                             <p>
                                 {{
@@ -130,10 +132,10 @@ const passwordInput = useTemplateRef('passwordInput');
                             </ul>
                         </div>
 
-                        <div class="grid gap-2">
-                            <Label for="password" class="sr-only">{{
+                        <div class="space-y-1">
+                            <label for="password" class="sr-only">{{
                                 $t('Password')
-                            }}</Label>
+                            }}</label>
                             <PasswordInput
                                 id="password"
                                 name="password"
@@ -152,8 +154,9 @@ const passwordInput = useTemplateRef('passwordInput');
 
                         <DialogFooter class="gap-2">
                             <DialogClose as-child>
-                                <Button
-                                    variant="secondary"
+                                <button
+                                    type="button"
+                                    class="nc-btn nc-btn-secondary"
                                     @click="
                                         () => {
                                             clearErrors();
@@ -162,17 +165,17 @@ const passwordInput = useTemplateRef('passwordInput');
                                     "
                                 >
                                     {{ $t('Cancel') }}
-                                </Button>
+                                </button>
                             </DialogClose>
 
-                            <Button
+                            <button
                                 type="submit"
-                                variant="destructive"
+                                class="nc-btn nc-btn-danger"
                                 :disabled="processing"
                                 data-test="confirm-delete-user-button"
                             >
                                 {{ $t('Delete account') }}
-                            </Button>
+                            </button>
                         </DialogFooter>
                     </Form>
                 </DialogContent>

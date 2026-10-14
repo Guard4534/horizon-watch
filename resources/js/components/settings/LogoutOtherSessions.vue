@@ -5,7 +5,6 @@ import OtherSessionsController from '@/actions/App/Http/Controllers/Settings/Oth
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
-import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogClose,
@@ -16,7 +15,6 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { invalidField } from '@/lib/fieldErrors';
 
 const open = ref(false);
@@ -36,11 +34,13 @@ const passwordInput = useTemplateRef('passwordInput');
         />
         <Dialog v-model:open="open">
             <DialogTrigger as-child>
-                <Button
-                    variant="secondary"
+                <button
+                    type="button"
+                    class="nc-btn nc-btn-secondary"
                     data-test="logout-other-sessions-button"
-                    >{{ $t('Log out other sessions') }}</Button
                 >
+                    {{ $t('Log out other sessions') }}
+                </button>
             </DialogTrigger>
             <DialogContent>
                 <Form
@@ -67,10 +67,10 @@ const passwordInput = useTemplateRef('passwordInput');
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div class="grid gap-2">
-                        <Label for="other-sessions-password" class="sr-only">{{
+                    <div class="space-y-1">
+                        <label for="other-sessions-password" class="sr-only">{{
                             $t('Password')
-                        }}</Label>
+                        }}</label>
                         <PasswordInput
                             id="other-sessions-password"
                             name="password"
@@ -92,8 +92,9 @@ const passwordInput = useTemplateRef('passwordInput');
 
                     <DialogFooter class="gap-2">
                         <DialogClose as-child>
-                            <Button
-                                variant="secondary"
+                            <button
+                                type="button"
+                                class="nc-btn nc-btn-secondary"
                                 @click="
                                     () => {
                                         clearErrors();
@@ -102,16 +103,17 @@ const passwordInput = useTemplateRef('passwordInput');
                                 "
                             >
                                 {{ $t('Cancel') }}
-                            </Button>
+                            </button>
                         </DialogClose>
 
-                        <Button
+                        <button
                             type="submit"
+                            class="nc-btn nc-btn-primary"
                             :disabled="processing"
                             data-test="confirm-logout-other-sessions-button"
                         >
                             {{ $t('Log out other sessions') }}
-                        </Button>
+                        </button>
                     </DialogFooter>
                 </Form>
             </DialogContent>

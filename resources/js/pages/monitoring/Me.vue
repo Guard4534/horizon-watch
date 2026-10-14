@@ -11,9 +11,9 @@ import {
 } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import LocaleSwitch from '@/components/LocaleSwitch.vue';
+import Avatar from '@/components/nocturne/Avatar.vue';
 import AlertEmailsToggle from '@/components/settings/AlertEmailsToggle.vue';
 import TeamSwitcher from '@/components/TeamSwitcher.vue';
-import { getInitials } from '@/lib/initials';
 import { useMobileOnlyPage } from '@/composables/useMobileOnlyPage';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { logout } from '@/routes';
@@ -49,7 +49,7 @@ const isMobile = useMobileOnlyPage(profileEdit());
             class="flex items-center gap-[10px]"
             style="padding: var(--nc-space-4)"
         >
-            <span class="avatar">{{ getInitials(user.name) }}</span>
+            <Avatar :name="user.name" :size="40" />
             <div class="min-w-0">
                 <div class="truncate" style="font-size: 14px">
                     {{ user.name }}
@@ -130,18 +130,6 @@ const isMobile = useMobileOnlyPage(profileEdit());
 </template>
 
 <style scoped>
-.avatar {
-    display: grid;
-    place-items: center;
-    flex: none;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    font-size: 13px;
-    background: var(--nc-neutral-800);
-    color: var(--nc-neutral-200);
-}
-
 .row {
     display: flex;
     align-items: center;

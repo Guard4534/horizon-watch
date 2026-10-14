@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import FieldError from '@/components/FieldError.vue';
 import { PhLockSimple, PhLockSimpleOpen, PhWarning } from '@phosphor-icons/vue';
 import { createReusableTemplate } from '@vueuse/core';
 import { computed, watch } from 'vue';
+import InputError from '@/components/InputError.vue';
 import ColorPicker from '@/components/monitoring/applications/ColorPicker.vue';
 import { invalidField } from '@/lib/fieldErrors';
 import { looksLikeProduction } from '@/lib/monitoring';
@@ -95,7 +95,11 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                 placeholder="production"
                 v-bind="invalidField(fieldId('name'), errorOf('name'))"
             />
-            <FieldError :field="fieldId('name')" :message="errorOf('name')" />
+            <InputError
+                size="sm"
+                :field="fieldId('name')"
+                :message="errorOf('name')"
+            />
             <div
                 v-if="!compact && !errorOf('name')"
                 class="nc-t-2xs nc-tone-faint mt-1"
@@ -119,7 +123,11 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                 :aria-labelledby="fieldId('color')"
                 v-bind="invalidField(fieldId('color'), errorOf('color'))"
             />
-            <FieldError :field="fieldId('color')" :message="errorOf('color')" />
+            <InputError
+                size="sm"
+                :field="fieldId('color')"
+                :message="errorOf('color')"
+            />
         </div>
     </DefineColor>
 
@@ -144,7 +152,8 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                     invalidField(fieldId('horizonUrl'), errorOf('horizonUrl'))
                 "
             />
-            <FieldError
+            <InputError
+                size="sm"
                 :field="fieldId('horizonUrl')"
                 :message="errorOf('horizonUrl')"
             />
@@ -195,7 +204,8 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                         )
                     "
                 />
-                <FieldError
+                <InputError
+                    size="sm"
                     v-if="!compact"
                     :field="fieldId('basicAuthUser')"
                     :message="errorOf('basicAuthUser')"
@@ -227,7 +237,8 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                     "
                 />
                 <template v-if="!compact">
-                    <FieldError
+                    <InputError
+                        size="sm"
                         :field="fieldId('basicAuthPassword')"
                         :message="errorOf('basicAuthPassword')"
                     />
@@ -292,7 +303,8 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                     >{{ $t('seconds') }}
                 </span>
             </div>
-            <FieldError
+            <InputError
+                size="sm"
                 v-if="!compact"
                 :field="fieldId('pollIntervalSeconds')"
                 :message="errorOf('pollIntervalSeconds')"
@@ -329,7 +341,8 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                 {{ $t('Collect readings') }}
             </label>
             <template v-if="!compact">
-                <FieldError
+                <InputError
+                    size="sm"
                     :field="fieldId('pollingEnabled')"
                     :message="errorOf('pollingEnabled')"
                 />
@@ -366,7 +379,8 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                 {{ $t('Production environment') }}
             </label>
             <template v-if="!compact">
-                <FieldError
+                <InputError
+                    size="sm"
                     :field="fieldId('isProduction')"
                     :message="errorOf('isProduction')"
                 />
@@ -411,11 +425,13 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
             </label>
             <CredentialFields v-if="auth" />
         </div>
-        <FieldError
+        <InputError
+            size="sm"
             :field="fieldId('basicAuthUser')"
             :message="errorOf('basicAuthUser')"
         />
-        <FieldError
+        <InputError
+            size="sm"
             :field="fieldId('basicAuthPassword')"
             :message="errorOf('basicAuthPassword')"
         />
@@ -428,15 +444,18 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
             <CollectField />
             <ProductionField />
         </div>
-        <FieldError
+        <InputError
+            size="sm"
             :field="fieldId('pollIntervalSeconds')"
             :message="errorOf('pollIntervalSeconds')"
         />
-        <FieldError
+        <InputError
+            size="sm"
             :field="fieldId('pollingEnabled')"
             :message="errorOf('pollingEnabled')"
         />
-        <FieldError
+        <InputError
+            size="sm"
             :field="fieldId('isProduction')"
             :message="errorOf('isProduction')"
         />

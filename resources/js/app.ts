@@ -10,8 +10,6 @@ import AuthLayout from '@/layouts/AuthLayout.vue';
 import SettingsLayout from '@/layouts/SettingsLayout.vue';
 import { initializeFlashToast } from '@/lib/flashToast';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Horizon Watch';
-
 type Messages = { default: Record<string, string> };
 
 const translations = import.meta.glob<Messages>('../../lang/*.json');
@@ -27,6 +25,10 @@ const initialLanguage = document.documentElement.lang || 'en';
 void loadMessages(initialLanguage).then((initialMessages) =>
     createInertiaApp({
         title: (title, page) => {
+            const appName =
+                typeof page.props.name === 'string' && page.props.name !== ''
+                    ? page.props.name
+                    : 'Horizon Watch';
             const full = title ? `${title} - ${appName}` : appName;
             const open = page.props.openAlertCount;
 

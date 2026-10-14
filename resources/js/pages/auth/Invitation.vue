@@ -85,7 +85,6 @@ const flushOnSignOut = () => router.flushAll();
                 <label for="password">{{ $t('Password') }}</label>
                 <PasswordInput
                     id="password"
-                    class="nc-input"
                     name="password"
                     required
                     autocomplete="new-password"
@@ -101,7 +100,6 @@ const flushOnSignOut = () => router.flushAll();
                 }}</label>
                 <PasswordInput
                     id="password_confirmation"
-                    class="nc-input"
                     name="password_confirmation"
                     required
                     autocomplete="new-password"

@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import { usePage } from '@inertiajs/vue3';
+
 const { size = 16, withName = true } = defineProps<{
     size?: number;
     withName?: boolean;
 }>();
+
+const page = usePage();
 </script>
 
 <template>
@@ -21,7 +25,7 @@ const { size = 16, withName = true } = defineProps<{
         <span
             v-if="withName"
             style="font-size: 15px; font-weight: 500; letter-spacing: -0.01em"
-            >Horizon Watch</span
+            >{{ page.props.name }}</span
         >
     </span>
 </template>

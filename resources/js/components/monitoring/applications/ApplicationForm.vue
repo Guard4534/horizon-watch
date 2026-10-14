@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import FieldError from '@/components/FieldError.vue';
+import InputError from '@/components/InputError.vue';
 import { invalidField } from '@/lib/fieldErrors';
 
 const model = defineModel<App.Data.Applications.ApplicationFormData>({
@@ -38,7 +38,8 @@ const {
                 placeholder="Invoicer"
                 v-bind="invalidField(`${prefix}name`, errors[`${prefix}name`])"
             />
-            <FieldError
+            <InputError
+                size="sm"
                 :field="`${prefix}name`"
                 :message="errors[`${prefix}name`]"
             />
@@ -58,7 +59,8 @@ const {
                 placeholder="invoicer.example.com"
                 v-bind="invalidField(`${prefix}host`, errors[`${prefix}host`])"
             />
-            <FieldError
+            <InputError
+                size="sm"
                 v-if="errors[`${prefix}host`]"
                 :field="`${prefix}host`"
                 :message="errors[`${prefix}host`]"

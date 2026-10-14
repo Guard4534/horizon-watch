@@ -106,13 +106,12 @@ test('every page title is the h1 of the page', function () {
 });
 
 test('every field error is announced and linked to the field it belongs to', function () {
-    expect(interfaceSource('js/components/InputError.vue'))->toContain('role="alert"')->toContain(':id="field ? errorId(field) : undefined"')
-        ->and(interfaceSource('js/components/FieldError.vue'))->toContain('role="alert"')->toContain(':id="field ? errorId(field) : undefined"');
+    expect(interfaceSource('js/components/InputError.vue'))->toContain('role="alert"')->toContain(':id="field ? errorId(field) : undefined"');
 
     $unlinked = [];
 
     foreach (interfaceFiles() as $path => $source) {
-        preg_match_all('/<(?:InputError|FieldError)\b[^>]*\/>/s', $source, $matches);
+        preg_match_all('/<InputError\b[^>]*\/>/s', $source, $matches);
 
         foreach ($matches[0] as $tag) {
             if (! preg_match('/\s:?field=/', $tag) && ! str_contains($tag, 'errors.account')) {
@@ -195,7 +194,6 @@ test('the login form tabs from the password to the submit button before the rese
         ->and(strpos($login, 'type="submit"'))->toBeLessThan(strpos($login, "\$t('Forgot your password?')"));
 });
 
-test('native search fields follow the dark nocturne scheme', function () {
-    expect(interfaceSource('css/nocturne.css'))
-        ->toMatch("/input\\[type='search'\\]\\.nc-input \\{\\s*color-scheme: dark;/");
+test('native controls, search fields included, follow the dark nocturne scheme', function () {
+    expect(interfaceSource('css/nocturne.css'))->toMatch('/:root \{\s*color-scheme: dark;/');
 });

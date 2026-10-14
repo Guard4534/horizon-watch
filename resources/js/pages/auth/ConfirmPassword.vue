@@ -29,7 +29,6 @@ defineOptions({
             <label for="password">{{ $t('Password') }}</label>
             <PasswordInput
                 id="password"
-                class="nc-input"
                 name="password"
                 required
                 autocomplete="current-password"

@@ -4,8 +4,6 @@ import SecurityController from '@/actions/App/Http/Controllers/Settings/Security
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import type { Props as ManageTwoFactorProps } from '@/components/ManageTwoFactor.vue';
 import ManageTwoFactor from '@/components/ManageTwoFactor.vue';
 import LogoutOtherSessions from '@/components/settings/LogoutOtherSessions.vue';
@@ -52,14 +50,13 @@ defineOptions({
             class="space-y-6"
             v-slot="{ errors, processing }"
         >
-            <div class="grid gap-2">
-                <Label for="current_password">{{
+            <div class="nc-field">
+                <label for="current_password">{{
                     $t('Current password')
-                }}</Label>
+                }}</label>
                 <PasswordInput
                     id="current_password"
                     name="current_password"
-                    class="mt-1 block w-full"
                     autocomplete="current-password"
                     :placeholder="$t('Current password')"
                     v-bind="
@@ -75,12 +72,11 @@ defineOptions({
                 />
             </div>
 
-            <div class="grid gap-2">
-                <Label for="password">{{ $t('New password') }}</Label>
+            <div class="nc-field">
+                <label for="password">{{ $t('New password') }}</label>
                 <PasswordInput
                     id="password"
                     name="password"
-                    class="mt-1 block w-full"
                     autocomplete="new-password"
                     :placeholder="$t('New password')"
                     :passwordrules="props.passwordRules"
@@ -89,14 +85,13 @@ defineOptions({
                 <InputError field="password" :message="errors.password" />
             </div>
 
-            <div class="grid gap-2">
-                <Label for="password_confirmation">{{
+            <div class="nc-field">
+                <label for="password_confirmation">{{
                     $t('Confirm password')
-                }}</Label>
+                }}</label>
                 <PasswordInput
                     id="password_confirmation"
                     name="password_confirmation"
-                    class="mt-1 block w-full"
                     autocomplete="new-password"
                     :placeholder="$t('Confirm password')"
                     :passwordrules="props.passwordRules"
@@ -113,14 +108,14 @@ defineOptions({
                 />
             </div>
 
-            <div class="flex items-center gap-4">
-                <Button
-                    :disabled="processing"
-                    data-test="update-password-button"
-                >
-                    {{ $t('Save') }}
-                </Button>
-            </div>
+            <button
+                type="submit"
+                class="nc-btn nc-btn-primary"
+                :disabled="processing"
+                data-test="update-password-button"
+            >
+                {{ $t('Save') }}
+            </button>
         </Form>
     </div>
 

@@ -80,7 +80,6 @@ class MembersQuery
                     id: $membership->user_id,
                     name: $membership->user->name,
                     email: $membership->user->email,
-                    initials: $this->initials($membership->user->name),
                     role: $membership->role,
                     roleLabel: $membership->role->label(),
                     visibility: $membership->visibility,
@@ -200,22 +199,5 @@ class MembersQuery
     private function environmentLabel(Environment $environment): string
     {
         return $environment->application->name.' / '.$environment->name;
-    }
-
-    private function initials(string $name): string
-    {
-        $parts = preg_split('/\s+/u', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
-
-        if ($parts === []) {
-            return '';
-        }
-
-        $initials = mb_substr($parts[0], 0, 1);
-
-        if (count($parts) > 1) {
-            $initials .= mb_substr($parts[count($parts) - 1], 0, 1);
-        }
-
-        return mb_strtoupper($initials);
     }
 }

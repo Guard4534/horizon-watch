@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import Heading from '@/components/Heading.vue';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { useCurrentPath } from '@/composables/useCurrentPath';
 import { edit as editProfile } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
@@ -30,29 +28,22 @@ const { startsWith } = useCurrentPath();
                     class="flex flex-col space-y-1 space-x-0"
                     :aria-label="$t('Settings')"
                 >
-                    <Button
+                    <Link
                         v-for="section in sections"
                         :key="section.href"
-                        variant="ghost"
-                        :class="[
-                            'w-full justify-start',
-                            { 'bg-muted': startsWith(section.href) },
-                        ]"
-                        as-child
+                        :href="section.href"
+                        class="settings-link"
+                        :class="{ 'is-active': startsWith(section.href) }"
+                        :aria-current="
+                            startsWith(section.href) ? 'page' : undefined
+                        "
                     >
-                        <Link
-                            :href="section.href"
-                            :aria-current="
-                                startsWith(section.href) ? 'page' : undefined
-                            "
-                        >
-                            {{ $t(section.title) }}
-                        </Link>
-                    </Button>
+                        {{ $t(section.title) }}
+                    </Link>
                 </nav>
             </aside>
 
-            <Separator class="my-6 lg:hidden" />
+            <hr class="my-6 lg:hidden" />
 
             <div class="flex-1 md:max-w-2xl">
                 <section class="max-w-xl space-y-12">
@@ -62,3 +53,23 @@ const { startsWith } = useCurrentPath();
         </div>
     </div>
 </template>
+
+<style scoped>
+.settings-link {
+    display: block;
+    font-size: 14px;
+    padding: 6px var(--nc-space-3);
+    border-radius: var(--nc-radius-sm);
+    color: inherit;
+    text-decoration: none;
+}
+
+.settings-link:hover {
+    background: color-mix(in srgb, var(--nc-text) 7%, transparent);
+}
+
+.settings-link.is-active {
+    background: color-mix(in srgb, var(--nc-accent) 14%, transparent);
+    color: var(--nc-accent-200);
+}
+</style>

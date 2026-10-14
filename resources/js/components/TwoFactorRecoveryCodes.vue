@@ -1,21 +1,9 @@
 <script setup lang="ts">
 import { Form } from '@inertiajs/vue3';
-import {
-    PhEye,
-    PhEyeSlash,
-    PhLockKey,
-    PhArrowsClockwise,
-} from '@phosphor-icons/vue';
+import { PhArrowsClockwise, PhEye, PhEyeSlash } from '@phosphor-icons/vue';
 import { nextTick, onUnmounted, ref, useTemplateRef } from 'vue';
 import AlertError from '@/components/AlertError.vue';
-import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
 import { regenerateRecoveryCodes } from '@/routes/two-factor';
 
@@ -63,120 +51,131 @@ onUnmounted(hideRecoveryCodes);
 </script>
 
 <template>
-    <Card class="w-full">
-        <CardHeader>
-            <CardTitle class="flex gap-3">
-                <PhLockKey class="size-4" />{{ $t('2FA recovery codes') }}
-            </CardTitle>
-            <CardDescription>
+    <SectionCard :title="$t('2FA recovery codes')" class="w-full">
+        <p class="nc-t-sm nc-tone-muted">
+            {{
+                $t(
+                    'Recovery codes let you regain access if you lose your 2FA device. Store them in a secure password manager.',
+                )
+            }}
+        </p>
+        <div
+            class="mt-4 flex flex-col gap-3 select-none sm:flex-row sm:items-center sm:justify-between"
+        >
+            <button
+                type="button"
+                class="nc-btn nc-btn-primary w-fit"
+                @click="toggleRecoveryCodesVisibility"
+            >
+                <component
+                    :is="isRecoveryCodesVisible ? PhEyeSlash : PhEye"
+                    :size="16"
+                />
+                {{
+                    isRecoveryCodesVisible
+                        ? $t('Hide recovery codes')
+                        : $t('View recovery codes')
+                }}
+            </button>
+
+            <button
+                v-if="
+                    isRecoveryCodesVisible &&
+                    recoveryCodesList.length &&
+                    !confirmingRegeneration
+                "
+                type="button"
+                class="nc-btn nc-btn-secondary w-fit"
+                @click="confirmingRegeneration = true"
+            >
+                <PhArrowsClockwise :size="16" /> {{ $t('Regenerate codes') }}
+            </button>
+        </div>
+        <div
+            v-if="confirmingRegeneration"
+            class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            style="
+                padding: var(--nc-space-4);
+                border: 1px solid var(--nc-divider);
+                border-radius: var(--nc-radius-md);
+            "
+        >
+            <p class="nc-t-sm">
                 {{
                     $t(
-                        'Recovery codes let you regain access if you lose your 2FA device. Store them in a secure password manager.',
+                        'The codes you have now stop working at once, and new ones replace them.',
                     )
                 }}
-            </CardDescription>
-        </CardHeader>
-        <CardContent>
-            <div
-                class="flex flex-col gap-3 select-none sm:flex-row sm:items-center sm:justify-between"
+            </p>
+            <Form
+                v-bind="regenerateRecoveryCodes.form()"
+                method="post"
+                :options="{ preserveScroll: true }"
+                class="flex flex-none gap-2"
+                @success="regenerated"
+                #default="{ processing }"
             >
-                <Button @click="toggleRecoveryCodesVisibility" class="w-fit">
-                    <component
-                        :is="isRecoveryCodesVisible ? PhEyeSlash : PhEye"
-                        class="size-4"
-                    />
-                    {{
-                        isRecoveryCodesVisible
-                            ? $t('Hide recovery codes')
-                            : $t('View recovery codes')
-                    }}
-                </Button>
-
-                <Button
-                    v-if="
-                        isRecoveryCodesVisible &&
-                        recoveryCodesList.length &&
-                        !confirmingRegeneration
-                    "
-                    variant="secondary"
-                    @click="confirmingRegeneration = true"
+                <button
+                    type="button"
+                    class="nc-btn nc-btn-secondary"
+                    :disabled="processing"
+                    @click="confirmingRegeneration = false"
                 >
-                    <PhArrowsClockwise /> {{ $t('Regenerate codes') }}
-                </Button>
+                    {{ $t('Cancel') }}
+                </button>
+                <button
+                    type="submit"
+                    class="nc-btn nc-btn-danger"
+                    :disabled="processing"
+                >
+                    <PhArrowsClockwise :size="16" />
+                    {{ $t('Regenerate codes') }}
+                </button>
+            </Form>
+        </div>
+        <div v-if="isRecoveryCodesVisible">
+            <div v-if="errors?.length" class="mt-6">
+                <AlertError :errors="errors" />
             </div>
-            <div
-                v-if="confirmingRegeneration"
-                class="mt-3 flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-                <p class="text-sm">
+            <div v-else class="mt-3 space-y-3">
+                <div
+                    ref="recoveryCodeSectionRef"
+                    class="nc-code nc-t-sm grid gap-1"
+                    style="
+                        padding: var(--nc-space-4);
+                        border-radius: var(--nc-radius-md);
+                        background: var(--nc-bg);
+                    "
+                >
+                    <div v-if="!recoveryCodesList.length" class="space-y-2">
+                        <div
+                            v-for="n in 8"
+                            :key="n"
+                            class="nc-pulse h-4"
+                            style="
+                                border-radius: var(--nc-radius-sm);
+                                background: var(--nc-neutral-900);
+                            "
+                        ></div>
+                    </div>
+                    <div
+                        v-else
+                        v-for="(code, index) in recoveryCodesList"
+                        :key="index"
+                    >
+                        {{ code }}
+                    </div>
+                </div>
+                <p class="nc-t-xs nc-tone-muted select-none">
                     {{
                         $t(
-                            'The codes you have now stop working at once, and new ones replace them.',
+                            'Each recovery code can be used once to access your account and will be removed after use. If you need more, click',
                         )
                     }}
+                    <span class="font-bold">{{ $t('Regenerate codes') }}</span>
+                    {{ $t('above.') }}
                 </p>
-                <Form
-                    v-bind="regenerateRecoveryCodes.form()"
-                    method="post"
-                    :options="{ preserveScroll: true }"
-                    class="flex flex-none gap-2"
-                    @success="regenerated"
-                    #default="{ processing }"
-                >
-                    <Button
-                        variant="secondary"
-                        type="button"
-                        :disabled="processing"
-                        @click="confirmingRegeneration = false"
-                    >
-                        {{ $t('Cancel') }}
-                    </Button>
-                    <Button
-                        variant="destructive"
-                        type="submit"
-                        :disabled="processing"
-                    >
-                        <PhArrowsClockwise /> {{ $t('Regenerate codes') }}
-                    </Button>
-                </Form>
             </div>
-            <div v-if="isRecoveryCodesVisible">
-                <div v-if="errors?.length" class="mt-6">
-                    <AlertError :errors="errors" />
-                </div>
-                <div v-else class="mt-3 space-y-3">
-                    <div
-                        ref="recoveryCodeSectionRef"
-                        class="bg-muted grid gap-1 rounded-lg p-4 font-mono text-sm"
-                    >
-                        <div v-if="!recoveryCodesList.length" class="space-y-2">
-                            <div
-                                v-for="n in 8"
-                                :key="n"
-                                class="bg-muted-foreground/20 h-4 animate-pulse rounded"
-                            ></div>
-                        </div>
-                        <div
-                            v-else
-                            v-for="(code, index) in recoveryCodesList"
-                            :key="index"
-                        >
-                            {{ code }}
-                        </div>
-                    </div>
-                    <p class="text-muted-foreground text-xs select-none">
-                        {{
-                            $t(
-                                'Each recovery code can be used once to access your account and will be removed after use. If you need more, click',
-                            )
-                        }}
-                        <span class="font-bold">{{
-                            $t('Regenerate codes')
-                        }}</span>
-                        {{ $t('above.') }}
-                    </p>
-                </div>
-            </div>
-        </CardContent>
-    </Card>
+        </div>
+    </SectionCard>
 </template>

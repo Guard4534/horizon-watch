@@ -7,9 +7,6 @@ import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import LocaleSwitch from '@/components/LocaleSwitch.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import AlertEmailsToggle from '@/components/settings/AlertEmailsToggle.vue';
 import { invalidField } from '@/lib/fieldErrors';
 
@@ -47,49 +44,44 @@ const changesEmail = computed(
             class="space-y-6"
             v-slot="{ errors, processing }"
         >
-            <div class="grid gap-2">
-                <Label for="name">{{ $t('Name') }}</Label>
-                <Input
+            <div class="nc-field">
+                <label for="name">{{ $t('Name') }}</label>
+                <input
                     id="name"
-                    class="mt-1 block w-full"
+                    class="nc-input"
                     name="name"
-                    :default-value="user.name"
+                    :value="user.name"
                     required
                     autocomplete="name"
                     :placeholder="$t('Full name')"
                     v-bind="invalidField('name', errors.name)"
                 />
-                <InputError field="name" class="mt-2" :message="errors.name" />
+                <InputError field="name" :message="errors.name" />
             </div>
 
-            <div class="grid gap-2">
-                <Label for="email">{{ $t('Email address') }}</Label>
-                <Input
+            <div class="nc-field">
+                <label for="email">{{ $t('Email address') }}</label>
+                <input
                     id="email"
-                    type="email"
-                    class="mt-1 block w-full"
-                    name="email"
                     v-model="email"
+                    class="nc-input"
+                    type="email"
+                    name="email"
                     required
                     autocomplete="username"
                     :placeholder="$t('Email address')"
                     v-bind="invalidField('email', errors.email)"
                 />
-                <InputError
-                    field="email"
-                    class="mt-2"
-                    :message="errors.email"
-                />
+                <InputError field="email" :message="errors.email" />
             </div>
 
-            <div v-if="changesEmail" class="grid gap-2">
-                <Label for="current_password">{{
+            <div v-if="changesEmail" class="nc-field">
+                <label for="current_password">{{
                     $t('Current password')
-                }}</Label>
+                }}</label>
                 <PasswordInput
                     id="current_password"
                     name="current_password"
-                    class="mt-1 block w-full"
                     required
                     autocomplete="current-password"
                     :placeholder="$t('Current password')"
@@ -100,7 +92,7 @@ const changesEmail = computed(
                         )
                     "
                 />
-                <p class="text-muted-foreground text-sm">
+                <p class="nc-t-xs nc-tone-muted mt-1">
                     {{
                         $t(
                             'Changing the email address needs your current password. The old address gets a notice of the change.',
@@ -109,18 +101,18 @@ const changesEmail = computed(
                 </p>
                 <InputError
                     field="current_password"
-                    class="mt-2"
                     :message="errors.current_password"
                 />
             </div>
 
-            <div class="flex items-center gap-4">
-                <Button
-                    :disabled="processing"
-                    data-test="update-profile-button"
-                    >{{ $t('Save') }}</Button
-                >
-            </div>
+            <button
+                type="submit"
+                class="nc-btn nc-btn-primary"
+                :disabled="processing"
+                data-test="update-profile-button"
+            >
+                {{ $t('Save') }}
+            </button>
         </Form>
     </div>
 

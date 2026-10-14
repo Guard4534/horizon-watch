@@ -4,9 +4,6 @@
 
 @import './nocturne.css';
 
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../storage/framework/views/*.php';
-
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -18,73 +15,32 @@
 
     --color-background: var(--background);
     --color-foreground: var(--foreground);
-    --color-card: var(--card);
-    --color-card-foreground: var(--card-foreground);
     --color-popover: var(--popover);
     --color-popover-foreground: var(--popover-foreground);
-    --color-primary: var(--primary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-secondary: var(--secondary);
-    --color-secondary-foreground: var(--secondary-foreground);
     --color-muted: var(--muted);
     --color-muted-foreground: var(--muted-foreground);
     --color-accent: var(--accent);
     --color-accent-foreground: var(--accent-foreground);
     --color-destructive: var(--destructive);
-    --color-destructive-foreground: var(--destructive-foreground);
     --color-border: var(--border);
     --color-input: var(--input);
     --color-ring: var(--ring);
-    --color-chart-1: var(--chart-1);
-    --color-chart-2: var(--chart-2);
-    --color-chart-3: var(--chart-3);
-    --color-chart-4: var(--chart-4);
-    --color-chart-5: var(--chart-5);
-    --color-sidebar: var(--sidebar-background);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-ring: var(--sidebar-ring);
 }
 
 :root {
     --background: var(--nc-bg);
     --foreground: var(--nc-text);
-    --card: var(--nc-surface);
-    --card-foreground: var(--nc-text);
     --popover: var(--nc-surface);
     --popover-foreground: var(--nc-text);
-    --primary: var(--nc-accent);
-    --primary-foreground: var(--nc-bg);
-    --secondary: var(--nc-neutral-900);
-    --secondary-foreground: var(--nc-text);
     --muted: var(--nc-neutral-900);
     --muted-foreground: var(--nc-neutral-500);
     --accent: color-mix(in srgb, var(--nc-text) 7%, transparent);
     --accent-foreground: var(--nc-text);
     --destructive: var(--st-down);
-    --destructive-foreground: var(--nc-text);
     --border: var(--nc-divider);
     --input: var(--nc-divider);
     --ring: var(--nc-accent);
-    --chart-1: var(--nc-accent);
-    --chart-2: var(--st-ok);
-    --chart-3: var(--st-warn);
-    --chart-4: var(--st-down);
-    --chart-5: var(--env-develop);
     --radius: 8px;
-    --sidebar-background: var(--nc-bg);
-    --sidebar: var(--nc-bg);
-    --sidebar-foreground: var(--nc-text);
-    --sidebar-primary: var(--nc-accent);
-    --sidebar-primary-foreground: var(--nc-bg);
-    --sidebar-accent: color-mix(in srgb, var(--nc-accent) 14%, transparent);
-    --sidebar-accent-foreground: var(--nc-accent-200);
-    --sidebar-border: var(--nc-divider);
-    --sidebar-ring: var(--nc-accent);
 }
 
 @layer base {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import FieldError from '@/components/FieldError.vue';
 import { useForm } from '@inertiajs/vue3';
 import { PhWarningOctagon } from '@phosphor-icons/vue';
 import { computed } from 'vue';
+import InputError from '@/components/InputError.vue';
 import {
     Dialog,
     DialogClose,
@@ -107,7 +107,8 @@ const submit = () => {
                     spellcheck="false"
                     v-bind="invalidField('confirm-by-name', form.errors.name)"
                 />
-                <FieldError
+                <InputError
+                    size="sm"
                     field="confirm-by-name"
                     :message="form.errors.name"
                 />
@@ -121,8 +122,7 @@ const submit = () => {
                 </DialogClose>
                 <button
                     type="button"
-                    class="nc-btn nc-tone-down"
-                    style="border-color: var(--st-down)"
+                    class="nc-btn nc-btn-danger"
                     :disabled="!matches || form.processing"
                     @click="submit"
                 >

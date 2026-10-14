@@ -155,6 +155,7 @@ the environment of the containers. Everything has a default except the mail serv
 | `HORIZON_WATCH_ORG_CREATION`           | `admins`                                 | Who may create organizations: `admins` (instance admins only) or `everyone`              |
 | `HORIZON_WATCH_DEFAULT_TIMEZONE`       | `UTC`                                    | Time zone new organizations start with                                                   |
 | `HORIZON_WATCH_HEARTBEAT_URL`          | _(empty)_                                | Dead man's switch called every minute; see [Watching the panel](#watching-the-panel)     |
+| `APP_NAME`                             | `Horizon Watch`                          | Name in the browser tab, sidebar, installed app and as email sender; see below           |
 | `APP_URL`                              | `http://localhost:8080`                  | Public URL, used in emails, password reset links and webhook payloads                    |
 | `APP_LOCALE`                           | `en`                                     | Default language, `en` or `it`, of the web pages, alert emails and webhook summaries     |
 | `APP_KEY`                              | generated                                | Leave empty: the first start writes one to the `app-data` volume                         |
@@ -168,6 +169,9 @@ the environment of the containers. Everything has a default except the mail serv
 | `MAIL_PASSWORD`                        | _(empty)_                                | SMTP password, when the server asks for one                                              |
 | `MAIL_FROM_ADDRESS`                    | `horizon-watch@example.com`              | Sender of invitations and alert emails                                                   |
 | `MAIL_TIMEOUT`                         | `10`                                     | Seconds an unresponsive SMTP server may hold a send; keep it below 30                    |
+
+Renaming `APP_NAME` signs everyone out, and the panel shows its scheduler and workers as stale
+until they next run, because the session cookie and the cache prefix are derived from it.
 
 Readings, resolved alerts and finished maintenance windows are pruned once a day. The newest reading of each environment is
 never pruned, so an environment paused for longer than the retention still shows its last

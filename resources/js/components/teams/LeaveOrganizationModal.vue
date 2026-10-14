@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
 import { ref } from 'vue';
-import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogClose,
@@ -52,21 +51,24 @@ function confirm(): void {
                 </DialogDescription>
             </DialogHeader>
 
-            <p class="font-medium">{{ organization?.name }}</p>
+            <p class="nc-t-sm">{{ organization?.name }}</p>
 
             <DialogFooter class="gap-2">
                 <DialogClose as-child>
-                    <Button variant="secondary">{{ $t('Cancel') }}</Button>
+                    <button type="button" class="nc-btn nc-btn-secondary">
+                        {{ $t('Cancel') }}
+                    </button>
                 </DialogClose>
 
-                <Button
+                <button
+                    type="button"
+                    class="nc-btn nc-btn-danger"
                     data-test="leave-team-confirm"
-                    variant="destructive"
                     :disabled="processing"
                     @click="confirm"
                 >
                     {{ $t('Leave the organization') }}
-                </Button>
+                </button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

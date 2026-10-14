@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\ManifestController;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\SetTeamUrlDefaults;
@@ -27,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
         then: function () {
             Route::get('/health', HealthController::class)->name('health');
+            Route::get('/manifest.webmanifest', ManifestController::class)->name('manifest');
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -133,6 +135,6 @@ return Application::configure(basePath: dirname(__DIR__))
 
             Inertia::flushShared();
 
-            return $response->render('Error', ['status' => $status, 'locale' => App::getLocale()]);
+            return $response->render('Error', ['status' => $status, 'locale' => App::getLocale(), 'name' => config('app.name')]);
         });
     })->create();
