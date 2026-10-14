@@ -43,7 +43,7 @@ export function axisTicks(max: number): number[] {
 }
 
 export function formatAxisCount(value: number): string {
-    return formatCount(value).replace(/\.0k$/, 'k');
+    return formatCount(value).replace(/[.,]0k$/, 'k');
 }
 
 export function spansDays(spanSeconds: number): boolean {

@@ -165,6 +165,7 @@ return [
         'basicAuthPassword' => 'password basic auth',
         'basicAuthUser' => 'username basic auth',
         'color' => 'colore',
+        'current_password' => 'password attuale',
         'email' => 'email',
         'environmentIds' => 'ambienti',
         'environmentIds.*' => 'ambiente',

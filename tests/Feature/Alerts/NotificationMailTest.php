@@ -117,11 +117,14 @@ test('every rule has its own headline and detail', function (AlertRuleMetric $me
     'inactive' => [AlertRuleMetric::HorizonMasterInactive, 14, [], 'Horizon inactive for 14 min', null],
     'unreachable' => [AlertRuleMetric::EndpointUnreachable, 3, [], 'Endpoint unreachable for 3 min', null],
     'paused' => [AlertRuleMetric::HorizonPaused, 20, [], 'Horizon paused for 20 min', null],
+    'one pending job' => [AlertRuleMetric::QueuePending, 1, [], '1 job pending', null],
     'max wait' => [AlertRuleMetric::QueueMaxWait, 95, ['waitSeconds' => 95], 'Oldest job waiting 95 s', null],
     'runtime' => [AlertRuleMetric::JobRuntime, 300, ['job' => 'App\Jobs\BuildReport', 'queue' => 'reports', 'seconds' => 300], 'A job has been running for 300 s', 'App\Jobs\BuildReport on queue reports'],
     'failed' => [AlertRuleMetric::JobsFailedPerHour, 31, ['failed' => 31], '31 jobs failed in the last hour', null],
+    'one failed job' => [AlertRuleMetric::JobsFailedPerHour, 1, ['failed' => 1], '1 job failed in the last hour', null],
     'failed past the jobs that were read' => [AlertRuleMetric::JobsFailedPerHour, 200, ['failed' => 200, 'atLeast' => true], 'at least 200 jobs failed in the last hour', null],
     'workers' => [AlertRuleMetric::WorkersMissing, 5, ['queues' => ['default', 'emails']], '5 queues with waiting jobs and no worker', 'Queues: default, emails'],
+    'one queue without workers' => [AlertRuleMetric::WorkersMissing, 1, ['queues' => ['default']], '1 queue with waiting jobs and no worker', 'Queues: default'],
 ]);
 
 test('the rule row names the rule, compares the way the rule fires and translates the unit', function (AlertRuleMetric $metric, float $threshold, float $value, string $english, string $italian) {
@@ -153,6 +156,12 @@ test('a state rule headline reads its duration in minutes, hours and days', func
     'whole days' => [AlertRuleMetric::EndpointUnreachable, 2880, 'Endpoint unreachable for 2 d<', 'Endpoint non raggiungibile da 2 g<'],
     'days and hours' => [AlertRuleMetric::EndpointUnreachable, 3000, 'Endpoint unreachable for 2 d 2 h', 'Endpoint non raggiungibile da 2 g 2 h'],
 ]);
+
+test('an italian alert email ends with an italian footer', function () {
+    expect(mailHtml(new AlertNotification($this->alert), 'it'))
+        ->toContain('Tutti i diritti riservati.')
+        ->not->toContain('All rights reserved.');
+});
 
 test('an alert of a deleted environment has no panel link and no nodes', function () {
     $alert = Alert::factory()->critical()->create([

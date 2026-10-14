@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { PhArrowSquareOut, PhShieldCheck } from '@phosphor-icons/vue';
-import { trans } from 'laravel-vue-i18n';
+import { trans, transChoice } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import EnvironmentMobile from '@/components/mobile/environment/EnvironmentMobile.vue';
 import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
@@ -70,6 +70,18 @@ const longRunningUnknown = computed(
         environment.value.status === 'unreachable',
 );
 
+const mastersPath = computed(() => {
+    try {
+        const path = new URL(environment.value.horizonUrl).pathname
+            .replace(/\/+$/, '')
+            .replace(/\/api$/, '');
+
+        return `${path}/api/masters`;
+    } catch {
+        return null;
+    }
+});
+
 type Tile = { label: string; value: string; color?: string; note: string };
 
 const maxWaitNote = computed(() => {
@@ -105,7 +117,7 @@ const tiles = computed<Tile[]>(() => [
             environment.value.pending,
             threshold('queue.pending'),
         ),
-        note: trans(':count queue', { count: String(page.queues.length) }),
+        note: transChoice(':count queue|:count queues', page.queues.length),
     },
     {
         label: trans('Max wait'),
@@ -302,8 +314,10 @@ const tiles = computed<Tile[]>(() => [
                     $t('Nodes (master supervisors)')
                 }}</span>
                 <span class="nc-t-2xs nc-tone-muted"
-                    >{{ $t('one master per machine') }} ·
-                    /horizon/api/masters</span
+                    >{{ $t('one master per machine')
+                    }}<template v-if="mastersPath">
+                        · {{ mastersPath }}</template
+                    ></span
                 >
                 <span
                     v-if="lastKnown"

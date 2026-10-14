@@ -80,9 +80,9 @@ function width(seconds: number): string {
                     />
                 </div>
                 <div class="nc-tone-faint mt-1">
-                    queue {{ job.queue }} ·
                     {{
-                        $t('started at :time', {
+                        $t('queue :queue · started at :time', {
+                            queue: job.queue,
                             time: formatClock(new Date(job.startedAt), locale),
                         })
                     }}

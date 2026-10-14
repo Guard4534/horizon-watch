@@ -260,9 +260,7 @@ const tiles = computed(() => [
                         >{{ node.hostname }}</span
                     >
                     <span class="nc-num nc-tone-muted ml-auto flex-none">{{
-                        $t(':count workers', {
-                            count: String(node.workers),
-                        })
+                        $tChoice(':count worker|:count workers', node.workers)
                     }}</span>
                 </div>
             </div>

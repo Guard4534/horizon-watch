@@ -173,7 +173,7 @@ const kpis = computed(() => [
         note: trans('to triage'),
     },
     {
-        label: trans('Queued jobs'),
+        label: trans('Pending jobs'),
         value: formatCount(page.kpis.pendingTotal),
         color: 'var(--nc-text)',
         note: trans('sum of every queue'),

@@ -280,7 +280,7 @@ test('members can leave an organization', function () {
         ->delete(route('teams.leave', $team));
 
     $response->assertRedirect(route('teams.index'));
-    $response->assertInertiaFlash('toast', ['type' => 'success', 'message' => "You left the team \"{$team->name}\""]);
+    $response->assertInertiaFlash('toast', ['type' => 'success', 'message' => "You left the organization \"{$team->name}\""]);
 
     expect($member->fresh()->belongsToTeam($team))->toBeFalse();
 });

@@ -35,7 +35,7 @@ class TeamController extends Controller
 
         $createTeam->handle($request->user(), $request->validated('name'));
 
-        $this->success(__('Team created.'));
+        $this->success(__('Organization created.'));
 
         return to_route('teams.index');
     }
@@ -46,7 +46,7 @@ class TeamController extends Controller
 
         $renameTeam->handle($team, $request->validated('name'));
 
-        $this->success(__('Team updated.'));
+        $this->success(__('Organization updated.'));
 
         return to_route('teams.index');
     }
@@ -80,7 +80,7 @@ class TeamController extends Controller
 
         $removeMember->handle($team, $request->user());
 
-        $this->success(__('You left the team ":name"', ['name' => $team->name]));
+        $this->success(__('You left the organization ":name"', ['name' => $team->name]));
 
         return to_route('teams.index');
     }
@@ -91,7 +91,7 @@ class TeamController extends Controller
 
         $deleteTeam->handle($team, $request->user(), $data);
 
-        $this->success(__('Team deleted.'));
+        $this->success(__('Organization deleted.'));
 
         return to_route('teams.index');
     }

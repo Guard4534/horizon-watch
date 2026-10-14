@@ -5,7 +5,7 @@ import {
     PhWarning,
     PhWarningOctagon,
 } from '@phosphor-icons/vue';
-import { trans } from 'laravel-vue-i18n';
+import { getActiveLanguage, trans } from 'laravel-vue-i18n';
 import type { Component } from 'vue';
 
 const SERIES_REFRESH_PER_STEP = 4;
@@ -67,7 +67,13 @@ export function formatCount(value: number): string {
         return String(value);
     }
 
-    return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
+    const digits = value >= 10000 ? 0 : 1;
+
+    return `${new Intl.NumberFormat(getActiveLanguage(), {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+        useGrouping: false,
+    }).format(value / 1000)}k`;
 }
 
 function compact(

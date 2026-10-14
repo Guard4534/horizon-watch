@@ -169,9 +169,10 @@ const silence = computed<string | null>(() => {
                     }}
                     ·
                     {{
-                        $t(':count workers', {
-                            count: String(environment.workers),
-                        })
+                        $tChoice(
+                            ':count worker|:count workers',
+                            environment.workers,
+                        )
                     }}
                 </template>
             </span>

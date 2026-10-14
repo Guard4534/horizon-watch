@@ -111,6 +111,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chosen.
 - Pages that show an environment say only whether it uses basic auth; the user name appears
   only in the edit forms.
+- Invitation emails are written in the language of whoever sends or resends them, instead of
+  always in `APP_LOCALE`.
+- Abbreviated counts use the decimal separator of the language, such as `1,2k` in Italian.
+- The wall calls its pending total **Pending jobs**, like the alert rule, instead of
+  **Queued jobs**.
 
 ### Fixed
 
@@ -142,6 +147,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The live dot in the header stayed green while the page could not refresh, and a failed
   refresh could cover a wall left on a screen with an error dialog. The dot now turns red and
   the error is not shown for automatic refreshes.
+- `APP_LOCALE` had no effect on the web pages: whoever had not chosen a language and whose
+  browser asked for neither English nor Italian got English. They now get `APP_LOCALE`.
+- In Italian, the password reset email, the greeting, signature and footer of every email,
+  the two-factor and password confirmation errors and the name of the current password field
+  were in English.
+- Counts read `1 master`, `1 worker` and `3 queues` instead of `1 masters`, `1 workers` and
+  `3 queue`, and alerts read `1 job pending` and `1 job failed in the last hour` instead of
+  `1 jobs …`, in the alert emails and webhook summaries too.
+- Pages in Italian no longer show English text for a moment while they load.
+- Messages about creating, renaming, leaving or deleting an organization, and the errors about
+  reserved names and existing members, said "team".
+- Italian used both "failed job" and "job falliti" for the same thing; it now always says
+  "job falliti".
+- The environment page named the masters endpoint `/horizon/api/masters` even when Horizon
+  lives under another path; it now follows the environment's Horizon URL.
+- The two-factor setup errors and the loading indicator were always in English.
 
 ## [0.1.0] - 2026-09-29
 

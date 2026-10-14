@@ -19,8 +19,8 @@ defineProps<{
     <template
         v-else-if="alert.metric === 'queue.pending' && alert.value !== null"
         >{{
-            $t(':count jobs pending', {
-                count: formatCount(alert.value),
+            $tChoice(':jobs job pending|:jobs jobs pending', alert.value, {
+                jobs: formatCount(alert.value),
             })
         }}</template
     >
@@ -51,13 +51,17 @@ defineProps<{
             alert.metric === 'jobs.failed_per_hour' && alert.value !== null
         "
         >{{
-            $t(':count jobs failed in the last hour', {
-                count: alert.valueIsLowerBound
-                    ? $t('at least :count', {
-                          count: formatCount(alert.value),
-                      })
-                    : formatCount(alert.value),
-            })
+            $tChoice(
+                ':jobs job failed in the last hour|:jobs jobs failed in the last hour',
+                alert.value,
+                {
+                    jobs: alert.valueIsLowerBound
+                        ? $t('at least :count', {
+                              count: formatCount(alert.value),
+                          })
+                        : formatCount(alert.value),
+                },
+            )
         }}</template
     >
     <template v-else-if="alert.metric === 'jobs.failed_per_hour'">{{

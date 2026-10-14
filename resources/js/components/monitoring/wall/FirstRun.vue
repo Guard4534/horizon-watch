@@ -95,7 +95,7 @@ const PALETTE = [
                     <span class="num">3</span>
                     <div class="min-w-0 flex-1">
                         <div class="step-title">
-                            {{ $t('Invite the team') }}
+                            {{ $t('Invite your colleagues') }}
                         </div>
                         <div class="step-body">
                             {{

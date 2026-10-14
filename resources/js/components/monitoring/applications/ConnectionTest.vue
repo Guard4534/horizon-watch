@@ -178,13 +178,13 @@ const icon = computed(() => {
                     $t('Testing the connection…')
                 }}</span>
                 <span v-else-if="result?.reachable" class="nc-num">{{
-                    $t(
-                        'Connected · Horizon :status · :count masters · :ms ms',
+                    $tChoice(
+                        'Connected · Horizon :status · :count master · :ms ms|Connected · Horizon :status · :count masters · :ms ms',
+                        result.masterCount ?? 0,
                         {
                             status: result.horizonStatus
                                 ? horizonStatusLabel(result.horizonStatus)
                                 : '—',
-                            count: String(result.masterCount ?? 0),
                             ms: String(result.latencyMs ?? 0),
                         },
                     )

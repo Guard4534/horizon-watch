@@ -35,8 +35,10 @@ class SetLocale
 
     public static function preferred(Request $request): Locale
     {
-        return Locale::tryFrom((string) $request->getPreferredLanguage(array_column(Locale::cases(), 'value')))
-            ?? Locale::tryFrom((string) config('app.locale'))
-            ?? Locale::En;
+        $default = Locale::tryFrom((string) config('app.locale')) ?? Locale::En;
+
+        $supported = array_values(array_unique([$default->value, ...array_column(Locale::cases(), 'value')]));
+
+        return Locale::tryFrom((string) $request->getPreferredLanguage($supported)) ?? $default;
     }
 }

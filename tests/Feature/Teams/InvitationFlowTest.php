@@ -5,6 +5,7 @@ use App\Actions\Teams\DeclineInvitation;
 use App\Actions\Teams\RegisterInvitedUser;
 use App\Actions\Teams\RevokeInvitation;
 use App\Data\Teams\AcceptInvitationData;
+use App\Enums\Locale;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Models\Application;
@@ -772,6 +773,32 @@ test('the invitation email tells its lifetime in the language of the app', funct
 
     expect((new TeamInvitationNotification($invitation, (string) $invitation->plainCode))->toMail((object) [])->outroLines)
         ->toContain('Questo invito scade tra 5 giorni.');
+});
+
+test('the invitation email and its resend are written in the language of whoever sends them', function () {
+    Notification::fake();
+
+    $this->owner->update(['locale' => Locale::It]);
+
+    $this->actingAs($this->owner)
+        ->post(route('members.invitations.store', ['current_team' => $this->team->slug]), [
+            'email' => 'invited@example.com',
+            'role' => TeamRole::Member->value,
+            'visibility' => MemberVisibility::All->value,
+        ])
+        ->assertRedirect();
+
+    Notification::assertSentOnDemand(TeamInvitationNotification::class, fn (TeamInvitationNotification $notification) => $notification->locale === 'it');
+
+    Notification::fake();
+
+    $this->owner->update(['locale' => Locale::En]);
+
+    $this->actingAs($this->owner)
+        ->post(route('members.invitations.resend', ['current_team' => $this->team->slug, 'invitation' => TeamInvitation::query()->sole()->id]))
+        ->assertRedirect();
+
+    Notification::assertSentOnDemand(TeamInvitationNotification::class, fn (TeamInvitationNotification $notification) => $notification->locale === 'en');
 });
 
 test('an invitation revoked after it was loaded is not accepted', function () {

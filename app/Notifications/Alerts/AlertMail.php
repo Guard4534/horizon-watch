@@ -78,13 +78,13 @@ final class AlertMail
             AlertRuleMetric::HorizonMasterInactive => __('Horizon inactive for :duration', ['duration' => self::duration($alert->value ?? 0)]),
             AlertRuleMetric::EndpointUnreachable => __('Endpoint unreachable for :duration', ['duration' => self::duration($alert->value ?? 0)]),
             AlertRuleMetric::HorizonPaused => __('Horizon paused for :duration', ['duration' => self::duration($alert->value ?? 0)]),
-            AlertRuleMetric::QueuePending => __(':count jobs pending', ['count' => $value]),
+            AlertRuleMetric::QueuePending => trans_choice(':jobs job pending|:jobs jobs pending', $alert->value ?? 0, ['jobs' => $value]),
             AlertRuleMetric::QueueMaxWait => __('Oldest job waiting :seconds s', ['seconds' => $value]),
             AlertRuleMetric::JobRuntime => __('A job has been running for :seconds s', ['seconds' => $value]),
-            AlertRuleMetric::JobsFailedPerHour => __(':count jobs failed in the last hour', [
-                'count' => ($alert->detail['atLeast'] ?? false) === true ? __('at least :count', ['count' => $value]) : $value,
+            AlertRuleMetric::JobsFailedPerHour => trans_choice(':jobs job failed in the last hour|:jobs jobs failed in the last hour', $alert->value ?? 0, [
+                'jobs' => ($alert->detail['atLeast'] ?? false) === true ? __('at least :count', ['count' => $value]) : $value,
             ]),
-            AlertRuleMetric::WorkersMissing => __(':count queues with waiting jobs and no worker', ['count' => $value]),
+            AlertRuleMetric::WorkersMissing => trans_choice(':count queue with waiting jobs and no worker|:count queues with waiting jobs and no worker', $alert->value ?? 0, ['count' => $value]),
         };
     }
 

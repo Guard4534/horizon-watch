@@ -27,10 +27,29 @@ test('a guest keeps the language for the session', function () {
     $this->get(route('login'))->assertInertia(fn (Assert $page) => $page->where('locale', 'it'));
 });
 
-test('without a choice the browser language is used when supported', function () {
-    $this->get(route('login'), ['Accept-Language' => 'it-IT,it;q=0.9'])
-        ->assertInertia(fn (Assert $page) => $page->where('locale', 'it'));
+test('without a choice the browser language is used when supported', function (string $default, string $header, string $expected) {
+    config(['app.locale' => $default]);
 
+    $this->get(route('login'), ['Accept-Language' => $header])
+        ->assertInertia(fn (Assert $page) => $page->where('locale', $expected));
+})->with([
+    'italian browser' => ['en', 'it-IT,it;q=0.9', 'it'],
+    'english browser on an italian install' => ['it', 'en-GB,en;q=0.9', 'en'],
+    'second choice supported' => ['en', 'de-DE,it;q=0.8', 'it'],
+]);
+
+test('APP_LOCALE is used when the browser asks for no supported language', function (string $header) {
+    config(['app.locale' => 'it']);
+
+    $this->get(route('login'), ['Accept-Language' => $header])
+        ->assertInertia(fn (Assert $page) => $page->where('locale', 'it'));
+})->with([
+    'unsupported language' => ['de-DE'],
+    'any language' => ['*'],
+    'empty header' => [''],
+]);
+
+test('english is used when the browser asks for no supported language on a default install', function () {
     $this->get(route('login'), ['Accept-Language' => 'de-DE'])
         ->assertInertia(fn (Assert $page) => $page->where('locale', 'en'));
 });

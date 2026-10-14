@@ -4,6 +4,7 @@ namespace App\Actions\Teams;
 
 use App\Models\TeamInvitation;
 use App\Notifications\Teams\TeamInvitation as TeamInvitationNotification;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Notification;
 
 class ResendInvitation
@@ -16,7 +17,7 @@ class ResendInvitation
         $invitation->update(['expires_at' => now()->addDays(TeamInvitation::lifetimeDays())]);
 
         Notification::route('mail', $invitation->email)
-            ->notify(new TeamInvitationNotification($invitation, $code));
+            ->notify((new TeamInvitationNotification($invitation, $code))->locale(App::getLocale()));
 
         return $invitation;
     }

@@ -86,6 +86,24 @@ No generic service classes.
   (`Password::uncompromised()` among them).
 - Nothing that could carry a credential is ever logged, attached to an exception, or shown.
 
+## Translations
+
+- English strings are the keys, so `lang/en.json` stays empty. The Italian lives in
+  `lang/it.json`, and validation messages and field names in `lang/it/validation.php`.
+- Counts go through `$tChoice()` or `trans_choice()` with a `singular|plural` key, even when
+  the two Italian forms are the same.
+- In Italian, Horizon's own words stay in English: job, queue, worker, master, supervisor,
+  pending. The rest is translated: failed (falliti), node (nodo), waiting (in attesa),
+  organization (organizzazione), application (applicativo), environment (ambiente). In both
+  languages the tenant is an organization, never a team.
+- Strings that only Laravel or Fortify print (the mail layout, the password reset email, the
+  two-factor and password confirmation errors) have no call site here. They are listed in
+  `frameworkTranslationKeys()` in `tests/Feature/TranslationsTest.php`; after upgrading
+  either package, check that their wording has not changed.
+- Adding a language takes a case in `App\Enums\Locale`, its name in `LocaleSwitch.vue`
+  (`vue-tsc` asks for it), a `lang/<code>.json` and a `lang/<code>/` folder modelled on the
+  Italian ones, and the code in the `APP_LOCALE` row of the README.
+
 ## Tests
 
 Tests run on PostgreSQL, against the `testing` database. To run a suite in parallel with
@@ -155,9 +173,11 @@ These have all cost someone an afternoon.
 - `npx shadcn-vue add` generates Lucide icons. Replace them with Phosphor before committing.
 - `npm run build` runs `typescript:transform` but not `vue-tsc`, so a PHP prop renamed
   without updating its Vue usage breaks `composer ci:check`, not the Docker build.
-- `tests/Feature/TranslationsTest.php` only sees literal `$t()` and `__()` call sites. A
-  string kept in a const table — a lookup keyed by an enum value, for instance — is
-  unguarded.
+- `tests/Feature/TranslationsTest.php` only sees literal translation calls and literal
+  `title`, `kicker`, `subtitle`, `description` and `buttonText` properties. A string kept in
+  a const table — a lookup keyed by an enum value, for instance — is unguarded. The test also
+  fails on an Italian entry that nothing uses any more, and on a translation that drops a
+  `:placeholder` or a plural form of its key.
 - Tabular numbers are opt-in through `nc-num` and are never set on `body`: Inter's `tnum`
   also widens the hyphen, so "worker-batch" would read "worker - batch" everywhere.
 - The bundled `@fontsource-variable/inter` subsets carry none of Inter's disambiguation

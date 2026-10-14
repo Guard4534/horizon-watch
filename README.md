@@ -156,7 +156,7 @@ the environment of the containers. Everything has a default except the mail serv
 | `HORIZON_WATCH_DEFAULT_TIMEZONE`       | `UTC`                                    | Time zone new organizations start with                                                   |
 | `HORIZON_WATCH_HEARTBEAT_URL`          | _(empty)_                                | Dead man's switch called every minute; see [Watching the panel](#watching-the-panel)     |
 | `APP_URL`                              | `http://localhost:8080`                  | Public URL, used in emails, password reset links and webhook payloads                    |
-| `APP_LOCALE`                           | `en`                                     | Default language, `en` or `it`                                                           |
+| `APP_LOCALE`                           | `en`                                     | Default language, `en` or `it`, of the web pages, alert emails and webhook summaries     |
 | `APP_KEY`                              | generated                                | Leave empty: the first start writes one to the `app-data` volume                         |
 | `APP_PREVIOUS_KEYS`                    | _(empty)_                                | Earlier keys, comma-separated, that still decrypt what they encrypted                    |
 | `TRUSTED_PROXIES`                      | `private`                                | `private` (loopback and RFC 1918), `*`, or a comma-separated list of addresses and CIDRs |

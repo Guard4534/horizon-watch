@@ -8,6 +8,7 @@ use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
 use App\Notifications\Teams\TeamInvitation as TeamInvitationNotification;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 
@@ -33,7 +34,7 @@ class InviteMember
             }
 
             Notification::route('mail', $invitation->email)
-                ->notify(new TeamInvitationNotification($invitation, $code));
+                ->notify((new TeamInvitationNotification($invitation, $code))->locale(App::getLocale()));
 
             return $invitation;
         });
