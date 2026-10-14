@@ -30,7 +30,7 @@ test('the setup page is shown while nobody has an account', function () {
         ->assertInertia(fn (Assert $page) => $page->component('auth/Setup'));
 });
 
-test('setup creates the administrator and the organization and signs in', function () {
+test('setup creates the administrator, who receives alert emails, and the organization and signs in', function () {
     $response = $this->post(route('setup.store'), setupPayload());
 
     $user = User::sole();
@@ -39,7 +39,8 @@ test('setup creates the administrator and the organization and signs in', functi
     expect($user->email)->toBe('ada@example.com')
         ->and($team->name)->toBe('Example Ops')
         ->and($user->teamRole($team))->toBe(TeamRole::Owner)
-        ->and($user->is_instance_admin)->toBeTrue();
+        ->and($user->is_instance_admin)->toBeTrue()
+        ->and($user->alert_emails)->toBeTrue();
 
     $this->assertAuthenticatedAs($user);
     $response->assertRedirect(route('wall', ['current_team' => $team->slug]));

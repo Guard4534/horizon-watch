@@ -7,7 +7,8 @@ Please report security problems privately, not in a public issue.
 Use GitHub's private reporting: open the **Security** tab of this repository and choose
 **Report a vulnerability**. That opens a draft advisory only the maintainers can read.
 
-Please include what you did, what happened, and the version or image tag you were running. A
+Please include what you did, what happened, and the version you were running (shown at the
+bottom of the sidebar and by `GET /health`). A
 proof of concept is welcome but not required. You will get an acknowledgement within a few
 days, and an estimate of when a fix will land. Please give the fix a reasonable window before
 publishing anything.

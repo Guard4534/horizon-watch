@@ -32,6 +32,7 @@ class CompleteSetup
                 'password' => $data->password,
                 'email_verified_at' => now(),
                 'is_instance_admin' => true,
+                'alert_emails' => true,
             ]);
 
             $this->createTeam->handle($user, $data->organization);

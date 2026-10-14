@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, usePage } from '@inertiajs/vue3';
 import InviteForm from '@/components/monitoring/members/InviteForm.vue';
 import MemberTable from '@/components/monitoring/members/MemberTable.vue';
 import PendingInvitations from '@/components/monitoring/members/PendingInvitations.vue';
 import PermissionMatrix from '@/components/monitoring/members/PermissionMatrix.vue';
+import WarningNotice from '@/components/monitoring/WarningNotice.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 
 defineOptions({
@@ -13,6 +14,8 @@ defineOptions({
 const { page } = defineProps<{
     page: App.Data.Pages.MembersPageData;
 }>();
+
+const shared = usePage();
 </script>
 
 <template>
@@ -27,6 +30,20 @@ const { page } = defineProps<{
         "
     >
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
+            <WarningNotice
+                v-if="
+                    page.permissions.canInvite &&
+                    shared.props.mailConfigured === false
+                "
+                :title="$t('Email is not set up')"
+            >
+                {{
+                    $t(
+                        'Invitations are not emailed until whoever runs this panel sets MAIL_HOST. Copy the link of a pending invitation and send it yourself.',
+                    )
+                }}
+            </WarningNotice>
+
             <MemberTable
                 :members="page.members"
                 :environments="page.environments"
@@ -37,6 +54,7 @@ const { page } = defineProps<{
             <PendingInvitations
                 v-if="page.permissions.canInvite"
                 :invitations="page.invitations"
+                :can-copy-links="page.permissions.canCopyInvitationLinks"
             />
 
             <PermissionMatrix :rows="page.matrix" />

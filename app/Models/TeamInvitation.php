@@ -99,6 +99,11 @@ class TeamInvitation extends Model
         return Attribute::set(fn (string $value): string => Str::lower($value));
     }
 
+    public function url(): string
+    {
+        return rtrim(config()->string('app.url'), '/').route('invitations.show', $this->code, false);
+    }
+
     public function isAccepted(): bool
     {
         return $this->accepted_at !== null;

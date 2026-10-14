@@ -57,5 +57,7 @@ Route::prefix('{current_team}')
             ->middleware('throttle:'.config()->integer('horizon-watch.rate_limits.invitations_per_minute').',1')
             ->name('members.invitations.resend');
 
+        Route::get('members/invitations/{invitation:id}/link', [TeamInvitationController::class, 'link'])->name('members.invitations.link');
+
         Route::delete('members/invitations/{invitation:id}', [TeamInvitationController::class, 'destroy'])->name('members.invitations.destroy');
     });

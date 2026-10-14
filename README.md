@@ -65,7 +65,9 @@ create organizations, so an invited viewer cannot open an organization of their 
 `HORIZON_WATCH_ORG_CREATION=everyone` to let every account create them. Grant or revoke the
 role from the command line (see [Running commands](#running-commands)); the last instance
 admin cannot be revoked. An instance admin can still delete their own account, which may leave
-the panel with no instance admin; grant the role again from the command line.
+the panel with no instance admin; grant the role again from the command line. Alert emails
+start turned on for this account, and off for everyone who joins later: each member turns them
+on in their settings.
 
 Then, in order:
 
@@ -88,8 +90,15 @@ Then, in order:
    wait again; a failed reading does not, unless the endpoint stays unreadable for longer than
    the stale window.
 4. **Alert rules → Notifications** → add the email recipients, and the webhook URL if you
-   want one.
+   want one. While no member receives alert emails and there is neither an extra address nor
+   a webhook, the wall, the alerts page and this card warn that alerts reach nobody. The
+   warning looks only at who could be told: it stays quiet when you turn email off on every
+   rule, or when the only members with alert emails see none of the environments.
 5. **Members** → invite the rest of the team and pick which environments each person sees.
+   While no SMTP server is set, an admin can also copy the link of a pending invitation
+   (**Show link**) and hand it over. Whoever opens that link creates the account for the
+   invited address without proving they own the mailbox, so once mail is set up only instance
+   admins can still copy links.
 
 Readings start within a minute of saving an environment; the wall fills itself as they
 arrive.
@@ -219,8 +228,10 @@ the panel lists that notice, and its resolution, as not sent.
 
 Email goes out only through the SMTP server you configure. Until `MAIL_HOST` is set, every
 email — invitations and alerts — fails: the panel lists alert emails as not delivered, and
-invitations stay in the failed jobs of the queue for 7 days. There is deliberately no fallback
-that writes emails to the log, because the log would then hold recipients and links.
+invitations stay in the failed jobs of the queue for 7 days. The Members page and the
+notification settings say so, and admins can copy an invitation link instead (instance admins
+can do that at any time). There is deliberately no fallback that writes emails to the log,
+because the log would then hold recipients and links.
 
 An alert email that does not go out is listed with the reason: _mail server unreachable_
 (connection, TLS or timeout; tried three times), _mail server refused the login_ or _refused by
@@ -253,7 +264,8 @@ plan one only for an environment they see. Finished windows are pruned with the 
 An organization can send its alerts to one webhook URL (Alert rules → Notifications). The
 panel `POST`s JSON with these headers:
 
-- `Content-Type: application/json`, `User-Agent: HorizonWatch`
+- `Content-Type: application/json`, `User-Agent: HorizonWatch/<version>` (for example
+  `HorizonWatch/v1.0.0`)
 - `X-Horizon-Watch-Timestamp`: the Unix time of the send
 - `X-Horizon-Watch-Signature`: `sha256=` followed by the hex HMAC-SHA256 of
   `<timestamp>.<raw body>`, keyed with the organization's webhook secret
@@ -531,6 +543,11 @@ Migrations run when the `web` container starts, under an advisory lock, so sever
 can start at once. Containers get 40 seconds to stop, so each worker finishes the job it holds
 and php-fpm the requests it serves. Read [CHANGELOG.md](CHANGELOG.md) before a major version.
 
+The running version shows at the bottom of the sidebar (and of the profile page on a phone), in
+`artisan about` and in `GET /health`. It comes from the image: a release image carries its tag,
+an image you build yourself says `dev` unless you pass `--build-arg VERSION=…`. The panel reads
+Horizon and calls webhooks and the heartbeat as `HorizonWatch/<version>`.
+
 ## Backup and restore
 
 Two volumes hold everything:
@@ -576,7 +593,8 @@ the old key from `APP_PREVIOUS_KEYS` and restart.
 **Every alert email is listed as not delivered, and invitations never arrive.** `MAIL_HOST`
 is empty, or the server refuses the panel (_mail server refused the login_: check
 `MAIL_USERNAME` and `MAIL_PASSWORD`). Set the SMTP settings and restart the stack; there is no
-log fallback by design.
+log fallback by design. Until then, admins can hand over invitations with **Show link** on the
+Members page.
 
 **`/setup` keeps appearing.** No user exists yet, so every route redirects there. If you have
 already created the administrator and still land on `/setup`, the panel is talking to an

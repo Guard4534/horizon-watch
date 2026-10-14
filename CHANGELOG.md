@@ -41,6 +41,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `detail` object: the longest-running job and its queue, the queues without workers, and
   whether the failed-jobs count is a lower bound. The README documents the full contract:
   events, rule and unit values, the digest, and which alerts reach the webhook.
+- The running version shows at the bottom of the sidebar, in `artisan about` and in
+  `GET /health`, and Horizon reads, webhooks and heartbeats identify themselves as
+  `HorizonWatch/<version>`.
+- While no SMTP server is set, admins can copy the link of a pending invitation from the
+  Members page and hand it over themselves; instance admins can do so at any time.
+- The Members page and the notification settings warn while no SMTP server is set.
+- The wall, the alerts page and the notification settings warn when alerts reach nobody: no
+  member receives alert emails, and there is neither an extra address nor a webhook. The
+  delivery policy says how many members receive alert emails.
 
 ### Changed
 
@@ -86,6 +95,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The notification setting of an alert rule chooses only whether its alerts are emailed; the
   webhook receives every alert the panel announces. 0.1.0 described it as a per-rule
   notification channel.
+- The account created by `/setup` starts with alert emails turned on.
+- Horizon reads, webhook deliveries and heartbeats send `User-Agent: HorizonWatch/<version>`.
+  Horizon reads used Guzzle's default and the other two sent `HorizonWatch`: update any
+  allowlist or firewall rule that matched the old value.
+- Without `MAIL_HOST`, the SMTP mailer has no host instead of falling back to `127.0.0.1`.
 
 ### Fixed
 

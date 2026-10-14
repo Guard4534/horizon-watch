@@ -3,7 +3,6 @@
 namespace App\Queries;
 
 use App\Data\Pages\AlertRulesPageData;
-use App\Data\Pages\NotificationSummaryData;
 use App\Models\AlertRule;
 use App\Models\Team;
 use App\Models\User;
@@ -38,7 +37,7 @@ class AlertRulesQuery
             scope: $scope,
             rules: $this->monitoring->alertRules($team, $scope),
             organizationRules: $scope === AlertRule::ORGANIZATION ? [] : $this->monitoring->alertRules($team, AlertRule::ORGANIZATION),
-            notificationSummary: NotificationSummaryData::of($settings),
+            notificationSummary: $this->monitoring->notificationSummary($team),
             notifications: $canManage ? $settings : null,
             canManage: $canManage,
             newWebhookSecret: $canManage ? $this->newWebhookSecret($team, $session) : null,

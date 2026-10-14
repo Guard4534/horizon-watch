@@ -9,6 +9,8 @@ use App\Models\Team;
 use App\Monitoring\MonitoringRepository;
 use App\Monitoring\PanelHealth;
 use App\Monitoring\VisibleEnvironments;
+use App\Support\MailStatus;
+use App\Support\Version;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -48,6 +50,8 @@ class HandleInertiaRequests extends Middleware
             'organizationHasEnvironments' => fn () => $user?->currentTeam
                 ? $user->currentTeam->environments()->exists()
                 : false,
+            'version' => $user ? Version::current() : null,
+            'mailConfigured' => fn () => $user ? MailStatus::isConfigured() : null,
             'panelHealth' => fn () => $user
                 ? PanelHealthData::fromReport(app(PanelHealth::class)->report(countFailedJobs: false))
                 : null,

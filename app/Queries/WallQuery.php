@@ -9,13 +9,15 @@ use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
 use App\Enums\SeriesRange;
 use App\Models\Team;
+use App\Models\User;
 use App\Monitoring\MonitoringRepository;
+use Illuminate\Support\Facades\Gate;
 
 class WallQuery
 {
     public function __construct(private MonitoringRepository $monitoring) {}
 
-    public function handle(Team $team): WallPageData
+    public function handle(Team $team, User $viewer): WallPageData
     {
         $environments = $this->monitoring->environments($team);
         usort($environments, EnvironmentData::compareBySeverityThenPending(...));
@@ -44,6 +46,8 @@ class WallQuery
             jobsPerMinute: $sum(fn (EnvironmentData $environment) => $environment->jobsPerMinute),
             notifications: $this->monitoring->sentNotifications($team),
             applicationCount: count($this->monitoring->applications($team)),
+            alertsReachNobody: $this->monitoring->notificationSummary($team)->reachesNobody,
+            canManageAlertRules: Gate::forUser($viewer)->allows('manageAlertRules', $team),
         );
     }
 

@@ -25,6 +25,8 @@ declare module '@inertiajs/core' {
             canManageApplications: boolean;
             visibilityRestricted: boolean;
             organizationHasEnvironments: boolean;
+            version: string | null;
+            mailConfigured: boolean | null;
             panelHealth: App.Data.Monitoring.PanelHealthData | null;
             [key: string]: unknown;
         };

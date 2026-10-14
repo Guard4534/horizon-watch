@@ -9,8 +9,10 @@ use App\Monitoring\PanelHealth;
 use App\Notifications\Auth\EmailChanged;
 use App\Notifications\Auth\ResetPassword;
 use App\Notifications\Teams\TeamInvitation;
+use App\Support\Version;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
 use Illuminate\Mail\Markdown;
@@ -28,6 +30,8 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
         $this->configureQueues();
         $this->configureRateLimiting();
+
+        AboutCommand::add('Horizon Watch', fn (): array => ['Version' => Version::current()]);
     }
 
     protected function configureQueues(): void

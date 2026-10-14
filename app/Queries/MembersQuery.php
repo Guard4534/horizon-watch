@@ -38,6 +38,7 @@ class MembersQuery
             environments: $environments,
             permissions: new MembersPermissionsData(
                 canInvite: $canInvite,
+                canCopyInvitationLinks: $gate->allows('copyInvitationLink', $team),
                 canManageMembers: $canManageMembers,
                 canTransferOwnership: $gate->allows('transferOwnership', $team),
             ),

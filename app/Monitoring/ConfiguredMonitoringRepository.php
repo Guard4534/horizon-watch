@@ -23,6 +23,7 @@ use App\Data\Monitoring\RuleScopeData;
 use App\Data\Monitoring\SentNotificationData;
 use App\Data\Monitoring\SeriesGridData;
 use App\Data\Pages\AlertCountsData;
+use App\Data\Pages\NotificationSummaryData;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
@@ -525,6 +526,14 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             quietTo: $this->clockTime($settings->quiet_to),
             timezone: $settings->timezone,
             repeatMinutes: $settings->repeat_minutes,
+        );
+    }
+
+    public function notificationSummary(Team $team): NotificationSummaryData
+    {
+        return NotificationSummaryData::of(
+            $this->notificationSettings($team),
+            $team->members()->where('users.alert_emails', true)->count(),
         );
     }
 

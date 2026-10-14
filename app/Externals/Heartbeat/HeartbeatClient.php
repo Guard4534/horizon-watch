@@ -8,6 +8,7 @@ use App\Externals\Http\ResolvedTarget;
 use App\Externals\Http\SafeUrlGuard;
 use App\Externals\Http\TransferWatch;
 use App\Externals\Http\UrlRefused;
+use App\Support\Version;
 use Illuminate\Container\Attributes\Config;
 use Illuminate\Support\Facades\Http;
 use SensitiveParameter;
@@ -57,7 +58,7 @@ final readonly class HeartbeatClient
         return Http::connectTimeout($this->timeoutSeconds)
             ->timeout($this->timeoutSeconds)
             ->withoutRedirecting()
-            ->withUserAgent('HorizonWatch')
+            ->withUserAgent(Version::userAgent())
             ->withHeaders(['Accept-Encoding' => 'identity'])
             ->withOptions([
                 'curl' => [CURLOPT_RESOLVE => [$resolved->curlResolve()]],

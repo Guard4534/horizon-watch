@@ -94,6 +94,13 @@ const { startsWith } = useCurrentPath();
         <div class="mt-auto flex flex-col" style="gap: var(--nc-space-3)">
             <TeamSwitcher />
             <NavUser />
+            <div
+                v-if="page.props.version"
+                class="nc-t-2xs nc-tone-faint nc-num truncate"
+                style="padding: 0 var(--nc-space-2)"
+            >
+                Horizon Watch {{ page.props.version }}
+            </div>
         </div>
     </aside>
 </template>

@@ -11,7 +11,7 @@ test('the wall lists the most severe environments first, then the busiest', func
     Readings::mockup($user->currentTeam);
     $this->actingAs($user);
 
-    $environments = app(WallQuery::class)->handle($user->currentTeam)->environments;
+    $environments = app(WallQuery::class)->handle($user->currentTeam, $user)->environments;
 
     foreach (array_slice($environments, 1) as $index => $environment) {
         $previous = $environments[$index];

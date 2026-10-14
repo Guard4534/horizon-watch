@@ -32,10 +32,7 @@ class TeamInvitation extends Notification implements ShouldQueue
                 'teamName' => $team->name,
                 'role' => $this->invitation->role->label(),
             ]))
-            ->action(
-                __('Join the organization'),
-                route('invitations.show', $this->invitation->code),
-            )
+            ->action(__('Join the organization'), $this->invitation->url())
             ->line(__('This invitation expires in :days days.', ['days' => TeamInvitationModel::lifetimeDays()]));
     }
 

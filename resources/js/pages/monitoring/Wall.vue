@@ -4,6 +4,7 @@ import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed, ref, watch } from 'vue';
 import MobileWall from '@/components/mobile/wall/MobileWall.vue';
+import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
 import VisibilityEmptyState from '@/components/monitoring/VisibilityEmptyState.vue';
 import AnomalyList from '@/components/monitoring/wall/AnomalyList.vue';
 import ApplicationGroup from '@/components/monitoring/wall/ApplicationGroup.vue';
@@ -230,6 +231,11 @@ const kpis = computed(() => [
     </div>
 
     <div v-else-if="isMobile" class="nc-page">
+        <AudienceWarning
+            v-if="page.alertsReachNobody"
+            :link="page.canManageAlertRules ? 'settings' : 'profile'"
+            style="margin-bottom: var(--nc-space-3)"
+        />
         <MobileWall
             v-model:filter="filter"
             :rows="shown"
@@ -284,6 +290,11 @@ const kpis = computed(() => [
         </div>
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
+            <AudienceWarning
+                v-if="page.alertsReachNobody"
+                :link="page.canManageAlertRules ? 'settings' : 'profile'"
+            />
+
             <AnomalyList :anomalies="page.anomalies" />
 
             <SectionCard :title="$t('Organization throughput')">

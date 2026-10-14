@@ -252,6 +252,7 @@ test('the heartbeat is pinged every minute, only when a heartbeat address is con
 });
 
 test('the heartbeat is sent only while the panel is healthy, through the outbound address rules', function () {
+    config(['horizon-watch.version' => 'v1.0.0']);
     $this->app->instance(Resolver::class, new FakeResolver(['hc.example.com' => ['203.0.113.20']]));
     config(['horizon-watch.health.heartbeat_url' => 'https://hc.example.com/ping/abc?status=up']);
     Http::preventStrayRequests();
@@ -264,7 +265,8 @@ test('the heartbeat is sent only while the panel is healthy, through the outboun
 
     expect(app(PingHeartbeat::class)->handle())->toBeTrue();
     Http::assertSent(fn (Request $request) => $request->method() === 'GET'
-        && $request->url() === 'https://hc.example.com/ping/abc?status=up');
+        && $request->url() === 'https://hc.example.com/ping/abc?status=up'
+        && $request->header('User-Agent') === ['HorizonWatch/v1.0.0']);
 });
 
 test('a heartbeat refused by the address rules or by the receiver is not counted as sent', function (string $url, Closure $response) {

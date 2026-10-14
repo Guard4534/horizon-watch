@@ -15,6 +15,7 @@ use App\Externals\Http\ResolvedTarget;
 use App\Externals\Http\SafeUrlGuard;
 use App\Externals\Http\TransferWatch;
 use App\Externals\Http\UrlRefused;
+use App\Support\Version;
 use Carbon\CarbonImmutable;
 use Closure;
 use GuzzleHttp\Exception\ConnectException;
@@ -217,6 +218,7 @@ final readonly class HorizonClient implements HorizonReader
             ->connectTimeout($this->timeoutSeconds)
             ->timeout($this->timeoutSeconds)
             ->withoutRedirecting()
+            ->withUserAgent(Version::userAgent())
             ->acceptJson()
             ->withHeaders(['Accept-Encoding' => 'identity'])
             ->withOptions([

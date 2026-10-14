@@ -9,6 +9,7 @@ use App\Data\Teams\InviteMemberData;
 use App\Http\Controllers\Controller;
 use App\Models\Team;
 use App\Models\TeamInvitation;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -36,6 +37,16 @@ class TeamInvitationController extends Controller
         $this->success(__('Invitation resent.'));
 
         return back();
+    }
+
+    public function link(Team $current_team, TeamInvitation $invitation): JsonResponse
+    {
+        $this->ensureBelongsToTeam($invitation, $current_team);
+        Gate::authorize('copyInvitationLink', $current_team);
+
+        abort_unless($invitation->isPending(), 404);
+
+        return response()->json(['url' => $invitation->url()], 200, ['Cache-Control' => 'no-store']);
     }
 
     public function destroy(Team $current_team, TeamInvitation $invitation, RevokeInvitation $revokeInvitation): RedirectResponse

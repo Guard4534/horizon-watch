@@ -108,6 +108,7 @@ test('the signature is an hmac of the timestamp and the body', function () {
 });
 
 test('the payload is posted as json with a signature the receiver can verify', function () {
+    config(['horizon-watch.version' => 'v1.0.0']);
     $this->travelTo(CarbonImmutable::createFromTimestampUTC(1_789_000_020));
 
     app(WebhookClient::class)->post(receiverUrl('ok'), WEBHOOK_TEST_SECRET, [
@@ -124,7 +125,7 @@ test('the payload is posted as json with a signature the receiver can verify', f
     expect($request['method'])->toBe('POST')
         ->and($request['path'])->toBe('/ok/tok-path-secret')
         ->and($request['headers']['content-type'])->toBe('application/json')
-        ->and($request['headers']['user-agent'])->toBe('HorizonWatch')
+        ->and($request['headers']['user-agent'])->toBe('HorizonWatch/v1.0.0')
         ->and($request['headers']['x-horizon-watch-timestamp'])->toBe('1789000020')
         ->and($request['body'])->toBe('{"event":"alert.opened","alert":{"url":"https://panel.example.com/acme/environments/production","application":"Città"}}')
         ->and(Signature::sign(WEBHOOK_TEST_SECRET, 1_789_000_020, $request['body']))->toBe($request['headers']['x-horizon-watch-signature'])

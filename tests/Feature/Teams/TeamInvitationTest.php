@@ -127,7 +127,8 @@ test('team invitations can be revoked by owners', function () {
     $this->assertDatabaseHas('team_invitations', ['id' => $invitation->id]);
 });
 
-test('invitation email links to the invitation page and mentions the organization and role', function () {
+test('invitation email links to the invitation page on the public url and mentions the organization and role', function () {
+    config(['app.url' => 'https://watch.example.com/']);
     $invitation = TeamInvitation::factory()->create([
         'team_id' => $this->team->id,
         'role' => TeamRole::Admin,
@@ -136,7 +137,7 @@ test('invitation email links to the invitation page and mentions the organizatio
 
     $mail = (new TeamInvitationNotification($invitation))->toMail((object) []);
 
-    expect($mail->actionUrl)->toBe(route('invitations.show', $invitation->code));
+    expect($mail->actionUrl)->toBe('https://watch.example.com/invitations/'.$invitation->code);
 
     $body = strtolower(implode(' ', $mail->introLines));
     $this->assertStringContainsString(strtolower($this->team->name), $body);

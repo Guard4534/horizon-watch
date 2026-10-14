@@ -198,6 +198,7 @@ test('the job payload never leaves the client', function () {
 });
 
 test('every request is pinned to the checked address and follows no redirect', function () {
+    config(['horizon-watch.version' => 'v1.0.0']);
     $sent = fakeHorizonApi();
 
     app(HorizonReader::class)->read(clientTarget());
@@ -218,6 +219,7 @@ test('every request is pinned to the checked address and follows no redirect', f
 
     Http::assertSent(fn (Request $request) => $request->header('Accept-Encoding') === ['identity']);
     Http::assertNotSent(fn (Request $request) => $request->header('Accept-Encoding') !== ['identity']);
+    Http::assertNotSent(fn (Request $request) => $request->header('User-Agent') !== ['HorizonWatch/v1.0.0']);
 
     expect($this->resolver->asked)->toBe(['shop.example.com']);
 });

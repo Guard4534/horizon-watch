@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { router, useForm } from '@inertiajs/vue3';
+import { router, useForm, usePage } from '@inertiajs/vue3';
 import { PhEnvelopeSimple, PhWebhooksLogo } from '@phosphor-icons/vue';
 import { computed, ref, useId, watch } from 'vue';
+import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
+import WarningNotice from '@/components/monitoring/WarningNotice.vue';
 import WebhookSecret from '@/components/monitoring/rules/WebhookSecret.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
@@ -30,6 +32,7 @@ const {
 
 const slug = useTeamSlug();
 const id = useId();
+const shared = usePage();
 
 type SettingsForm = {
     recipients: string;
@@ -156,6 +159,29 @@ const movesHost = computed(
 
 <template>
     <SectionCard :title="$t('Notifications')">
+        <div
+            v-if="
+                summary.reachesNobody || shared.props.mailConfigured === false
+            "
+            class="flex flex-col"
+            style="gap: var(--nc-space-2); margin-bottom: var(--nc-space-4)"
+        >
+            <AudienceWarning
+                v-if="summary.reachesNobody"
+                :link="settings ? undefined : 'profile'"
+            />
+            <WarningNotice
+                v-if="shared.props.mailConfigured === false"
+                :title="$t('Email is not set up')"
+            >
+                {{
+                    $t(
+                        'No alert email, test email included, goes out until whoever runs this panel sets MAIL_HOST. The webhook does not depend on it.',
+                    )
+                }}
+            </WarningNotice>
+        </div>
+
         <form v-if="settings" novalidate @submit.prevent="save">
             <div class="settings-grid">
                 <div class="nc-field wide">
@@ -187,6 +213,14 @@ const movesHost = computed(
                             $t(
                                 'Comma-separated, up to :count addresses, in addition to the members who turned on alert emails',
                                 { count: String(maxRecipients) },
+                            )
+                        }}
+                    </div>
+                    <div class="field-hint">
+                        {{
+                            $tChoice(
+                                '{0} No member has turned on alert emails yet.|{1} One member has turned on alert emails.|[2,*] :count members have turned on alert emails.',
+                                summary.optedInMemberCount,
                             )
                         }}
                     </div>
@@ -425,6 +459,17 @@ const movesHost = computed(
                 gap: var(--nc-space-4);
             "
         >
+            <div>
+                <div class="nc-label">{{ $t('Alert emails') }}</div>
+                <div class="nc-num">
+                    {{
+                        $tChoice(
+                            ':count member|:count members',
+                            summary.optedInMemberCount,
+                        )
+                    }}
+                </div>
+            </div>
             <div>
                 <div class="nc-label">{{ $t('Email recipients') }}</div>
                 <div class="nc-num">

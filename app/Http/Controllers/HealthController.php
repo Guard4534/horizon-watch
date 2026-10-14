@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Monitoring\PanelHealth;
+use App\Support\Version;
 use Illuminate\Http\JsonResponse;
 
 class HealthController extends Controller
@@ -13,7 +14,7 @@ class HealthController extends Controller
 
         return response()->json([
             'status' => $report->healthy() ? 'ok' : 'failing',
-            'version' => config('horizon-watch.version'),
+            'version' => Version::current(),
             'checks' => [
                 'database' => [
                     'ok' => $report->database,

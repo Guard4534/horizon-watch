@@ -7,6 +7,7 @@ use App\Enums\TeamPermission;
 use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\User;
+use App\Support\MailStatus;
 
 class TeamPolicy
 {
@@ -46,6 +47,12 @@ class TeamPolicy
     public function inviteMember(User $user, Team $team): bool
     {
         return $user->hasTeamPermission($team, TeamPermission::CreateInvitation);
+    }
+
+    public function copyInvitationLink(User $user, Team $team): bool
+    {
+        return $this->inviteMember($user, $team)
+            && ($user->is_instance_admin || ! MailStatus::isConfigured());
     }
 
     public function cancelInvitation(User $user, Team $team): bool

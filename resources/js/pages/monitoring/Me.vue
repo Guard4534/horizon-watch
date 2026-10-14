@@ -118,6 +118,14 @@ const isMobile = useMobileOnlyPage(profileEdit());
                 <span class="label">{{ $t('Log out') }}</span>
             </Link>
         </div>
+
+        <div
+            v-if="shared.props.version"
+            class="nc-t-2xs nc-tone-faint nc-num text-center"
+            style="padding: var(--nc-space-4) var(--nc-space-4) 0"
+        >
+            Horizon Watch {{ shared.props.version }}
+        </div>
     </div>
 </template>
 

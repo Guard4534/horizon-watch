@@ -19,7 +19,7 @@ return [
 
     'stale_after_intervals' => 3,
 
-    'version' => env('HORIZON_WATCH_VERSION'),
+    'version' => (string) (env('HORIZON_WATCH_VERSION') ?: 'dev'),
 
     'health' => [
         'scheduler_late_seconds' => 120,

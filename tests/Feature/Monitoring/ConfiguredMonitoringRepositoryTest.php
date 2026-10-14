@@ -116,7 +116,7 @@ test('an application with no visible environment does not appear, even though it
     expect($applications)->toHaveCount(1)
         ->and($applications[0]->id)->toBe($alpha->slug);
 
-    expect(app(WallQuery::class)->handle($this->team)->applicationCount)->toBe(1);
+    expect(app(WallQuery::class)->handle($this->team, $this->user)->applicationCount)->toBe(1);
 });
 
 test('an admin sees an application with zero environments, so they can still reach it', function () {
@@ -295,7 +295,7 @@ test('a stale environment is a problem everywhere, not up', function () {
     Readings::record($fresh);
     $this->actingAs($this->user);
 
-    $wall = app(WallQuery::class)->handle($this->team);
+    $wall = app(WallQuery::class)->handle($this->team, $this->user);
     $applications = app(ApplicationListQuery::class)->handle($this->team);
 
     expect(array_map(fn ($environment) => [$environment->id, $environment->status], $wall->environments))->toBe([
@@ -315,7 +315,7 @@ test('a stale environment last known down stays down and is not counted as up', 
     $this->actingAs($this->user);
 
     $data = $this->repository->environment($this->team, $environment->slug);
-    $wall = app(WallQuery::class)->handle($this->team);
+    $wall = app(WallQuery::class)->handle($this->team, $this->user);
 
     expect($data->stale)->toBeTrue()
         ->and($data->status)->toBe($status)
@@ -451,7 +451,7 @@ test('the trend is read once for every environment on the page, whatever their n
         DB::flushQueryLog();
         freshMonitoringRepository();
         DB::enableQueryLog();
-        $page = app(WallQuery::class)->handle($this->team);
+        $page = app(WallQuery::class)->handle($this->team, $this->user);
         DB::disableQueryLog();
 
         return [$page, collect(DB::getQueryLog())->pluck('query')];
@@ -483,7 +483,7 @@ test('the trend query only ever asks for what the viewer watches', function () {
     freshMonitoringRepository();
 
     DB::enableQueryLog();
-    app(WallQuery::class)->handle($this->team);
+    app(WallQuery::class)->handle($this->team, $this->user);
 
     $trend = collect(DB::getQueryLog())->filter(fn (array $query) => str_contains($query['query'], 'avg(pending)'))->sole();
 

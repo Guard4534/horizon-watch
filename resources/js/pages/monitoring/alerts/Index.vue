@@ -7,6 +7,7 @@ import AlertCards from '@/components/mobile/alerts/AlertCards.vue';
 import VisibilityEmptyState from '@/components/monitoring/VisibilityEmptyState.vue';
 import AlertPagination from '@/components/monitoring/alerts/AlertPagination.vue';
 import AlertTable from '@/components/monitoring/alerts/AlertTable.vue';
+import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
 import DeliveryPolicy from '@/components/monitoring/alerts/DeliveryPolicy.vue';
 import DeliveryTest from '@/components/monitoring/alerts/DeliveryTest.vue';
 import EmailPreview from '@/components/monitoring/alerts/EmailPreview.vue';
@@ -140,6 +141,10 @@ const previewed = computed(
                 padding: var(--nc-space-3) var(--nc-space-4) 0;
             "
         >
+            <AudienceWarning
+                v-if="page.notificationSummary.reachesNobody"
+                :link="page.notifications !== null ? 'settings' : 'profile'"
+            />
             <SegmentedControl
                 v-model="state"
                 name="alert-state-mobile"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { PhEnvelopeSimple, PhWebhooksLogo } from '@phosphor-icons/vue';
+import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
@@ -22,6 +23,11 @@ const slug = useTeamSlug();
                 >{{ $t('Alert settings') }}</Link
             >
         </template>
+        <AudienceWarning
+            v-if="summary.reachesNobody"
+            :link="manages ? 'settings' : 'profile'"
+            style="margin-bottom: var(--nc-space-3)"
+        />
         <ul class="policy">
             <li>
                 <template v-if="summary.repeatMinutes">{{
@@ -83,7 +89,16 @@ const slug = useTeamSlug();
                 <PhEnvelopeSimple :size="14" class="mt-[2px] flex-none" />
                 <span>{{
                     $tChoice(
-                        '{0} By email to the members who turned on alert emails|{1} By email to the members who turned on alert emails, plus one extra address|[2,*] By email to the members who turned on alert emails, plus :count extra addresses',
+                        '{0} No member has turned on alert emails|{1} By email to the one member who turned on alert emails|[2,*] By email to the :count members who turned on alert emails',
+                        summary.optedInMemberCount,
+                    )
+                }}</span>
+            </div>
+            <div v-if="summary.recipientCount" class="flex items-start gap-2">
+                <PhEnvelopeSimple :size="14" class="mt-[2px] flex-none" />
+                <span>{{
+                    $tChoice(
+                        '{1} By email to one extra address|[2,*] By email to :count extra addresses',
                         summary.recipientCount,
                     )
                 }}</span>

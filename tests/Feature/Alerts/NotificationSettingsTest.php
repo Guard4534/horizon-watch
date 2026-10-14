@@ -2,9 +2,11 @@
 
 use App\Actions\Alerts\UpdateNotificationSettings;
 use App\Data\Alerts\NotificationSettingsInputData;
+use App\Enums\AlertRuleMetric;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Externals\Http\Dns\Resolver;
+use App\Models\AlertRule;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\NotificationSetting;
@@ -68,7 +70,9 @@ test('without a saved row the page shows the defaults', function () {
         ->where('page.timezones', DateTimeZone::listIdentifiers())
         ->where('page.notificationSummary', [
             'recipientCount' => 0,
+            'optedInMemberCount' => 0,
             'webhookConfigured' => false,
+            'reachesNobody' => true,
             'quietFrom' => null,
             'quietTo' => null,
             'timezone' => NotificationSetting::defaultTimezone(),
@@ -530,3 +534,70 @@ test('a first save that loses the race for the row updates it instead of failing
         ->and($settings->webhook_secret)->toBe($competitorHasAddress ? str_repeat('s', 40) : $secret)
         ->and($secret)->toBe($competitorHasAddress ? null : $settings->webhook_secret);
 })->with(['the competitor has no address' => false, 'the competitor already has an address' => true]);
+
+test('the summary counts the members of the organization who turned on alert emails', function () {
+    $this->admin->forceFill(['alert_emails' => true])->save();
+    ($this->memberOf)(TeamRole::Member);
+    ($this->memberOf)(TeamRole::Viewer)->forceFill(['alert_emails' => true])->save();
+    User::factory()->create(['alert_emails' => true]);
+
+    $this->actingAs($this->admin);
+
+    ($this->page)()->assertInertia(fn (Assert $page) => $page
+        ->where('page.notificationSummary.optedInMemberCount', 2)
+        ->where('page.notificationSummary.reachesNobody', false));
+});
+
+test('the pages say when alerts reach nobody', function (Closure $setUp, bool $reachesNobody) {
+    $setUp->call($this);
+    $this->actingAs($this->admin);
+    $slug = ['current_team' => $this->team->slug];
+
+    ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.notificationSummary.reachesNobody', $reachesNobody));
+
+    $this->get(route('alerts.index', $slug))
+        ->assertInertia(fn (Assert $page) => $page->where('page.notificationSummary.reachesNobody', $reachesNobody));
+
+    $this->get(route('wall', $slug))
+        ->assertInertia(fn (Assert $page) => $page->where('page.alertsReachNobody', $reachesNobody));
+})->with([
+    'no member, address or webhook' => [function () {
+        User::factory()->create(['alert_emails' => true]);
+        NotificationSetting::factory()->for($this->team)->create();
+    }, true],
+    'a member with alert emails' => [function () {
+        ($this->memberOf)(TeamRole::Viewer)->forceFill(['alert_emails' => true])->save();
+    }, false],
+    'an extra address' => [function () {
+        NotificationSetting::factory()->for($this->team)->create(['recipients' => ['ops@example.com']]);
+    }, false],
+    'a webhook' => [function () {
+        NotificationSetting::factory()->for($this->team)->withWebhook()->create();
+    }, false],
+]);
+
+test('the warning counts who can be told, not which rules send email', function () {
+    ($this->memberOf)(TeamRole::Viewer)->forceFill(['alert_emails' => true])->save();
+
+    foreach (AlertRuleMetric::cases() as $metric) {
+        AlertRule::factory()->for($this->team)->create(['metric' => $metric, 'notify_email' => false]);
+    }
+
+    $this->actingAs($this->admin);
+
+    ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.notificationSummary.reachesNobody', false));
+});
+
+test('the wall points admins to the alert settings and everyone else to their own alert emails', function (TeamRole $role, bool $manages) {
+    NotificationSetting::factory()->for($this->team)->create();
+
+    $this->actingAs(($this->memberOf)($role))
+        ->get(route('wall', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.alertsReachNobody', true)
+            ->where('page.canManageAlertRules', $manages));
+})->with([
+    'an admin' => [TeamRole::Admin, true],
+    'a member' => [TeamRole::Member, false],
+    'a viewer' => [TeamRole::Viewer, false],
+]);
