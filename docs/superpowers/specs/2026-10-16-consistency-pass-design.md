@@ -408,6 +408,117 @@ mode may shorten labels only. Limits and defaults come from server config.
 - **Version:** bare `1.0.0` in `Version::current()` and the release workflow build arg. Update
   the test fixtures that expect `v`.
 
+### 20. Configuration export and import (owner request, 2026-10-16)
+
+**Why.** Move an organization's monitoring setup between installations and versions (a new
+server, a fresh install after a major upgrade, a staging panel) without retyping it. Secrets never
+leave the panel.
+
+**Owner decisions.** Content: applications, environments and alert rules. Both panel and command
+line. Import shows a preview and lets the admin choose to update or skip existing items; nothing
+is ever deleted. Environments that need a basic-auth password arrive with collection paused and a
+"password needed" mark.
+
+**File.** One JSON document per organization, UTF-8, at most 1 MB:
+
+```json
+{
+    "format": "horizon-watch.config",
+    "version": 1,
+    "exported_at": "2026-10-16T09:00:00Z",
+    "app_version": "1.0.0",
+    "organization": "Example Organization",
+    "applications": [
+        {
+            "name": "Acme Shop",
+            "environments": [
+                {
+                    "name": "production",
+                    "type": "production",
+                    "horizon_url": "https://shop.example.com/horizon",
+                    "basic_auth_user": "ops",
+                    "poll_interval_seconds": 60,
+                    "polling_enabled": true
+                }
+            ]
+        }
+    ],
+    "alert_rules": [
+        {
+            "scope": "organization",
+            "metric": "queue.pending",
+            "threshold": 2000,
+            "severity": "warning",
+            "notify_by_email": true,
+            "enabled": true,
+            "for_minutes": 0
+        },
+        { "scope": "production", "metric": "queue.max_wait", "threshold": 90 }
+    ]
+}
+```
+
+- Never exported: basic-auth passwords, the webhook signing secret, credentials inside URLs
+  (stripped), notification settings, maintenance windows, members, invitations, readings, alerts.
+- Override rows carry only their non-null fields; organization rows carry every field.
+- `version` is the file format version. The importer upgrades older versions step by step and
+  refuses a newer version with "This file comes from a newer Horizon Watch: update the panel
+  first."
+
+**Matching.** Applications by name (case-insensitive) within the organization; environments by
+name within their application; alert rules by (scope, metric).
+
+**Export.**
+
+- Panel: an "Export" action on the Applications page downloads
+  `horizon-watch-<organization-slug>-<YYYY-MM-DD>.json`.
+- CLI: `artisan applications:export <organization-slug> [--output=<path>]`, writing to stdout by
+  default.
+- Only users who can manage applications and alert rules (admins, owners) may export.
+
+**Import.**
+
+- Panel: an "Import" action on the Applications page opens an import page. Uploading the file
+  shows a preview with one row per application, environment and rule, each marked:
+    - **new**;
+    - **changed**, with the fields that differ;
+    - **unchanged**;
+    - **invalid**, with the validation message.
+- An "Update existing items" switch (off by default) decides whether changed items are applied
+  or skipped.
+- "Import" applies everything in one transaction and shows a summary toast: created, updated,
+  skipped. An invalid item blocks the import until the file is fixed.
+- Every item goes through the same validation as the forms: name format and uniqueness, the
+  type enum, `HorizonUrl::normalize`, `OutboundUrl`, poll interval limits, rule threshold
+  limits, the reserved scope name and the wizard environment cap. A hand-edited file can do no
+  more than the forms can.
+- CLI: `artisan applications:import <organization-slug> <path|-> [--update] [--dry-run]`.
+  `--dry-run` prints the preview and changes nothing; `-` reads stdin, so
+  `docker compose run --rm -T web artisan applications:import shop - < file.json` works on the
+  production stack.
+- Passwords:
+    - A new environment with a `basic_auth_user`, or an existing one whose user changes, is saved
+      with no password and `polling_enabled = false`.
+    - The environment shows "Password needed" (derived: user set, password empty) on the
+      application page, the environment page and the edit form until a password is entered.
+    - An updated environment with the same user keeps its stored password.
+- Never deleted: items missing from the file stay as they are.
+
+**Tests.**
+
+- Round trip: export, then import into an empty organization, then export again gives an equal
+  document apart from `exported_at`.
+- The preview classifies new, changed, unchanged and invalid items.
+- Update vs skip.
+- Passwords and secrets never appear in an export, including credentials pasted in legacy URLs.
+- The password-needed pause on import.
+- Malformed JSON, the wrong `format`, a newer `version`, a file over 1 MB, a disallowed URL.
+- Permissions (viewer and member forbidden).
+- The CLI dry-run prints the preview and changes nothing.
+- Translations.
+
+**Docs.** A README section "Moving the configuration to another panel", and a CHANGELOG entry.
+
 ## Out of scope
 
 - Moving the time zone to organization settings.
@@ -448,3 +559,4 @@ by the plan:
 6. Primitives and layout (theme 15).
 7. Data trimming (theme 17).
 8. Docs, time zone labels and version (themes 18, 19).
+9. Configuration export and import (theme 20).
