@@ -7,6 +7,7 @@ use App\Data\Pages\WallKpisData;
 use App\Data\Pages\WallPageData;
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
+use App\Enums\EnvironmentType;
 use App\Enums\SeriesRange;
 use App\Models\Team;
 use App\Models\User;
@@ -48,6 +49,7 @@ class WallQuery
             applicationCount: count($this->monitoring->applications($team)),
             alertsReachNobody: $this->monitoring->notificationSummary($team)->reachesNobody,
             canManageAlertRules: Gate::forUser($viewer)->allows('manageAlertRules', $team),
+            types: EnvironmentType::options(),
         );
     }
 

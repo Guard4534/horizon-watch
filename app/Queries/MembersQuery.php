@@ -157,7 +157,7 @@ class MembersQuery
             ->map(fn (Environment $environment) => new EnvironmentOptionData(
                 id: $environment->id,
                 name: $this->environmentLabel($environment),
-                isProduction: $environment->is_production,
+                type: $environment->type,
             ))
             ->values()
             ->all();

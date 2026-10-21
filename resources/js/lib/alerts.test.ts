@@ -25,7 +25,7 @@ const alert = (
     environmentId: null,
     applicationName: 'Billing',
     environmentName: 'production',
-    color: 'prod',
+    environmentType: 'production',
     environmentStatus: 'degraded',
     collectionPaused: false,
     minutesAgo: 3,

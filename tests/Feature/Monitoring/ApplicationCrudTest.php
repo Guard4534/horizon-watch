@@ -1,6 +1,6 @@
 <?php
 
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Environment;
@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Policies\EnvironmentPolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\Grants;
 
@@ -28,7 +29,7 @@ beforeEach(function () {
 
     $this->environmentPayload = fn (string $name = 'production'): array => [
         'name' => $name,
-        'color' => EnvironmentColor::Prod->value,
+        'type' => (EnvironmentType::suggestFor($name) ?? EnvironmentType::Staging)->value,
         'horizonUrl' => 'https://'.$name.'.invoicer.example.com/horizon/api',
         'basicAuthUser' => null,
         'basicAuthPassword' => null,
@@ -40,7 +41,6 @@ test('an admin creates an application with two environments in one request', fun
     $response = $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
         'application' => [
             'name' => 'Invoicer',
-            'host' => 'invoicer.example.com',
         ],
         'environments' => [
             ($this->environmentPayload)('production'),
@@ -68,12 +68,12 @@ test('the wizard consults the manage-credentials permission for the environments
     }));
 
     $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
-        'application' => ['name' => 'Plain', 'host' => 'plain.example.com'],
+        'application' => ['name' => 'Plain'],
         'environments' => [($this->environmentPayload)()],
     ])->assertRedirect();
 
     $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
-        'application' => ['name' => 'Guarded', 'host' => 'guarded.example.com'],
+        'application' => ['name' => 'Guarded'],
         'environments' => [
             ($this->environmentPayload)('production'),
             [...($this->environmentPayload)('staging'), 'basicAuthUser' => 'monitor', 'basicAuthPassword' => 'secret'],
@@ -87,7 +87,7 @@ test('the created application belongs to the organization it was created in', fu
     $otherTeam = Team::factory()->create();
 
     $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
-        'application' => ['name' => 'Scoped', 'host' => 'scoped.example.com'],
+        'application' => ['name' => 'Scoped'],
         'environments' => [($this->environmentPayload)()],
     ])->assertRedirect();
 
@@ -106,7 +106,7 @@ test('member and viewer cannot create, edit or delete applications', function (s
 
     $this->actingAs($user)
         ->post(route('applications.store', ['current_team' => $this->team->slug]), [
-            'application' => ['name' => 'Blocked', 'host' => 'blocked.example.com'],
+            'application' => ['name' => 'Blocked'],
             'environments' => [($this->environmentPayload)()],
         ])
         ->assertForbidden();
@@ -118,7 +118,6 @@ test('member and viewer cannot create, edit or delete applications', function (s
     $this->actingAs($user)
         ->patch(route('applications.update', ['current_team' => $this->team->slug, 'application' => $this->application->slug]), [
             'name' => 'Renamed',
-            'host' => $this->application->host,
         ])
         ->assertForbidden();
 
@@ -134,7 +133,7 @@ test('member and viewer cannot create, edit or delete applications', function (s
 test('the wizard is rejected without at least one environment', function () {
     $this->actingAs($this->admin)
         ->post(route('applications.store', ['current_team' => $this->team->slug]), [
-            'application' => ['name' => 'NoEnv', 'host' => 'noenv.example.com'],
+            'application' => ['name' => 'NoEnv'],
             'environments' => [],
         ])
         ->assertInvalid(['environments']);
@@ -151,7 +150,7 @@ test('the wizard is rejected past the environment cap, which the form knows', fu
 
     $this->actingAs($this->admin)
         ->post(route('applications.store', ['current_team' => $this->team->slug]), [
-            'application' => ['name' => 'Crowded', 'host' => 'crowded.example.com'],
+            'application' => ['name' => 'Crowded'],
             'environments' => [
                 ($this->environmentPayload)('production'),
                 ($this->environmentPayload)('staging'),
@@ -166,7 +165,7 @@ test('the wizard is rejected past the environment cap, which the form knows', fu
 test('the wizard is rejected when two rows carry the same environment name', function () {
     $this->actingAs($this->admin)
         ->post(route('applications.store', ['current_team' => $this->team->slug]), [
-            'application' => ['name' => 'Twice', 'host' => 'twice.example.com'],
+            'application' => ['name' => 'Twice'],
             'environments' => [
                 ($this->environmentPayload)('production'),
                 ($this->environmentPayload)('production'),
@@ -180,7 +179,7 @@ test('the wizard is rejected when two rows carry the same environment name', fun
 test('the wizard accepts two rows that only differ by name', function () {
     $this->actingAs($this->admin)
         ->post(route('applications.store', ['current_team' => $this->team->slug]), [
-            'application' => ['name' => 'Pair', 'host' => 'pair.example.com'],
+            'application' => ['name' => 'Pair'],
             'environments' => [
                 ($this->environmentPayload)('production'),
                 ($this->environmentPayload)('preprod'),
@@ -194,7 +193,7 @@ test('the wizard accepts two rows that only differ by name', function () {
 test('a wizard row with a password but no username is rejected on that row', function () {
     $this->actingAs($this->admin)
         ->post(route('applications.store', ['current_team' => $this->team->slug]), [
-            'application' => ['name' => 'Orphan', 'host' => 'orphan.example.com'],
+            'application' => ['name' => 'Orphan'],
             'environments' => [
                 [...($this->environmentPayload)('production'), 'basicAuthPassword' => 'orphan-secret'],
             ],
@@ -207,7 +206,7 @@ test('a wizard row with a password but no username is rejected on that row', fun
 test('a failed wizard does not flash any row password into the session', function () {
     $this->actingAs($this->admin)
         ->post(route('applications.store', ['current_team' => $this->team->slug]), [
-            'application' => ['name' => 'Flashed', 'host' => 'flashed.example.com'],
+            'application' => ['name' => 'Flashed'],
             'environments' => [
                 [
                     ...($this->environmentPayload)('production'),
@@ -234,7 +233,6 @@ test('renaming an application does not change its slug', function () {
     $this->actingAs($this->admin)
         ->patch(route('applications.update', ['current_team' => $this->team->slug, 'application' => $this->application->slug]), [
             'name' => 'Invoice Desk Renamed',
-            'host' => $this->application->host,
         ])
         ->assertRedirect();
 
@@ -277,7 +275,6 @@ test('an application from another organization responds 404', function () {
     $this->actingAs($this->admin)
         ->patch(route('applications.update', ['current_team' => $this->team->slug, 'application' => $foreignApplication->slug]), [
             'name' => 'Hijacked',
-            'host' => 'hijacked.example.com',
         ])
         ->assertNotFound();
 
@@ -326,7 +323,7 @@ test('deleting an application clears the manual visibility grants of its environ
 
 test('the wizard stores each row\'s collection switch, on by default', function () {
     $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
-        'application' => ['name' => 'Switches', 'host' => 'switches.example.com'],
+        'application' => ['name' => 'Switches'],
         'environments' => [
             ($this->environmentPayload)('production'),
             [...($this->environmentPayload)('staging'), 'pollingEnabled' => false],
@@ -339,27 +336,27 @@ test('the wizard stores each row\'s collection switch, on by default', function 
         ->toBe(['production' => true, 'staging' => false]);
 });
 
-test('the wizard stores each row\'s production flag', function () {
+test('the wizard stores each row\'s type', function () {
     $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
-        'application' => ['name' => 'Flags', 'host' => 'flags.example.com'],
+        'application' => ['name' => 'Types'],
         'environments' => [
             ($this->environmentPayload)('prod'),
-            [...($this->environmentPayload)('blue'), 'isProduction' => true],
-            [...($this->environmentPayload)('production'), 'isProduction' => false],
+            [...($this->environmentPayload)('blue'), 'type' => EnvironmentType::Production->value],
+            [...($this->environmentPayload)('production'), 'type' => EnvironmentType::Demo->value],
             ($this->environmentPayload)('staging'),
         ],
     ])->assertRedirect();
 
-    $application = Application::where('team_id', $this->team->id)->where('name', 'Flags')->firstOrFail();
+    $application = Application::where('team_id', $this->team->id)->where('name', 'Types')->firstOrFail();
 
-    expect($application->environments()->orderBy('name')->pluck('is_production', 'name')->all())
-        ->toBe(['blue' => true, 'prod' => true, 'production' => false, 'staging' => false]);
+    expect($application->environments()->orderBy('name')->pluck('type', 'name')->map(fn (EnvironmentType $type) => $type->value)->all())
+        ->toBe(['blue' => 'production', 'prod' => 'production', 'production' => 'demo', 'staging' => 'staging']);
 });
 
 test('a wizard row whose URL carries credentials is refused on that row', function () {
     $this->actingAs($this->admin)
         ->post(route('applications.store', ['current_team' => $this->team->slug]), [
-            'application' => ['name' => 'Leaky', 'host' => 'leaky.example.com'],
+            'application' => ['name' => 'Leaky'],
             'environments' => [
                 ($this->environmentPayload)('production'),
                 [...($this->environmentPayload)('staging'), 'horizonUrl' => 'https://ops:url-secret@staging.leaky.example.com/horizon'],
@@ -372,33 +369,22 @@ test('a wizard row whose URL carries credentials is refused on that row', functi
         ->and(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('url-secret');
 });
 
-dataset('hosts that are not a bare domain', [
-    'credentials' => ['ops:host-secret@shop.example.com'],
-    'user only' => ['host-secret@shop.example.com'],
-    'a scheme' => ['https://shop.example.com'],
-    'another scheme' => ['FTP://host-secret.example.com'],
-]);
+test('the wizard keeps no domain and stores each row\'s URL tidied', function () {
+    $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
+        'application' => ['name' => 'Tidy', 'host' => 'ignored.example.com'],
+        'environments' => [
+            [...($this->environmentPayload)('production'), 'horizonUrl' => 'HTTPS://Production.Tidy.example.com/horizon/api/'],
+        ],
+    ])->assertRedirect();
 
-test('an application host with a scheme or credentials is refused in the wizard and on edit, and not flashed back', function (string $host) {
-    $this->actingAs($this->admin)
-        ->post(route('applications.store', ['current_team' => $this->team->slug]), [
-            'application' => ['name' => 'Hosted', 'host' => $host],
-            'environments' => [($this->environmentPayload)('production')],
-        ])
-        ->assertInvalid(['application.host' => 'without a scheme or credentials']);
+    expect(Schema::hasColumn('applications', 'host'))->toBeFalse()
+        ->and(Application::where('name', 'Tidy')->sole()->environments()->sole()->horizon_url)
+        ->toBe('https://production.tidy.example.com/horizon');
+});
 
-    expect(Application::where('name', 'Hosted')->exists())->toBeFalse()
-        ->and(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('host-secret');
-
-    $original = $this->application->host;
-
-    $this->actingAs($this->admin)
-        ->patch(route('applications.update', ['current_team' => $this->team->slug, 'application' => $this->application->slug]), [
-            'name' => $this->application->name,
-            'host' => $host,
-        ])
-        ->assertInvalid(['host' => 'without a scheme or credentials']);
-
-    expect($this->application->fresh()->host)->toBe($original)
-        ->and(json_encode(session()->all(), JSON_THROW_ON_ERROR))->not->toContain('host-secret');
-})->with('hosts that are not a bare domain');
+test('the wizard rows call the field Horizon URL in their rule messages too', function () {
+    $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
+        'application' => ['name' => 'Named'],
+        'environments' => [[...($this->environmentPayload)('production'), 'horizonUrl' => '']],
+    ])->assertInvalid(['environments.0.horizonUrl' => 'The Horizon URL field is required.']);
+});

@@ -7,7 +7,7 @@ import {
     worstTone,
 } from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { envColor } from '@/lib/monitoring';
+import { envTypeColor } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
 defineProps<{
@@ -31,7 +31,7 @@ const badgeStyle = (group: App.Data.Pages.ApplicationGroupData) => {
 };
 
 const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
-    background: envColor(environment.color),
+    background: envTypeColor(environment.type),
     boxShadow: needsAttention(environment)
         ? `0 0 0 2px color-mix(in srgb, ${statusTone(environment)} 55%, transparent)`
         : undefined,

@@ -534,7 +534,7 @@ test('override rows of a name no environment carries any more stay listed, so th
 
     $this->get(route('alert-rules.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.scopes', fn ($scopes) => collect($scopes)->last() == ['id' => 'legacy', 'color' => null, 'environmentCount' => 0, 'overrideCount' => 2]));
+            ->where('page.scopes', fn ($scopes) => collect($scopes)->last() == ['id' => 'legacy', 'type' => null, 'environmentCount' => 0, 'overrideCount' => 2]));
 
     $this->get(route('alert-rules.index', ['current_team' => $this->team->slug, 'scope' => 'legacy']))
         ->assertOk()

@@ -3,7 +3,7 @@
 use App\Alerts\EmailPreview;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Models\Alert;
 use App\Models\Application;
 use App\Models\Environment;
@@ -169,7 +169,7 @@ test('an alert of a deleted environment has no panel link and no nodes', functio
         'team_id' => $this->team->id,
         'application_name' => 'Shop',
         'environment_name' => 'gone',
-        'environment_color' => EnvironmentColor::Staging,
+        'environment_type' => EnvironmentType::Staging,
     ]);
 
     $html = mailHtml(new AlertNotification($alert));

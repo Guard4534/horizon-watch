@@ -169,7 +169,7 @@ export function readingProblemLabel(
                 : trans('The address redirects elsewhere');
         case 'not_found':
             return trans(
-                'Nothing at this path (HTTP 404): check the Horizon path',
+                'Nothing at this path (HTTP 404): check the Horizon URL',
             );
         case 'http_status':
             return trans('HTTP :status', {

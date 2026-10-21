@@ -45,6 +45,7 @@ use App\Models\MaintenanceWindow;
 use App\Models\NotificationSetting;
 use App\Models\Team;
 use App\Models\User;
+use App\Support\HorizonUrl;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Database\Eloquent\Builder;
@@ -142,8 +143,10 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
     public function applications(Team $team): array
     {
+        $environments = $this->visibleEnvironmentModels($team);
+
         return $this->visibleApplications($team)
-            ->map($this->toApplicationData(...))
+            ->map(fn (Application $application) => $this->toApplicationData($application, $environments))
             ->all();
     }
 
@@ -159,8 +162,10 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
     public function configurableApplications(Team $team): array
     {
+        $environments = $this->configurableEnvironmentModels($team);
+
         return $this->configurableApplicationModels($team)
-            ->map($this->toApplicationData(...))
+            ->map(fn (Application $application) => $this->toApplicationData($application, $environments))
             ->all();
     }
 
@@ -168,7 +173,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     {
         $application = $this->configurableApplicationModels($team)->firstWhere('slug', $applicationId);
 
-        return $application ? $this->toApplicationData($application) : null;
+        return $application ? $this->toApplicationData($application, $this->configurableEnvironmentModels($team)) : null;
     }
 
     public function configurableEnvironments(Team $team): array
@@ -443,7 +448,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
         $scopes = [new RuleScopeData(
             id: AlertRule::ORGANIZATION,
-            color: null,
+            type: null,
             environmentCount: $environments->count(),
             overrideCount: 0,
         )];
@@ -468,7 +473,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
             $scopes[] = new RuleScopeData(
                 id: $scope,
-                color: $environment->color,
+                type: $environment->type,
                 environmentCount: $counts[$scope],
                 overrideCount: $overrideCounts[$scope] ?? 0,
             );
@@ -480,7 +485,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
         foreach ($overrideCounts as $scope => $count) {
             if (! isset($names[$scope])) {
-                $scopes[] = new RuleScopeData(id: $scope, color: null, environmentCount: 0, overrideCount: $count);
+                $scopes[] = new RuleScopeData(id: $scope, type: null, environmentCount: 0, overrideCount: $count);
             }
         }
 
@@ -542,7 +547,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     public function maintenanceWindows(Team $team): array
     {
         $now = $this->now();
-        $relations = ['application:id,name', 'environment:id,application_id,name,color', 'environment.application:id,name', 'creator:id,name'];
+        $relations = ['application:id,name', 'environment:id,application_id,name,type', 'environment.application:id,name', 'creator:id,name'];
 
         $current = $this->visibleMaintenance($team)
             ->where('ends_at', '>', $now->utc())
@@ -568,7 +573,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
                 scope: $window->scope,
                 applicationName: $window->application->name ?? $window->environment?->application->name,
                 environmentName: $window->environment?->name,
-                color: $window->environment?->color,
+                environmentType: $window->environment?->type,
                 startsAt: $window->starts_at->toIso8601String(),
                 endsAt: $window->ends_at->toIso8601String(),
                 active: $window->isActiveAt($now),
@@ -605,7 +610,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
                 $environment->slug,
                 $environment->application->name,
                 $environment->name,
-                $environment->color,
+                $environment->type,
             );
         }
 
@@ -795,9 +800,18 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         return $user;
     }
 
-    private function toApplicationData(Application $application): ApplicationData
+    /**
+     * @param  Collection<int, Environment>  $environments
+     */
+    private function toApplicationData(Application $application, Collection $environments): ApplicationData
     {
-        return new ApplicationData($application->slug, $application->name, $application->host);
+        $primary = Application::primaryEnvironment($environments->where('application_id', $application->id));
+
+        return new ApplicationData(
+            id: $application->slug,
+            name: $application->name,
+            domain: $primary === null ? null : HorizonUrl::host($primary->horizon_url),
+        );
     }
 
     private function toEnvironmentData(Environment $environment, bool $watched): EnvironmentData
@@ -814,8 +828,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             applicationId: $environment->application->slug,
             applicationName: $environment->application->name,
             name: $environment->name,
-            color: $environment->color,
-            isProduction: $environment->is_production,
+            type: $environment->type,
             horizonUrl: EnvironmentFormData::withoutUserinfo($environment->horizon_url),
             status: match (true) {
                 ! $watched => null,
@@ -1006,7 +1019,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             environmentId: $environment?->id,
             applicationName: $alert->application_name,
             environmentName: $alert->environment_name,
-            color: $alert->environment_color,
+            environmentType: $alert->environment_type,
             environmentStatus: $environment?->status,
             collectionPaused: $open && $environment !== null && ! $environment->pollingEnabled,
             minutesAgo: $minutes($alert->opened_at) ?? 0,

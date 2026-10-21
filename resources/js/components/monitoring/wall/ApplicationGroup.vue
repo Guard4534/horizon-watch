@@ -10,7 +10,7 @@ import {
 } from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import {
-    envColor,
+    envTypeColor,
     formatCount,
     statusColor,
     statusLabel,
@@ -51,7 +51,7 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
         ? `0 0 0 2px color-mix(in srgb, ${statusColor(environment.status!)} 55%, transparent)`
         : undefined;
 
-    return { background: envColor(environment.color), boxShadow: halo };
+    return { background: envTypeColor(environment.type), boxShadow: halo };
 }
 </script>
 

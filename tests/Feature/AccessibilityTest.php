@@ -152,12 +152,14 @@ test('search fields have a name and the environment chips expose which one is se
     expect($filters)
         ->toContain('type="search"')
         ->toContain(":aria-label=\"\$t('Filter by application or environment')\"")
-        ->toContain(':aria-pressed="environmentName === \'\'"')
-        ->toContain(':aria-pressed="environmentName === chip.name"');
+        ->toContain(':aria-pressed="environmentType === \'\'"')
+        ->toContain(':aria-pressed="environmentType === chip.type"');
 
     expect($applications)
         ->toContain('type="search"')
-        ->toContain(":aria-label=\"\$t('Search application')\"");
+        ->toContain(":aria-label=\"\$t('Search application')\"")
+        ->toContain('hostOf(environment.horizonUrl)')
+        ->not->toContain('application.host');
 });
 
 test('the chart can be read point by point from the keyboard', function () {

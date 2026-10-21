@@ -47,9 +47,10 @@ const { canManageApplications } = useVisibility();
                 {{ group.application.name }}
             </Link>
             <span
+                v-if="group.application.domain"
                 class="nc-t-2xs nc-tone-muted"
                 style="letter-spacing: 0.01em"
-                >{{ group.application.host }}</span
+                >{{ group.application.domain }}</span
             >
             <span
                 v-if="group.triageCount"
@@ -119,15 +120,13 @@ const { canManageApplications } = useVisibility();
                             >
                                 <EnvPill
                                     :name="environment.name"
-                                    :color="environment.color"
-                                    :production="environment.isProduction"
+                                    :type="environment.type"
                                 />
                             </Link>
                             <EnvPill
                                 v-else
                                 :name="environment.name"
-                                :color="environment.color"
-                                :production="environment.isProduction"
+                                :type="environment.type"
                             />
                         </td>
                         <td

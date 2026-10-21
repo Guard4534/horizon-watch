@@ -95,8 +95,8 @@ test('readings: the failed-rate window follows the configuration', function (int
 test('readings: a poll interval left out takes the configured default', function () {
     config(['horizon-watch.readings.poll_interval_seconds.default' => 45]);
 
-    $environment = ['name' => 'staging', 'color' => 'staging', 'horizonUrl' => 'https://shop.example.com/horizon'];
-    $wizard = ApplicationWizardData::from(['application' => ['name' => 'Shop', 'host' => 'shop.example.com'], 'environments' => [$environment]]);
+    $environment = ['name' => 'staging', 'type' => 'staging', 'horizonUrl' => 'https://shop.example.com/horizon'];
+    $wizard = ApplicationWizardData::from(['application' => ['name' => 'Shop'], 'environments' => [$environment]]);
 
     expect(EnvironmentFormData::from($environment)->pollIntervalSeconds)->toBe(45)
         ->and($wizard->environments[0]->pollIntervalSeconds)->toBe(45);

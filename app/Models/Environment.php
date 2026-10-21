@@ -4,7 +4,7 @@ namespace App\Models;
 
 use App\Concerns\GeneratesUniqueSlugs;
 use App\Concerns\ReplacesUnreadableSecrets;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use Carbon\CarbonImmutable;
 use Database\Factories\EnvironmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -24,13 +24,12 @@ use Illuminate\Support\Str;
  * @property int $team_id
  * @property string $name
  * @property string $slug
- * @property EnvironmentColor $color
+ * @property EnvironmentType $type
  * @property string $horizon_url
  * @property string|null $basic_auth_user
  * @property string|null $basic_auth_password
  * @property int $poll_interval_seconds
  * @property bool $polling_enabled
- * @property bool $is_production
  * @property CarbonImmutable|null $last_polled_at
  * @property CarbonImmutable|null $next_poll_at
  * @property Carbon|null $created_at
@@ -42,13 +41,12 @@ use Illuminate\Support\Str;
 #[Fillable([
     'name',
     'slug',
-    'color',
+    'type',
     'horizon_url',
     'basic_auth_user',
     'basic_auth_password',
     'poll_interval_seconds',
     'polling_enabled',
-    'is_production',
 ])]
 #[Hidden(['basic_auth_password'])]
 class Environment extends Model
@@ -72,8 +70,8 @@ class Environment extends Model
 
             $environment->team_id = $application->team_id;
 
-            if (! array_key_exists('is_production', $environment->getAttributes())) {
-                $environment->is_production = static::looksLikeProduction($environment->name);
+            if (! array_key_exists('type', $environment->getAttributes())) {
+                $environment->type = EnvironmentType::suggestFor($environment->name) ?? EnvironmentType::Staging;
             }
 
             if (empty($environment->slug)) {
@@ -112,18 +110,12 @@ class Environment extends Model
     protected function casts(): array
     {
         return [
-            'color' => EnvironmentColor::class,
+            'type' => EnvironmentType::class,
             'basic_auth_password' => 'encrypted',
             'polling_enabled' => 'boolean',
-            'is_production' => 'boolean',
             'last_polled_at' => 'immutable_datetime',
             'next_poll_at' => 'immutable_datetime',
         ];
-    }
-
-    public static function looksLikeProduction(string $name): bool
-    {
-        return preg_match('/^(production|prod|prd|live)([-_.\s].*)?$/i', trim($name)) === 1;
     }
 
     public function getRouteKeyName(): string

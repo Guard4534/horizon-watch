@@ -2,7 +2,7 @@
 
 namespace App\Data\Monitoring;
 
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Enums\MaintenanceScope;
 use Spatie\LaravelData\Data;
 
@@ -13,7 +13,7 @@ class MaintenanceWindowData extends Data
         public MaintenanceScope $scope,
         public ?string $applicationName,
         public ?string $environmentName,
-        public ?EnvironmentColor $color,
+        public ?EnvironmentType $environmentType,
         public string $startsAt,
         public string $endsAt,
         public bool $active,

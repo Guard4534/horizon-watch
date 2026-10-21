@@ -12,9 +12,12 @@ class EnvironmentFormPageData extends Data
         public ?EnvironmentSummaryData $environment,
         public ApplicationFormData $application,
         /** @var array<int, array{value: string, label: string}> */
-        public array $colors,
+        public array $types,
         public bool $hasPassword,
         public string $applicationSlug,
         public ?string $slug = null,
+        public ?string $domain = null,
+        public ?string $baseHorizonUrl = null,
+        public ?string $baseEnvironmentName = null,
     ) {}
 }

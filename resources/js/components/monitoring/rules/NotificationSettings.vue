@@ -7,6 +7,7 @@ import WarningNotice from '@/components/monitoring/WarningNotice.vue';
 import WebhookSecret from '@/components/monitoring/rules/WebhookSecret.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { hostOf } from '@/lib/environments';
 import { errorId, invalidField } from '@/lib/fieldErrors';
 import {
     test as testNotification,
@@ -141,14 +142,6 @@ function sendTest(channel: App.Enums.NotificationChannel): void {
 const webhookSaved = computed(
     () => settings !== null && (settings.webhookUrl ?? '') !== '',
 );
-
-function hostOf(url: string): string {
-    try {
-        return new URL(url).hostname.toLowerCase();
-    } catch {
-        return '';
-    }
-}
 
 const movesHost = computed(
     () =>

@@ -87,11 +87,7 @@ const silence = computed<string | null>(() => {
     >
         <span class="flex flex-wrap items-center" style="gap: 4px 7px">
             <span class="min-w-0 flex-auto">
-                <EnvPill
-                    :name="environment.name"
-                    :color="environment.color"
-                    :production="environment.isProduction"
-                />
+                <EnvPill :name="environment.name" :type="environment.type" />
             </span>
             <MaintenanceBadge
                 v-if="environment.maintenanceUntil"

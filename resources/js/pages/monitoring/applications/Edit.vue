@@ -30,10 +30,7 @@ const name = computed(() => page.application?.name ?? '');
 const form = useForm<{
     application: App.Data.Applications.ApplicationFormData;
 }>({
-    application: {
-        name: page.application?.name ?? '',
-        host: page.application?.host ?? '',
-    },
+    application: { name: page.application?.name ?? '' },
 });
 
 const errors = computed(

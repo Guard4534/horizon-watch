@@ -2,21 +2,21 @@
 import { Link } from '@inertiajs/vue3';
 import { PhPlus } from '@phosphor-icons/vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { envTypeColor } from '@/lib/monitoring';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 import { create as createApplication } from '@/routes/applications';
 import { index as membersIndex } from '@/routes/members';
 
 const slug = useTeamSlug();
 
-const PALETTE = [
-    'prod',
+const TYPES: App.Enums.EnvironmentType[] = [
+    'production',
     'preprod',
     'staging',
-    'develop',
-    'demo',
-    'worker',
+    'development',
     'testing',
-] as const;
+    'demo',
+];
 </script>
 
 <template>
@@ -31,10 +31,10 @@ const PALETTE = [
                     style="margin-bottom: var(--nc-space-4)"
                 >
                     <span
-                        v-for="color in PALETTE"
-                        :key="color"
+                        v-for="type in TYPES"
+                        :key="type"
                         class="swatch"
-                        :style="{ background: `var(--env-${color})` }"
+                        :style="{ background: envTypeColor(type) }"
                     />
                 </div>
                 <h2 style="margin: 0 0 var(--nc-space-2); font-size: 25px">
@@ -59,7 +59,7 @@ const PALETTE = [
                         <div class="step-body">
                             {{
                                 $t(
-                                    'Name, domain and Horizon path. Then one environment per installation, each with its colour.',
+                                    'A name, then one environment per installation, each with its type and Horizon URL.',
                                 )
                             }}
                         </div>

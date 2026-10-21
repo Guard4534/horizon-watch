@@ -2,14 +2,12 @@
 
 namespace App\Data\Applications;
 
-use App\Rules\HostWithoutSchemeOrCredentials;
 use Spatie\LaravelData\Data;
 
 class ApplicationFormData extends Data
 {
     public function __construct(
         public string $name,
-        public string $host,
     ) {}
 
     /**
@@ -19,7 +17,6 @@ class ApplicationFormData extends Data
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'host' => ['required', 'string', 'max:255', new HostWithoutSchemeOrCredentials],
         ];
     }
 }

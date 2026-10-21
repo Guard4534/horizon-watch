@@ -62,6 +62,7 @@ test('each watched environment carries what its group and tile draw', function (
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('monitoring/Wall')
+            ->has('page.types', 6)->where('page.types.0.value', 'production')
             ->has('page.environments', 2)
             ->where('page.environments.0.id', $this->production->slug)
             ->where('page.environments.0.status', 'degraded')
@@ -69,7 +70,7 @@ test('each watched environment carries what its group and tile draw', function (
             ->where('page.environments.1.applicationId', $this->application->slug)
             ->where('page.environments.1.applicationName', 'Invoicer')
             ->where('page.environments.1.status', 'active')
-            ->where('page.environments.1.color', 'staging')
+            ->where('page.environments.1.type', 'staging')
             ->where('page.environments.1.pending', 200)
             ->where('page.environments.1.trend', [0, 0, 0, 0, 0, 0, 100, 100, 100, 200, 200, 200])
             ->where('page.environments.1.trendPercent', 100)

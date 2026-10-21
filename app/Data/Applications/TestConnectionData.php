@@ -5,6 +5,7 @@ namespace App\Data\Applications;
 use App\Externals\Horizon\HorizonTarget;
 use App\Models\Environment;
 use App\Rules\StoredPasswordStaysWithItsAddress;
+use App\Support\HorizonUrl;
 use SensitiveParameter;
 use Spatie\LaravelData\Data;
 use Spatie\LaravelData\Support\Validation\ValidationContext;
@@ -17,6 +18,19 @@ class TestConnectionData extends Data
         #[SensitiveParameter]
         public ?string $basicAuthPassword = null,
     ) {}
+
+    /**
+     * @param  array<array-key, mixed>  $properties
+     * @return array<array-key, mixed>
+     */
+    public static function prepareForPipeline(array $properties): array
+    {
+        if (is_string($properties['horizonUrl'] ?? null)) {
+            $properties['horizonUrl'] = HorizonUrl::normalize($properties['horizonUrl']);
+        }
+
+        return $properties;
+    }
 
     /**
      * @return array<string, array<int, mixed>>
@@ -40,6 +54,16 @@ class TestConnectionData extends Data
                         sameUsernameToo: true,
                     )]),
             ],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function attributes(): array
+    {
+        return [
+            'horizonUrl' => __('Horizon URL'),
         ];
     }
 

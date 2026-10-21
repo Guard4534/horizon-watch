@@ -2,7 +2,7 @@
 import { Link, router } from '@inertiajs/vue3';
 import { useId } from 'vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { envColor } from '@/lib/monitoring';
+import { envTypeColor } from '@/lib/monitoring';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 
 defineProps<{
@@ -61,8 +61,8 @@ function pick(scope: string): void {
                     <span
                         class="size-2 flex-none rounded-[2px]"
                         :style="{
-                            background: scope.color
-                                ? envColor(scope.color)
+                            background: scope.type
+                                ? envTypeColor(scope.type)
                                 : 'var(--nc-accent)',
                         }"
                     />

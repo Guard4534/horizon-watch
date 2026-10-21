@@ -293,7 +293,7 @@ test('the alert settings list the windows under way, the planned ones and the la
             'scope' => 'environment',
             'applicationName' => 'Billing',
             'environmentName' => 'production',
-            'color' => 'prod',
+            'environmentType' => 'production',
             'startsAt' => '2026-09-18T09:55:00+00:00',
             'endsAt' => '2026-09-18T11:00:00+00:00',
             'active' => true,

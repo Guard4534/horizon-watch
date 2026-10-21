@@ -29,3 +29,17 @@ test('a name without letters or digits falls back to a slug that can be routed',
         ->and($second->slug)->toBe('application-1')
         ->and($environment->slug)->toBe('application-production');
 });
+
+test('the primary environment is the production one, else the first created', function () {
+    $application = Application::factory()->create();
+    $staging = Environment::factory()->for($application)->staging()->create();
+    $production = Environment::factory()->for($application)->production()->create();
+
+    expect(Application::primaryEnvironment($application->environments()->get())?->is($production))->toBeTrue();
+
+    $production->delete();
+    Environment::factory()->for($application)->develop()->create();
+
+    expect(Application::primaryEnvironment($application->environments()->get())?->is($staging))->toBeTrue()
+        ->and(Application::primaryEnvironment(collect()))->toBeNull();
+});

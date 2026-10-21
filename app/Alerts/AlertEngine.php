@@ -255,7 +255,7 @@ final class AlertEngine
             'severity' => $rule->severity,
             'application_name' => $environment->application->name,
             'environment_name' => $environment->name,
-            'environment_color' => $environment->color,
+            'environment_type' => $environment->type,
             'threshold' => $rule->threshold,
             'unit' => $rule->metric->unit(),
             'value' => $value,

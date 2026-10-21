@@ -92,10 +92,11 @@ const stats = computed(() => [
                         {{ page.application.name }}
                     </div>
                     <div
+                        v-if="page.application.domain"
                         class="nc-t-xs nc-tone-muted"
                         style="letter-spacing: 0.01em"
                     >
-                        {{ page.application.host }}
+                        {{ page.application.domain }}
                     </div>
                 </div>
                 <div

@@ -25,15 +25,7 @@ vi.mock('@/routes/applications', () => ({
     store: (team: string) => ({ url: `/${team}/applications`, method: 'post' }),
 }));
 
-const COLORS = [
-    { value: 'prod', label: 'Production' },
-    { value: 'staging', label: 'Staging' },
-    { value: 'preprod', label: 'Pre-production' },
-    { value: 'develop', label: 'Develop' },
-    { value: 'demo', label: 'Demo' },
-    { value: 'testing', label: 'Testing' },
-    { value: 'worker', label: 'Worker' },
-];
+const BASE_URL = 'https://shop.example.com/horizon';
 
 const reachable = (yes: boolean) =>
     ({
@@ -50,11 +42,11 @@ const reachable = (yes: boolean) =>
         },
     }) as const;
 
-async function wizardFor(host = 'example.com') {
-    const wizard = useApplicationWizard(COLORS);
+async function wizardFor(baseUrl = BASE_URL) {
+    const wizard = useApplicationWizard();
 
     wizard.form.application.name = 'Billing';
-    wizard.form.application.host = host;
+    wizard.form.environments[0].horizonUrl = baseUrl;
     await nextTick();
 
     return wizard;
@@ -66,116 +58,134 @@ beforeEach(() => {
 });
 
 describe('useApplicationWizard', () => {
-    it('starts with a production environment', () => {
-        const { form } = useApplicationWizard(COLORS);
+    it('starts with a production environment whose URL is typed by hand', () => {
+        const { form, rows } = useApplicationWizard();
 
-        expect(form.environments).toHaveLength(1);
-        expect(form.environments[0]).toMatchObject({
-            name: 'production',
-            color: 'prod',
-            horizonUrl: '',
-            isProduction: true,
-            pollIntervalSeconds: 15,
+        expect(form.application).toEqual({ name: '' });
+        expect(form.environments).toEqual([
+            {
+                name: 'production',
+                type: 'production',
+                horizonUrl: '',
+                basicAuthUser: null,
+                basicAuthPassword: null,
+                pollIntervalSeconds: 15,
+                pollingEnabled: true,
+            },
+        ]);
+        expect(rows.value[0]).toMatchObject({
+            urlEdited: false,
+            typeEdited: false,
         });
     });
 
-    it('suggests the next usual environment with its colour', async () => {
+    it('suggests the next usual environment with its type', async () => {
         const { form, addEnvironment } = await wizardFor();
 
         addEnvironment();
         addEnvironment();
+        addEnvironment();
 
-        expect(
-            form.environments.map(({ name, color }) => [name, color]),
-        ).toEqual([
-            ['production', 'prod'],
-            ['staging', 'staging'],
-            ['preprod', 'preprod'],
-        ]);
-        expect(form.environments[1].isProduction).toBe(false);
+        expect(form.environments.map(({ name, type }) => [name, type])).toEqual(
+            [
+                ['production', 'production'],
+                ['staging', 'staging'],
+                ['preprod', 'preprod'],
+                ['develop', 'development'],
+            ],
+        );
     });
 
-    it('falls back to an unnamed environment in the next colour', () => {
-        const { form, addEnvironment } = useApplicationWizard([
-            { value: 'worker', label: 'Worker' },
-            { value: 'demo', label: 'Demo' },
-        ]);
+    it('falls back to an unnamed staging environment once the usual names are taken', () => {
+        const { form, addEnvironment } = useApplicationWizard();
 
-        addEnvironment();
-        addEnvironment();
+        for (let added = 0; added < 6; added++) {
+            addEnvironment();
+        }
 
         expect(
-            form.environments.map(({ name, color }) => [name, color]),
+            form.environments.slice(4).map(({ name, type }) => [name, type]),
         ).toEqual([
             ['demo', 'demo'],
-            ['', 'demo'],
-            ['', 'worker'],
+            ['testing', 'testing'],
+            ['', 'staging'],
         ]);
     });
 
-    it('derives each Horizon URL from the host, the environment and the path', async () => {
-        const { form, horizonPath, addEnvironment } = await wizardFor(
-            ' https://example.com/ ',
-        );
+    it('derives each further Horizon URL from the first row', async () => {
+        const { form, addEnvironment } = await wizardFor();
 
         addEnvironment();
         await nextTick();
 
         expect(form.environments.map((env) => env.horizonUrl)).toEqual([
-            'https://example.com/horizon',
-            'https://staging.example.com/horizon',
+            'https://shop.example.com/horizon',
+            'https://staging.shop.example.com/horizon',
         ]);
 
-        horizonPath.value = '/ops/horizon/';
+        form.environments[0].horizonUrl =
+            'https://production.shop.example.com/ops/horizon/';
         await nextTick();
 
-        expect(form.environments[0].horizonUrl).toBe(
-            'https://example.com/ops/horizon',
+        expect(form.environments[1].horizonUrl).toBe(
+            'https://staging.shop.example.com/ops/horizon',
         );
 
-        horizonPath.value = '';
         form.environments[1].name = 'qa';
         await nextTick();
 
-        expect(form.environments[1].horizonUrl).toBe('https://qa.example.com');
+        expect(form.environments[1].horizonUrl).toBe(
+            'https://qa.shop.example.com/ops/horizon',
+        );
+        expect(form.environments[0].horizonUrl).toBe(
+            'https://production.shop.example.com/ops/horizon/',
+        );
     });
 
-    it('stops suggesting once the URL is edited by hand', async () => {
-        const { form, rows, onUrlInput } = await wizardFor();
+    it('stops suggesting once a further URL is edited by hand', async () => {
+        const { form, rows, onUrlInput, addEnvironment } = await wizardFor();
 
-        form.environments[0].horizonUrl = 'https://horizon.example.net';
-        onUrlInput(0);
-        form.application.host = 'example.org';
+        addEnvironment();
         await nextTick();
 
-        expect(rows.value[0].urlEdited).toBe(true);
-        expect(form.environments[0].horizonUrl).toBe(
+        form.environments[1].horizonUrl = 'https://horizon.example.net';
+        onUrlInput(1);
+        form.environments[0].horizonUrl = 'https://example.org/horizon';
+        await nextTick();
+
+        expect(rows.value[1].urlEdited).toBe(true);
+        expect(form.environments[1].horizonUrl).toBe(
             'https://horizon.example.net',
         );
 
-        form.environments[0].horizonUrl = 'https://example.org/horizon';
-        onUrlInput(0);
+        form.environments[1].horizonUrl = 'https://staging.example.org/horizon';
+        onUrlInput(1);
 
-        expect(rows.value[0].urlEdited).toBe(false);
+        expect(rows.value[1].urlEdited).toBe(false);
     });
 
-    it('needs a name and a URL for every environment', async () => {
-        const wizard = useApplicationWizard(COLORS);
+    it('needs the application name, and a name and a URL for every environment', async () => {
+        const wizard = useApplicationWizard();
 
         expect(wizard.applicationFilled.value).toBe(false);
         expect(wizard.environmentsFilled.value).toBe(false);
 
         wizard.form.application.name = 'Billing';
-        wizard.form.application.host = 'example.com';
         await nextTick();
 
         expect(wizard.applicationFilled.value).toBe(true);
+        expect(wizard.environmentsFilled.value).toBe(false);
+
+        wizard.form.environments[0].horizonUrl = BASE_URL;
+        wizard.addEnvironment();
+        await nextTick();
+
         expect(wizard.environmentsFilled.value).toBe(true);
 
-        wizard.addEnvironment();
         wizard.form.environments[1].name = ' ';
         await nextTick();
 
+        expect(wizard.form.environments[1].horizonUrl).toBe('');
         expect(wizard.environmentsFilled.value).toBe(false);
 
         wizard.removeEnvironment(1);
@@ -183,6 +193,24 @@ describe('useApplicationWizard', () => {
         expect(wizard.environmentsFilled.value).toBe(true);
         expect(wizard.rows.value).toHaveLength(1);
         expect(inertia.clearErrors).toHaveBeenCalledOnce();
+    });
+
+    it('names the domain after the production row, else after the first row', async () => {
+        const { form, domain, addEnvironment, onUrlInput } = await wizardFor();
+
+        expect(domain.value).toBe('shop.example.com');
+
+        form.environments[0].type = 'staging';
+        addEnvironment();
+        await nextTick();
+
+        expect(domain.value).toBe('shop.example.com');
+
+        form.environments[1].type = 'production';
+        form.environments[1].horizonUrl = 'https://live.example.net/horizon';
+        onUrlInput(1);
+
+        expect(domain.value).toBe('live.example.net');
     });
 
     it('tests again on the last step only what changed since the last test', async () => {
@@ -266,7 +294,7 @@ describe('useApplicationWizard', () => {
         expect(step.value).toBe(2);
         expect(rows.value.map((row) => row.auth)).toEqual([false, true]);
 
-        onError({ 'application.host': 'Taken.', 'environments.0.name': 'x' });
+        onError({ 'application.name': 'Taken.', 'environments.0.name': 'x' });
 
         expect(step.value).toBe(1);
 

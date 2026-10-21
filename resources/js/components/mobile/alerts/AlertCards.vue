@@ -56,7 +56,7 @@ const environmentHref = useEnvironmentHref();
                         class="nc-tone-muted mt-[4px] flex items-center gap-[6px]"
                         style="font-size: 11px"
                     >
-                        <EnvSwatch :color="alert.color" :size="8" />
+                        <EnvSwatch :type="alert.environmentType" :size="8" />
                         <span class="min-w-0 truncate"
                             >{{ alert.applicationName }} /
                             {{ alert.environmentName }}</span

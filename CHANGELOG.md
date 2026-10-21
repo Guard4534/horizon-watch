@@ -28,9 +28,11 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
 - `HORIZON_WATCH_ORG_CREATION` (`admins` or `everyone`) decides who may create organizations.
 - The owner of an organization can transfer ownership to another member from the Members
   page; the previous owner becomes an admin.
-- A **Production environment** checkbox on environments, ticked for you when the label is
-  `production`, `prod`, `prd` or `live`, alone or followed by a separator. The production mark
-  shows next to the environment wherever it appears.
+- Each environment has a **type**: Production, Pre-production, Staging, Development, Testing or
+  Demo. The type gives the environment its colour, puts the production mark wherever the
+  environment appears and decides what "everything except production" hides. The forms suggest
+  the type from the name (`production`, `prod`, `prd` and `live` suggest Production) until you
+  pick one.
 - `HORIZON_WATCH_SETUP_TOKEN`: when set, `/setup` asks for it before it creates the first
   account. It must be at least 16 characters long.
 - Self-monitoring. `GET /health` answers `503` when the database is unreachable, the scheduler
@@ -88,13 +90,24 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
 
 ### Changed
 
-- A calmer interface. Environment colours now come from a cool range (violet, indigo, blue,
-  cyan, slate), so red, amber and green only ever mean down, warning and healthy. Status is
-  shown once per tile and card, in words with an icon, without side stripes or glowing lamps;
-  healthy readings stay neutral. Text is never smaller than 11px and uses fewer uppercase
-  labels. Rules are shown by name ("Horizon inactive ≥ 2 min") instead of their id, the
-  throughput and max-wait chart is split into two charts with one scale each, environment
-  overrides use one Customize switch per rule, and the panel has a new brand mark and icons.
+- A calmer interface. Environment colours follow the environment type and come from a cool range
+  (rose-violet, violet, indigo, blue, slate, cyan), so red, amber and green only ever mean down,
+  warning and healthy. Status is shown once per tile and card, in words with an icon, without
+  side stripes or glowing lamps; healthy readings stay neutral. Text is never smaller than 11px
+  and uses fewer uppercase labels. Rules are shown by name ("Horizon inactive ≥ 2 min") instead
+  of their id, the throughput and max-wait chart is split into two charts with one scale each,
+  environment overrides use one Customize switch per rule, and the panel has a new brand mark
+  and icons.
+- An environment's Horizon URL, as you open it in the browser, is the only address the panel
+  asks for. Applications no longer have a domain: the one shown next to an application is the
+  host of its production environment's Horizon URL, or of its first environment. The wizard asks
+  for the full Horizon URL of the first environment and suggests the others from it, and **Add
+  environment** suggests one from the application's production environment.
+- Horizon URLs are tidied when saved and when tested: surrounding spaces, capitals in the
+  scheme and host, trailing slashes and a trailing `/api` or Horizon API path (such as
+  `/api/stats`) are removed.
+- The wall's environment chips filter by environment type instead of by environment name, and
+  the wall link carries `?type=` instead of `?environment=`.
 - **Upgrade note:** `compose.prod.yaml` refuses to start without `DB_PASSWORD`, which used to
   default to `horizon_watch`. If you never set it, put `DB_PASSWORD=horizon_watch` in `.env`
   before upgrading, then change it as the README describes.
@@ -117,11 +130,18 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   organization; this cannot be undone by a rollback. Before upgrading, demote to member anyone
   who must stay limited. Promoting someone to admin now lifts their limit, and an admin
   invitation always grants every environment.
-- **Upgrade note:** upgrading marks as production every environment labelled `production`,
-  `prod`, `prd` or `live`, alone or followed by a separator (such as `prod-eu` or
-  `live-preview`). Members who see everything except production stop seeing those
-  environments and stop receiving their alert emails. After upgrading, review the
-  **Production environment** box on each environment.
+- **Upgrade note:** each environment's colour becomes its type. An environment coloured `prod`,
+  or labelled `production`, `prod`, `prd` or `live`, alone or followed by a separator (such as
+  `prod-eu` or `live-preview`), becomes Production: members who see everything except production
+  stop seeing it and stop receiving its alert emails. The other colours become the type of the
+  same name (`develop` becomes Development) and `worker` becomes Staging. Stored alerts of an
+  environment that becomes Production become Production too; the others keep the type that
+  matches their colour. After upgrading, review the type of each environment.
+- **Upgrade note:** a bookmarked wall link that filters with `?environment=` shows every
+  environment after the upgrade. Change it to the type, such as `?environment=production` to
+  `?type=production`.
+- **Upgrade note:** applications lose their domain field. Nothing else is lost: each environment
+  keeps its Horizon URL, and the domain shown next to the application now comes from those URLs.
 - **Upgrade note:** webhooks queued by 0.1.0, including those waiting for a retry, are sent as
   they were built, without `version`, `summary` and `detail`. If your receiver needs those
   fields, let the `notifications` queue empty before upgrading.
@@ -217,7 +237,7 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   and very long names no longer overflow the slug column.
 - An organization name whose slug would be a reserved address (such as `Settings!`) is refused.
 - "Everything except production" hid only an environment labelled exactly `production`; it now
-  hides every environment marked as production.
+  hides every environment of type Production.
 - A reading that crashed or ran past its time limit left nothing behind, so the
   endpoint-unreachable rule never fired; it is now stored as unreachable.
 - A reading dropped because it waited in the queue longer than its interval is now logged.
@@ -263,8 +283,6 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   reserved names and existing members, said "team".
 - Italian used both "failed job" and "job falliti" for the same thing; it now always says
   "job falliti".
-- The environment page named the masters endpoint `/horizon/api/masters` even when Horizon
-  lives under another path; it now follows the environment's Horizon URL.
 - The two-factor setup errors and the loading indicator were always in English.
 - The browser tab kept the name the image was built with instead of following `APP_NAME`.
 - Controls drawn by the browser, such as scrollbars, checkboxes and autofilled fields, were
@@ -304,6 +322,9 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   receiver cannot sign for the new one.
 - `/setup` can require `HORIZON_WATCH_SETUP_TOKEN`, and `DB_PASSWORD` no longer has a default
   (see **Changed**).
+- A Horizon URL or a webhook address that points to a network the panel never calls
+  (link-local and cloud metadata addresses, and private networks when
+  `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` is on) is refused when saved, without looking names up.
 
 ## [0.1.0] - 2026-09-29
 

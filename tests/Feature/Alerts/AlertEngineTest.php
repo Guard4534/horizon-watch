@@ -12,7 +12,7 @@ use App\Data\Applications\EnvironmentFormData;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Enums\MemberVisibility;
 use App\Enums\MuteDuration;
 use App\Enums\ReadingError;
@@ -148,7 +148,7 @@ test('a breached threshold opens one alert with the environment and rule copied 
         ->and($alert->severity)->toBe(AlertSeverity::Warning)
         ->and($alert->application_name)->toBe('Billing')
         ->and($alert->environment_name)->toBe('production')
-        ->and($alert->environment_color)->toBe(EnvironmentColor::Prod)
+        ->and($alert->environment_type)->toBe(EnvironmentType::Production)
         ->and($alert->threshold)->toBe(2000.0)
         ->and($alert->unit)->toBe('job')
         ->and($alert->value)->toBe(2500.0)
@@ -1050,7 +1050,7 @@ test('a new address keeps an open state alert open while the environment stays i
 
     app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
         name: 'production',
-        color: EnvironmentColor::Prod,
+        type: EnvironmentType::Production,
         horizonUrl: 'https://horizon.example.net/horizon',
         pollIntervalSeconds: 300,
     ));
@@ -1185,7 +1185,7 @@ test('an alert open before a long pause survives it, with its opening kept and t
 test('resuming the collection starts a new run even within the stale window', function () {
     $edit = fn (bool $pollingEnabled) => app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
         name: 'production',
-        color: EnvironmentColor::Prod,
+        type: EnvironmentType::Production,
         horizonUrl: $this->environment->horizon_url,
         pollIntervalSeconds: 300,
         basicAuthUser: 'monitor',
@@ -1209,7 +1209,7 @@ test('resuming the collection starts a new run even within the stale window', fu
 test('resuming the collection during an outage does not bring back the run from before it', function () {
     $edit = fn (bool $pollingEnabled) => app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
         name: 'production',
-        color: EnvironmentColor::Prod,
+        type: EnvironmentType::Production,
         horizonUrl: $this->environment->horizon_url,
         pollIntervalSeconds: 300,
         basicAuthUser: 'monitor',
@@ -1238,7 +1238,7 @@ test('saving an environment that keeps collecting leaves its run alone', functio
 
     app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
         name: 'production',
-        color: EnvironmentColor::Prod,
+        type: EnvironmentType::Production,
         horizonUrl: $this->environment->horizon_url,
         pollIntervalSeconds: 300,
         basicAuthUser: 'monitor',
@@ -1400,7 +1400,7 @@ test('resuming the collection forgets the breaches seen before the pause', funct
     ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 2]);
     $edit = fn (bool $pollingEnabled) => app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
         name: 'production',
-        color: EnvironmentColor::Prod,
+        type: EnvironmentType::Production,
         horizonUrl: $this->environment->horizon_url,
         pollIntervalSeconds: 300,
         basicAuthUser: 'monitor',

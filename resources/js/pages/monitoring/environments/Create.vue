@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
+import { useSuggestedHorizonUrl } from '@/composables/useSuggestedHorizonUrl';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { typeForName } from '@/lib/environments';
 import {
     show,
     testConnection as testUnsavedConnection,
@@ -26,15 +28,34 @@ const form = useForm<{
 }>({
     environment: {
         name: '',
-        color: page.colors[0].value as App.Enums.EnvironmentColor,
+        type: typeForName(''),
         horizonUrl: '',
         basicAuthUser: null,
         basicAuthPassword: null,
         pollIntervalSeconds: 15,
         pollingEnabled: true,
-        isProduction: false,
     },
 });
+
+const typeEdited = ref(false);
+
+const { onUrlInput } = useSuggestedHorizonUrl(
+    computed({
+        get: () => form.environment.horizonUrl,
+        set: (url: string) => {
+            form.environment.horizonUrl = url;
+        },
+    }),
+    () =>
+        page.baseHorizonUrl === null
+            ? null
+            : {
+                  horizonUrl: page.baseHorizonUrl,
+                  name: page.baseEnvironmentName ?? '',
+              },
+    () => form.environment.name,
+    () => form.environment.type,
+);
 
 const testPayload = computed<App.Data.Applications.TestConnectionData>(() => ({
     horizonUrl: form.environment.horizonUrl,
@@ -82,18 +103,20 @@ const submit = () => {
             <div style="font-size: 26px; line-height: 1.15">
                 {{ $t('Add environment') }}
             </div>
-            <div class="nc-t-xs nc-tone-muted">
-                {{ page.application.host }}
+            <div v-if="page.domain" class="nc-t-xs nc-tone-muted">
+                {{ page.domain }}
             </div>
         </div>
 
         <SectionCard :title="$t('Environment')">
             <EnvironmentForm
                 v-model="form.environment"
-                :colors="page.colors"
+                v-model:type-edited="typeEdited"
+                :types="page.types"
                 :errors="errors"
                 :has-password="page.hasPassword"
-                suggest-production
+                type-follows-name
+                @url-input="onUrlInput"
             />
             <div
                 class="mt-[var(--nc-space-4)] flex flex-wrap items-center"

@@ -76,14 +76,25 @@ const filter = computed<'all' | 'problems'>({
         chosenFilter.value = value;
     },
 });
-const environmentName = ref(query.get('environment') ?? '');
+const typeFromQuery = (value: string | null): App.Enums.EnvironmentType | '' =>
+    page.types.some((option) => option.value === value)
+        ? (value as App.Enums.EnvironmentType)
+        : '';
+const environmentType = ref<App.Enums.EnvironmentType | ''>(
+    typeFromQuery(query.get('type')),
+);
+const typeLabel = computed(
+    () =>
+        page.types.find((option) => option.value === environmentType.value)
+            ?.label ?? '',
+);
 const needle = ref(query.get('q') ?? '');
 
-watch([chosenFilter, environmentName, needle], () => {
+watch([chosenFilter, environmentType, needle], () => {
     const params = new URLSearchParams();
 
     if (chosenFilter.value) params.set('filter', chosenFilter.value);
-    if (environmentName.value) params.set('environment', environmentName.value);
+    if (environmentType.value) params.set('type', environmentType.value);
     if (needle.value) params.set('q', needle.value);
 
     const url = `${path}${params.size ? `?${params}` : ''}`;
@@ -107,7 +118,7 @@ const waitingCount = computed(
 );
 
 function clearNarrowing(): void {
-    environmentName.value = '';
+    environmentType.value = '';
     needle.value = '';
 }
 
@@ -117,8 +128,8 @@ const shown = computed(() => {
     return (filter.value === 'problems' ? problems.value : page.environments)
         .filter(
             (environment) =>
-                !environmentName.value ||
-                environment.name === environmentName.value,
+                !environmentType.value ||
+                environment.type === environmentType.value,
         )
         .filter(
             (environment) =>
@@ -241,7 +252,7 @@ const kpis = computed(() => [
             :total-count="page.environments.length"
             :problem-count="problems.length"
             :waiting-count="waitingCount"
-            :environment-name="environmentName"
+            :type-label="typeLabel"
             :search="needle"
             :kpis="page.kpis"
             @clear="clearNarrowing"
@@ -269,10 +280,11 @@ const kpis = computed(() => [
 
             <WallFilters
                 v-model:filter="filter"
-                v-model:environment-name="environmentName"
+                v-model:environment-type="environmentType"
                 v-model:search="needle"
                 :environments="page.environments"
                 :problem-count="problems.length"
+                :types="page.types"
             />
 
             <ApplicationGroup

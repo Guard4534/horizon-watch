@@ -2,22 +2,23 @@
 import { PhShieldCheck } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
-import { envColor } from '@/lib/monitoring';
+import { isProductionType } from '@/lib/environments';
+import { envTypeColor } from '@/lib/monitoring';
 
 const {
     name,
-    color,
+    type,
     size = 12,
-    production = false,
 } = defineProps<{
     name: string;
-    color: App.Enums.EnvironmentColor;
+    type: App.Enums.EnvironmentType;
     size?: number;
-    production?: boolean;
 }>();
 
+const production = computed(() => isProductionType(type));
+
 const style = computed(() => {
-    const background = envColor(color);
+    const background = envTypeColor(type);
 
     return {
         color: background,
@@ -28,7 +29,7 @@ const style = computed(() => {
 });
 
 const title = computed(() =>
-    production ? `${name} · ${trans('Production environment')}` : name,
+    production.value ? `${name} · ${trans('Production environment')}` : name,
 );
 </script>
 

@@ -28,14 +28,12 @@ const form = useForm<{
 }>({
     environment: {
         name: page.environment?.name ?? '',
-        color: (page.environment?.color ??
-            page.colors[0].value) as App.Enums.EnvironmentColor,
+        type: page.environment?.type ?? 'staging',
         horizonUrl: page.environment?.horizonUrl ?? '',
         basicAuthUser: page.environment?.basicAuthUser ?? null,
         basicAuthPassword: null,
         pollIntervalSeconds: page.environment?.pollIntervalSeconds ?? 15,
         pollingEnabled: page.environment?.pollingEnabled ?? true,
-        isProduction: page.environment?.isProduction ?? false,
     },
 });
 
@@ -108,7 +106,7 @@ const submit = () => {
         <SectionCard :title="$t('Credentials & collection')">
             <EnvironmentForm
                 v-model="form.environment"
-                :colors="page.colors"
+                :types="page.types"
                 :errors="errors"
                 :has-password="page.hasPassword"
             />

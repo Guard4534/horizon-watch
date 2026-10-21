@@ -76,7 +76,10 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                         <div
                             class="nc-t-2xs nc-tone-muted mt-[3px] flex items-center gap-[6px]"
                         >
-                            <EnvSwatch :color="alert.color" :size="8" />
+                            <EnvSwatch
+                                :type="alert.environmentType"
+                                :size="8"
+                            />
                             <span class="min-w-0 truncate"
                                 >{{ alert.applicationName }} /
                                 {{ alert.environmentName }} ·

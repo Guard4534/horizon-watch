@@ -3,6 +3,7 @@
 use App\Alerts\Events\AlertOpened;
 use App\Alerts\Events\AlertResolved;
 use App\Enums\AlertRuleMetric;
+use App\Enums\EnvironmentType;
 use App\Models\Alert;
 use App\Models\AlertNotification;
 use App\Models\Application;
@@ -75,7 +76,7 @@ test('a configured local horizon is added, polled, and left without readings', f
         ->and($local->horizon_url)->toBe('http://host.docker.internal:8080/horizon')
         ->and($local->poll_interval_seconds)->toBe(15)
         ->and($local->application->name)->toBe('Local Horizon')
-        ->and($local->application->host)->toBe('localhost')
+        ->and($local->type)->toBe(EnvironmentType::Development)
         ->and($local->application->team_id)->toBe(Environment::query()->where('slug', 'invoice-desk-production')->sole()->team_id)
         ->and($local->state()->exists())->toBeFalse()
         ->and($local->snapshots()->exists())->toBeFalse();

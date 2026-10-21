@@ -31,7 +31,7 @@ const {
     totalCount,
     problemCount,
     waitingCount,
-    environmentName,
+    typeLabel,
     search,
     kpis,
 } = defineProps<{
@@ -39,7 +39,7 @@ const {
     totalCount: number;
     problemCount: number;
     waitingCount: number;
-    environmentName: string;
+    typeLabel: string;
     search: string;
     kpis: App.Data.Pages.WallKpisData;
 }>();
@@ -51,7 +51,7 @@ const filter = defineModel<'all' | 'problems'>('filter', { required: true });
 const slug = useTeamSlug();
 
 const narrowing = computed(() =>
-    [environmentName, search.trim() ? `"${search.trim()}"` : '']
+    [typeLabel, search.trim() ? `"${search.trim()}"` : '']
         .filter(Boolean)
         .join(' · '),
 );
@@ -133,8 +133,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                         }}</span>
                         <EnvPill
                             :name="environment.name"
-                            :color="environment.color"
-                            :production="environment.isProduction"
+                            :type="environment.type"
                             :size="11"
                             style="margin-top: 3px"
                         />

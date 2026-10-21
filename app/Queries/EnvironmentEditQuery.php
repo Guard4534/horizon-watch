@@ -6,7 +6,7 @@ use App\Data\Applications\ApplicationFormData;
 use App\Data\Applications\EnvironmentFormData;
 use App\Data\Applications\EnvironmentSummaryData;
 use App\Data\Pages\EnvironmentFormPageData;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Models\Environment;
 use App\Rules\StoredPasswordStaysWithItsAddress;
 
@@ -17,15 +17,14 @@ class EnvironmentEditQuery
         return new EnvironmentFormPageData(
             environment: new EnvironmentSummaryData(
                 name: $environment->name,
-                color: $environment->color,
+                type: $environment->type,
                 horizonUrl: EnvironmentFormData::withoutUserinfo($environment->horizon_url),
                 basicAuthUser: $environment->basic_auth_user,
                 pollIntervalSeconds: $environment->poll_interval_seconds,
                 pollingEnabled: $environment->polling_enabled,
-                isProduction: $environment->is_production,
             ),
             application: ApplicationFormData::from($environment->application),
-            colors: EnvironmentColor::options(),
+            types: EnvironmentType::options(),
             hasPassword: StoredPasswordStaysWithItsAddress::hasStoredPassword($environment),
             applicationSlug: $environment->application->slug,
             slug: $environment->slug,

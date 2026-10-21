@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { envColor } from '@/lib/monitoring';
+import { envTypeColor } from '@/lib/monitoring';
 
-const { color, size = 8 } = defineProps<{
-    color: App.Enums.EnvironmentColor;
+const { type, size = 8 } = defineProps<{
+    type: App.Enums.EnvironmentType;
     size?: number;
 }>();
 
@@ -11,7 +11,7 @@ const style = computed(() => ({
     width: `${size}px`,
     height: `${size}px`,
     borderRadius: size > 8 ? '3px' : '2px',
-    background: envColor(color),
+    background: envTypeColor(type),
 }));
 </script>
 

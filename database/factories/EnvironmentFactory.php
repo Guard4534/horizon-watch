@@ -2,7 +2,7 @@
 
 namespace Database\Factories;
 
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Models\Application;
 use App\Models\Environment;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -19,21 +19,24 @@ class EnvironmentFactory extends Factory
     public function definition(): array
     {
         return array_merge(
-            $this->typical('production', EnvironmentColor::Prod),
-            ['application_id' => Application::factory()],
+            $this->typical('production', EnvironmentType::Production),
+            [
+                'application_id' => Application::factory(),
+                'type' => fn (array $attributes) => EnvironmentType::suggestFor((string) $attributes['name']) ?? EnvironmentType::Staging,
+            ],
         );
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function typical(string $name, EnvironmentColor $color): array
+    private function typical(string $name, EnvironmentType $type): array
     {
-        $hasBasicAuth = in_array($color, [EnvironmentColor::Prod, EnvironmentColor::Preprod], true);
+        $hasBasicAuth = in_array($type, [EnvironmentType::Production, EnvironmentType::Preprod], true);
 
         return [
             'name' => $name,
-            'color' => $color,
+            'type' => $type,
             'horizon_url' => 'https://'.Str::slug($name).'.example.com/horizon',
             'basic_auth_user' => $hasBasicAuth ? 'monitor' : null,
             'basic_auth_password' => $hasBasicAuth ? fake()->password() : null,
@@ -43,36 +46,36 @@ class EnvironmentFactory extends Factory
 
     public function production(): static
     {
-        return $this->state(fn () => $this->typical('production', EnvironmentColor::Prod));
+        return $this->state(fn () => $this->typical('production', EnvironmentType::Production));
     }
 
     public function preprod(): static
     {
-        return $this->state(fn () => $this->typical('preprod', EnvironmentColor::Preprod));
+        return $this->state(fn () => $this->typical('preprod', EnvironmentType::Preprod));
     }
 
     public function staging(): static
     {
-        return $this->state(fn () => $this->typical('staging', EnvironmentColor::Staging));
+        return $this->state(fn () => $this->typical('staging', EnvironmentType::Staging));
     }
 
     public function develop(): static
     {
-        return $this->state(fn () => $this->typical('develop', EnvironmentColor::Develop));
+        return $this->state(fn () => $this->typical('develop', EnvironmentType::Development));
     }
 
     public function demo(): static
     {
-        return $this->state(fn () => $this->typical('demo', EnvironmentColor::Demo));
+        return $this->state(fn () => $this->typical('demo', EnvironmentType::Demo));
     }
 
     public function workerBatch(): static
     {
-        return $this->state(fn () => $this->typical('worker-batch', EnvironmentColor::Worker));
+        return $this->state(fn () => $this->typical('worker-batch', EnvironmentType::Staging));
     }
 
     public function testing(): static
     {
-        return $this->state(fn () => $this->typical('testing', EnvironmentColor::Testing));
+        return $this->state(fn () => $this->typical('testing', EnvironmentType::Testing));
     }
 }

@@ -25,5 +25,7 @@ class WallPageData extends Data
         public int $applicationCount,
         public bool $alertsReachNobody,
         public bool $canManageAlertRules,
+        /** @var array<int, array{value: string, label: string}> */
+        public array $types,
     ) {}
 }

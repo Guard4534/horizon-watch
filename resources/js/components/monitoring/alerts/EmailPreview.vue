@@ -36,7 +36,7 @@ const src = computed(() =>
             <div
                 class="nc-t-2xs nc-tone-muted mb-[var(--nc-space-2)] flex items-center gap-[7px]"
             >
-                <EnvSwatch :color="alert.color" :size="8" />
+                <EnvSwatch :type="alert.environmentType" :size="8" />
                 <span class="min-w-0 truncate"
                     >{{ alert.applicationName }} / {{ alert.environmentName }} ·
                     {{ ruleLabel(alert.metric) }}</span

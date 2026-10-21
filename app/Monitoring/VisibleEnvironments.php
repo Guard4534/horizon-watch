@@ -2,6 +2,7 @@
 
 namespace App\Monitoring;
 
+use App\Enums\EnvironmentType;
 use App\Enums\MemberVisibility;
 use App\Models\Environment;
 use App\Models\Membership;
@@ -73,8 +74,8 @@ class VisibleEnvironments
 
         $production = [];
 
-        foreach ($this->ofTeam($team)->toBase()->get(['environments.id', 'environments.is_production']) as $environment) {
-            $production[(int) $environment->id] = (bool) $environment->is_production;
+        foreach ($this->ofTeam($team)->toBase()->get(['environments.id', 'environments.type']) as $environment) {
+            $production[(int) $environment->id] = $environment->type === EnvironmentType::Production->value;
         }
 
         $granted = $this->grants(array_keys($production), array_values(array_unique($manual)));
@@ -137,7 +138,7 @@ class VisibleEnvironments
 
         return match ($membership->visibility) {
             MemberVisibility::All => $query,
-            MemberVisibility::NonProduction => $query->where('environments.is_production', false),
+            MemberVisibility::NonProduction => $query->where('environments.type', '!=', EnvironmentType::Production->value),
             MemberVisibility::Manual => $query->whereIn('environments.id', function ($environments) use ($membership) {
                 $environments->select('environment_id')
                     ->from('environment_user')

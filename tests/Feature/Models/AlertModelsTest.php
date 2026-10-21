@@ -5,7 +5,7 @@ use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
 use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Enums\Locale;
 use App\Enums\MuteDuration;
 use App\Enums\NotificationChannel;
@@ -123,7 +123,7 @@ test('an alert copies its environment and casts its columns', function () {
         ->and($alert->team_id)->toBe($environment->team_id)
         ->and($alert->metric)->toBe(AlertRuleMetric::QueueMaxWait)
         ->and($alert->severity)->toBeInstanceOf(AlertSeverity::class)
-        ->and($alert->environment_color)->toBe(EnvironmentColor::Prod)
+        ->and($alert->environment_type)->toBe(EnvironmentType::Production)
         ->and($alert->application_name)->toBe($environment->application->name)
         ->and($alert->environment_name)->toBe('production')
         ->and($alert->detail)->toBe(['waitSeconds' => 90])
@@ -236,14 +236,14 @@ test('an alert of a deleted environment can be made without one', function () {
         'team_id' => $team->id,
         'application_name' => 'Billing',
         'environment_name' => 'production',
-        'environment_color' => EnvironmentColor::Prod,
+        'environment_type' => EnvironmentType::Production,
     ])->fresh();
 
     expect($alert->environment_id)->toBeNull()
         ->and($alert->team_id)->toBe($team->id)
         ->and($alert->application_name)->toBe('Billing')
         ->and($alert->environment_name)->toBe('production')
-        ->and($alert->environment_color)->toBe(EnvironmentColor::Prod)
+        ->and($alert->environment_type)->toBe(EnvironmentType::Production)
         ->and($alert->threshold)->toBe(AlertRuleMetric::QueuePending->defaultThreshold())
         ->and(Environment::query()->count())->toBe(0);
 });

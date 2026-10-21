@@ -2,13 +2,13 @@
 
 namespace App\Data\Applications;
 
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Models\AlertRule;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Rules\OutboundUrl;
 use App\Rules\StoredPasswordStaysWithItsAddress;
-use App\Rules\UrlWithoutCredentials;
-use App\Rules\UrlWithoutQueryOrFragment;
+use App\Support\HorizonUrl;
 use Closure;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -20,13 +20,12 @@ class EnvironmentFormData extends Data
 {
     public function __construct(
         public string $name,
-        public EnvironmentColor $color,
+        public EnvironmentType $type,
         public string $horizonUrl,
         public int $pollIntervalSeconds,
         public ?string $basicAuthUser = null,
         public ?string $basicAuthPassword = null,
         public bool $pollingEnabled = true,
-        public bool $isProduction = false,
     ) {}
 
     /**
@@ -39,11 +38,8 @@ class EnvironmentFormData extends Data
             $properties['pollIntervalSeconds'] = config()->integer('horizon-watch.readings.poll_interval_seconds.default');
         }
 
-        if (! array_key_exists('isProduction', $properties)) {
-            $stored = self::environmentBeingUpdated();
-
-            $properties['isProduction'] = ($stored !== null && $stored->is_production)
-                || (is_string($properties['name'] ?? null) && Environment::looksLikeProduction($properties['name']));
+        if (is_string($properties['horizonUrl'] ?? null)) {
+            $properties['horizonUrl'] = HorizonUrl::normalize($properties['horizonUrl']);
         }
 
         return $properties;
@@ -56,7 +52,7 @@ class EnvironmentFormData extends Data
     {
         return [
             'name' => ['required', 'string', 'max:60', 'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/', self::reservedNameRule(), ...self::uniqueNameRules()],
-            'color' => ['required', Rule::enum(EnvironmentColor::class)],
+            'type' => ['required', Rule::enum(EnvironmentType::class)],
             'horizonUrl' => self::horizonUrlRules(),
             'basicAuthUser' => self::basicAuthUserRules(self::key($context, 'basicAuthPassword')),
             'basicAuthPassword' => ['nullable', 'string', ...self::passwordRequiredWithUsernameRules($context)],
@@ -66,7 +62,16 @@ class EnvironmentFormData extends Data
                 'multiple_of:'.config()->integer('horizon-watch.readings.poll_tick_seconds'),
             ],
             'pollingEnabled' => ['boolean'],
-            'isProduction' => ['boolean'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function attributes(): array
+    {
+        return [
+            'horizonUrl' => __('Horizon URL'),
         ];
     }
 
@@ -85,11 +90,11 @@ class EnvironmentFormData extends Data
     }
 
     /**
-     * @return array<int, string|UrlWithoutCredentials|UrlWithoutQueryOrFragment>
+     * @return array<int, string|OutboundUrl>
      */
     public static function horizonUrlRules(): array
     {
-        return ['required', 'url:http,https', 'max:255', new UrlWithoutCredentials, new UrlWithoutQueryOrFragment];
+        return ['required', 'url:http,https', 'max:255', new OutboundUrl];
     }
 
     /**

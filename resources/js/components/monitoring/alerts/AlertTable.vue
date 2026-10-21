@@ -72,7 +72,10 @@ const environmentHref = useEnvironmentHref();
                             :href="environmentHref(alert.environmentId)"
                             class="nc-t-xs env-link inline-flex items-center gap-[7px]"
                         >
-                            <EnvSwatch :color="alert.color" :size="8" />
+                            <EnvSwatch
+                                :type="alert.environmentType"
+                                :size="8"
+                            />
                             {{ alert.applicationName }} /
                             {{ alert.environmentName }}
                         </Link>
@@ -81,7 +84,10 @@ const environmentHref = useEnvironmentHref();
                             class="nc-t-xs nc-tone-soft inline-flex items-center gap-[7px]"
                             :title="$t('This environment has been deleted')"
                         >
-                            <EnvSwatch :color="alert.color" :size="8" />
+                            <EnvSwatch
+                                :type="alert.environmentType"
+                                :size="8"
+                            />
                             {{ alert.applicationName }} /
                             {{ alert.environmentName }}
                         </span>

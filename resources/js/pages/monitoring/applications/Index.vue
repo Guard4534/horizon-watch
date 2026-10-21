@@ -8,6 +8,7 @@ import ApplicationSection from '@/components/monitoring/applications/Application
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { useVisibility } from '@/composables/useVisibility';
+import { hostOf } from '@/lib/environments';
 import { create as createApplication } from '@/routes/applications';
 
 defineOptions({
@@ -25,15 +26,21 @@ const { canManageApplications } = useVisibility();
 
 const nothingVisible = computed(() => page.groups.length === 0);
 
+const haystack = (group: App.Data.Pages.ApplicationGroupData): string =>
+    [
+        group.application.name,
+        ...group.environments.map(
+            (environment) => hostOf(environment.horizonUrl) ?? '',
+        ),
+    ]
+        .join(' ')
+        .toLowerCase();
+
 const groups = computed(() => {
     const needle = search.value.trim().toLowerCase();
 
     return needle
-        ? page.groups.filter((group) =>
-              `${group.application.name} ${group.application.host}`
-                  .toLowerCase()
-                  .includes(needle),
-          )
+        ? page.groups.filter((group) => haystack(group).includes(needle))
         : page.groups;
 });
 </script>

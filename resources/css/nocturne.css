@@ -44,13 +44,12 @@
 
     /* Identity hues for environments: cool range only, so red, amber and
        green keep meaning down, warning and healthy. */
-    --env-prod: oklch(0.72 0.13 325);
+    --env-production: oklch(0.72 0.13 325);
     --env-preprod: oklch(0.7 0.13 295);
     --env-staging: oklch(0.7 0.12 268);
-    --env-develop: oklch(0.74 0.11 240);
-    --env-demo: oklch(0.8 0.09 212);
-    --env-worker: oklch(0.82 0.07 192);
+    --env-development: oklch(0.74 0.11 240);
     --env-testing: oklch(0.74 0.03 255);
+    --env-demo: oklch(0.8 0.09 212);
 }
 
 @keyframes nc-pulse {

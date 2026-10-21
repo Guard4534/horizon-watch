@@ -12,7 +12,7 @@ class ApplicationFormPageData extends Data
         /**
          * @var array<int, array{value: string, label: string}>
          */
-        public array $colors,
+        public array $types,
         public ?string $slug = null,
         public ?int $maxEnvironments = null,
     ) {}

@@ -3,9 +3,9 @@ import { PhLockSimple, PhLockSimpleOpen, PhWarning } from '@phosphor-icons/vue';
 import { createReusableTemplate } from '@vueuse/core';
 import { computed, watch } from 'vue';
 import InputError from '@/components/InputError.vue';
-import ColorPicker from '@/components/monitoring/applications/ColorPicker.vue';
+import TypePicker from '@/components/nocturne/TypePicker.vue';
+import { followSuggestion, typeForName } from '@/lib/environments';
 import { invalidField } from '@/lib/fieldErrors';
-import { looksLikeProduction } from '@/lib/monitoring';
 
 const model = defineModel<App.Data.Applications.EnvironmentFormData>({
     required: true,
@@ -13,23 +13,21 @@ const model = defineModel<App.Data.Applications.EnvironmentFormData>({
 
 const auth = defineModel<boolean>('auth', { default: true });
 
-const productionEdited = defineModel<boolean>('productionEdited', {
-    default: false,
-});
+const typeEdited = defineModel<boolean>('typeEdited', { default: false });
 
 const {
     errors,
     prefix = '',
     hasPassword = false,
     compact = false,
-    suggestProduction = false,
+    typeFollowsName = false,
 } = defineProps<{
-    colors: App.Data.Pages.EnvironmentFormPageData['colors'];
+    types: App.Data.Pages.EnvironmentFormPageData['types'];
     errors: Record<string, string | undefined>;
     prefix?: string;
     hasPassword?: boolean;
     compact?: boolean;
-    suggestProduction?: boolean;
+    typeFollowsName?: boolean;
 }>();
 
 defineEmits<{
@@ -58,25 +56,22 @@ const toggleAuth = () => {
 watch(
     () => model.value.name,
     (name) => {
-        if (productionEdited.value) {
-            return;
-        }
-
-        if (looksLikeProduction(name)) {
-            model.value.isProduction = true;
-        } else if (suggestProduction) {
-            model.value.isProduction = false;
+        if (typeFollowsName) {
+            model.value.type = followSuggestion(
+                model.value.type,
+                typeForName(name),
+                typeEdited.value,
+            );
         }
     },
 );
 
 const [DefineName, NameField] = createReusableTemplate();
-const [DefineColor, ColorField] = createReusableTemplate();
+const [DefineType, TypeField] = createReusableTemplate();
 const [DefineUrl, UrlField] = createReusableTemplate();
 const [DefineCredentials, CredentialFields] = createReusableTemplate();
 const [DefineInterval, IntervalField] = createReusableTemplate();
 const [DefineCollect, CollectField] = createReusableTemplate();
-const [DefineProduction, ProductionField] = createReusableTemplate();
 </script>
 
 <template>
@@ -113,23 +108,34 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
         </div>
     </DefineName>
 
-    <DefineColor>
+    <DefineType>
         <div class="nc-field">
-            <label :id="fieldId('color')">{{ $t('Color') }}</label>
-            <ColorPicker
-                v-model="model.color"
-                :colors="colors"
-                :name="fieldId('color')"
-                :aria-labelledby="fieldId('color')"
-                v-bind="invalidField(fieldId('color'), errorOf('color'))"
+            <label :id="fieldId('type')">{{ $t('Type') }}</label>
+            <TypePicker
+                v-model="model.type"
+                :types="types"
+                :name="fieldId('type')"
+                :aria-labelledby="fieldId('type')"
+                v-bind="invalidField(fieldId('type'), errorOf('type'))"
+                @update:model-value="typeEdited = true"
             />
             <InputError
                 size="sm"
-                :field="fieldId('color')"
-                :message="errorOf('color')"
+                :field="fieldId('type')"
+                :message="errorOf('type')"
             />
+            <div
+                v-if="!compact && !errorOf('type')"
+                class="nc-t-2xs nc-tone-faint mt-1"
+            >
+                {{
+                    $t(
+                        'Members who see everything except production do not see production environments.',
+                    )
+                }}
+            </div>
         </div>
-    </DefineColor>
+    </DefineType>
 
     <DefineUrl>
         <div class="nc-field">
@@ -142,11 +148,7 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                 type="url"
                 autocomplete="off"
                 spellcheck="false"
-                :placeholder="
-                    compact
-                        ? 'https://invoicer.example.com/horizon'
-                        : 'https://production.invoicer.example.com/horizon'
-                "
+                placeholder="https://shop.example.com/horizon"
                 @input="$emit('urlInput')"
                 v-bind="
                     invalidField(fieldId('horizonUrl'), errorOf('horizonUrl'))
@@ -166,6 +168,16 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
                 {{
                     $t(
                         'The basic-auth password travels unencrypted over http://. Use https:// unless the network in between is trusted.',
+                    )
+                }}
+            </div>
+            <div
+                v-else-if="!errorOf('horizonUrl')"
+                class="nc-t-2xs nc-tone-faint mt-1"
+            >
+                {{
+                    $t(
+                        'The address of the Horizon dashboard, as you open it in the browser.',
                     )
                 }}
             </div>
@@ -314,16 +326,7 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
 
     <DefineCollect>
         <div :class="compact ? 'contents' : undefined">
-            <label
-                :class="compact ? 'nc-radio nc-t-xs' : 'nc-radio nc-t-sm'"
-                :title="
-                    compact
-                        ? $t(
-                              'Hidden from members who see everything except production.',
-                          )
-                        : undefined
-                "
-            >
+            <label :class="compact ? 'nc-radio nc-t-xs' : 'nc-radio nc-t-sm'">
                 <input
                     :id="fieldId('pollingEnabled')"
                     v-model="model.pollingEnabled"
@@ -360,44 +363,6 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
         </div>
     </DefineCollect>
 
-    <DefineProduction>
-        <div :class="compact ? 'contents' : undefined">
-            <label :class="compact ? 'nc-radio nc-t-xs' : 'nc-radio nc-t-sm'">
-                <input
-                    :id="fieldId('isProduction')"
-                    v-model="model.isProduction"
-                    type="checkbox"
-                    @change="productionEdited = true"
-                    v-bind="
-                        invalidField(
-                            fieldId('isProduction'),
-                            errorOf('isProduction'),
-                        )
-                    "
-                />
-                <span class="nc-dot" />
-                {{ $t('Production environment') }}
-            </label>
-            <template v-if="!compact">
-                <InputError
-                    size="sm"
-                    :field="fieldId('isProduction')"
-                    :message="errorOf('isProduction')"
-                />
-                <div
-                    v-if="!errorOf('isProduction')"
-                    class="nc-t-2xs nc-tone-faint mt-1"
-                >
-                    {{
-                        $t(
-                            'Hidden from members who see everything except production.',
-                        )
-                    }}
-                </div>
-            </template>
-        </div>
-    </DefineProduction>
-
     <div v-if="compact">
         <div
             class="grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto]"
@@ -411,7 +376,7 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
         </div>
 
         <div class="mt-[var(--nc-space-3)]">
-            <ColorField />
+            <TypeField />
         </div>
 
         <div
@@ -442,7 +407,6 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
         >
             <IntervalField />
             <CollectField />
-            <ProductionField />
         </div>
         <InputError
             size="sm"
@@ -453,11 +417,6 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
             size="sm"
             :field="fieldId('pollingEnabled')"
             :message="errorOf('pollingEnabled')"
-        />
-        <InputError
-            size="sm"
-            :field="fieldId('isProduction')"
-            :message="errorOf('isProduction')"
         />
     </div>
 
@@ -470,7 +429,7 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
             "
         >
             <NameField />
-            <ColorField />
+            <TypeField />
         </div>
 
         <UrlField />
@@ -487,6 +446,5 @@ const [DefineProduction, ProductionField] = createReusableTemplate();
         </div>
 
         <CollectField />
-        <ProductionField />
     </div>
 </template>

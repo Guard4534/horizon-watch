@@ -2,8 +2,8 @@
 
 use App\Enums\AlertRuleMetric;
 use App\Enums\DeliveryStatus;
-use App\Enums\EnvironmentColor;
 use App\Enums\EnvironmentStatus;
+use App\Enums\EnvironmentType;
 use App\Enums\MemberVisibility;
 use App\Enums\NotificationChannel;
 use App\Enums\SentNotificationKind;
@@ -82,7 +82,7 @@ test('the open tab lists the open alerts with their details, and the counts of e
             'environmentId' => $this->production->slug,
             'applicationName' => 'Billing',
             'environmentName' => 'production',
-            'color' => 'prod',
+            'environmentType' => 'production',
             'environmentStatus' => 'degraded',
             'minutesAgo' => 0,
             'resolvedMinutesAgo' => null,
@@ -217,13 +217,13 @@ test('the resolved alerts of a deleted environment are kept for those who see ev
         'team_id' => $this->team->id,
         'application_name' => 'Legacy',
         'environment_name' => 'old-production',
-        'environment_color' => EnvironmentColor::Prod,
+        'environment_type' => EnvironmentType::Production,
     ]);
     Alert::factory()->withoutEnvironment()->resolved()->create([
         'team_id' => Team::factory()->create()->id,
         'application_name' => 'Elsewhere',
         'environment_name' => 'production',
-        'environment_color' => EnvironmentColor::Prod,
+        'environment_type' => EnvironmentType::Production,
     ]);
 
     $admin = ($this->page)(['state' => 'resolved']);

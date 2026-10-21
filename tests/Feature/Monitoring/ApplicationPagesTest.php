@@ -2,6 +2,8 @@
 
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
+use App\Enums\MemberVisibility;
+use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\User;
@@ -44,4 +46,26 @@ test('an application page shows one card per environment with its pending trend'
             ->has('page.environments.0.trend', 12)
             ->has('page.recentAlerts', 1)
             ->where('page.recentAlerts.0.metric', 'horizon.master_inactive'));
+});
+
+test('an application is named after its production environment, or the first one the viewer sees', function () {
+    $member = User::factory()->create();
+    $this->user->currentTeam->members()->attach($member, [
+        'role' => TeamRole::Member->value,
+        'visibility' => MemberVisibility::NonProduction->value,
+    ]);
+
+    $this->actingAs($this->user)
+        ->get(route('applications.index', ['current_team' => $this->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.groups.0.application.domain', 'production.example.com')
+            ->missing('page.groups.0.application.host'));
+
+    $this->actingAs($member)
+        ->get(route('applications.index', ['current_team' => $this->slug]))
+        ->assertInertia(fn (Assert $page) => $page->where('page.groups.0.application.domain', 'staging.example.com'));
+
+    $this->actingAs($this->user)
+        ->get(route('applications.show', ['current_team' => $this->slug, 'application' => 'invoice-desk']))
+        ->assertInertia(fn (Assert $page) => $page->where('page.application.domain', 'production.example.com'));
 });

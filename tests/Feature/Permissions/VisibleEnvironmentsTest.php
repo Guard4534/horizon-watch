@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\EnvironmentType;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Models\Application;
@@ -176,28 +177,28 @@ test('the ids of a membership are null for everything, or the environments it se
         ]);
 });
 
-test('non_production follows the production flag, not the environment name', function () {
+test('non_production follows the type, not the environment name', function () {
     $prodEu = Environment::factory()->for($this->appCharlie)->create(['name' => 'prod-eu']);
     $live = Environment::factory()->for($this->appCharlie)->create(['name' => 'live']);
-    $flagged = Environment::factory()->for($this->appCharlie)->create(['name' => 'blue', 'is_production' => true]);
-    $unflagged = Environment::factory()->for($this->appCharlie)->create(['name' => 'production-archive', 'is_production' => false]);
+    $typed = Environment::factory()->for($this->appCharlie)->create(['name' => 'blue', 'type' => EnvironmentType::Production]);
+    $untyped = Environment::factory()->for($this->appCharlie)->create(['name' => 'production-archive', 'type' => EnvironmentType::Staging]);
     $membership = $this->userNonProduction->teamMemberships()->where('team_id', $this->team->id)->sole();
 
     $ids = $this->filter->query($this->team, $this->userNonProduction)->pluck('id')->all();
     $batched = $this->filter->idsForAllOf($this->team, [$membership])[$membership->id];
 
-    expect($ids)->toContain($unflagged->id)
+    expect($ids)->toContain($untyped->id)
         ->and($ids)->not->toContain($prodEu->id)
         ->and($ids)->not->toContain($live->id)
-        ->and($ids)->not->toContain($flagged->id)
+        ->and($ids)->not->toContain($typed->id)
         ->and($batched)->toEqualCanonicalizing($ids)
         ->and($this->filter->idsFor($this->team, $membership))->toEqualCanonicalizing($ids)
-        ->and($this->filter->sees($this->team, $this->userNonProduction, $flagged->id))->toBeFalse()
-        ->and($this->filter->sees($this->team, $this->userNonProduction, $unflagged->id))->toBeTrue();
+        ->and($this->filter->sees($this->team, $this->userNonProduction, $typed->id))->toBeFalse()
+        ->and($this->filter->sees($this->team, $this->userNonProduction, $untyped->id))->toBeTrue();
 });
 
-test('unflagging an environment shows it to non_production members', function () {
-    $this->alphaProduction->update(['is_production' => false]);
+test('changing the type away from production shows the environment to non_production members', function () {
+    $this->alphaProduction->update(['type' => EnvironmentType::Staging]);
 
     expect($this->filter->sees($this->team, $this->userNonProduction, $this->alphaProduction->id))->toBeTrue()
         ->and($this->filter->sees($this->team, $this->userNonProduction, $this->bravoProduction->id))->toBeFalse();

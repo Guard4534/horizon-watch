@@ -124,9 +124,9 @@ test('the environment picker marks the production environments', function () {
         ->get(route('members.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environments.0.name', 'Billing / production')
-            ->where('page.environments.0.isProduction', true)
+            ->where('page.environments.0.type', 'production')
             ->where('page.environments.1.name', 'Billing / staging')
-            ->where('page.environments.1.isProduction', false));
+            ->where('page.environments.1.type', 'staging'));
 });
 
 test('a manual member lists the environments they can actually see', function () {

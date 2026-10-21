@@ -147,4 +147,14 @@ describe('readingProblemLabel', () => {
             }),
         ).toBe('HTTP —');
     });
+
+    it('sends a 404 back to the Horizon URL, the only address there is', () => {
+        expect(
+            readingProblemLabel({
+                cause: 'not_found',
+                status: 404,
+                location: null,
+            }),
+        ).toBe('Nothing at this path (HTTP 404): check the Horizon URL');
+    });
 });

@@ -25,13 +25,13 @@ const slug = useTeamSlug();
 
 const {
     step,
-    horizonPath,
     form,
     rows,
     errors,
     unplacedErrors,
     applicationFilled,
     environmentsFilled,
+    domain,
     testing,
     addEnvironment,
     removeEnvironment,
@@ -40,7 +40,7 @@ const {
     rememberTest,
     testAgain,
     submit,
-} = useApplicationWizard(page.colors);
+} = useApplicationWizard();
 </script>
 
 <template>
@@ -84,25 +84,7 @@ const {
                 :errors="errors"
                 prefix="application."
                 wizard
-            >
-                <div class="nc-field">
-                    <label for="wizard-horizon-path">{{
-                        $t('Horizon path')
-                    }}</label>
-                    <input
-                        id="wizard-horizon-path"
-                        v-model="horizonPath"
-                        class="nc-input"
-                        type="text"
-                        autocomplete="off"
-                        spellcheck="false"
-                        placeholder="horizon"
-                    />
-                    <div class="nc-t-2xs nc-tone-faint mt-1">
-                        {{ $t('If you changed HORIZON_PATH, set it here.') }}
-                    </div>
-                </div>
-            </ApplicationForm>
+            />
         </SectionCard>
 
         <div
@@ -122,12 +104,12 @@ const {
                 <EnvironmentForm
                     v-model="form.environments[index]"
                     v-model:auth="rows[index].auth"
-                    v-model:production-edited="rows[index].productionEdited"
-                    :colors="page.colors"
+                    v-model:type-edited="rows[index].typeEdited"
+                    :types="page.types"
                     :errors="errors"
                     :prefix="`environments.${index}.`"
                     compact
-                    suggest-production
+                    type-follows-name
                     @url-input="onUrlInput(index)"
                 >
                     <template #actions>
@@ -175,9 +157,10 @@ const {
             >
                 <span style="font-size: 15px">{{ form.application.name }}</span>
                 <span
+                    v-if="domain"
                     class="nc-t-xs nc-tone-muted"
                     style="letter-spacing: 0.01em"
-                    >{{ form.application.host }}</span
+                    >{{ domain }}</span
                 >
                 <button
                     type="button"

@@ -43,15 +43,15 @@ seed() {
             "password" => "smoke-password-1",
             "organization" => "Smoke",
         ]));
-        $application = $user->currentTeam->applications()->create(["name" => "Shop", "host" => "shop.example.com"]);
-        $application->environments()->create([
+        $typed = Illuminate\Support\Facades\Schema::hasColumn("environments", "type");
+        $application = $user->currentTeam->applications()->create($typed ? ["name" => "Shop"] : ["name" => "Shop", "host" => "shop.example.com"]);
+        $application->environments()->create(array_merge($typed ? ["type" => "production"] : ["color" => "prod"], [
             "name" => "production",
-            "color" => "prod",
             "horizon_url" => "http://horizon:8080/horizon",
             "basic_auth_user" => "smoke",
             "basic_auth_password" => "smoke-basic-auth",
             "poll_interval_seconds" => 15,
-        ]);
+        ]));
         echo "seeded";
     ' | tr -d '\r'
 }
@@ -155,7 +155,7 @@ check_upgrade() {
         echo "users:".App\Models\User::count()
             .":admin:".(int) App\Models\User::sole()->is_instance_admin
             .":password:".(int) ($environment->basic_auth_password === "smoke-basic-auth")
-            .":production:".(int) $environment->is_production;
+            .":production:".(int) $environment->type->isProduction();
     ' | tr -d '\r')"
     [[ "$probe" == *"users:1:admin:1:password:1:production:1"* ]] || fail "the data did not survive the upgrade from $previous: $probe"
 

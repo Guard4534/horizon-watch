@@ -5,6 +5,7 @@ use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -59,15 +60,15 @@ test('the four form pages answer 403 for a member and for a viewer', function (s
     }
 })->with(['member', 'viewer']);
 
-test('the wizard receives the whole palette and nothing to edit', function () {
+test('the wizard receives every environment type and nothing to edit', function () {
     $this->actingAs($this->admin)
         ->get(route('applications.create', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.application', null)
             ->where('page.slug', null)
-            ->has('page.colors', 7)
-            ->where('page.colors.0.value', 'prod')
-            ->where('page.colors.0.label', 'Prod'));
+            ->has('page.types', 6)
+            ->where('page.types.0.value', 'production')
+            ->where('page.types.0.label', 'Production'));
 });
 
 test('the application edit page carries the slug its form submits to', function () {
@@ -79,7 +80,7 @@ test('the application edit page carries the slug its form submits to', function 
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.slug', 'invoicer')
             ->where('page.application.name', 'Invoicer')
-            ->where('page.application.host', $this->application->host));
+            ->missing('page.application.host'));
 });
 
 test('the environment edit page shows the username and whether a password is set', function () {
@@ -94,7 +95,7 @@ test('the environment edit page shows the username and whether a password is set
             ->where('page.environment.basicAuthUser', 'monitor')
             ->where('page.environment.pollingEnabled', true)
             ->where('page.hasPassword', true)
-            ->has('page.colors', 7));
+            ->has('page.types', 6)->where('page.environment.type', 'production'));
 });
 
 test('an environment without credentials reports no password set', function () {
@@ -114,6 +115,47 @@ test('an environment without credentials reports no password set', function () {
             ->where('page.environment.basicAuthUser', null)
             ->where('page.environment.pollingEnabled', false)
             ->where('page.hasPassword', false));
+});
+
+test('the add environment page names the domain and the base of its URL suggestion', function () {
+    Environment::factory()->for($this->application)->staging()->create();
+
+    $this->actingAs($this->admin)
+        ->get(route('environments.create', ['current_team' => $this->team->slug, 'application' => $this->application->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.domain', 'production.example.com')
+            ->where('page.baseHorizonUrl', 'https://production.example.com/horizon')
+            ->where('page.baseEnvironmentName', 'production'));
+});
+
+test('without a production environment the suggestion starts from the first one', function () {
+    $this->environment->delete();
+    Environment::factory()->for($this->application)->staging()->create();
+    Environment::factory()->for($this->application)->develop()->create();
+
+    $this->actingAs($this->admin)
+        ->get(route('environments.create', ['current_team' => $this->team->slug, 'application' => $this->application->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.domain', 'staging.example.com')
+            ->where('page.baseEnvironmentName', 'staging'));
+});
+
+test('a legacy Horizon URL with credentials inside never reaches the add environment page', function () {
+    DB::table('environments')->where('id', $this->environment->id)
+        ->update(['horizon_url' => 'https://monitor:ry3-lin3n-pillow@Production.Example.com/horizon/api']);
+
+    $this->actingAs($this->admin)
+        ->get(route('environments.create', ['current_team' => $this->team->slug, 'application' => $this->application->slug]))
+        ->assertDontSee('ry3-lin3n-pillow', false)
+        ->assertDontSee('monitor:', false)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.domain', 'production.example.com')
+            ->where('page.baseHorizonUrl', fn (string $url) => ! str_contains($url, '@')));
+
+    $this->actingAs($this->admin)
+        ->get(route('applications.index', ['current_team' => $this->team->slug]))
+        ->assertDontSee('ry3-lin3n-pillow', false)
+        ->assertDontSee('monitor:', false);
 });
 
 test('no form page prop is a password field, and none carries the stored one', function () {
@@ -162,4 +204,47 @@ test('the wizard and the environment pages share one environment form', function
     foreach (['basicAuthUser', 'basicAuthPassword', 'pollIntervalSeconds', 'pollingEnabled'] as $field) {
         expect($wizard)->not->toContain($field);
     }
+});
+
+test('identity follows the environment type everywhere', function () {
+    $css = file_get_contents(resource_path('css/nocturne.css'));
+
+    foreach (['production', 'preprod', 'staging', 'development', 'testing', 'demo'] as $type) {
+        expect($css)->toContain("--env-{$type}:");
+    }
+
+    expect($css)->not->toContain('--env-prod:')->not->toContain('--env-worker:')->not->toContain('--env-develop:')
+        ->and(file_exists(resource_path('js/components/monitoring/applications/ColorPicker.vue')))->toBeFalse()
+        ->and(file_get_contents(resource_path('js/components/nocturne/EnvPill.vue')))->toContain('isProductionType(type)');
+});
+
+test('the environment form asks for a type and the full Horizon URL, and the environment page re-derives no API path', function () {
+    $form = file_get_contents(resource_path('js/components/monitoring/applications/EnvironmentForm.vue'));
+    $create = file_get_contents(resource_path('js/pages/monitoring/environments/Create.vue'));
+    $show = file_get_contents(resource_path('js/pages/monitoring/environments/Show.vue'));
+
+    expect($form)
+        ->toContain('<TypePicker')
+        ->toContain("'The address of the Horizon dashboard, as you open it in the browser.'")
+        ->toContain('placeholder="https://shop.example.com/horizon"')
+        ->toContain('followSuggestion(')
+        ->not->toContain('isProduction')
+        ->not->toContain('productionEdited')
+        ->not->toContain('Hidden from members who see everything except production.');
+
+    expect($create)
+        ->toContain('useSuggestedHorizonUrl(')
+        ->toContain('@url-input="onUrlInput"')
+        ->toContain('type-follows-name')
+        ->not->toContain('urlEdited')
+        ->not->toContain('application.host');
+    expect($show)->not->toContain('mastersPath');
+});
+
+test('the wizard asks only the application name before the environments', function () {
+    $wizard = file_get_contents(resource_path('js/pages/monitoring/applications/Create.vue'));
+    $form = file_get_contents(resource_path('js/components/monitoring/applications/ApplicationForm.vue'));
+
+    expect($wizard)->not->toContain('horizonPath')->not->toContain('application.host')->toContain('type-follows-name')
+        ->and($form)->not->toContain('host');
 });

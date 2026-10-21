@@ -2,8 +2,8 @@
 
 namespace App\Data\Monitoring;
 
-use App\Enums\EnvironmentColor;
 use App\Enums\EnvironmentStatus;
+use App\Enums\EnvironmentType;
 use App\Enums\HorizonStatus;
 use App\Enums\ReadingError;
 use Spatie\LaravelData\Data;
@@ -15,8 +15,7 @@ class EnvironmentData extends Data
         public string $applicationId,
         public string $applicationName,
         public string $name,
-        public EnvironmentColor $color,
-        public bool $isProduction,
+        public EnvironmentType $type,
         public string $horizonUrl,
         public ?EnvironmentStatus $status,
         public int $pending,

@@ -30,6 +30,7 @@ import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { isProductionType } from '@/lib/environments';
 import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
 import {
     formatCount,
@@ -69,18 +70,6 @@ const longRunningUnknown = computed(
         environment.value.status === null ||
         environment.value.status === 'unreachable',
 );
-
-const mastersPath = computed(() => {
-    try {
-        const path = new URL(environment.value.horizonUrl).pathname
-            .replace(/\/+$/, '')
-            .replace(/\/api$/, '');
-
-        return `${path}/api/masters`;
-    } catch {
-        return null;
-    }
-});
 
 type Tile = { label: string; value: string; color?: string; note: string };
 
@@ -186,10 +175,10 @@ const tiles = computed<Tile[]>(() => [
                     class="flex items-center"
                     style="font-size: 24px; line-height: 1.15; gap: 8px"
                 >
-                    <EnvSwatch :color="environment.color" :size="12" />
+                    <EnvSwatch :type="environment.type" :size="12" />
                     {{ environment.name }}
                     <span
-                        v-if="environment.isProduction"
+                        v-if="isProductionType(environment.type)"
                         class="nc-tone-muted inline-flex"
                         role="img"
                         :title="$t('Production environment')"
@@ -310,12 +299,9 @@ const tiles = computed<Tile[]>(() => [
                 <span style="font-size: 14px">{{
                     $t('Nodes (master supervisors)')
                 }}</span>
-                <span class="nc-t-2xs nc-tone-muted"
-                    >{{ $t('one master per machine')
-                    }}<template v-if="mastersPath">
-                        · {{ mastersPath }}</template
-                    ></span
-                >
+                <span class="nc-t-2xs nc-tone-muted">{{
+                    $t('one master per machine')
+                }}</span>
                 <span
                     v-if="lastKnown"
                     class="nc-t-2xs ml-auto"

@@ -5,7 +5,7 @@ namespace App\Models;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use Carbon\CarbonImmutable;
 use Database\Factories\AlertFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -24,7 +24,7 @@ use Illuminate\Support\Carbon;
  * @property AlertSeverity $severity
  * @property string $application_name
  * @property string $environment_name
- * @property EnvironmentColor $environment_color
+ * @property EnvironmentType $environment_type
  * @property float $threshold
  * @property string $unit
  * @property float|null $value
@@ -56,7 +56,7 @@ use Illuminate\Support\Carbon;
     'severity',
     'application_name',
     'environment_name',
-    'environment_color',
+    'environment_type',
     'threshold',
     'unit',
     'value',
@@ -171,7 +171,7 @@ class Alert extends Model
         return [
             'metric' => AlertRuleMetric::class,
             'severity' => AlertSeverity::class,
-            'environment_color' => EnvironmentColor::class,
+            'environment_type' => EnvironmentType::class,
             'threshold' => 'float',
             'value' => 'float',
             'detail' => 'array',

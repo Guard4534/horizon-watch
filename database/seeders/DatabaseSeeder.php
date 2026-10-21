@@ -5,7 +5,7 @@ namespace Database\Seeders;
 use App\Actions\Alerts\RegenerateWebhookSecret;
 use App\Actions\Setup\CompleteSetup;
 use App\Data\Auth\SetupData;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\NotificationSetting;
@@ -33,16 +33,16 @@ class DatabaseSeeder extends Seeder
     ];
 
     /**
-     * @var array<string, EnvironmentColor>
+     * @var array<string, EnvironmentType>
      */
-    private const COLORS = [
-        'production' => EnvironmentColor::Prod,
-        'preprod' => EnvironmentColor::Preprod,
-        'staging' => EnvironmentColor::Staging,
-        'develop' => EnvironmentColor::Develop,
-        'demo' => EnvironmentColor::Demo,
-        'worker-batch' => EnvironmentColor::Worker,
-        'testing' => EnvironmentColor::Testing,
+    private const TYPES = [
+        'production' => EnvironmentType::Production,
+        'preprod' => EnvironmentType::Preprod,
+        'staging' => EnvironmentType::Staging,
+        'develop' => EnvironmentType::Development,
+        'demo' => EnvironmentType::Demo,
+        'worker-batch' => EnvironmentType::Staging,
+        'testing' => EnvironmentType::Testing,
     ];
 
     /**
@@ -90,11 +90,11 @@ class DatabaseSeeder extends Seeder
             return;
         }
 
-        $application = Application::factory()->for($team)->create(['name' => 'Local Horizon', 'host' => 'localhost']);
+        $application = Application::factory()->for($team)->create(['name' => 'Local Horizon']);
 
         Environment::factory()->for($application)->create([
             'name' => 'local',
-            'color' => EnvironmentColor::Develop,
+            'type' => EnvironmentType::Development,
             'horizon_url' => $url,
             'basic_auth_user' => null,
             'basic_auth_password' => null,
@@ -111,14 +111,14 @@ class DatabaseSeeder extends Seeder
         $environments = [];
 
         foreach (self::APPLICATIONS as $name => [$host, $environmentNames]) {
-            $application = Application::factory()->for($team)->create(['name' => $name, 'host' => $host]);
+            $application = Application::factory()->for($team)->create(['name' => $name]);
 
             foreach ($environmentNames as $environmentName) {
                 $hasBasicAuth = in_array($environmentName, ['production', 'preprod'], true);
 
                 $environments[] = Environment::factory()->for($application)->create([
                     'name' => $environmentName,
-                    'color' => self::COLORS[$environmentName],
+                    'type' => self::TYPES[$environmentName],
                     'horizon_url' => 'https://'.($environmentName === 'production' ? '' : "{$environmentName}.").$host.'/horizon',
                     'basic_auth_user' => $hasBasicAuth ? 'horizon-bot' : null,
                     'basic_auth_password' => $hasBasicAuth ? 'change-me' : null,

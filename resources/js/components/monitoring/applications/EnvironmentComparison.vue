@@ -61,7 +61,7 @@ const header = computed(() => {
                     >
                         <td>
                             <span class="inline-flex items-center gap-2"
-                                ><EnvSwatch :color="environment.color" />{{
+                                ><EnvSwatch :type="environment.type" />{{
                                     environment.name
                                 }}</span
                             >

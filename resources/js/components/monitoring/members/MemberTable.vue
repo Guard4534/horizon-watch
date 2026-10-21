@@ -21,6 +21,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { isProductionType } from '@/lib/environments';
 import {
     ASSIGNABLE_ROLES,
     losingTheLastAdmin as losesTheLastAdmin,
@@ -287,7 +288,7 @@ function confirmRemove() {
                                                     class="nc-t-2xs nc-tone-faint max-w-[240px]"
                                                     >{{
                                                         $t(
-                                                            'Hides every environment marked as production.',
+                                                            'Hides every environment of type Production.',
                                                         )
                                                     }}</span
                                                 >
@@ -353,7 +354,7 @@ function confirmRemove() {
                     />
                     {{ environment.name }}
                     <span
-                        v-if="environment.isProduction"
+                        v-if="isProductionType(environment.type)"
                         class="nc-tone-muted inline-flex"
                         role="img"
                         :title="$t('Production environment')"

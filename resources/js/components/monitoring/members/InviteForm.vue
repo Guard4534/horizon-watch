@@ -6,6 +6,7 @@ import InputError from '@/components/InputError.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { Spinner } from '@/components/ui/spinner';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { isProductionType } from '@/lib/environments';
 import { invalidField } from '@/lib/fieldErrors';
 import { ASSIGNABLE_ROLES, VISIBILITIES, visibilityLabel } from '@/lib/members';
 import { store as storeInvitation } from '@/routes/members/invitations';
@@ -116,7 +117,7 @@ function reset() {
                     v-if="visibility === 'non_production' && !errors.visibility"
                     class="nc-t-2xs nc-tone-faint mt-1"
                 >
-                    {{ $t('Hides every environment marked as production.') }}
+                    {{ $t('Hides every environment of type Production.') }}
                 </div>
             </div>
 
@@ -150,7 +151,7 @@ function reset() {
                         />
                         {{ environment.name }}
                         <span
-                            v-if="environment.isProduction"
+                            v-if="isProductionType(environment.type)"
                             class="nc-tone-muted inline-flex"
                             role="img"
                             :title="$t('Production environment')"

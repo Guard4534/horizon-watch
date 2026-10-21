@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
+    envTypeColor,
     exceeds,
     formatCount,
     formatDuration,
     formatElapsed,
     formatWait,
-    looksLikeProduction,
     seriesRefreshInterval,
     statusColor,
     statusLabel,
@@ -83,21 +83,10 @@ describe('thresholds', () => {
     });
 });
 
-describe('looksLikeProduction', () => {
-    it.each([
-        ['production', true],
-        ['Prod', true],
-        ['prd', true],
-        ['live', true],
-        ['prod-eu', true],
-        ['production 2', true],
-        [' live.west ', true],
-        ['productions', false],
-        ['pre-production', false],
-        ['preprod', false],
-        ['staging', false],
-    ])('reads %s as production: %s', (name, expected) => {
-        expect(looksLikeProduction(name)).toBe(expected);
+describe('envTypeColor', () => {
+    it('points at the identity token of the type', () => {
+        expect(envTypeColor('production')).toBe('var(--env-production)');
+        expect(envTypeColor('development')).toBe('var(--env-development)');
     });
 });
 

@@ -127,7 +127,7 @@ final class SyntheticAlerts
                 'severity' => $metric->defaultSeverity(),
                 'application_name' => $environment->application->name,
                 'environment_name' => $environment->name,
-                'environment_color' => $environment->color,
+                'environment_type' => $environment->type,
                 'threshold' => $metric->defaultThreshold(),
                 'unit' => $metric->unit(),
                 'value' => $value,

@@ -49,8 +49,7 @@ const hasNumbers = computed(() => hasMeasurement(environment));
             <span class="min-w-0">
                 <EnvPill
                     :name="environment.name"
-                    :color="environment.color"
-                    :production="environment.isProduction"
+                    :type="environment.type"
                     :size="13"
                 />
             </span>

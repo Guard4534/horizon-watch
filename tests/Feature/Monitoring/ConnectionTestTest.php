@@ -167,7 +167,7 @@ test('an admin testing the edit form with a blank password uses the stored one o
         ->assertJsonPath('reachable', true);
 
     expect($this->reader->probed)->toBe([[
-        'url' => 'HTTPS://Invoicer.example.com:443/ops/horizon',
+        'url' => 'https://invoicer.example.com:443/ops/horizon',
         'username' => 'monitor',
         'password' => 'stored-secret-value',
     ]])
@@ -376,6 +376,21 @@ test('an admin tests an unsaved address from the wizard', function () {
     ]]);
 });
 
+test('an address pasted untidy is tested where saving it would point', function (string $route) {
+    $url = $route === 'application' ? $this->applicationUrl : ($this->environmentUrl)($this->staging);
+
+    $this->actingAs($this->admin)
+        ->postJson($url, ['horizonUrl' => 'HTTPS://Staging.Invoicer.Example.com/horizon/api/stats/'])
+        ->assertOk()
+        ->assertJsonPath('suggestedUrl', null);
+
+    expect($this->reader->probed)->toBe([[
+        'url' => 'https://staging.invoicer.example.com/horizon',
+        'username' => null,
+        'password' => null,
+    ]]);
+})->with(['application', 'environment']);
+
 test('the unsaved-address test needs the permission that creates applications', function (string $role) {
     $user = $role === 'member' ? $this->member : $this->viewer;
 
@@ -399,7 +414,7 @@ test('the unsaved-address test requires a body', function () {
     $this->actingAs($this->admin)
         ->postJson($this->applicationUrl)
         ->assertUnprocessable()
-        ->assertJsonValidationErrors('horizonUrl');
+        ->assertJsonValidationErrors(['horizonUrl' => 'The Horizon URL field is required.']);
 });
 
 test('a failed probe is a 200 with the reason and nothing else', function (ReadingError $reason) {
@@ -441,8 +456,8 @@ test('an address pasted from a horizon page gets the dashboard address suggested
     'dashboard' => ['https://shop.example.com/horizon/dashboard', ReadingError::NotHorizon, 'https://shop.example.com/horizon'],
     'a pending job list' => ['https://shop.example.com/horizon/jobs/pending', ReadingError::NotHorizon, 'https://shop.example.com/horizon'],
     'a failed job' => ['https://shop.example.com/ops/horizon/failed/8a2e3d4c', ReadingError::NotHorizon, 'https://shop.example.com/ops/horizon'],
-    'an api call' => ['https://shop.example.com/horizon/api/stats', ReadingError::NotHorizon, 'https://shop.example.com/horizon'],
-    'the api root, which reads the same as the dashboard' => ['https://shop.example.com/horizon/api', ReadingError::NotHorizon, null],
+    'an api call, already tidied to the dashboard' => ['https://shop.example.com/horizon/api/stats', ReadingError::NotHorizon, null],
+    'the api root, already tidied to the dashboard' => ['https://shop.example.com/horizon/api', ReadingError::NotHorizon, null],
     'the dashboard itself' => ['https://shop.example.com/horizon', ReadingError::NotHorizon, null],
     'a horizon moved to a route name' => ['https://shop.example.com/dashboard', ReadingError::NotHorizon, null],
     'a path that only starts like a route' => ['https://shop.example.com/horizon/jobsite', ReadingError::NotHorizon, null],

@@ -285,10 +285,10 @@ function period(
                                 <EnvPill
                                     v-if="
                                         maintenance.environmentName &&
-                                        maintenance.color
+                                        maintenance.environmentType
                                     "
                                     :name="maintenance.environmentName"
-                                    :color="maintenance.color"
+                                    :type="maintenance.environmentType"
                                     :size="11"
                                 />
                                 <span v-else class="nc-t-xs nc-tone-muted">{{
