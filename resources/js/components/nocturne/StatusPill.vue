@@ -1,21 +1,32 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { statusColor, statusLabel } from '@/lib/monitoring';
+import StatusLamp from '@/components/nocturne/StatusLamp.vue';
+import { lampColor, lampLabel } from '@/components/nocturne/status';
 
-const { status } = defineProps<{
-    status: App.Enums.EnvironmentStatus;
+const { status, label, tone } = defineProps<{
+    status: App.Enums.EnvironmentStatus | null;
+    label?: string;
+    tone?: string;
 }>();
 
-const color = computed(() => statusColor(status));
+const color = computed(() => lampColor(status, tone));
+const text = computed(() => lampLabel(status, label));
 </script>
 
 <template>
-    <span
-        class="nc-t-xs inline-flex items-center gap-[6px]"
-        style="border-radius: var(--nc-radius-sm); padding: 3px 9px"
-        :style="{ color, border: `1px solid ${color}` }"
-    >
-        <span class="size-[6px] rounded-full" :style="{ background: color }" />
-        {{ statusLabel(status) }}
+    <span class="status-pill nc-t-xs" :style="{ color, borderColor: color }">
+        <StatusLamp :status="status" :tone="tone" :size="6" decorative />
+        {{ text }}
     </span>
 </template>
+
+<style scoped>
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border: 1px solid;
+    border-radius: var(--nc-radius-sm);
+}
+</style>

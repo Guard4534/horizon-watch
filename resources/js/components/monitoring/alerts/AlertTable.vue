@@ -4,7 +4,7 @@ import AlertActions from '@/components/monitoring/alerts/AlertActions.vue';
 import AlertDetail from '@/components/monitoring/alerts/AlertDetail.vue';
 import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import AlertOpened from '@/components/monitoring/alerts/AlertOpened.vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { formatRule } from '@/lib/alertRules';
 import {
@@ -67,24 +67,24 @@ const environmentHref = useEnvironmentHref();
                             :href="environmentHref(alert.environmentId)"
                             class="nc-t-xs env-link inline-flex items-center gap-[7px]"
                         >
-                            <EnvSwatch
-                                :type="alert.environmentType"
-                                :size="8"
-                            />
                             {{ alert.applicationName }} /
-                            {{ alert.environmentName }}
+                            <EnvPill
+                                :name="alert.environmentName"
+                                :type="alert.environmentType"
+                                :size="11"
+                            />
                         </Link>
                         <span
                             v-else
                             class="nc-t-xs nc-tone-soft inline-flex items-center gap-[7px]"
                             :title="$t('This environment has been deleted')"
                         >
-                            <EnvSwatch
-                                :type="alert.environmentType"
-                                :size="8"
-                            />
                             {{ alert.applicationName }} /
-                            {{ alert.environmentName }}
+                            <EnvPill
+                                :name="alert.environmentName"
+                                :type="alert.environmentType"
+                                :size="11"
+                            />
                         </span>
                     </td>
                     <td class="nc-t-xs nc-tone-soft max-w-[260px]">

@@ -206,7 +206,7 @@ test('leaving an organization is one action with one modal, offered on your own 
         ->not->toContain('losingTheLastAdmin')
         ->and($sources['components/teams/LeaveOrganizationModal.vue'])->toContain('v-if="organization?.isLastAdmin"')
         ->and($sources['pages/monitoring/Members.vue'])->not->toContain("'How access works'")
-        ->and($sources['pages/monitoring/Members.vue'])->toContain('@media (max-width: 1023px)');
+        ->and($sources['pages/monitoring/Members.vue'])->toContain('nc-two-col');
 });
 
 test('every new password field shows the one password policy', function () {

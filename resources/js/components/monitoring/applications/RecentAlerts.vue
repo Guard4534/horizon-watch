@@ -2,6 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import { PhCheckCircle } from '@phosphor-icons/vue';
 import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { ruleLabel } from '@/lib/alertRules';
@@ -59,14 +60,20 @@ const slug = useTeamSlug();
                     :style="{ color: alertTone(alert) }"
                 />
                 <div class="min-w-0">
-                    <div class="nc-t-xs">
-                        {{
+                    <div
+                        class="nc-t-xs flex flex-wrap items-center"
+                        style="gap: 6px"
+                    >
+                        <span>{{
                             alert.state === 'resolved'
-                                ? $t('Back within threshold · :environment', {
-                                      environment: alert.environmentName,
-                                  })
-                                : `${ruleLabel(alert.metric)} · ${alert.environmentName}`
-                        }}
+                                ? $t('Back within threshold')
+                                : ruleLabel(alert.metric)
+                        }}</span>
+                        <EnvPill
+                            :name="alert.environmentName"
+                            :type="alert.environmentType"
+                            :size="11"
+                        />
                     </div>
                     <div class="nc-num nc-t-2xs nc-tone-faint mt-[2px]">
                         {{

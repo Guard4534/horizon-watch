@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import {
-    PhArrowSquareOut,
-    PhPencilSimple,
-    PhShieldCheck,
-} from '@phosphor-icons/vue';
+import { PhArrowSquareOut, PhPencilSimple } from '@phosphor-icons/vue';
 import { trans, transChoice } from 'laravel-vue-i18n';
 import { computed } from 'vue';
+import PageHeader from '@/components/PageHeader.vue';
 import EnvironmentMobile from '@/components/mobile/environment/EnvironmentMobile.vue';
 import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
 import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
@@ -24,13 +21,12 @@ import {
     failedLastHourText,
     horizonStatusLabel,
     horizonStatusTone,
-    isHealthy,
-    needsAttention,
     statusText,
+    statusTone,
     thresholdTone,
 } from '@/components/monitoring/environment/readings';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
-import MetricTile from '@/components/nocturne/MetricTile.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
+import MetricCard from '@/components/nocturne/MetricCard.vue';
 import StatusPill from '@/components/nocturne/StatusPill.vue';
 import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
 import { useIsMobile } from '@/composables/useIsMobile';
@@ -38,7 +34,6 @@ import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { useVisibility } from '@/composables/useVisibility';
 import { formatThreshold } from '@/lib/alertRules';
-import { isProductionType } from '@/lib/environments';
 import { failedWindowNote } from '@/lib/failedWindow';
 import {
     formatCount,
@@ -154,75 +149,44 @@ const tiles = computed<Tile[]>(() => [
 </script>
 
 <template>
-    <Head :title="`${environment.applicationName} · ${environment.name}`" />
+    <Head :title="`${environment.applicationName} / ${environment.name}`" />
 
     <EnvironmentMobile v-if="isMobile" :page="page" />
 
-    <div
-        v-else
-        class="flex flex-col"
-        style="padding: var(--nc-space-6); gap: var(--nc-space-4)"
-    >
-        <div class="flex flex-wrap items-center" style="gap: var(--nc-space-3)">
-            <div class="min-w-0">
-                <div class="nc-t-2xs nc-tone-muted">
-                    <Link :href="applicationsIndex(slug)">{{
-                        $t('Applications')
-                    }}</Link>
-                    /
-                    <Link
-                        :href="
-                            showApplication({
-                                current_team: slug,
-                                application: environment.applicationId,
-                            })
-                        "
-                        >{{ environment.applicationName }}</Link
-                    >
-                </div>
-                <div
-                    class="flex items-center"
-                    style="font-size: 24px; line-height: 1.15; gap: 8px"
-                >
-                    <EnvSwatch :type="environment.type" :size="12" />
-                    {{ environment.name }}
-                    <span
-                        v-if="isProductionType(environment.type)"
-                        class="nc-tone-muted inline-flex"
-                        role="img"
-                        :title="$t('Production environment')"
-                        :aria-label="$t('Production environment')"
-                    >
-                        <PhShieldCheck :size="20" weight="bold" />
-                    </span>
-                </div>
-            </div>
-            <StatusPill
-                v-if="
-                    environment.status &&
-                    (needsAttention(environment) || isHealthy(environment))
-                "
-                :status="environment.status"
-            />
-            <span
-                v-else
-                class="nc-t-xs nc-tone-muted"
-                style="
-                    border-radius: var(--nc-radius-sm);
-                    padding: 3px 9px;
-                    border: 1px solid var(--nc-neutral-700);
-                "
-                >{{ statusText(environment) }}</span
-            >
-            <MaintenanceBadge
-                v-if="environment.maintenanceUntil"
-                :until="environment.maintenanceUntil"
-                :reason="environment.maintenanceReason"
-            />
-            <div
-                class="ml-auto flex flex-wrap items-center justify-end"
-                style="gap: var(--nc-space-2)"
-            >
+    <div v-else class="nc-page flex flex-col" style="gap: var(--nc-space-4)">
+        <PageHeader
+            :title="environment.name"
+            :crumbs="[
+                { label: $t('Applications'), href: applicationsIndex(slug) },
+                {
+                    label: environment.applicationName,
+                    href: showApplication({
+                        current_team: slug,
+                        application: environment.applicationId,
+                    }),
+                },
+            ]"
+        >
+            <template #title>
+                <EnvPill
+                    :name="environment.name"
+                    :type="environment.type"
+                    :size="20"
+                />
+            </template>
+            <template #status>
+                <StatusPill
+                    :status="environment.status"
+                    :label="statusText(environment)"
+                    :tone="statusTone(environment)"
+                />
+                <MaintenanceBadge
+                    v-if="environment.maintenanceUntil"
+                    :until="environment.maintenanceUntil"
+                    :reason="environment.maintenanceReason"
+                />
+            </template>
+            <template #actions>
                 <SilenceMenu
                     v-if="page.canSilence"
                     :environment-id="environment.id"
@@ -259,8 +223,8 @@ const tiles = computed<Tile[]>(() => [
                 >
                     <PhArrowSquareOut :size="14" />{{ $t('Open Horizon') }}
                 </a>
-            </div>
-        </div>
+            </template>
+        </PageHeader>
 
         <div
             class="nc-t-2xs nc-tone-muted flex flex-wrap items-center"
@@ -306,7 +270,7 @@ const tiles = computed<Tile[]>(() => [
                 gap: var(--nc-space-3);
             "
         >
-            <MetricTile
+            <MetricCard
                 v-for="tile in tiles"
                 :key="tile.label"
                 :label="tile.label"
@@ -355,7 +319,10 @@ const tiles = computed<Tile[]>(() => [
             </div>
         </section>
 
-        <div class="detail-grid mt-[var(--nc-space-2)]">
+        <div
+            class="nc-two-col mt-[var(--nc-space-2)]"
+            style="--nc-two-col-columns: minmax(0, 1.6fr) minmax(0, 1fr)"
+        >
             <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
                 <TrendChart
                     :throughput="series.throughput"
@@ -386,18 +353,3 @@ const tiles = computed<Tile[]>(() => [
         </div>
     </div>
 </template>
-
-<style scoped>
-.detail-grid {
-    display: grid;
-    align-items: start;
-    gap: var(--nc-space-6);
-    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-}
-
-@media (max-width: 1023px) {
-    .detail-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
-</style>

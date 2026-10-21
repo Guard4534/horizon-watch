@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { Form } from '@inertiajs/vue3';
-import { PhPaperPlaneTilt, PhShieldCheck } from '@phosphor-icons/vue';
+import { PhPaperPlaneTilt } from '@phosphor-icons/vue';
 import { ref } from 'vue';
 import InputError from '@/components/InputError.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { Spinner } from '@/components/ui/spinner';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { isProductionType } from '@/lib/environments';
 import { invalidField } from '@/lib/fieldErrors';
 import { store as storeInvitation } from '@/routes/members/invitations';
 
@@ -142,7 +142,7 @@ function reset() {
                     <label
                         v-for="environment in environments"
                         :key="environment.id"
-                        class="nc-t-sm flex items-center gap-2"
+                        class="nc-checkbox nc-t-sm"
                     >
                         <input
                             v-model="environmentIds"
@@ -150,16 +150,13 @@ function reset() {
                             name="environmentIds[]"
                             :value="environment.id"
                         />
-                        {{ environment.name }}
-                        <span
-                            v-if="isProductionType(environment.type)"
-                            class="nc-tone-muted inline-flex"
-                            role="img"
-                            :title="$t('Production environment')"
-                            :aria-label="$t('Production environment')"
-                        >
-                            <PhShieldCheck :size="14" weight="bold" />
-                        </span>
+                        <span class="nc-box" />
+                        <span class="min-w-0"
+                            >{{ environment.applicationName }} /
+                            <EnvPill
+                                :name="environment.name"
+                                :type="environment.type"
+                        /></span>
                     </label>
                     <div
                         v-if="!environments.length"

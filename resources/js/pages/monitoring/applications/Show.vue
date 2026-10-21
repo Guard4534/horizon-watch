@@ -3,9 +3,11 @@ import { Head, Link } from '@inertiajs/vue3';
 import { PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
+import PageHeader from '@/components/PageHeader.vue';
 import EnvironmentCard from '@/components/monitoring/applications/EnvironmentCard.vue';
 import RecentAlerts from '@/components/monitoring/applications/RecentAlerts.vue';
 import { hasMeasurement } from '@/components/monitoring/environment/readings';
+import MetricCard from '@/components/nocturne/MetricCard.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
@@ -76,38 +78,21 @@ const stats = computed(() => [
     <Head :title="page.application.name" />
 
     <div
-        class="flex flex-col"
-        :style="{
-            padding: isMobile
-                ? 'var(--nc-space-3) var(--nc-space-4)'
-                : 'var(--nc-space-6)',
-            gap: isMobile ? 'var(--nc-space-4)' : 'var(--nc-space-6)',
-        }"
+        class="nc-page flex flex-col"
+        :style="{ gap: isMobile ? 'var(--nc-space-4)' : 'var(--nc-space-6)' }"
     >
         <div class="flex flex-col" style="gap: var(--nc-space-4)">
-            <div class="flex flex-wrap items-end gap-3">
-                <div class="min-w-0">
-                    <div class="nc-t-2xs nc-tone-muted">
-                        <Link :href="applicationsIndex(slug)">{{
-                            $t('Applications')
-                        }}</Link>
-                    </div>
-                    <div style="font-size: 26px; line-height: 1.15">
-                        {{ page.application.name }}
-                    </div>
-                    <div
-                        v-if="page.application.domain"
-                        class="nc-t-xs nc-tone-muted"
-                        style="letter-spacing: 0.01em"
-                    >
-                        {{ page.application.domain }}
-                    </div>
-                </div>
-                <div
-                    v-if="canManageApplications"
-                    class="ml-auto flex flex-wrap"
-                    style="gap: var(--nc-space-2)"
-                >
+            <PageHeader
+                :title="page.application.name"
+                :subtitle="page.application.domain"
+                :crumbs="[
+                    {
+                        label: $t('Applications'),
+                        href: applicationsIndex(slug),
+                    },
+                ]"
+            >
+                <template v-if="canManageApplications" #actions>
                     <Link
                         class="nc-btn nc-btn-secondary nc-t-xs"
                         :href="
@@ -132,8 +117,8 @@ const stats = computed(() => [
                             $t('Edit application')
                         }}
                     </Link>
-                </div>
-            </div>
+                </template>
+            </PageHeader>
             <div
                 class="grid"
                 style="
@@ -141,25 +126,13 @@ const stats = computed(() => [
                     gap: var(--nc-space-3);
                 "
             >
-                <div
+                <MetricCard
                     v-for="stat in stats"
                     :key="stat.key"
-                    class="nc-card"
-                    style="padding: var(--nc-space-3) var(--nc-space-4)"
-                >
-                    <div class="nc-label">{{ stat.label }}</div>
-                    <div
-                        class="nc-num"
-                        style="
-                            font-size: 26px;
-                            line-height: 1.15;
-                            margin-top: 4px;
-                        "
-                        :style="{ color: stat.color }"
-                    >
-                        {{ stat.value }}
-                    </div>
-                </div>
+                    :label="stat.label"
+                    :value="stat.value"
+                    :color="stat.color"
+                />
             </div>
         </div>
 

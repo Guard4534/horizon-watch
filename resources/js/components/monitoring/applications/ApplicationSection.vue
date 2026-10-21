@@ -8,6 +8,7 @@ import {
     statusTone,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
+import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { useVisibility } from '@/composables/useVisibility';
@@ -152,11 +153,11 @@ const { canManageApplications } = useVisibility();
                                 }"
                             >
                                 <template v-if="environment.watched">
-                                    <span
-                                        class="size-[6px] rounded-full"
-                                        :style="{
-                                            background: statusTone(environment),
-                                        }"
+                                    <StatusLamp
+                                        :status="environment.status"
+                                        :tone="statusTone(environment)"
+                                        :size="6"
+                                        decorative
                                     />
                                     {{ statusText(environment) }}
                                 </template>

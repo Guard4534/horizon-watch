@@ -114,10 +114,11 @@ test('an unknown code is a 404, not an empty invitation page', function () {
     $this->get(route('invitations.show', 'does-not-exist'))->assertNotFound();
 });
 
-test('a manual invitation names the environments the invitee will see', function () {
-    $application = Application::factory()->for($this->team)->create();
+test('a manual invitation names the environments the invitee will see, under their application', function () {
+    $application = Application::factory()->for($this->team)->create(['name' => 'Shop']);
     $staging = Environment::factory()->for($application)->create(['name' => 'staging']);
     Environment::factory()->for($application)->create(['name' => 'production']);
+    $billing = Environment::factory()->for(Application::factory()->for($this->team)->create(['name' => 'Billing']))->create(['name' => 'staging']);
 
     $invitation = TeamInvitation::factory()->create([
         'team_id' => $this->team->id,
@@ -127,14 +128,14 @@ test('a manual invitation names the environments the invitee will see', function
         'invited_by' => $this->owner->id,
         'expires_at' => now()->addDays(7),
     ]);
-    $invitation->environments()->sync([$staging->id]);
+    $invitation->environments()->sync([$staging->id, $billing->id]);
 
     $this->get(route('invitations.show', $invitation->plainCode))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.state', 'open')
             ->where('page.visibilityLabel', 'Manual selection')
-            ->where('page.visibleEnvironmentNames', ['staging']));
+            ->where('page.visibleEnvironmentNames', ['Billing / staging', 'Shop / staging']));
 });
 
 test('a guest whose address already has an account is asked to sign in, not to register', function () {

@@ -3,7 +3,7 @@ import { Link } from '@inertiajs/vue3';
 import { PhCheckCircle } from '@phosphor-icons/vue';
 import AlertActions from '@/components/monitoring/alerts/AlertActions.vue';
 import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCondition, ruleLabel } from '@/lib/alertRules';
@@ -68,13 +68,14 @@ const slug = useTeamSlug();
                         <div
                             class="nc-t-2xs nc-tone-muted mt-[3px] flex items-center gap-[6px]"
                         >
-                            <EnvSwatch
-                                :type="alert.environmentType"
-                                :size="8"
-                            />
                             <span class="min-w-0 truncate"
                                 >{{ alert.applicationName }} /
-                                {{ alert.environmentName }} ·
+                                <EnvPill
+                                    :name="alert.environmentName"
+                                    :type="alert.environmentType"
+                                    :size="11"
+                                />
+                                ·
                                 {{ formatAgo(alert.minutesAgo * 60) }}</span
                             >
                         </div>

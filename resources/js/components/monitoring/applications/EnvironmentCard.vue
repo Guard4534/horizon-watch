@@ -11,6 +11,7 @@ import {
     troubledStyle,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
+import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCount, formatSeconds } from '@/lib/monitoring';
@@ -53,9 +54,18 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                     :size="13"
                 />
             </span>
-            <span class="nc-t-2xs ml-auto flex-none" :style="{ color: tone }">{{
-                statusText(environment)
-            }}</span>
+            <span
+                class="nc-t-2xs ml-auto inline-flex flex-none items-center gap-[5px]"
+                :style="{ color: tone }"
+            >
+                <StatusLamp
+                    :status="environment.status"
+                    :tone="tone"
+                    :size="6"
+                    decorative
+                />
+                {{ statusText(environment) }}
+            </span>
         </span>
         <span
             class="nc-t-2xs nc-tone-faint mt-[3px] block truncate"

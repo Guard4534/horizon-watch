@@ -137,6 +137,24 @@ samp,
     }
 }
 
+.nc-page-narrow {
+    width: 100%;
+    max-width: 940px;
+    margin-inline: auto;
+}
+
+.nc-two-col {
+    display: grid;
+    align-items: start;
+    gap: var(--nc-space-6);
+    grid-template-columns: var(--nc-two-col-columns, minmax(0, 1fr) 320px);
+}
+@media (max-width: 1023px) {
+    .nc-two-col {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .nc-btn {
     display: inline-flex;
     align-items: center;
@@ -255,6 +273,7 @@ select.nc-input option {
 }
 
 .nc-radio {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -289,7 +308,61 @@ select.nc-input option {
     outline-offset: 2px;
 }
 
+.nc-checkbox {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
+.nc-checkbox input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+.nc-checkbox .nc-box {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    flex: none;
+    border-radius: var(--nc-radius-sm);
+    border: 1.5px solid var(--nc-divider);
+}
+.nc-checkbox:hover .nc-box {
+    border-color: var(--nc-accent);
+}
+.nc-checkbox input:checked + .nc-box {
+    border-color: var(--nc-accent);
+    background: var(--nc-accent);
+}
+.nc-checkbox input:checked + .nc-box::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 5px;
+    height: 9px;
+    border: solid var(--nc-bg);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+.nc-checkbox input:focus-visible + .nc-box {
+    outline: 2px solid var(--nc-accent);
+    outline-offset: 2px;
+}
+.nc-checkbox:has(input:disabled) {
+    cursor: default;
+    color: var(--nc-neutral-500);
+}
+.nc-checkbox input:disabled + .nc-box {
+    opacity: 0.55;
+}
+
 .nc-switch {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -354,6 +427,7 @@ select.nc-input option {
     border-radius: var(--nc-radius-md);
 }
 .nc-seg-opt {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 6px;

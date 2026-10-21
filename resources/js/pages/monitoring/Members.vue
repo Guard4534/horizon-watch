@@ -20,7 +20,7 @@ const shared = usePage();
 <template>
     <Head :title="$t('Members')" />
 
-    <div class="members-grid">
+    <div class="nc-page nc-two-col">
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
             <WarningNotice
                 v-if="
@@ -65,21 +65,3 @@ const shared = usePage();
         </div>
     </div>
 </template>
-
-<style scoped>
-.members-grid {
-    display: grid;
-    align-items: start;
-    padding: var(--nc-space-6);
-    gap: var(--nc-space-6);
-    grid-template-columns: minmax(0, 1fr) 270px;
-}
-
-@media (max-width: 1023px) {
-    .members-grid {
-        grid-template-columns: minmax(0, 1fr);
-        padding: var(--nc-space-4);
-        gap: var(--nc-space-4);
-    }
-}
-</style>

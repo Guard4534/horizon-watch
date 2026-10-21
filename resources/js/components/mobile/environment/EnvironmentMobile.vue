@@ -15,15 +15,14 @@ import SilenceMenu from '@/components/monitoring/environment/SilenceMenu.vue';
 import QueueFlags from '@/components/monitoring/environment/QueueFlags.vue';
 import {
     failedLastHourText,
-    isHealthy,
-    needsAttention,
     statusText,
     statusTone,
     thresholdTone,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
-import MetricTile from '@/components/nocturne/MetricTile.vue';
+import MetricCard from '@/components/nocturne/MetricCard.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
+import StatusPill from '@/components/nocturne/StatusPill.vue';
 import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { useVisibility } from '@/composables/useVisibility';
@@ -117,21 +116,12 @@ const tiles = computed(() => [
                     class="mt-[2px]"
                 />
             </span>
-            <span
-                class="ml-auto inline-flex flex-none items-center gap-[5px]"
-                style="font-size: 11px"
-                :style="{ color: statusTone(environment) }"
-            >
-                <StatusLamp
-                    :status="
-                        needsAttention(environment) || isHealthy(environment)
-                            ? environment.status
-                            : null
-                    "
-                    :label="statusText(environment)"
-                    :size="6"
-                />{{ statusText(environment) }}
-            </span>
+            <StatusPill
+                class="ml-auto flex-none"
+                :status="environment.status"
+                :label="statusText(environment)"
+                :tone="statusTone(environment)"
+            />
         </div>
 
         <div
@@ -177,10 +167,10 @@ const tiles = computed(() => [
             />
 
             <div class="grid grid-cols-3" style="gap: var(--nc-space-2)">
-                <MetricTile
+                <MetricCard
                     v-for="tile in tiles"
                     :key="tile.label"
-                    compact
+                    size="compact"
                     :label="tile.label"
                     :value="tile.value"
                     :color="tile.color"

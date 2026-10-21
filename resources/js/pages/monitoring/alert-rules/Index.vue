@@ -33,7 +33,7 @@ const nothingVisible = computed(
 <template>
     <Head :title="$t('Alert settings')" />
 
-    <div class="rules-grid">
+    <div class="nc-page rules-grid">
         <ScopeList :scopes="page.scopes" :current="page.scope" />
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
@@ -91,7 +91,6 @@ const nothingVisible = computed(
 .rules-grid {
     display: grid;
     align-items: start;
-    padding: var(--nc-space-6);
     gap: var(--nc-space-6);
     grid-template-columns: 224px minmax(0, 1fr);
 }
@@ -105,7 +104,6 @@ const nothingVisible = computed(
 @media (max-width: 767px) {
     .rules-grid {
         grid-template-columns: minmax(0, 1fr);
-        padding: var(--nc-space-4);
         gap: var(--nc-space-4);
     }
 }

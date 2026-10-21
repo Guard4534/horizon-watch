@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useForm, usePage } from '@inertiajs/vue3';
-import { PhDotsThree, PhShieldCheck } from '@phosphor-icons/vue';
+import { PhDotsThree } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import FormErrors from '@/components/FormErrors.vue';
 import Avatar from '@/components/nocturne/Avatar.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import LeaveOrganizationModal from '@/components/teams/LeaveOrganizationModal.vue';
 import {
@@ -23,7 +24,6 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { isProductionType } from '@/lib/environments';
 import { roleTagClass } from '@/lib/members';
 import {
     destroy as destroyMember,
@@ -361,23 +361,20 @@ function confirmRemove() {
                 <label
                     v-for="environment in environments"
                     :key="environment.id"
-                    class="nc-t-sm flex items-center gap-2"
+                    class="nc-checkbox nc-t-sm"
                 >
                     <input
                         v-model="manualIds"
                         type="checkbox"
                         :value="environment.id"
                     />
-                    {{ environment.name }}
-                    <span
-                        v-if="isProductionType(environment.type)"
-                        class="nc-tone-muted inline-flex"
-                        role="img"
-                        :title="$t('Production environment')"
-                        :aria-label="$t('Production environment')"
-                    >
-                        <PhShieldCheck :size="14" weight="bold" />
-                    </span>
+                    <span class="nc-box" />
+                    <span class="min-w-0"
+                        >{{ environment.applicationName }} /
+                        <EnvPill
+                            :name="environment.name"
+                            :type="environment.type"
+                    /></span>
                 </label>
                 <div v-if="!environments.length" class="nc-t-xs nc-tone-muted">
                     {{

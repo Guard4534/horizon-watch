@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import Heading from '@/components/Heading.vue';
 import { useCurrentPath } from '@/composables/useCurrentPath';
 import { edit as editProfile } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
@@ -17,11 +16,6 @@ const { startsWith } = useCurrentPath();
 
 <template>
     <div class="px-4 py-6">
-        <Heading
-            :title="$t('Settings')"
-            :description="$t('Manage your profile and account settings')"
-        />
-
         <div class="flex flex-col lg:flex-row lg:space-x-12">
             <aside class="w-full max-w-xl lg:w-48">
                 <nav

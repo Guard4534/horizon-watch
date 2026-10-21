@@ -3,7 +3,7 @@ import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
-import KpiCard from '@/components/nocturne/KpiCard.vue';
+import MetricCard from '@/components/nocturne/MetricCard.vue';
 import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
 import {
     calmStyle,
@@ -68,10 +68,10 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
 <template>
     <div class="flex flex-col" style="gap: var(--nc-space-3)">
         <div class="flex" style="gap: var(--nc-space-2)">
-            <KpiCard
+            <MetricCard
                 v-for="kpi in tiles"
                 :key="kpi.key"
-                compact
+                size="compact"
                 class="flex-1"
                 :label="kpi.label"
                 :value="kpi.value"

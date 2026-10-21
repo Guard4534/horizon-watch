@@ -9,8 +9,9 @@ import {
     statusText,
     statusTone,
 } from '@/components/monitoring/environment/readings';
+import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { envTypeColor, formatCount } from '@/lib/monitoring';
+import { formatCount } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
 const { applicationId, applicationName, environments } = defineProps<{
@@ -30,18 +31,6 @@ const expanded = computed(() => forced.value ?? troubled.value.length > 0);
 const pending = computed(() =>
     environments.reduce((total, environment) => total + environment.pending, 0),
 );
-
-function dotLabel(environment: App.Data.Monitoring.EnvironmentData): string {
-    return `${environment.name} · ${statusText(environment)}`;
-}
-
-function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
-    const halo = needsAttention(environment)
-        ? `0 0 0 2px color-mix(in srgb, ${statusTone(environment)} 55%, transparent)`
-        : undefined;
-
-    return { background: envTypeColor(environment.type), boxShadow: halo };
-}
 </script>
 
 <template>
@@ -89,14 +78,13 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
                 v-if="!expanded"
                 class="flex min-w-0 flex-wrap items-center gap-[5px]"
             >
-                <span
+                <StatusLamp
                     v-for="environment in environments"
                     :key="environment.id"
-                    class="dot"
-                    role="img"
-                    :style="dotStyle(environment)"
-                    :title="dotLabel(environment)"
-                    :aria-label="dotLabel(environment)"
+                    :status="environment.status"
+                    :tone="statusTone(environment)"
+                    :label="`${environment.name} · ${statusText(environment)}`"
+                    :size="7"
                 />
             </span>
             <span class="nc-num nc-t-2xs nc-tone-faint ml-auto flex-none"
@@ -161,12 +149,5 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
 
 .name:hover {
     color: var(--nc-accent);
-}
-
-.dot {
-    width: 7px;
-    height: 7px;
-    flex: none;
-    border-radius: 50%;
 }
 </style>

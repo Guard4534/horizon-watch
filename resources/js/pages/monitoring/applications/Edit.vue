@@ -4,6 +4,7 @@ import { PhTrashSimple } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import ConfirmByNameDialog from '@/components/ConfirmByNameDialog.vue';
 import DangerZoneCard from '@/components/DangerZoneCard.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import ApplicationForm from '@/components/monitoring/applications/ApplicationForm.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
@@ -54,30 +55,22 @@ const submit = () => {
     <Head :title="$t('Edit application')" />
 
     <div
-        class="mx-auto flex w-full flex-col"
-        style="
-            padding: var(--nc-space-6);
-            gap: var(--nc-space-6);
-            max-width: 940px;
-        "
+        class="nc-page nc-page-narrow flex flex-col"
+        style="gap: var(--nc-space-6)"
     >
-        <div class="min-w-0">
-            <div class="nc-t-2xs nc-tone-muted">
-                <Link :href="applicationsIndex(slug)">{{
-                    $t('Applications')
-                }}</Link>
-                /
-                <Link
-                    :href="
-                        show({ current_team: slug, application: application })
-                    "
-                    >{{ name }}</Link
-                >
-            </div>
-            <div style="font-size: 26px; line-height: 1.15">
-                {{ $t('Edit application') }}
-            </div>
-        </div>
+        <PageHeader
+            :title="$t('Edit application')"
+            :crumbs="[
+                { label: $t('Applications'), href: applicationsIndex(slug) },
+                {
+                    label: name,
+                    href: show({
+                        current_team: slug,
+                        application: application,
+                    }),
+                },
+            ]"
+        />
 
         <SectionCard :title="$t('Application')">
             <form

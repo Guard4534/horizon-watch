@@ -6,10 +6,12 @@ use App\Actions\Teams\AcceptInvitation;
 use App\Actions\Teams\DeclineInvitation;
 use App\Actions\Teams\RegisterInvitedUser;
 use App\Data\Auth\PasswordPolicyData;
+use App\Data\Pages\EnvironmentOptionData;
 use App\Data\Pages\InvitationPageData;
 use App\Data\Teams\AcceptInvitationData;
 use App\Enums\MemberVisibility;
 use App\Http\Controllers\Controller;
+use App\Models\Environment;
 use App\Models\TeamInvitation;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -35,7 +37,11 @@ class InvitationController extends Controller
                 visibilityLabel: $canSeeDetails ? $invitation->visibility->label() : null,
                 email: $canSeeDetails ? $invitation->email : null,
                 visibleEnvironmentNames: $canSeeDetails && $invitation->visibility === MemberVisibility::Manual
-                    ? $invitation->environments->pluck('name')->all()
+                    ? $invitation->environments->load('application')
+                        ->map(fn (Environment $environment) => EnvironmentOptionData::of($environment)->label())
+                        ->sort()
+                        ->values()
+                        ->all()
                     : [],
                 state: $state,
                 authenticated: $user !== null,

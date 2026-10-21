@@ -172,7 +172,7 @@ const previewed = computed(
         </div>
     </div>
 
-    <div v-else class="nc-page alerts-grid">
+    <div v-else class="nc-page nc-two-col">
         <section class="nc-card min-w-0">
             <div
                 class="mb-[var(--nc-space-3)] flex flex-wrap items-center"
@@ -219,18 +219,3 @@ const previewed = computed(
         </div>
     </div>
 </template>
-
-<style scoped>
-.alerts-grid {
-    display: grid;
-    align-items: start;
-    gap: var(--nc-space-6);
-    grid-template-columns: minmax(0, 1fr) 300px;
-}
-
-@media (max-width: 1023px) {
-    .alerts-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
-</style>

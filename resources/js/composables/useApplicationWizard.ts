@@ -2,7 +2,7 @@ import type { InertiaForm } from '@inertiajs/vue3';
 import { useForm } from '@inertiajs/vue3';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch, watchEffect } from 'vue';
-import type { ConnectionOutcome } from '@/components/monitoring/applications/ConnectionTest.vue';
+import type { ConnectionOutcome } from '@/components/monitoring/applications/connection';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import {
     domainOf,

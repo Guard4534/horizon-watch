@@ -44,11 +44,11 @@ function targetLabel(
         case 'organization':
             return trans('Whole organization');
         case 'application':
-            return trans(':application · every environment', {
+            return trans(':application / every environment', {
                 application: target.applicationName ?? '',
             });
         case 'environment':
-            return `${target.applicationName} · ${target.environmentName}`;
+            return `${target.applicationName} / ${target.environmentName}`;
     }
 }
 
@@ -268,23 +268,25 @@ function period(
                                 >{{ $t('Whole organization') }}</span
                             >
                             <span
-                                v-else
+                                v-else-if="
+                                    maintenance.environmentName &&
+                                    maintenance.environmentType
+                                "
                                 class="inline-flex flex-wrap items-center gap-[6px]"
                             >
-                                <span>{{ maintenance.applicationName }}</span>
+                                {{ maintenance.applicationName }} /
                                 <EnvPill
-                                    v-if="
-                                        maintenance.environmentName &&
-                                        maintenance.environmentType
-                                    "
                                     :name="maintenance.environmentName"
                                     :type="maintenance.environmentType"
                                     :size="11"
                                 />
-                                <span v-else class="nc-t-xs nc-tone-muted">{{
-                                    $t('every environment')
-                                }}</span>
                             </span>
+                            <span v-else>{{
+                                $t(':application / every environment', {
+                                    application:
+                                        maintenance.applicationName ?? '',
+                                })
+                            }}</span>
                         </td>
                         <td class="nc-t-xs nc-num whitespace-nowrap">
                             <span

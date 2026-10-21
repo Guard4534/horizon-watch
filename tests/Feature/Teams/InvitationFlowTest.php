@@ -656,7 +656,7 @@ test('an invitation sent in mixed case creates a canonical account that can sign
 
 test('the invitation environment relation drops a row from another organization', function () {
     $foreign = Environment::factory()->create(['name' => 'production']);
-    $application = Application::factory()->for($this->team)->create();
+    $application = Application::factory()->for($this->team)->create(['name' => 'Shop']);
     $mine = Environment::factory()->for($application)->create(['name' => 'staging']);
 
     $invitation = TeamInvitation::factory()->create([
@@ -676,7 +676,7 @@ test('the invitation environment relation drops a row from another organization'
 
     $this->get(route('invitations.show', $invitation->plainCode))
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->where('page.visibleEnvironmentNames', ['staging']));
+        ->assertInertia(fn (Assert $page) => $page->where('page.visibleEnvironmentNames', ['Shop / staging']));
 });
 
 test('a stale revoke reaches an Inertia visit as a redirect carrying a toast', function () {

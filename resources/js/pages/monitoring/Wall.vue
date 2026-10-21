@@ -11,7 +11,7 @@ import ApplicationGroup from '@/components/monitoring/wall/ApplicationGroup.vue'
 import FirstRun from '@/components/monitoring/wall/FirstRun.vue';
 import SentNotifications from '@/components/monitoring/wall/SentNotifications.vue';
 import WallFilters from '@/components/monitoring/wall/WallFilters.vue';
-import KpiCard from '@/components/nocturne/KpiCard.vue';
+import MetricCard from '@/components/nocturne/MetricCard.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import TimeSeriesChart from '@/components/nocturne/TimeSeriesChart.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
@@ -231,7 +231,7 @@ const kpis = useWallKpis(() => page.kpis);
         />
     </div>
 
-    <div v-else class="nc-page wall-grid">
+    <div v-else class="nc-page nc-two-col">
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
             <div
                 class="grid"
@@ -240,9 +240,10 @@ const kpis = useWallKpis(() => page.kpis);
                     gap: var(--nc-space-3);
                 "
             >
-                <KpiCard
+                <MetricCard
                     v-for="kpi in kpis"
                     :key="kpi.key"
+                    size="hero"
                     :label="kpi.label"
                     :value="kpi.value"
                     :color="kpi.color"
@@ -314,18 +315,3 @@ const kpis = useWallKpis(() => page.kpis);
         </div>
     </div>
 </template>
-
-<style scoped>
-.wall-grid {
-    display: grid;
-    align-items: start;
-    gap: var(--nc-space-6);
-    grid-template-columns: minmax(0, 1fr) 322px;
-}
-
-@media (max-width: 1023px) {
-    .wall-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
-</style>

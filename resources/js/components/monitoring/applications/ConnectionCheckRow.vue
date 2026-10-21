@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import {
-    PhCheckCircle,
-    PhCircleNotch,
-    PhMinusCircle,
-    PhWarning,
-} from '@phosphor-icons/vue';
-import type { Component } from 'vue';
 import { computed, useTemplateRef } from 'vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
-import type { ConnectionOutcome } from '@/components/monitoring/applications/ConnectionTest.vue';
+import {
+    connectionIcon,
+    connectionState,
+    connectionTone,
+} from '@/components/monitoring/applications/connection';
+import type { ConnectionOutcome } from '@/components/monitoring/applications/connection';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import { formatSeconds } from '@/lib/monitoring';
 import type { RouteDefinition } from '@/wayfinder';
@@ -26,29 +24,9 @@ const test = useTemplateRef('test');
 
 const testing = computed(() => outcome.value.state === 'testing');
 
-const reachable = computed(
-    () => outcome.value.state === 'done' && outcome.value.result.reachable,
-);
-
-const icon = computed<Component>(() => {
-    if (outcome.value.state === 'testing') {
-        return PhCircleNotch;
-    }
-
-    if (outcome.value.state !== 'done') {
-        return PhMinusCircle;
-    }
-
-    return reachable.value ? PhCheckCircle : PhWarning;
-});
-
-const tone = computed(() => {
-    if (outcome.value.state !== 'done') {
-        return 'var(--nc-neutral-500)';
-    }
-
-    return reachable.value ? 'var(--st-ok)' : 'var(--st-warn)';
-});
+const icon = computed(() => connectionIcon(outcome.value));
+const tone = computed(() => connectionTone(outcome.value));
+const state = computed(() => connectionState(outcome.value));
 
 const refusedCredentials = computed(
     () =>
@@ -79,14 +57,7 @@ defineExpose({
                     class="ml-auto flex-none"
                     :style="{ fontSize: '11px', color: tone }"
                 >
-                    <template v-if="testing">{{ $t('Testing…') }}</template>
-                    <template v-else-if="reachable">{{
-                        $t('Connected')
-                    }}</template>
-                    <template v-else-if="outcome.state === 'done'">{{
-                        $t('Not connected')
-                    }}</template>
-                    <template v-else>{{ $t('Not tested') }}</template>
+                    {{ state }}
                 </span>
             </div>
             <div class="url">{{ environment.horizonUrl }}</div>

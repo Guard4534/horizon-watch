@@ -4,11 +4,15 @@ import { PhTrashSimple } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import ConfirmByNameDialog from '@/components/ConfirmByNameDialog.vue';
 import DangerZoneCard from '@/components/DangerZoneCard.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { show as showApplication } from '@/routes/applications';
+import {
+    index as applicationsIndex,
+    show as showApplication,
+} from '@/routes/applications';
 import { destroy, show, testConnection, update } from '@/routes/environments';
 
 defineOptions({
@@ -77,36 +81,29 @@ const submit = () => {
     <Head :title="$t('Edit environment')" />
 
     <div
-        class="mx-auto flex w-full flex-col"
-        style="
-            padding: var(--nc-space-6);
-            gap: var(--nc-space-6);
-            max-width: 940px;
-        "
+        class="nc-page nc-page-narrow flex flex-col"
+        style="gap: var(--nc-space-6)"
     >
-        <div class="min-w-0">
-            <div class="nc-t-2xs nc-tone-muted">
-                <Link
-                    :href="
-                        showApplication({
-                            current_team: slug,
-                            application: page.applicationSlug,
-                        })
-                    "
-                    >{{ page.application.name }}</Link
-                >
-                /
-                <Link
-                    :href="
-                        show({ current_team: slug, environment: environment })
-                    "
-                    >{{ name }}</Link
-                >
-            </div>
-            <div style="font-size: 26px; line-height: 1.15">
-                {{ $t('Edit environment') }}
-            </div>
-        </div>
+        <PageHeader
+            :title="$t('Edit environment')"
+            :crumbs="[
+                { label: $t('Applications'), href: applicationsIndex(slug) },
+                {
+                    label: page.application.name,
+                    href: showApplication({
+                        current_team: slug,
+                        application: page.applicationSlug,
+                    }),
+                },
+                {
+                    label: name,
+                    href: show({
+                        current_team: slug,
+                        environment: environment,
+                    }),
+                },
+            ]"
+        />
 
         <SectionCard :title="$t('Environment')">
             <form

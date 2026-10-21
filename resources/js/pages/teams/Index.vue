@@ -10,7 +10,6 @@ import {
 } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import ConfirmByNameDialog from '@/components/ConfirmByNameDialog.vue';
-import Heading from '@/components/Heading.vue';
 import CreateOrganizationModal from '@/components/teams/CreateOrganizationModal.vue';
 import LeaveOrganizationModal from '@/components/teams/LeaveOrganizationModal.vue';
 import RenameOrganizationModal from '@/components/teams/RenameOrganizationModal.vue';
@@ -48,16 +47,14 @@ function switchTo(team: Organization): void {
     <Head :title="$t('Organizations')" />
 
     <div class="flex flex-col space-y-6">
-        <div class="flex items-center justify-between">
-            <Heading
-                variant="small"
-                :title="$t('Organizations')"
-                :description="
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <p class="nc-t-sm nc-tone-muted">
+                {{
                     $t(
                         'Every application, environment, member and alert rule belongs to one organization.',
                     )
-                "
-            />
+                }}
+            </p>
 
             <CreateOrganizationModal v-if="canCreateOrganizations">
                 <button

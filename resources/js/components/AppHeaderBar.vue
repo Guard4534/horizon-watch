@@ -3,6 +3,7 @@ import { usePage } from '@inertiajs/vue3';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import BrandMark from '@/components/nocturne/BrandMark.vue';
+import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useLastRefresh } from '@/composables/useLastRefresh';
 import { useLiveConnection } from '@/composables/useLiveConnection';
 import { useRefreshInterval } from '@/composables/useRefreshInterval';
@@ -57,17 +58,12 @@ function choose(event: Event): void {
                 v-if="live"
                 class="nc-num nc-t-2xs nc-tone-soft inline-flex items-center gap-[7px]"
             >
-                <span
-                    class="size-[6px] flex-none rounded-full"
+                <StatusLamp
+                    :status="null"
+                    :tone="connected ? 'var(--st-ok)' : 'var(--st-down)'"
+                    :label="connectionLabel"
+                    :size="6"
                     :class="{ 'live-dot-on': connected }"
-                    :style="{
-                        background: connected
-                            ? 'var(--st-ok)'
-                            : 'var(--st-down)',
-                    }"
-                    role="img"
-                    :aria-label="connectionLabel"
-                    :title="connectionLabel"
                 />
                 <label class="inline-flex items-center gap-[7px]">
                     <span class="phone-hidden-words">{{

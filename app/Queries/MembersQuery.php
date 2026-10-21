@@ -61,7 +61,7 @@ class MembersQuery
         $labels = [];
 
         foreach ($environments as $option) {
-            $labels[$option->id] = $option->name;
+            $labels[$option->id] = $option->label();
         }
 
         $memberships = $team->memberships()
@@ -158,12 +158,8 @@ class MembersQuery
         return $team->environments()
             ->with('application')
             ->get()
-            ->sortBy(fn (Environment $environment) => $this->environmentLabel($environment))
-            ->map(fn (Environment $environment) => new EnvironmentOptionData(
-                id: $environment->id,
-                name: $this->environmentLabel($environment),
-                type: $environment->type,
-            ))
+            ->map(fn (Environment $environment) => EnvironmentOptionData::of($environment))
+            ->sortBy(fn (EnvironmentOptionData $option) => $option->label())
             ->values()
             ->all();
     }
@@ -199,10 +195,5 @@ class MembersQuery
             TeamPermission::HandleAlert => __('Mark an alert as handled'),
             TeamPermission::TestConnection => __('Test the connection'),
         };
-    }
-
-    private function environmentLabel(Environment $environment): string
-    {
-        return $environment->application->name.' / '.$environment->name;
     }
 }

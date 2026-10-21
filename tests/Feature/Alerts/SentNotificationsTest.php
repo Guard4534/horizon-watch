@@ -49,9 +49,9 @@ test('the panel lists the latest deliveries with their outcome', function () {
     $rows = sentFor($this->team, 'admin@example.com', TeamRole::Admin);
 
     expect(array_map(fn (SentNotificationData $row) => $row->toArray(), $rows))->toBe([
-        ['channel' => 'mail', 'kind' => 'critical_alert', 'status' => 'sent', 'error' => null, 'httpStatus' => null, 'subject' => 'Alpha · production', 'target' => 'ops@example.com', 'minutesAgo' => 2],
-        ['channel' => 'webhook', 'kind' => 'critical_alert', 'status' => 'failed', 'error' => 'http_5xx', 'httpStatus' => 503, 'subject' => 'Alpha · production', 'target' => 'hooks.example.com', 'minutesAgo' => 3],
-        ['channel' => 'mail', 'kind' => 'resolved', 'status' => 'skipped', 'error' => 'opening_not_delivered', 'httpStatus' => null, 'subject' => 'Alpha · staging', 'target' => 'dev@example.com', 'minutesAgo' => 5],
+        ['channel' => 'mail', 'kind' => 'critical_alert', 'status' => 'sent', 'error' => null, 'httpStatus' => null, 'subject' => 'Alpha / production', 'target' => 'ops@example.com', 'minutesAgo' => 2],
+        ['channel' => 'webhook', 'kind' => 'critical_alert', 'status' => 'failed', 'error' => 'http_5xx', 'httpStatus' => 503, 'subject' => 'Alpha / production', 'target' => 'hooks.example.com', 'minutesAgo' => 3],
+        ['channel' => 'mail', 'kind' => 'resolved', 'status' => 'skipped', 'error' => 'opening_not_delivered', 'httpStatus' => null, 'subject' => 'Alpha / staging', 'target' => 'dev@example.com', 'minutesAgo' => 5],
         ['channel' => 'mail', 'kind' => 'warning_digest', 'status' => 'sent', 'error' => null, 'httpStatus' => null, 'subject' => '3', 'target' => 'ops@example.com', 'minutesAgo' => 15],
         ['channel' => 'webhook', 'kind' => 'test', 'status' => 'sent', 'error' => null, 'httpStatus' => null, 'subject' => '', 'target' => 'hooks.example.com', 'minutesAgo' => 20],
     ]);
@@ -84,8 +84,8 @@ test('a partial view lists only deliveries about watched environments', function
 
     expect(array_map(fn (SentNotificationData $row) => $row->subject, $rows))->toBe($expected);
 })->with([
-    'non production' => [MemberVisibility::NonProduction, ['Alpha · staging']],
-    'manual on production' => [MemberVisibility::Manual, ['Alpha · production', 'Alpha · production']],
+    'non production' => [MemberVisibility::NonProduction, ['Alpha / staging']],
+    'manual on production' => [MemberVisibility::Manual, ['Alpha / production', 'Alpha / production']],
 ]);
 
 test('the panel reads the log in a fixed number of queries', function () {

@@ -1,33 +1,39 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { trans } from 'laravel-vue-i18n';
-import { statusColor, statusLabel } from '@/lib/monitoring';
+import { lampColor, lampLabel } from '@/components/nocturne/status';
 
 const {
     status,
-    size = 8,
     label,
+    tone,
+    size = 8,
+    decorative = false,
 } = defineProps<{
     status: App.Enums.EnvironmentStatus | null;
-    size?: number;
     label?: string;
+    tone?: string;
+    size?: number;
+    decorative?: boolean;
 }>();
 
-const text = computed(
-    () =>
-        label ??
-        (status === null ? trans('No reading yet') : statusLabel(status)),
-);
+const text = computed(() => lampLabel(status, label));
 
 const style = computed(() => ({
     width: `${size}px`,
     height: `${size}px`,
-    background: status === null ? 'var(--nc-neutral-600)' : statusColor(status),
+    background: lampColor(status, tone),
 }));
 </script>
 
 <template>
     <span
+        v-if="decorative"
+        class="inline-block flex-none rounded-full"
+        :style="style"
+        aria-hidden="true"
+    />
+    <span
+        v-else
         class="inline-block flex-none rounded-full"
         :style="style"
         role="img"

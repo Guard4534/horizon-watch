@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { PhArrowClockwise, PhPlus, PhTrashSimple } from '@phosphor-icons/vue';
 import FormErrors from '@/components/FormErrors.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import ApplicationForm from '@/components/monitoring/applications/ApplicationForm.vue';
 import ConnectionCheckRow from '@/components/monitoring/applications/ConnectionCheckRow.vue';
 import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
@@ -48,30 +49,20 @@ const {
     <Head :title="$t('Add application')" />
 
     <div
-        class="mx-auto flex w-full flex-col"
-        style="
-            padding: var(--nc-space-6);
-            gap: var(--nc-space-6);
-            max-width: 720px;
-        "
+        class="nc-page nc-page-narrow flex flex-col"
+        style="gap: var(--nc-space-6)"
     >
-        <div>
-            <div class="nc-t-2xs nc-tone-muted">
-                <Link :href="applicationsIndex(slug)">{{
-                    $t('Applications')
-                }}</Link>
-            </div>
-            <div style="font-size: 26px; line-height: 1.15">
-                {{ $t('Add application') }}
-            </div>
-            <div class="nc-t-xs nc-tone-muted">
-                {{
-                    $t(
-                        'An application and its environments are created together, in one step.',
-                    )
-                }}
-            </div>
-        </div>
+        <PageHeader
+            :title="$t('Add application')"
+            :subtitle="
+                $t(
+                    'An application and its environments are created together, in one step.',
+                )
+            "
+            :crumbs="[
+                { label: $t('Applications'), href: applicationsIndex(slug) },
+            ]"
+        />
 
         <form
             class="flex flex-col"

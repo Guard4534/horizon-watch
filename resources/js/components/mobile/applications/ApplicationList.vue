@@ -3,12 +3,11 @@ import { Link } from '@inertiajs/vue3';
 import { PhCaretRight } from '@phosphor-icons/vue';
 import AttentionBadge from '@/components/monitoring/AttentionBadge.vue';
 import {
-    needsAttention,
     statusText,
     statusTone,
 } from '@/components/monitoring/environment/readings';
+import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { envTypeColor } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
 defineProps<{
@@ -16,13 +15,6 @@ defineProps<{
 }>();
 
 const slug = useTeamSlug();
-
-const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
-    background: envTypeColor(environment.type),
-    boxShadow: needsAttention(environment)
-        ? `0 0 0 2px color-mix(in srgb, ${statusTone(environment)} 55%, transparent)`
-        : undefined,
-});
 </script>
 
 <template>
@@ -43,12 +35,13 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
                     group.application.name
                 }}</span>
                 <span class="mt-[5px] flex flex-wrap items-center gap-1">
-                    <span
+                    <StatusLamp
                         v-for="environment in group.environments"
                         :key="environment.id"
-                        class="size-[7px] flex-none rounded-full"
-                        :style="dotStyle(environment)"
-                        :title="`${environment.name} · ${statusText(environment)}`"
+                        :status="environment.status"
+                        :tone="statusTone(environment)"
+                        :label="`${environment.name} · ${statusText(environment)}`"
+                        :size="7"
                     />
                     <span
                         class="nc-num nc-tone-faint"

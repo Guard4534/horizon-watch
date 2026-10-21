@@ -4,7 +4,7 @@ import AlertActions from '@/components/monitoring/alerts/AlertActions.vue';
 import AlertDetail from '@/components/monitoring/alerts/AlertDetail.vue';
 import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import AlertOpened from '@/components/monitoring/alerts/AlertOpened.vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { ruleLabel } from '@/lib/alertRules';
 import { alertIcon, alertTone } from '@/lib/alerts';
@@ -56,11 +56,13 @@ const environmentHref = useEnvironmentHref();
                         class="nc-tone-muted mt-[4px] flex items-center gap-[6px]"
                         style="font-size: 11px"
                     >
-                        <EnvSwatch :type="alert.environmentType" :size="8" />
                         <span class="min-w-0 truncate"
                             >{{ alert.applicationName }} /
-                            {{ alert.environmentName }}</span
-                        >
+                            <EnvPill
+                                :name="alert.environmentName"
+                                :type="alert.environmentType"
+                                :size="11"
+                        /></span>
                         <span class="nc-num ml-auto flex-none"
                             ><template
                                 v-if="alert.resolvedMinutesAgo !== null"

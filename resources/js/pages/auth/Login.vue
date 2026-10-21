@@ -66,9 +66,9 @@ defineProps<{
             <InputError field="password" :message="errors.password" />
         </div>
 
-        <label class="nc-radio nc-t-xs">
+        <label class="nc-checkbox nc-t-xs">
             <input type="checkbox" name="remember" />
-            <span class="nc-dot" />
+            <span class="nc-box" />
             {{ $t('Remember me') }}
         </label>
 
