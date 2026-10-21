@@ -14,6 +14,7 @@ use App\Models\EnvironmentSnapshot;
 use App\Models\Team;
 use App\Models\User;
 use App\Queries\WallQuery;
+use Illuminate\Support\Arr;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\Readings;
@@ -95,9 +96,9 @@ test('an environment hidden from the viewer is not on the wall at all', function
     $response->assertInertia(fn (Assert $page) => $page
         ->has('page.environments', 1)
         ->where('page.environments.0.id', $this->staging->slug)
-        ->where('page.kpis.openAnomalies', 0)
+        ->where('page.kpis.openAlerts', 0)
         ->where('page.kpis.openAlertSeverity', null)->where('page.kpis.environmentsNeedingAttention', 0)->where('page.kpis.environmentsJudged', 1)
-        ->has('page.anomalies', 0));
+        ->has('page.alerts', 0));
 
     expect($response->getContent())->not->toContain($this->production->slug);
 });
@@ -112,7 +113,7 @@ test('an environment never read is on the wall without a status, and is not coun
             ->where('page.environments.0.lastReadingAt', null)
             ->where('page.kpis.environmentsHealthy', 1)->where('page.kpis.environmentsJudged', 1)
             ->has('page.environments', 2)
-            ->where('page.kpis.openAnomalies', 0));
+            ->where('page.kpis.openAlerts', 0));
 });
 
 test('a row that will never be read stays below every row in trouble', function () {
@@ -221,15 +222,15 @@ test('a last hour exactly at the threshold does not tone the failed KPI, as the 
             ->where('page.kpis.failedSeverity', null));
 });
 
-test('an anomaly open for more than a day shows its full age', function () {
+test('an alert open for more than a day shows its full age', function () {
     Readings::record($this->production, EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused]);
     Alert::query()->update(['opened_at' => now()->subHours(30)]);
 
     wallPage($this->admin, $this->team)
         ->assertInertia(fn (Assert $page) => $page
-            ->has('page.anomalies', 1)
-            ->where('page.anomalies.0.metric', 'horizon.paused')
-            ->where('page.anomalies.0.minutesAgo', 1800));
+            ->has('page.alerts', 1)
+            ->where('page.alerts.0.metric', 'horizon.paused')
+            ->where('page.alerts.0.minutesAgo', 1800));
 });
 
 test('the poll reload answers with only the props it asks for, and with the new reading', function () {
@@ -363,3 +364,25 @@ test('the open alerts KPI takes the severity of the worst open alert', function 
     'an inactive horizon is critical' => [EnvironmentStatus::Inactive, AlertRuleMetric::HorizonMasterInactive, 'critical'],
     'nothing open has no tone' => [EnvironmentStatus::Active, null, null],
 ]);
+
+test('the wall lists as many open alerts as wall_alerts allows', function () {
+    Alert::factory()->for($this->production)->create();
+    Alert::factory()->for($this->staging)->create();
+    config(['horizon-watch.pages.wall_alerts' => 1]);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.kpis.openAlerts', 2)
+            ->has('page.alerts', 1));
+});
+
+test('a configuration that still names wall_anomalies keeps its limit', function () {
+    Alert::factory()->for($this->production)->create();
+    Alert::factory()->for($this->staging)->create();
+    config(['horizon-watch.pages' => [...Arr::except(config('horizon-watch.pages'), ['wall_alerts']), 'wall_anomalies' => 1]]);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.kpis.openAlerts', 2)
+            ->has('page.alerts', 1));
+});

@@ -93,16 +93,26 @@ trait HasTeams
      */
     public function toUserTeams(bool $includeCurrent = false): Collection
     {
-        return $this->teams()
-            ->get()
-            ->map(fn (Team $team) => ! $includeCurrent && $this->isCurrentTeam($team) ? null : $this->toUserTeam($team))
+        $teams = $this->teams()->get();
+        $admins = $this->adminCounts($teams
+            ->filter(fn (Team $team) => $this->teamRole($team) === TeamRole::Admin)
+            ->map(fn (Team $team): int => $team->id)
+            ->values()
+            ->all());
+
+        return $teams
+            ->map(fn (Team $team) => ! $includeCurrent && $this->isCurrentTeam($team) ? null : $this->toUserTeam($team, $admins[$team->id] ?? 0))
             ->filter()
             ->values();
     }
 
-    public function toUserTeam(Team $team): UserTeamData
+    public function toUserTeam(Team $team, ?int $adminCount = null): UserTeamData
     {
         $role = $this->teamRole($team);
+
+        if ($role === TeamRole::Admin) {
+            $adminCount ??= $this->adminCounts([$team->id])[$team->id] ?? 0;
+        }
 
         return new UserTeamData(
             id: $team->id,
@@ -111,7 +121,28 @@ trait HasTeams
             role: $role,
             roleLabel: $role?->label(),
             isCurrent: $this->isCurrentTeam($team),
+            isLastAdmin: $role === TeamRole::Admin && $adminCount === 1,
         );
+    }
+
+    /**
+     * @param  array<int, int>  $teamIds
+     * @return array<int, int>
+     */
+    private function adminCounts(array $teamIds): array
+    {
+        if ($teamIds === []) {
+            return [];
+        }
+
+        return Membership::query()
+            ->whereIn('team_id', $teamIds)
+            ->where('role', TeamRole::Admin->value)
+            ->groupBy('team_id')
+            ->selectRaw('team_id, count(*) as admins')
+            ->pluck('admins', 'team_id')
+            ->map(fn (mixed $count): int => (int) $count)
+            ->all();
     }
 
     public function fallbackTeam(?Team $excluding = null): ?Team

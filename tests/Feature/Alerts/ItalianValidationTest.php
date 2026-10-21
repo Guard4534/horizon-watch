@@ -45,7 +45,7 @@ test('quiet hours without an end are reported in italian', function () {
             'repeatMinutes' => null,
         ])
         ->assertSessionHasErrors([
-            'quietTo' => 'Il campo fine della finestra di silenzio è obbligatorio quando è presente inizio della finestra di silenzio.',
+            'quietTo' => 'Il campo fine della fascia di quiete è obbligatorio quando è presente inizio della fascia di quiete.',
         ]);
 });
 
@@ -60,7 +60,7 @@ test('quiet hours over the whole day are reported in italian', function () {
             'repeatMinutes' => null,
         ])
         ->assertSessionHasErrors([
-            'quietTo' => 'La finestra di silenzio non può coprire l’intera giornata: lascia fuori almeno un quarto d’ora.',
+            'quietTo' => 'La fascia di quiete non può coprire l’intera giornata: lascia fuori almeno un quarto d’ora.',
         ]);
 });
 

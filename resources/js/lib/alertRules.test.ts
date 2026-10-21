@@ -14,6 +14,8 @@ const rule = (
 ): App.Data.Monitoring.AlertRuleData => ({
     metric: 'queue.pending',
     unit: 'job',
+    comparator: '>',
+    isStateRule: false,
     threshold: 1000.4,
     severity: 'warning',
     notifyByEmail: true,
@@ -32,21 +34,34 @@ const rule = (
 });
 
 describe('formatRule', () => {
-    it.each<[App.Enums.AlertRuleMetric, number, string, string]>([
-        ['queue.pending', 100, 'job', 'Pending jobs > 100'],
-        ['queue.max_wait', 90, 's', 'Max wait > 90 s'],
-        ['job.runtime', 10, 'min', 'Job runtime > 10 min'],
-        ['jobs.failed_per_hour', 2.5, '', 'Failed jobs / hour > 2.5'],
-        ['workers.missing', 1, '', 'Missing workers ≥ 1'],
-        ['horizon.master_inactive', 5, 'min', 'Horizon inactive ≥ 5 min'],
-        ['endpoint.unreachable', 3, 'min', 'Endpoint unreachable ≥ 3 min'],
-        ['horizon.paused', 15, 'min', 'Horizon paused ≥ 15 min'],
+    it.each<[App.Enums.AlertRuleMetric, number, string, string, string]>([
+        ['queue.pending', 100, 'job', '>', 'Pending jobs > 100'],
+        ['queue.max_wait', 90, 's', '>', 'Max wait > 90 s'],
+        ['job.runtime', 10, 'min', '>', 'Job runtime > 10 min'],
+        ['jobs.failed_per_hour', 2.5, '', '>', 'Failed jobs / hour > 2.5'],
+        ['workers.missing', 1, '', '≥', 'Missing workers ≥ 1'],
+        ['horizon.master_inactive', 5, 'min', '≥', 'Horizon inactive ≥ 5 min'],
+        ['endpoint.unreachable', 3, 'min', '≥', 'Endpoint unreachable ≥ 3 min'],
+        ['horizon.paused', 15, 'min', '≥', 'Horizon paused ≥ 15 min'],
     ])(
         'writes %s with its readable name',
-        (metric, threshold, unit, expected) => {
-            expect(formatRule(metric, threshold, unit)).toBe(expected);
+        (metric, threshold, unit, comparator, expected) => {
+            expect(formatRule({ metric, threshold, unit, comparator })).toBe(
+                expected,
+            );
         },
     );
+
+    it('prints the comparator the server sent, not one of its own', () => {
+        expect(
+            formatRule({
+                metric: 'queue.pending',
+                threshold: 100,
+                unit: 'job',
+                comparator: '≥',
+            }),
+        ).toBe('Pending jobs ≥ 100');
+    });
 });
 
 describe('formatCondition', () => {

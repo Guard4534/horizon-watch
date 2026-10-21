@@ -939,7 +939,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
         return $this->alertAbilitiesByTeam[$team->id] ??= [
             'mute' => $user->can('muteAlert', $team),
-            'handle' => $user->can('handleAnomaly', $team),
+            'handle' => $user->can('handleAlert', $team),
             'all' => $this->visible->seesEverything($team, $user),
         ];
     }
@@ -998,6 +998,8 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             metric: $alert->metric,
             threshold: $alert->threshold,
             unit: $alert->unit,
+            comparator: $alert->metric->comparator(),
+            isStateRule: $alert->metric->isStateRule(),
             value: $alert->value,
             valueIsLowerBound: ($alert->detail['atLeast'] ?? false) === true,
             longestJob: $this->detailText($alert, 'job'),

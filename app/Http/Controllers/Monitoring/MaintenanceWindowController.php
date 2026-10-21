@@ -60,7 +60,7 @@ class MaintenanceWindowController extends Controller
             null,
         );
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Alerts silenced.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Maintenance window started.')]);
 
         return back();
     }

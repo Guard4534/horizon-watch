@@ -11,7 +11,7 @@ import { invalidField } from '@/lib/fieldErrors';
 
 // oxfmt-ignore
 type Props = {
-    passwordRules: string;
+    passwordPolicy: App.Data.Auth.PasswordPolicyData;
 } &
     ManageTwoFactorProps;
 
@@ -79,9 +79,12 @@ defineOptions({
                     name="password"
                     autocomplete="new-password"
                     :placeholder="$t('New password')"
-                    :passwordrules="props.passwordRules"
+                    :passwordrules="props.passwordPolicy.rules"
                     v-bind="invalidField('password', errors.password)"
                 />
+                <div class="nc-t-2xs nc-tone-faint">
+                    {{ props.passwordPolicy.description }}
+                </div>
                 <InputError field="password" :message="errors.password" />
             </div>
 
@@ -94,7 +97,7 @@ defineOptions({
                     name="password_confirmation"
                     autocomplete="new-password"
                     :placeholder="$t('Confirm password')"
-                    :passwordrules="props.passwordRules"
+                    :passwordrules="props.passwordPolicy.rules"
                     v-bind="
                         invalidField(
                             'password_confirmation',

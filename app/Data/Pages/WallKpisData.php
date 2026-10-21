@@ -11,7 +11,7 @@ class WallKpisData extends Data
         public int $environmentsHealthy,
         public int $environmentsJudged,
         public int $environmentsNeedingAttention,
-        public int $openAnomalies,
+        public int $openAlerts,
         public ?AlertSeverity $openAlertSeverity,
         public int $pendingTotal,
         public int $failedLastHour,

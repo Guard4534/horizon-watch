@@ -17,7 +17,7 @@ defineOptions({
 const props = defineProps<{
     token: string;
     email: string;
-    passwordRules: string;
+    passwordPolicy: App.Data.Auth.PasswordPolicyData;
 }>();
 
 const inputEmail = ref(props.email);
@@ -55,9 +55,12 @@ const inputEmail = ref(props.email);
                 name="password"
                 autocomplete="new-password"
                 autofocus
-                :passwordrules="passwordRules"
+                :passwordrules="passwordPolicy.rules"
                 v-bind="invalidField('password', errors.password)"
             />
+            <div class="nc-t-2xs nc-tone-faint">
+                {{ passwordPolicy.description }}
+            </div>
             <InputError field="password" :message="errors.password" />
         </div>
 
@@ -69,7 +72,7 @@ const inputEmail = ref(props.email);
                 id="password_confirmation"
                 name="password_confirmation"
                 autocomplete="new-password"
-                :passwordrules="passwordRules"
+                :passwordrules="passwordPolicy.rules"
                 v-bind="
                     invalidField(
                         'password_confirmation',

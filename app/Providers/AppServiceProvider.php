@@ -9,6 +9,7 @@ use App\Monitoring\PanelHealth;
 use App\Notifications\Auth\EmailChanged;
 use App\Notifications\Auth\ResetPassword;
 use App\Notifications\Teams\TeamInvitation;
+use App\Support\PasswordPolicy;
 use App\Support\Version;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -81,7 +82,7 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): Password => Password::min(10)->letters()->numbers());
+        Password::defaults(fn (): Password => PasswordPolicy::rule());
 
         Markdown::withSecuredEncoding();
     }

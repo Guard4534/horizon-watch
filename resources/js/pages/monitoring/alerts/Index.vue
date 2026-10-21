@@ -9,7 +9,6 @@ import AlertPagination from '@/components/monitoring/alerts/AlertPagination.vue'
 import AlertTable from '@/components/monitoring/alerts/AlertTable.vue';
 import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
 import DeliveryPolicy from '@/components/monitoring/alerts/DeliveryPolicy.vue';
-import DeliveryTest from '@/components/monitoring/alerts/DeliveryTest.vue';
 import EmailPreview from '@/components/monitoring/alerts/EmailPreview.vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
@@ -93,7 +92,7 @@ const empty = computed(() => {
             return trans('No resolved alerts.');
         default:
             return trans(
-                'No open anomalies: every watched environment is within its thresholds.',
+                'No open alerts: every environment you can see is within its thresholds.',
             );
     }
 });
@@ -116,7 +115,7 @@ const previewed = computed(
                           'Configure an application with at least one environment first: alerts appear as soon as there is something to watch.',
                       )
                     : $t(
-                          'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                          'Nothing is configured yet. An admin of this organization has to add an application before anything shows up here.',
                       )
             "
         />
@@ -213,10 +212,6 @@ const previewed = computed(
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
             <EmailPreview v-if="page.notifications" :alert="previewed" />
-            <DeliveryTest
-                v-if="page.notifications"
-                :settings="page.notifications"
-            />
             <DeliveryPolicy
                 :summary="page.notificationSummary"
                 :manages="page.notifications !== null"

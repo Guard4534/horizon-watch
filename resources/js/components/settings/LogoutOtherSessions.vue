@@ -61,7 +61,7 @@ const passwordInput = useTemplateRef('passwordInput');
                         <DialogDescription>
                             {{
                                 $t(
-                                    'Enter your password to log out of every other browser and device. This one stays signed in.',
+                                    'Enter your password to log out of every other browser and device. This one stays logged in.',
                                 )
                             }}
                         </DialogDescription>

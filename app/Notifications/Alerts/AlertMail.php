@@ -111,11 +111,11 @@ final class AlertMail
         return null;
     }
 
-    public static function detectedAt(Alert $alert): string
+    public static function openedAt(Alert $alert): string
     {
         $timezone = self::timezone($alert->team);
 
-        return __('Detected on :time (:timezone)', [
+        return __('Opened on :time (:timezone)', [
             'time' => self::time($alert->opened_at, $timezone),
             'timezone' => $timezone,
         ]);
@@ -136,13 +136,13 @@ final class AlertMail
     /**
      * @return list<array{label: string, value: string}>
      */
-    public static function rows(Alert $alert): array
+    public static function rows(Alert $alert, bool $withValue = false): array
     {
         return [
             ['label' => __('Environment'), 'value' => self::where($alert)],
             ['label' => __('Nodes'), 'value' => self::nodes($alert)],
             ['label' => __('Rule'), 'value' => self::rule($alert)],
-            ['label' => __('Value'), 'value' => self::value($alert)],
+            ...($withValue ? [['label' => __('Value'), 'value' => self::value($alert)]] : []),
         ];
     }
 

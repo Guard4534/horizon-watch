@@ -8,12 +8,13 @@ import { Spinner } from '@/components/ui/spinner';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { isProductionType } from '@/lib/environments';
 import { invalidField } from '@/lib/fieldErrors';
-import { ASSIGNABLE_ROLES, VISIBILITIES, visibilityLabel } from '@/lib/members';
 import { store as storeInvitation } from '@/routes/members/invitations';
 
-const { environments, expiresDays } = defineProps<{
+const { environments, expiresDays, roles, visibilities } = defineProps<{
     environments: App.Data.Pages.EnvironmentOptionData[];
     expiresDays: number;
+    roles: App.Data.Teams.RoleOptionData[];
+    visibilities: App.Data.Teams.VisibilityOptionData[];
 }>();
 
 const slug = useTeamSlug();
@@ -49,7 +50,7 @@ function reset() {
                     type="email"
                     name="email"
                     required
-                    placeholder="name@example.com"
+                    placeholder="email@example.com"
                     v-bind="invalidField('invite-email', errors.email)"
                 />
                 <InputError field="invite-email" :message="errors.email" />
@@ -65,17 +66,17 @@ function reset() {
                     v-bind="invalidField('invite-role', errors.role)"
                 >
                     <label
-                        v-for="option in ASSIGNABLE_ROLES"
-                        :key="option"
+                        v-for="option in roles"
+                        :key="option.value"
                         class="nc-radio"
                     >
                         <input
                             v-model="role"
                             type="radio"
                             name="role"
-                            :value="option"
+                            :value="option.value"
                         />
-                        <span class="nc-dot"></span>{{ option }}
+                        <span class="nc-dot"></span>{{ option.label }}
                     </label>
                 </div>
                 <InputError field="invite-role" :message="errors.role" />
@@ -102,11 +103,11 @@ function reset() {
                     "
                 >
                     <option
-                        v-for="option in VISIBILITIES"
-                        :key="option"
-                        :value="option"
+                        v-for="option in visibilities"
+                        :key="option.value"
+                        :value="option.value"
                     >
-                        {{ visibilityLabel(option) }}
+                        {{ option.label }}
                     </option>
                 </select>
                 <InputError

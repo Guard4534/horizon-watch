@@ -826,7 +826,7 @@ test('the wall reads its open alerts once, and the sidebar badge counts them in 
 
     $this->get(route('wall', ['current_team' => $this->team->slug]))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('openAlertCount', 1)->has('page.anomalies', 1));
+        ->assertInertia(fn ($page) => $page->where('openAlertCount', 1)->has('page.alerts', 1));
 
     $reads = collect(DB::getQueryLog())->filter(fn (array $query) => str_contains($query['query'], 'from "alerts"'))->pluck('query');
 

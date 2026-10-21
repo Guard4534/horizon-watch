@@ -5,7 +5,7 @@ const kpis: App.Data.Pages.WallKpisData = {
     environmentsHealthy: 3,
     environmentsJudged: 5,
     environmentsNeedingAttention: 2,
-    openAnomalies: 2,
+    openAlerts: 2,
     openAlertSeverity: 'critical',
     pendingTotal: 1250,
     failedLastHour: 42,
@@ -33,7 +33,7 @@ describe('useWallKpis', () => {
     it('says at least for a capped last hour and stays neutral without a breach', () => {
         const [, openAlerts, , failed] = useWallKpis(() => ({
             ...kpis,
-            openAnomalies: 0,
+            openAlerts: 0,
             openAlertSeverity: null,
             failedLastHourCapped: true,
             failedSeverity: null,

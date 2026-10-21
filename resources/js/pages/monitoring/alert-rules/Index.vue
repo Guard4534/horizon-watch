@@ -2,6 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import { PhInfo } from '@phosphor-icons/vue';
 import { computed } from 'vue';
+import DeliveryPolicy from '@/components/monitoring/alerts/DeliveryPolicy.vue';
 import MaintenanceWindows from '@/components/monitoring/rules/MaintenanceWindows.vue';
 import NotificationSettings from '@/components/monitoring/rules/NotificationSettings.vue';
 import RulesForm from '@/components/monitoring/rules/RulesForm.vue';
@@ -62,6 +63,7 @@ const nothingVisible = computed(
             />
 
             <NotificationSettings
+                v-if="page.notifications"
                 :summary="page.notificationSummary"
                 :settings="page.notifications"
                 :new-webhook-secret="page.newWebhookSecret"
@@ -69,6 +71,11 @@ const nothingVisible = computed(
                 :max-recipients="page.maxRecipients"
                 :previous-secret-hours="page.previousSecretHours"
                 :timezones="page.timezones"
+            />
+            <DeliveryPolicy
+                v-else
+                :summary="page.notificationSummary"
+                :manages="false"
             />
 
             <MaintenanceWindows

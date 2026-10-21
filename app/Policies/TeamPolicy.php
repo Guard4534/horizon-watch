@@ -84,8 +84,8 @@ class TeamPolicy
         return $user->hasTeamPermission($team, TeamPermission::MuteAlert);
     }
 
-    public function handleAnomaly(User $user, Team $team): bool
+    public function handleAlert(User $user, Team $team): bool
     {
-        return $user->hasTeamPermission($team, TeamPermission::HandleAnomaly);
+        return $user->hasTeamPermission($team, TeamPermission::HandleAlert);
     }
 }

@@ -52,21 +52,21 @@ const icon = computed(() => {
             <template v-if="state === 'sign_in_required'">
                 {{
                     $t(
-                        'This address already has an account. Sign in to accept the invitation.',
+                        'This address already has an account. Log in to accept the invitation.',
                     )
                 }}
             </template>
             <template v-else-if="state === 'wrong_account'">
                 {{
                     $t(
-                        'This invitation was sent to another address. Sign out, then open the link again.',
+                        'This invitation was sent to another address. Log out, then open the link again.',
                     )
                 }}
             </template>
             <template v-else-if="state === 'expired'">
                 {{
                     $t(
-                        'This invitation has expired. Ask an administrator to send a new one.',
+                        'This invitation has expired. Ask an admin to send a new one.',
                     )
                 }}
             </template>

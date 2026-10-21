@@ -75,7 +75,7 @@ describe('one wording and one tone per state', () => {
     it.each<[Partial<State>, string, string]>([
         [
             { watched: false, status: null },
-            'Not on your wall',
+            'Outside your visibility',
             'var(--nc-neutral-500)',
         ],
         [

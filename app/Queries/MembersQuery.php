@@ -8,6 +8,8 @@ use App\Data\Pages\MembersPermissionsData;
 use App\Data\Pages\PermissionMatrixRowData;
 use App\Data\Teams\InvitationData;
 use App\Data\Teams\MemberData;
+use App\Data\Teams\RoleOptionData;
+use App\Data\Teams\VisibilityOptionData;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamPermission;
 use App\Enums\TeamRole;
@@ -43,6 +45,9 @@ class MembersQuery
                 canTransferOwnership: $gate->allows('transferOwnership', $team),
             ),
             matrix: $this->matrix(),
+            roles: array_map(RoleOptionData::of(...), TeamRole::cases()),
+            assignableRoles: array_map(RoleOptionData::of(...), TeamRole::assignable()),
+            visibilities: array_map(VisibilityOptionData::of(...), MemberVisibility::cases()),
             invitationExpiresDays: TeamInvitation::lifetimeDays(),
         );
     }
@@ -189,9 +194,9 @@ class MembersQuery
             TeamPermission::CancelInvitation => __('Revoke an invitation'),
             TeamPermission::ManageApplications => __('Create and edit applications and environments'),
             TeamPermission::ManageCredentials => __('Manage the credentials'),
-            TeamPermission::ManageAlertRules => __('Edit thresholds and recipients'),
+            TeamPermission::ManageAlertRules => __('Edit thresholds and notifications'),
             TeamPermission::MuteAlert => __('Mute an alert or plan maintenance'),
-            TeamPermission::HandleAnomaly => __('Mark an anomaly handled'),
+            TeamPermission::HandleAlert => __('Mark an alert as handled'),
             TeamPermission::TestConnection => __('Test the connection'),
         };
     }

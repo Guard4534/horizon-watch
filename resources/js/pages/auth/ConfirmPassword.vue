@@ -10,7 +10,7 @@ defineOptions({
     layout: {
         title: 'Confirm your password',
         description:
-            'This is a secure area of the application. Please confirm your password before continuing.',
+            'This is a secure area of the panel. Please confirm your password before continuing.',
     },
 });
 </script>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Actions\Setup\CompleteSetup;
+use App\Data\Auth\PasswordPolicyData;
 use App\Data\Auth\SetupData;
 use App\Data\Pages\SetupPageData;
 use App\Http\Controllers\Controller;
@@ -18,7 +19,7 @@ class SetupController extends Controller
     public function create(): Response
     {
         return Inertia::render('auth/Setup', [
-            'page' => new SetupPageData(requiresToken: SetupStatus::requiresToken()),
+            'page' => new SetupPageData(requiresToken: SetupStatus::requiresToken(), passwordPolicy: PasswordPolicyData::current()),
         ]);
     }
 

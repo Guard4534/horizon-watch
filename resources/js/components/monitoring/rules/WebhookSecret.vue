@@ -116,7 +116,7 @@ function regenerate(): void {
                 <DialogDescription>
                     {{
                         $tChoice(
-                            'Webhook deliveries are signed with the new secret, shown only once. For the next hour they also carry a signature made with the current one, so the receiver can switch without missing any.|Webhook deliveries are signed with the new secret, shown only once. For the next :count hours they also carry a signature made with the current one, so the receiver can switch without missing any.',
+                            'Webhook deliveries are signed with the new signing secret, shown only once. For the next hour they also carry a signature made with the current one, so the receiver can switch without missing any.|Webhook deliveries are signed with the new signing secret, shown only once. For the next :count hours they also carry a signature made with the current one, so the receiver can switch without missing any.',
                             previousSecretHours,
                         )
                     }}

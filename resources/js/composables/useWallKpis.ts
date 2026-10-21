@@ -32,7 +32,7 @@ export function useWallKpis(
             {
                 key: 'openAlerts',
                 label: trans('Open alerts'),
-                value: String(kpis.openAnomalies),
+                value: String(kpis.openAlerts),
                 color: kpis.openAlertSeverity
                     ? severityColor(kpis.openAlertSeverity)
                     : undefined,

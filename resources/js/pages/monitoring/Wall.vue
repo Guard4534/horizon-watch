@@ -6,7 +6,7 @@ import { computed, ref, watch } from 'vue';
 import MobileWall from '@/components/mobile/wall/MobileWall.vue';
 import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
 import VisibilityEmptyState from '@/components/monitoring/VisibilityEmptyState.vue';
-import AnomalyList from '@/components/monitoring/wall/AnomalyList.vue';
+import OpenAlertList from '@/components/monitoring/wall/OpenAlertList.vue';
 import ApplicationGroup from '@/components/monitoring/wall/ApplicationGroup.vue';
 import FirstRun from '@/components/monitoring/wall/FirstRun.vue';
 import SentNotifications from '@/components/monitoring/wall/SentNotifications.vue';
@@ -189,7 +189,7 @@ const kpis = useWallKpis(() => page.kpis);
                           'An application is configured but has no environment yet. Add one to it and it shows up here.',
                       )
                     : $t(
-                          'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                          'Nothing is configured yet. An admin of this organization has to add an application before anything shows up here.',
                       )
             "
         >
@@ -286,7 +286,7 @@ const kpis = useWallKpis(() => page.kpis);
                 :link="page.canManageAlertRules ? 'settings' : 'profile'"
             />
 
-            <AnomalyList :anomalies="page.anomalies" />
+            <OpenAlertList :alerts="page.alerts" />
 
             <SectionCard :title="$t('Organization throughput')">
                 <TimeSeriesChart

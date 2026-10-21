@@ -44,7 +44,7 @@ class NotificationSettingsInputData extends Data
     public static function attributes(): array
     {
         return [
-            'recipients' => __('recipients'),
+            'recipients' => __('extra addresses'),
             'recipients.*' => __('address'),
             'webhookUrl' => __('webhook URL'),
             'quietFrom' => __('quiet hours start'),

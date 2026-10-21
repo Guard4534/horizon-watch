@@ -43,7 +43,7 @@ class AlertActionController extends Controller
 
     public function handle(Request $request, Team $current_team, string $alert, HandleAlert $handleAlert): RedirectResponse
     {
-        $found = $this->authorized($current_team, $request->user(), $alert, 'handleAnomaly');
+        $found = $this->authorized($current_team, $request->user(), $alert, 'handleAlert');
 
         $handleAlert->handle($found, $request->user());
 

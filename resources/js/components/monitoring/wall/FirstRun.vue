@@ -43,7 +43,7 @@ const TYPES: App.Enums.EnvironmentType[] = [
                 <p class="lead">
                     {{
                         $t(
-                            'Connect your first application and its environments: the panel starts polling Horizon and opening anomalies as soon as a metric crosses a threshold.',
+                            'Connect your first application and its environments: the panel starts polling Horizon and opening alerts as soon as a metric crosses a threshold.',
                         )
                     }}
                 </p>
@@ -80,7 +80,7 @@ const TYPES: App.Enums.EnvironmentType[] = [
                         <div class="step-body">
                             {{
                                 $t(
-                                    'The organization defaults apply straight away: they decide when an anomaly opens.',
+                                    'The organization defaults apply straight away: they decide when an alert opens.',
                                 )
                             }}
                         </div>

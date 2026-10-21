@@ -24,7 +24,7 @@ class WallQuery
         $environments = $this->monitoring->environments($team);
         usort($environments, EnvironmentData::compareBySeverityThenPending(...));
 
-        $anomalies = $this->monitoring->openAlerts($team);
+        $alerts = $this->monitoring->openAlerts($team);
         $judged = array_values(array_filter($environments, fn (EnvironmentData $environment) => $environment->isJudged()));
         $sum = fn (array $rows, callable $value) => array_sum(array_map($value, $rows));
         $failedRule = AlertRuleMetric::JobsFailedPerHour->value;
@@ -38,8 +38,8 @@ class WallQuery
                 environmentsHealthy: count(array_filter($judged, fn (EnvironmentData $environment) => $environment->isHealthy())),
                 environmentsJudged: count($judged),
                 environmentsNeedingAttention: count(array_filter($judged, fn (EnvironmentData $environment) => $environment->needsAttention())),
-                openAnomalies: count($anomalies),
-                openAlertSeverity: AlertSeverity::worstOf(array_map(fn (AlertData $alert) => $alert->severity, $anomalies)),
+                openAlerts: count($alerts),
+                openAlertSeverity: AlertSeverity::worstOf(array_map(fn (AlertData $alert) => $alert->severity, $alerts)),
                 pendingTotal: $sum($judged, fn (EnvironmentData $environment) => $environment->pending),
                 failedLastHour: $sum($judged, fn (EnvironmentData $environment) => $environment->failedLastHour),
                 failedLastHourCapped: array_any($judged, fn (EnvironmentData $environment) => $environment->failedLastHourCapped),
@@ -51,7 +51,7 @@ class WallQuery
                 failedWindowMinutes: $this->commonFailedWindow($judged === [] ? $environments : $judged),
             ),
             environments: $environments,
-            anomalies: array_slice($anomalies, 0, config()->integer('horizon-watch.pages.wall_anomalies')),
+            alerts: array_slice($alerts, 0, config()->integer('horizon-watch.pages.wall_alerts', config()->integer('horizon-watch.pages.wall_anomalies', 5))),
             throughput: $this->monitoring->throughputSeries($team, null, SeriesRange::ThreeHours),
             grid: $this->monitoring->seriesGrid(SeriesRange::ThreeHours),
             jobsPerMinute: $sum($judged, fn (EnvironmentData $environment) => $environment->jobsPerMinute),

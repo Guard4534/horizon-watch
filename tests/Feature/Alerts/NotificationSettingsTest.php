@@ -233,7 +233,7 @@ test('regenerating makes a new secret, shown once, and keeps the replaced one fo
 
     $this->post(route('alert-settings.regenerate-secret', ['current_team' => $this->team->slug]))
         ->assertRedirect()
-        ->assertInertiaFlash('toast.message', 'New webhook secret generated.');
+        ->assertInertiaFlash('toast.message', 'New signing secret generated.');
 
     $settings = NotificationSetting::query()->sole();
     $new = $settings->webhook_secret;
@@ -601,3 +601,11 @@ test('the wall points admins to the alert settings and everyone else to their ow
     'a member' => [TeamRole::Member, false],
     'a viewer' => [TeamRole::Viewer, false],
 ]);
+
+test('too many extra addresses are named as such in the error', function () {
+    config(['horizon-watch.notifications.max_recipients' => 1]);
+    $this->actingAs($this->admin);
+
+    ($this->save)(['recipients' => ['ops@example.com', 'oncall@example.com']])
+        ->assertSessionHasErrors(['recipients' => 'The extra addresses field must not have more than 1 items.']);
+});

@@ -72,12 +72,6 @@ const LABELS: Record<
     },
 };
 
-const STATE_METRICS: ReadonlySet<App.Enums.AlertRuleMetric> = new Set([
-    'horizon.master_inactive',
-    'endpoint.unreachable',
-    'horizon.paused',
-]);
-
 export function ruleIcon(metric: App.Enums.AlertRuleMetric): Component {
     return ICONS[metric];
 }
@@ -88,10 +82,6 @@ export function ruleLabel(metric: App.Enums.AlertRuleMetric): string {
 
 export function ruleHint(metric: App.Enums.AlertRuleMetric): string {
     return LABELS[metric].hint();
-}
-
-function isStateMetric(metric: App.Enums.AlertRuleMetric): boolean {
-    return STATE_METRICS.has(metric);
 }
 
 export function unitLabel(unit: string): string {
@@ -119,16 +109,13 @@ export function formatRuleFor(minutes: number): string {
     return trans('for :duration', { duration: formatSeconds(minutes * 60) });
 }
 
-function comparison(metric: App.Enums.AlertRuleMetric): string {
-    return isStateMetric(metric) || metric === 'workers.missing' ? '≥' : '>';
-}
-
 export function formatRule(
-    metric: App.Enums.AlertRuleMetric,
-    threshold: number,
-    unit: string,
+    rule: Pick<
+        App.Data.Monitoring.AlertData,
+        'metric' | 'threshold' | 'unit' | 'comparator'
+    >,
 ): string {
-    return `${ruleLabel(metric)} ${comparison(metric)} ${formatThreshold(threshold, unit)}`;
+    return `${ruleLabel(rule.metric)} ${rule.comparator} ${formatThreshold(rule.threshold, rule.unit)}`;
 }
 
 export function formatCondition(

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import { PhEnvelopeSimple, PhWebhooksLogo } from '@phosphor-icons/vue';
 import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
+import WarningNotice from '@/components/monitoring/WarningNotice.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatSeconds } from '@/lib/monitoring';
@@ -13,6 +14,7 @@ defineProps<{
 }>();
 
 const slug = useTeamSlug();
+const shared = usePage();
 </script>
 
 <template>
@@ -24,16 +26,33 @@ const slug = useTeamSlug();
                 >{{ $t('Alert settings') }}</Link
             >
         </template>
-        <AudienceWarning
-            v-if="summary.reachesNobody"
-            :link="manages ? 'settings' : 'profile'"
-            style="margin-bottom: var(--nc-space-3)"
-        />
+        <div
+            v-if="
+                summary.reachesNobody || shared.props.mailConfigured === false
+            "
+            class="flex flex-col"
+            style="gap: var(--nc-space-2); margin-bottom: var(--nc-space-3)"
+        >
+            <AudienceWarning
+                v-if="summary.reachesNobody"
+                :link="manages ? 'settings' : 'profile'"
+            />
+            <WarningNotice
+                v-if="shared.props.mailConfigured === false"
+                :title="$t('Email is not set up')"
+            >
+                {{
+                    $t(
+                        'No alert email, test email included, goes out until whoever runs this panel sets MAIL_HOST. The webhook does not depend on it.',
+                    )
+                }}
+            </WarningNotice>
+        </div>
         <ul class="policy">
             <li>
                 <template v-if="summary.repeatMinutes">{{
                     $t(
-                        'A critical alert is sent as soon as it opens, then again every :interval until it clears, gets muted or is handled.',
+                        'A critical alert is sent as soon as it opens, then again every :interval until it is resolved, muted or marked as handled.',
                         { interval: formatSeconds(summary.repeatMinutes * 60) },
                     )
                 }}</template>
@@ -68,7 +87,7 @@ const slug = useTeamSlug();
             <li>
                 {{
                     $t(
-                        'When a notified alert clears, a resolution follows. A muted alert sends nothing at all.',
+                        'When a notified alert is resolved, a resolution notice follows. A muted alert sends nothing at all.',
                     )
                 }}
             </li>
@@ -81,6 +100,7 @@ const slug = useTeamSlug();
             </li>
         </ul>
         <div
+            v-if="!summary.reachesNobody"
             class="nc-t-xs nc-tone-soft flex flex-col"
             style="
                 gap: var(--nc-space-2);

@@ -14,6 +14,8 @@ class AlertRuleData extends Data
     public function __construct(
         public AlertRuleMetric $metric,
         public string $unit,
+        public string $comparator,
+        public bool $isStateRule,
         public float $threshold,
         public AlertSeverity $severity,
         public bool $notifyByEmail,
@@ -37,6 +39,8 @@ class AlertRuleData extends Data
         return new self(
             metric: $rule->metric,
             unit: $rule->metric->unit(),
+            comparator: $rule->metric->comparator(),
+            isStateRule: $rule->metric->isStateRule(),
             threshold: $rule->threshold,
             severity: $rule->severity,
             notifyByEmail: $rule->notifyByEmail,

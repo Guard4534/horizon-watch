@@ -172,7 +172,7 @@ const { canManageApplications } = useVisibility();
                                         'Your visibility does not cover this environment: no detail page and no chart, but you can still configure it.',
                                     )
                                 "
-                                >{{ $t('Not on your wall') }}</span
+                                >{{ $t('Outside your visibility') }}</span
                             >
                             <Link
                                 v-if="canManageApplications"

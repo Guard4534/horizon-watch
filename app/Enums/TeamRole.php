@@ -12,11 +12,19 @@ enum TeamRole: string
     public function label(): string
     {
         return match ($this) {
-            self::Owner => __('Owner · admin'),
+            self::Owner => __('Owner'),
             self::Admin => __('Admin'),
             self::Member => __('Member'),
             self::Viewer => __('Viewer'),
         };
+    }
+
+    /**
+     * @return array<int, TeamRole>
+     */
+    public static function assignable(): array
+    {
+        return [self::Admin, self::Member, self::Viewer];
     }
 
     /**
@@ -32,7 +40,7 @@ enum TeamRole: string
             )),
             self::Member => [
                 TeamPermission::MuteAlert,
-                TeamPermission::HandleAnomaly,
+                TeamPermission::HandleAlert,
                 TeamPermission::TestConnection,
             ],
             self::Viewer => [],

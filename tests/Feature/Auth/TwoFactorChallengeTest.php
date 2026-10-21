@@ -79,7 +79,7 @@ test('a two-factor secret that no longer decrypts answers with an error instead 
     $this->from(route('two-factor.login'))
         ->post(route('two-factor.login.store'), [$field => '123456'])
         ->assertRedirect(route('two-factor.login'))
-        ->assertSessionHasErrors([$field => 'The two-factor secret of this account can no longer be read: ask an administrator to turn two-factor authentication off.'])
+        ->assertSessionHasErrors([$field => 'The two-factor secret of this account can no longer be read: ask whoever runs this panel to turn two-factor authentication off.'])
         ->assertSessionHas('login.id', $user->id);
 
     $this->assertGuest();

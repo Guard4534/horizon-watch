@@ -596,3 +596,28 @@ test('leaving a team clears the environment grants it carried', function () {
         'environment_id' => $environment->id,
     ]);
 });
+
+test('an admin is told when they are the last admin of an organization', function () {
+    $team = Team::factory()->create();
+    $owner = User::factory()->create();
+    $admin = User::factory()->create();
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+    $team->members()->attach($admin, ['role' => TeamRole::Admin->value]);
+
+    expect($admin->toUserTeams(includeCurrent: true)->firstWhere('id', $team->id)->isLastAdmin)->toBeTrue()
+        ->and($admin->toUserTeam($team)->isLastAdmin)->toBeTrue()
+        ->and($owner->toUserTeam($team)->isLastAdmin)->toBeFalse();
+
+    $team->members()->attach(User::factory()->create(), ['role' => TeamRole::Admin->value]);
+
+    expect($admin->fresh()->toUserTeams(includeCurrent: true)->firstWhere('id', $team->id)->isLastAdmin)->toBeFalse()
+        ->and($admin->fresh()->toUserTeam($team)->isLastAdmin)->toBeFalse();
+});
+
+test('a member is never the last admin', function () {
+    $team = Team::factory()->create();
+    $member = User::factory()->create();
+    $team->members()->attach($member, ['role' => TeamRole::Member->value]);
+
+    expect($member->toUserTeam($team)->isLastAdmin)->toBeFalse();
+});

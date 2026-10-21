@@ -8,10 +8,10 @@ import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { formatRule } from '@/lib/alertRules';
 import {
+    alertIcon,
+    alertTone,
     channelIcon,
     channelLabel,
-    severityColor,
-    severityIcon,
     severityLabel,
 } from '@/lib/alerts';
 import { formatAgo } from '@/lib/monitoring';
@@ -48,23 +48,18 @@ const environmentHref = useEnvironmentHref();
                     <td>
                         <span
                             class="nc-t-xs inline-flex items-center gap-[6px] whitespace-nowrap"
-                            :style="{ color: severityColor(alert.severity) }"
                         >
                             <component
-                                :is="severityIcon(alert.severity)"
+                                :is="alertIcon(alert)"
                                 :size="14"
+                                class="flex-none"
+                                :style="{ color: alertTone(alert) }"
                             />
                             {{ severityLabel(alert.severity) }}
                         </span>
                     </td>
                     <td class="nc-t-xs whitespace-nowrap" :title="alert.metric">
-                        {{
-                            formatRule(
-                                alert.metric,
-                                alert.threshold,
-                                alert.unit,
-                            )
-                        }}
+                        {{ formatRule(alert) }}
                     </td>
                     <td>
                         <Link

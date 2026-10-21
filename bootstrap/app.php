@@ -81,7 +81,7 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             return redirect()->route('two-factor.login')->withErrors([
-                $request->filled('recovery_code') ? 'recovery_code' : 'code' => __('The two-factor secret of this account can no longer be read: ask an administrator to turn two-factor authentication off.'),
+                $request->filled('recovery_code') ? 'recovery_code' : 'code' => __('The two-factor secret of this account can no longer be read: ask whoever runs this panel to turn two-factor authentication off.'),
             ]);
         });
 

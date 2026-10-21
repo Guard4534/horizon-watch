@@ -7,7 +7,6 @@ import WarningNotice from '@/components/monitoring/WarningNotice.vue';
 import WebhookSecret from '@/components/monitoring/rules/WebhookSecret.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { quietHoursSummary } from '@/lib/datetime';
 import { hostOf } from '@/lib/environments';
 import { errorId, invalidField } from '@/lib/fieldErrors';
 import { formatSeconds } from '@/lib/monitoring';
@@ -26,7 +25,7 @@ const {
     timezones,
 } = defineProps<{
     summary: App.Data.Pages.NotificationSummaryData;
-    settings: App.Data.Monitoring.NotificationSettingsData | null;
+    settings: App.Data.Monitoring.NotificationSettingsData;
     newWebhookSecret: string | null;
     repeatChoices: number[];
     maxRecipients: number;
@@ -49,12 +48,12 @@ type SettingsForm = {
 
 function received(): SettingsForm {
     return {
-        recipients: settings?.recipients.join(', ') ?? '',
-        webhookUrl: settings?.webhookUrl ?? '',
-        quietFrom: settings?.quietFrom ?? '',
-        quietTo: settings?.quietTo ?? '',
-        timezone: settings?.timezone ?? summary.timezone,
-        repeatMinutes: settings?.repeatMinutes ?? null,
+        recipients: settings.recipients.join(', '),
+        webhookUrl: settings.webhookUrl ?? '',
+        quietFrom: settings.quietFrom ?? '',
+        quietTo: settings.quietTo ?? '',
+        timezone: settings.timezone,
+        repeatMinutes: settings.repeatMinutes,
     };
 }
 
@@ -141,15 +140,13 @@ function sendTest(channel: App.Enums.NotificationChannel): void {
     );
 }
 
-const webhookSaved = computed(
-    () => settings !== null && (settings.webhookUrl ?? '') !== '',
-);
+const webhookSaved = computed(() => (settings.webhookUrl ?? '') !== '');
 
 const movesHost = computed(
     () =>
         webhookSaved.value &&
         form.webhookUrl.trim() !== '' &&
-        hostOf(form.webhookUrl.trim()) !== hostOf(settings?.webhookUrl ?? ''),
+        hostOf(form.webhookUrl.trim()) !== hostOf(settings.webhookUrl ?? ''),
 );
 </script>
 
@@ -162,10 +159,7 @@ const movesHost = computed(
             class="flex flex-col"
             style="gap: var(--nc-space-2); margin-bottom: var(--nc-space-4)"
         >
-            <AudienceWarning
-                v-if="summary.reachesNobody"
-                :link="settings ? undefined : 'profile'"
-            />
+            <AudienceWarning v-if="summary.reachesNobody" />
             <WarningNotice
                 v-if="shared.props.mailConfigured === false"
                 :title="$t('Email is not set up')"
@@ -178,11 +172,11 @@ const movesHost = computed(
             </WarningNotice>
         </div>
 
-        <form v-if="settings" novalidate @submit.prevent="save">
+        <form novalidate @submit.prevent="save">
             <div class="settings-grid">
                 <div class="nc-field wide">
                     <label :for="`${id}-recipients`">{{
-                        $t('Email recipients')
+                        $t('Extra addresses')
                     }}</label>
                     <input
                         :id="`${id}-recipients`"
@@ -487,78 +481,17 @@ const movesHost = computed(
                     </button>
                 </div>
             </div>
+            <div class="field-hint" style="margin-top: var(--nc-space-2)">
+                {{
+                    $t(
+                        'The test email also goes to you. A test opens no alert and shows up among the notifications sent on the status wall.',
+                    )
+                }}
+            </div>
             <div v-if="testError" class="field-error" role="alert">
                 {{ testError }}
             </div>
         </form>
-
-        <div
-            v-else
-            class="nc-t-sm grid"
-            style="
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: var(--nc-space-4);
-            "
-        >
-            <div>
-                <div class="nc-label">{{ $t('Alert emails') }}</div>
-                <div class="nc-num">
-                    {{
-                        $tChoice(
-                            ':count member|:count members',
-                            summary.optedInMemberCount,
-                        )
-                    }}
-                </div>
-            </div>
-            <div>
-                <div class="nc-label">{{ $t('Email recipients') }}</div>
-                <div class="nc-num">
-                    {{
-                        $tChoice(
-                            ':count recipient|:count recipients',
-                            summary.recipientCount,
-                        )
-                    }}
-                </div>
-            </div>
-            <div>
-                <div class="nc-label">{{ $t('Webhook') }}</div>
-                <div>
-                    {{
-                        summary.webhookConfigured
-                            ? $t('Webhook configured')
-                            : $t('No webhook')
-                    }}
-                </div>
-            </div>
-            <div>
-                <div class="nc-label">{{ $t('Quiet hours') }}</div>
-                <div class="nc-num">
-                    {{
-                        quietHoursSummary(
-                            summary.quietFrom,
-                            summary.quietTo,
-                            summary.timezone,
-                        )
-                    }}
-                </div>
-            </div>
-            <div>
-                <div class="nc-label">{{ $t('Alert repeat') }}</div>
-                <div>
-                    {{
-                        summary.repeatMinutes === null
-                            ? $t('first detection only')
-                            : $t('every :interval while open', {
-                                  interval: formatSeconds(
-                                      summary.repeatMinutes * 60,
-                                  ),
-                              })
-                    }}
-                </div>
-            </div>
-        </div>
     </SectionCard>
 </template>
 

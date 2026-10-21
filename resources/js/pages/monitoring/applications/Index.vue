@@ -86,7 +86,7 @@ const groups = computed(() => {
                           'Add an application and its environments, and every one of them shows up here.',
                       )
                     : $t(
-                          'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                          'Nothing is configured yet. An admin of this organization has to add an application before anything shows up here.',
                       )
             "
         />

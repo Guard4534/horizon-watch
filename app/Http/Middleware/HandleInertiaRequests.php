@@ -27,6 +27,10 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+        $teams = null;
+        $userTeams = function () use ($user, &$teams) {
+            return $teams ??= $user?->toUserTeams(includeCurrent: true) ?? collect();
+        };
 
         return [
             ...parent::share($request),
@@ -35,8 +39,10 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user ? AuthUserData::fromModel($user) : null,
             ],
             'locale' => fn () => app()->getLocale(),
-            'currentTeam' => fn () => $user?->currentTeam ? $user->toUserTeam($user->currentTeam) : null,
-            'teams' => fn () => $user?->toUserTeams(includeCurrent: true) ?? [],
+            'currentTeam' => fn () => $user?->currentTeam
+                ? $userTeams()->firstWhere('isCurrent', true) ?? $user->toUserTeam($user->currentTeam)
+                : null,
+            'teams' => $userTeams,
             'canCreateOrganizations' => fn () => $user?->can('create', Team::class) ?? false,
             'openAlertCount' => fn () => $user?->currentTeam
                 ? app(MonitoringRepository::class)->alertCounts($user->currentTeam)->open

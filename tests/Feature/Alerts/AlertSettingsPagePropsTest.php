@@ -147,3 +147,13 @@ test('notification setting errors name the field, and an address by what it is',
         'repeatMinutes' => 'The selected alert repeat is invalid.',
     ]);
 });
+
+test('each rule carries its comparator and whether it is a state rule', function () {
+    $this->actingAs(($this->memberOf)(TeamRole::Viewer));
+
+    $rules = collect(($this->pageOf)('organization')['rules'])->keyBy('metric');
+
+    expect($rules['queue.pending'])->toMatchArray(['comparator' => '>', 'isStateRule' => false])
+        ->and($rules['workers.missing'])->toMatchArray(['comparator' => '≥', 'isStateRule' => false])
+        ->and($rules['horizon.paused'])->toMatchArray(['comparator' => '≥', 'isStateRule' => true]);
+});

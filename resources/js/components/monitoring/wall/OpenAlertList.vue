@@ -6,36 +6,28 @@ import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatCondition, ruleIcon, ruleLabel } from '@/lib/alertRules';
-import { channelIcon, channelLabel } from '@/lib/alerts';
+import { formatCondition, ruleLabel } from '@/lib/alertRules';
+import { alertIcon, alertTone, channelIcon, channelLabel } from '@/lib/alerts';
 import { formatAgo } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 import { show as showEnvironment } from '@/routes/environments';
 
 defineProps<{
-    anomalies: App.Data.Monitoring.AlertData[];
+    alerts: App.Data.Monitoring.AlertData[];
 }>();
 
 const slug = useTeamSlug();
-
-function color(alert: App.Data.Monitoring.AlertData): string {
-    if (alert.metric === 'horizon.paused') {
-        return 'var(--st-off)';
-    }
-
-    return alert.severity === 'critical' ? 'var(--st-down)' : 'var(--st-warn)';
-}
 </script>
 
 <template>
-    <SectionCard :title="$t('Open anomalies')">
+    <SectionCard :title="$t('Open alerts')">
         <template #actions>
             <Link :href="alertsIndex(slug)" class="nc-t-2xs">{{
                 $t('Full log')
             }}</Link>
         </template>
         <div
-            v-if="anomalies.length === 0"
+            v-if="alerts.length === 0"
             class="nc-t-xs nc-tone-muted flex items-center gap-[9px]"
         >
             <PhCheckCircle
@@ -45,18 +37,18 @@ function color(alert: App.Data.Monitoring.AlertData): string {
             />
             {{
                 $t(
-                    'No open anomalies: every watched environment is within its thresholds.',
+                    'No open alerts: every environment you can see is within its thresholds.',
                 )
             }}
         </div>
         <div v-else class="flex flex-col" style="gap: var(--nc-space-3)">
-            <div v-for="alert in anomalies" :key="alert.id" class="anomaly">
+            <div v-for="alert in alerts" :key="alert.id" class="open-alert">
                 <div class="flex items-start gap-[9px]">
                     <component
-                        :is="ruleIcon(alert.metric)"
+                        :is="alertIcon(alert)"
                         :size="15"
                         class="mt-[2px] flex-none"
-                        :style="{ color: color(alert) }"
+                        :style="{ color: alertTone(alert) }"
                     />
                     <div class="min-w-0 flex-1">
                         <Link
@@ -128,12 +120,12 @@ function color(alert: App.Data.Monitoring.AlertData): string {
 </template>
 
 <style scoped>
-.anomaly {
+.open-alert {
     padding: 0 0 var(--nc-space-3);
     border-bottom: 1px solid color-mix(in srgb, var(--nc-text) 7%, transparent);
 }
 
-.anomaly:last-child {
+.open-alert:last-child {
     padding-bottom: 0;
     border-bottom: 0;
 }

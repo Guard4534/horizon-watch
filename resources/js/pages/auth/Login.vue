@@ -79,7 +79,7 @@ defineProps<{
             data-test="login-button"
         >
             <Spinner v-if="processing" />
-            {{ $t('Sign in') }}
+            {{ $t('Log in') }}
         </button>
 
         <TextLink

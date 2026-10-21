@@ -202,3 +202,9 @@ test('correct password must be provided to delete account', function () {
 
     expect($user->fresh())->not->toBeNull();
 });
+
+test('the email-change notice tells the previous address whom to warn', function () {
+    $mail = (new EmailChanged('owner@example.com', 'new@example.com'))->toMail(new AnonymousNotifiable);
+
+    expect((string) $mail->introLines[1])->toBe('If you did not make this change, tell whoever runs '.config('app.name').' straight away: someone else may be using your account.');
+});

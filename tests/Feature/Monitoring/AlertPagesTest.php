@@ -97,7 +97,7 @@ test('a paused horizon is an open warning on the page', function () {
         ->and($alerts[0]['environmentStatus'])->toBe('paused');
 });
 
-test('muted and resolved stay empty while anomalies are open', function (AlertState $state) {
+test('muted and resolved stay empty while alerts are open', function (AlertState $state) {
     Readings::record($this->production, EnvironmentStatus::Unreachable);
     Readings::record($this->staging, EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
 
@@ -154,7 +154,7 @@ test('without ManageAlertRules a member only learns how many targets there are',
         ->not->toContain('America\/New_York');
 })->with([TeamRole::Member, TeamRole::Viewer])->with(['alerts.index', 'alert-rules.index']);
 
-test('a member limited to non-production gets no anomaly of a production environment', function () {
+test('a member limited to non-production gets no alert of a production environment', function () {
     Readings::record($this->production, EnvironmentStatus::Unreachable);
     Readings::record($this->staging, EnvironmentStatus::Degraded, [AlertRuleMetric::QueueMaxWait]);
 
@@ -203,7 +203,7 @@ test('the paused rule is a warning that is not emailed by default', function () 
             ->where('page.rules.2.origin', 'organization'));
 });
 
-test('the worst anomaly leads the log, even when it is the oldest', function () {
+test('the worst alert leads the log, even when it is the oldest', function () {
     Readings::record($this->production, EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
     $this->travel(5)->minutes();
     Readings::record($this->staging, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending]);

@@ -53,14 +53,13 @@ const changesEmail = computed(
                     :value="user.name"
                     required
                     autocomplete="name"
-                    :placeholder="$t('Full name')"
                     v-bind="invalidField('name', errors.name)"
                 />
                 <InputError field="name" :message="errors.name" />
             </div>
 
             <div class="nc-field">
-                <label for="email">{{ $t('Email address') }}</label>
+                <label for="email">{{ $t('Email') }}</label>
                 <input
                     id="email"
                     v-model="email"
@@ -69,7 +68,7 @@ const changesEmail = computed(
                     name="email"
                     required
                     autocomplete="username"
-                    :placeholder="$t('Email address')"
+                    placeholder="email@example.com"
                     v-bind="invalidField('email', errors.email)"
                 />
                 <InputError field="email" :message="errors.email" />

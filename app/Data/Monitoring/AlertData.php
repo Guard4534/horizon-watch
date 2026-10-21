@@ -19,6 +19,8 @@ class AlertData extends Data
         public AlertRuleMetric $metric,
         public float $threshold,
         public string $unit,
+        public string $comparator,
+        public bool $isStateRule,
         public ?float $value,
         public bool $valueIsLowerBound,
         public ?string $longestJob,

@@ -4,8 +4,8 @@ import AlertActions from '@/components/monitoring/alerts/AlertActions.vue';
 import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatCondition, ruleIcon, ruleLabel } from '@/lib/alertRules';
-import { isMuted, severityColor } from '@/lib/alerts';
+import { formatCondition, ruleLabel } from '@/lib/alertRules';
+import { alertIcon, alertTone } from '@/lib/alerts';
 import { formatAgo } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 
@@ -15,12 +15,6 @@ const { compact = false } = defineProps<{
 }>();
 
 const slug = useTeamSlug();
-
-function color(alert: App.Data.Monitoring.AlertData): string {
-    return isMuted(alert)
-        ? 'var(--nc-neutral-500)'
-        : severityColor(alert.severity);
-}
 </script>
 
 <template>
@@ -34,10 +28,10 @@ function color(alert: App.Data.Monitoring.AlertData): string {
             <div v-for="alert in alerts" :key="alert.id" class="live-alert">
                 <div class="flex items-start gap-[9px]">
                     <component
-                        :is="ruleIcon(alert.metric)"
+                        :is="alertIcon(alert)"
                         :size="15"
                         class="mt-[2px] flex-none"
-                        :style="{ color: color(alert) }"
+                        :style="{ color: alertTone(alert) }"
                     />
                     <div class="min-w-0 flex-1">
                         <div

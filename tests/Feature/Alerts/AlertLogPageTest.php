@@ -402,8 +402,8 @@ test('the sidebar badge counts the open alerts the viewer sees, muted ones aside
         ->get(route('wall', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('openAlertCount', 2)
-            ->where('page.kpis.openAnomalies', 2)
-            ->has('page.anomalies', 2));
+            ->where('page.kpis.openAlerts', 2)
+            ->has('page.alerts', 2));
 
     $this->actingAs(($this->memberAs)(TeamRole::Viewer, MemberVisibility::NonProduction))
         ->get(route('wall', ['current_team' => $this->team->slug]))
@@ -530,4 +530,14 @@ test('an alert still open on an environment whose collection is paused says so',
     expect($open['production']['collectionPaused'])->toBeTrue()
         ->and($open['staging']['collectionPaused'])->toBeFalse()
         ->and(($this->page)(['state' => 'resolved'])['alerts'][0]['collectionPaused'])->toBeFalse();
+});
+
+test('every alert carries the comparator of its rule and whether it is a state rule', function () {
+    Alert::factory()->for($this->production)->create(['metric' => AlertRuleMetric::QueuePending]);
+    Alert::factory()->for($this->staging)->critical()->create(['metric' => AlertRuleMetric::EndpointUnreachable]);
+
+    $alerts = collect(($this->page)()['alerts'])->keyBy('metric');
+
+    expect($alerts['queue.pending'])->toMatchArray(['comparator' => '>', 'isStateRule' => false])
+        ->and($alerts['endpoint.unreachable'])->toMatchArray(['comparator' => '≥', 'isStateRule' => true]);
 });

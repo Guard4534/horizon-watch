@@ -169,7 +169,7 @@ function readNumber(event: Event): number | null {
                     {{ errors.threshold }}
                 </div>
                 <div
-                    v-if="shown.forMinutes !== null"
+                    v-if="!rule.isStateRule"
                     class="mt-[6px] flex items-center gap-[6px]"
                     :title="
                         $t(

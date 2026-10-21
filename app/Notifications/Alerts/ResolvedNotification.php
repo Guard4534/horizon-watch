@@ -29,7 +29,7 @@ class ResolvedNotification extends Notification
                 'headline' => AlertMail::resolvedHeadline($alert),
                 'sub' => AlertMail::resolvedAt($alert),
                 'detail' => null,
-                'rows' => AlertMail::rows($alert),
+                'rows' => AlertMail::rows($alert, withValue: true),
                 'note' => null,
                 'url' => AlertMail::url($alert),
                 'action' => AlertMail::openPanel(),

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { useForm } from '@inertiajs/vue3';
+import { useForm, usePage } from '@inertiajs/vue3';
 import { PhDotsThree, PhShieldCheck } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import Avatar from '@/components/nocturne/Avatar.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
+import LeaveOrganizationModal from '@/components/teams/LeaveOrganizationModal.vue';
 import {
     Dialog,
     DialogContent,
@@ -22,28 +23,31 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { isProductionType } from '@/lib/environments';
-import {
-    ASSIGNABLE_ROLES,
-    losingTheLastAdmin as losesTheLastAdmin,
-    assignableRoleName,
-    roleTagClass,
-    VISIBILITIES,
-    visibilityLabel,
-} from '@/lib/members';
+import { roleTagClass } from '@/lib/members';
 import {
     destroy as destroyMember,
     transferOwnership,
     update as updateMember,
 } from '@/routes/members';
 
-const { members, environments, canManage, canTransferOwnership } = defineProps<{
+const {
+    members,
+    environments,
+    roles,
+    visibilities,
+    canManage,
+    canTransferOwnership,
+} = defineProps<{
     members: App.Data.Teams.MemberData[];
     environments: App.Data.Pages.EnvironmentOptionData[];
+    roles: App.Data.Teams.RoleOptionData[];
+    visibilities: App.Data.Teams.VisibilityOptionData[];
     canManage: boolean;
     canTransferOwnership: boolean;
 }>();
 
 const slug = useTeamSlug();
+const shared = usePage();
 
 const form = useForm<App.Data.Teams.UpdateMemberData>({
     role: null,
@@ -64,13 +68,13 @@ const manualIds = ref<number[]>([]);
 
 const removing = ref<App.Data.Teams.MemberData | null>(null);
 const transferring = ref<App.Data.Teams.MemberData | null>(null);
-
-const losingTheLastAdmin = computed(() =>
-    losesTheLastAdmin(removing.value, removing.value?.isSelf === true, members),
-);
+const leaving = ref<App.Data.Teams.UserTeamData | null>(null);
 
 const isActionable = (member: App.Data.Teams.MemberData) =>
     canManage && !member.isOwner;
+
+const hasMenu = (member: App.Data.Teams.MemberData) =>
+    isActionable(member) || (member.isSelf && !member.isOwner);
 
 function patch(
     member: App.Data.Teams.MemberData,
@@ -221,7 +225,7 @@ function confirmRemove() {
                             </div>
                         </td>
                         <td class="nc-right">
-                            <DropdownMenu v-if="isActionable(member)">
+                            <DropdownMenu v-if="hasMenu(member)">
                                 <DropdownMenuTrigger as-child>
                                     <button
                                         type="button"
@@ -237,75 +241,91 @@ function confirmRemove() {
                                     </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuLabel>{{
-                                        $t('Role')
-                                    }}</DropdownMenuLabel>
-                                    <DropdownMenuItem
-                                        v-for="role in ASSIGNABLE_ROLES"
-                                        :key="role"
-                                        :disabled="member.role === role"
-                                        @click="changeRole(member, role)"
-                                    >
-                                        {{ assignableRoleName(role) }}
-                                    </DropdownMenuItem>
-                                    <template v-if="member.role !== 'admin'">
-                                        <DropdownMenuSeparator />
+                                    <template v-if="isActionable(member)">
                                         <DropdownMenuLabel>{{
-                                            $t('Visible environments')
+                                            $t('Role')
                                         }}</DropdownMenuLabel>
                                         <DropdownMenuItem
-                                            v-for="visibility in VISIBILITIES"
-                                            :key="visibility"
+                                            v-for="option in roles"
+                                            :key="option.value"
                                             :disabled="
-                                                member.visibility ===
-                                                    visibility &&
-                                                visibility !== 'manual'
+                                                member.role === option.value
                                             "
                                             @click="
-                                                changeVisibility(
-                                                    member,
-                                                    visibility,
-                                                )
+                                                changeRole(member, option.value)
                                             "
                                         >
-                                            <div class="flex flex-col">
-                                                <span
-                                                    >{{
-                                                        visibilityLabel(
-                                                            visibility,
-                                                        )
-                                                    }}{{
-                                                        visibility === 'manual'
-                                                            ? '…'
-                                                            : ''
-                                                    }}</span
-                                                >
-                                                <span
-                                                    v-if="
-                                                        visibility ===
-                                                        'non_production'
-                                                    "
-                                                    class="nc-t-2xs nc-tone-faint max-w-[240px]"
-                                                    >{{
-                                                        $t(
-                                                            'Hides every environment of type Production.',
-                                                        )
-                                                    }}</span
-                                                >
-                                            </div>
+                                            {{ option.label }}
                                         </DropdownMenuItem>
-                                    </template>
-                                    <template v-if="canTransferOwnership">
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            data-test="member-transfer-ownership"
-                                            @click="transferring = member"
+                                        <template
+                                            v-if="member.role !== 'admin'"
                                         >
-                                            {{ $t('Transfer ownership') }}…
-                                        </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuLabel>{{
+                                                $t('Visible environments')
+                                            }}</DropdownMenuLabel>
+                                            <DropdownMenuItem
+                                                v-for="option in visibilities"
+                                                :key="option.value"
+                                                :disabled="
+                                                    member.visibility ===
+                                                        option.value &&
+                                                    option.value !== 'manual'
+                                                "
+                                                @click="
+                                                    changeVisibility(
+                                                        member,
+                                                        option.value,
+                                                    )
+                                                "
+                                            >
+                                                <div class="flex flex-col">
+                                                    <span
+                                                        >{{ option.label
+                                                        }}{{
+                                                            option.value ===
+                                                            'manual'
+                                                                ? '…'
+                                                                : ''
+                                                        }}</span
+                                                    >
+                                                    <span
+                                                        v-if="
+                                                            option.value ===
+                                                            'non_production'
+                                                        "
+                                                        class="nc-t-2xs nc-tone-faint max-w-[240px]"
+                                                        >{{
+                                                            $t(
+                                                                'Hides every environment of type Production.',
+                                                            )
+                                                        }}</span
+                                                    >
+                                                </div>
+                                            </DropdownMenuItem>
+                                        </template>
+                                        <template v-if="canTransferOwnership">
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                data-test="member-transfer-ownership"
+                                                @click="transferring = member"
+                                            >
+                                                {{ $t('Transfer ownership') }}…
+                                            </DropdownMenuItem>
+                                        </template>
+                                        <DropdownMenuSeparator />
                                     </template>
-                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem
+                                        v-if="member.isSelf"
+                                        class="nc-tone-down"
+                                        @click="
+                                            leaving = shared.props.currentTeam
+                                        "
+                                    >
+                                        {{ $t('Leave the organization') }}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        v-else
                                         class="nc-tone-down"
                                         @click="removing = member"
                                     >
@@ -412,30 +432,14 @@ function confirmRemove() {
                 }}</DialogTitle>
                 <DialogDescription>
                     {{
-                        removing?.isSelf
-                            ? $t(
-                                  'You lose access to every environment of this organization. Your account and your other organizations are untouched, and you can be invited again.',
-                              )
-                            : $t(
-                                  'They lose access to every environment of this organization. Their account and their other organizations are untouched, and they can be invited again.',
-                              )
+                        $t(
+                            'They lose access to every environment of this organization. Their account and their other organizations are untouched, and they can be invited again.',
+                        )
                     }}
                 </DialogDescription>
             </DialogHeader>
 
             <p class="nc-t-sm">{{ removing?.name }}</p>
-
-            <p
-                v-if="losingTheLastAdmin"
-                class="nc-t-xs"
-                style="color: var(--st-warn)"
-            >
-                {{
-                    $t(
-                        'You are the only admin besides the owner: after this, nobody but the owner will be able to invite, remove or change members.',
-                    )
-                }}
-            </p>
 
             <DialogFooter class="gap-2">
                 <button
@@ -498,4 +502,6 @@ function confirmRemove() {
             </DialogFooter>
         </DialogContent>
     </Dialog>
+
+    <LeaveOrganizationModal v-model:organization="leaving" />
 </template>

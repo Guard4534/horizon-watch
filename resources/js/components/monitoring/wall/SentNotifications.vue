@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { trans } from 'laravel-vue-i18n';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
-import { channelIcon } from '@/lib/alerts';
+import { channelIcon, deliveryErrorLabel } from '@/lib/alerts';
 import { formatAgo } from '@/lib/monitoring';
 
 defineProps<{
@@ -16,44 +16,6 @@ const WEBHOOK_EVENTS: Record<App.Enums.SentNotificationKind, string> = {
     test: 'test',
 };
 
-function errorLabel(
-    error: App.Enums.DeliveryError,
-    httpStatus: number | null,
-): string {
-    if (httpStatus !== null) {
-        return `HTTP ${httpStatus}`;
-    }
-
-    switch (error) {
-        case 'timeout':
-            return trans('timeout');
-        case 'blocked':
-            return trans('blocked');
-        case 'http_3xx':
-            return trans('http_3xx');
-        case 'http_4xx':
-            return trans('http_4xx');
-        case 'http_5xx':
-            return trans('http_5xx');
-        case 'unreachable':
-            return trans('unreachable');
-        case 'mail':
-            return trans('mail');
-        case 'mail_unreachable':
-            return trans('mail server unreachable');
-        case 'mail_authentication':
-            return trans('mail server refused the login');
-        case 'mail_rejected':
-            return trans('refused by the mail server');
-        case 'secret_unreadable':
-            return trans('signing secret unreadable, regenerate it');
-        case 'no_longer_due':
-            return trans('alert resolved, handled or muted first');
-        case 'opening_not_delivered':
-            return trans('its opening never reached this destination');
-    }
-}
-
 function outcome(
     notification: App.Data.Monitoring.SentNotificationData,
 ): string | null {
@@ -67,7 +29,7 @@ function outcome(
             : trans('not sent');
 
     return notification.error
-        ? `${status} · ${errorLabel(notification.error, notification.httpStatus)}`
+        ? `${status} · ${deliveryErrorLabel(notification.error, notification.httpStatus)}`
         : status;
 }
 

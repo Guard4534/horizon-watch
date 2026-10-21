@@ -94,7 +94,7 @@ return [
         'alerts_per_page' => 50,
         'resolved_alerts' => 5,
         'sent_notifications' => 6,
-        'wall_anomalies' => 5,
+        'wall_alerts' => 5,
         'ended_maintenance_windows' => 5,
     ],
 

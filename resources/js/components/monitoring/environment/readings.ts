@@ -47,7 +47,7 @@ export function statusText(environment: StateFields): string {
 
     switch (state) {
         case 'hidden':
-            return trans('Not on your wall');
+            return trans('Outside your visibility');
         case 'collection_off':
             return trans('Collection paused');
         case 'reading_error':

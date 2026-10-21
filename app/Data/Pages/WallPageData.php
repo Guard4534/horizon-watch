@@ -15,7 +15,7 @@ class WallPageData extends Data
         /** @var array<int, EnvironmentData> */
         public array $environments,
         /** @var array<int, AlertData> */
-        public array $anomalies,
+        public array $alerts,
         /** @var array<int, int> */
         public array $throughput,
         public SeriesGridData $grid,

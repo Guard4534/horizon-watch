@@ -30,7 +30,7 @@ class EmailChanged extends Notification implements ShouldQueue
                 'previous' => $this->previousEmail,
                 'new' => $this->newEmail,
             ]))
-            ->line(__('If you did not make this change, tell the administrator of :app straight away: someone else may be using your account.', [
+            ->line(__('If you did not make this change, tell whoever runs :app straight away: someone else may be using your account.', [
                 'app' => config()->string('app.name'),
             ]));
     }

@@ -69,7 +69,7 @@ const since = computed(() => (alert ? formatAgo(alert.minutesAgo * 60) : null));
                 }}</template>
                 <template v-else>{{ $t('Threshold exceeded') }}</template>
                 <span v-if="since" class="nc-num nc-t-2xs nc-tone-muted">
-                    · {{ $t('started :elapsed', { elapsed: since }) }}</span
+                    · {{ $t('opened :elapsed', { elapsed: since }) }}</span
                 >
             </div>
             <div
@@ -125,9 +125,7 @@ const since = computed(() => (alert ? formatAgo(alert.minutesAgo * 60) : null));
                 class="nc-t-2xs nc-tone-muted mt-[5px]"
             >
                 {{ $t('Rule:') }}
-                <span :title="alert.metric">{{
-                    formatRule(alert.metric, alert.threshold, alert.unit)
-                }}</span>
+                <span :title="alert.metric">{{ formatRule(alert) }}</span>
             </div>
         </div>
     </div>

@@ -8,6 +8,7 @@ use App\Models\Environment;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\Grants;
@@ -537,7 +538,7 @@ test('every role tag comes from the one role label formula', function () {
     $this->actingAs($this->admin)
         ->get(route('members.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.members.0.roleLabel', 'Owner · admin')
+            ->where('page.members.0.roleLabel', 'Owner')
             ->where('page.members.1.roleLabel', 'Admin')
             ->where('page.members.2.roleLabel', 'Member')
             ->where('page.members.3.roleLabel', 'Viewer'));
@@ -566,4 +567,68 @@ test('the manual grants of the whole page are read in one query, not one per mem
     DB::disableQueryLog();
 
     expect($grantQueries)->toBe(1);
+});
+
+test('the role and visibility choices come labelled from the server', function () {
+    $this->actingAs($this->admin)
+        ->get(route('members.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.roles', [
+                ['value' => 'owner', 'label' => 'Owner'],
+                ['value' => 'admin', 'label' => 'Admin'],
+                ['value' => 'member', 'label' => 'Member'],
+                ['value' => 'viewer', 'label' => 'Viewer'],
+            ])
+            ->where('page.assignableRoles', [
+                ['value' => 'admin', 'label' => 'Admin'],
+                ['value' => 'member', 'label' => 'Member'],
+                ['value' => 'viewer', 'label' => 'Viewer'],
+            ])
+            ->where('page.visibilities', array_map(
+                fn (MemberVisibility $visibility) => ['value' => $visibility->value, 'label' => $visibility->label()],
+                MemberVisibility::cases(),
+            )));
+});
+
+test('the four roles have italian names', function () {
+    App::setLocale('it');
+
+    expect(array_map(fn (TeamRole $role) => $role->label(), TeamRole::cases()))
+        ->toBe(['Proprietario', 'Amministratore', 'Membro', 'Osservatore']);
+});
+
+test('only the owner role cannot be handed out', function () {
+    expect(TeamRole::assignable())->toBe([TeamRole::Admin, TeamRole::Member, TeamRole::Viewer]);
+});
+
+test('the role rules accept exactly the roles that can be handed out', function () {
+    $this->actingAs($this->admin)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), ['role' => TeamRole::Owner->value])
+        ->assertSessionHasErrors('role');
+
+    expect($this->member->fresh()->teamRole($this->team))->toBe(TeamRole::Member);
+});
+
+test('the last admin reads the leave warning from the shared organization, counted once per request', function () {
+    $this->team->memberships()->where('user_id', '!=', $this->owner->id)->where('user_id', '!=', $this->admin->id)->delete();
+    $this->admin->switchTeam($this->team);
+
+    $this->actingAs($this->admin);
+
+    DB::enableQueryLog();
+
+    $this->get(route('members.index', ['current_team' => $this->team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('currentTeam.id', $this->team->id)
+            ->where('currentTeam.isLastAdmin', true)
+            ->where('teams', fn ($teams) => collect($teams)->firstWhere('id', $this->team->id)['isLastAdmin'] === true));
+
+    $adminCounts = collect(DB::getQueryLog())
+        ->filter(fn (array $entry) => str_contains($entry['query'], 'as admins'))
+        ->count();
+
+    DB::disableQueryLog();
+
+    expect($adminCounts)->toBe(1);
 });

@@ -17,6 +17,6 @@ enum TeamPermission: string
     case ManageCredentials = 'credential:manage';
     case ManageAlertRules = 'alert-rule:manage';
     case MuteAlert = 'alert:mute';
-    case HandleAnomaly = 'anomaly:handle';
+    case HandleAlert = 'alert:handle';
     case TestConnection = 'connection:test';
 }

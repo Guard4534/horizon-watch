@@ -58,7 +58,7 @@ function silenceFor(minutes: number): void {
                 :class="{ 'silence-block': block }"
                 :disabled="busy"
             >
-                <PhWrench :size="13" />{{ $t('Silence for…') }}
+                <PhWrench :size="13" />{{ $t('Maintenance for…') }}
                 <PhCaretDown :size="10" style="opacity: 0.7" />
             </button>
         </DropdownMenuTrigger>

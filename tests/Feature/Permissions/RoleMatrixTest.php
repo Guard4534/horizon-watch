@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\TeamPermission;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Environment;
@@ -31,11 +32,16 @@ test('owner, admin and member can mute an alert, viewer cannot', function () {
         ->and(Gate::forUser($this->viewer)->allows('muteAlert', $this->team))->toBeFalse();
 });
 
-test('owner, admin and member can mark an anomaly as handled, viewer cannot', function () {
-    expect(Gate::forUser($this->owner)->allows('handleAnomaly', $this->team))->toBeTrue()
-        ->and(Gate::forUser($this->admin)->allows('handleAnomaly', $this->team))->toBeTrue()
-        ->and(Gate::forUser($this->member)->allows('handleAnomaly', $this->team))->toBeTrue()
-        ->and(Gate::forUser($this->viewer)->allows('handleAnomaly', $this->team))->toBeFalse();
+test('owner, admin and member can mark an alert as handled, viewer cannot', function () {
+    expect(Gate::forUser($this->owner)->allows('handleAlert', $this->team))->toBeTrue()
+        ->and(Gate::forUser($this->admin)->allows('handleAlert', $this->team))->toBeTrue()
+        ->and(Gate::forUser($this->member)->allows('handleAlert', $this->team))->toBeTrue()
+        ->and(Gate::forUser($this->viewer)->allows('handleAlert', $this->team))->toBeFalse();
+});
+
+test('the handle permission is named after alerts', function () {
+    expect(TeamPermission::HandleAlert->value)->toBe('alert:handle')
+        ->and(array_map(fn (TeamPermission $permission) => $permission->value, TeamPermission::cases()))->not->toContain('anomaly:handle');
 });
 
 test('owner, admin and member can test the connection, viewer cannot', function () {

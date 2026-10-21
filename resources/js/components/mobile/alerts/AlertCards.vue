@@ -7,7 +7,7 @@ import AlertOpened from '@/components/monitoring/alerts/AlertOpened.vue';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { ruleLabel } from '@/lib/alertRules';
-import { severityColor, severityIcon } from '@/lib/alerts';
+import { alertIcon, alertTone } from '@/lib/alerts';
 import { formatAgo } from '@/lib/monitoring';
 
 defineProps<{
@@ -34,10 +34,10 @@ const environmentHref = useEnvironmentHref();
         >
             <div class="flex items-start gap-[9px]">
                 <component
-                    :is="severityIcon(alert.severity)"
+                    :is="alertIcon(alert)"
                     :size="15"
                     class="mt-px flex-none"
-                    :style="{ color: severityColor(alert.severity) }"
+                    :style="{ color: alertTone(alert) }"
                 />
                 <div class="min-w-0 flex-1">
                     <Link

@@ -25,7 +25,7 @@ class UpdateMemberData extends Data
     public static function rules(): array
     {
         return [
-            'role' => ['nullable', 'required_without:visibility', Rule::enum(TeamRole::class)->except(TeamRole::Owner)],
+            'role' => ['nullable', 'required_without:visibility', Rule::enum(TeamRole::class)->only(TeamRole::assignable())],
             'visibility' => ['nullable', 'required_without:role', Rule::enum(MemberVisibility::class)],
             ...self::environmentIdRules(self::currentTeam()),
         ];

@@ -68,10 +68,10 @@ test('a critical alert email carries the subject, the detail rows and the panel 
 
     expect(mailSubject($notification))->toBe('[CRITICAL] Shop <b>&</b> · production — Pending jobs')
         ->and($html)->toContain('4,312 jobs pending')
-        ->and($html)->toContain('Detected on 2026-09-17 14:02 (Europe/Rome)')
+        ->and($html)->toContain('Opened on 2026-09-17 14:02 (Europe/Rome)')
         ->and($html)->toContain('queue-01, queue-02')
         ->and($html)->toContain('Pending jobs &gt; 2,000</td>')
-        ->and($html)->toContain('4,312 jobs</td>')
+        ->and($html)->not->toContain('Value</td>')
         ->and($html)->not->toContain('queue.pending')
         ->and($html)->toContain('Shop &lt;b&gt;&amp;&lt;/b&gt; · production')
         ->and($html)->not->toContain('<b>&</b>')
@@ -85,11 +85,24 @@ test('a repeated email says it keeps repeating', function () {
     expect(mailHtml(new AlertNotification($this->alert, repeated: true)))->toContain('Still open: this email repeats');
 });
 
+test('the opening and repeated emails print the value only in their headline', function () {
+    foreach ([new AlertNotification($this->alert), new AlertNotification($this->alert, repeated: true)] as $notification) {
+        $html = mailHtml($notification);
+
+        expect($html)->toContain('4,312 jobs pending')
+            ->and($html)->not->toContain('Value</td>')
+            ->and($html)->toContain('Pending jobs &gt; 2,000</td>');
+    }
+
+    expect(mailHtml(new AlertNotification($this->alert, repeated: true)))
+        ->toContain('Still open: this email repeats until the alert is resolved, muted or marked as handled.');
+});
+
 test('the email follows the organization time zone and the recipient language', function () {
     NotificationSetting::factory()->for($this->team)->create(['timezone' => 'America/New_York']);
     $notification = new AlertNotification($this->alert);
 
-    expect(mailHtml($notification))->toContain('Detected on 2026-09-17 08:02 (America/New_York)')
+    expect(mailHtml($notification))->toContain('Opened on 2026-09-17 08:02 (America/New_York)')
         ->and(mailSubject($notification, 'it'))->toStartWith('[CRITICO] Shop')
         ->and(mailHtml($notification, 'it'))->toContain('Ambiente')
         ->and(mailHtml($notification, 'it'))->toContain('4.312');
@@ -128,8 +141,8 @@ test('every rule has its own headline and detail', function (AlertRuleMetric $me
 ]);
 
 test('the rule row names the rule, compares the way the rule fires and translates the unit', function (AlertRuleMetric $metric, float $threshold, float $value, string $english, string $italian) {
-    $this->alert->update(['metric' => $metric, 'threshold' => $threshold, 'value' => $value, 'detail' => [], 'unit' => $metric->unit()]);
-    $notification = new AlertNotification($this->alert);
+    $this->alert->update(['metric' => $metric, 'threshold' => $threshold, 'value' => $value, 'detail' => [], 'unit' => $metric->unit(), 'resolved_at' => now()]);
+    $notification = new ResolvedNotification($this->alert);
 
     expect(mailHtml($notification))->toContain($english)
         ->and(mailHtml($notification, 'it'))->toContain($italian);
@@ -198,6 +211,8 @@ test('a resolution email says how long the alert lasted', function () {
 
     expect(mailSubject($notification))->toBe('[RESOLVED] Shop <b>&</b> · production — Pending jobs')
         ->and($html)->toContain('Back within the threshold: Pending jobs')
+        ->and($html)->toContain('Value</td>')
+        ->and($html)->toContain('4,312 jobs</td>')
         ->and($html)->toContain('Resolved on 2026-09-17 14:27 (Europe/Rome), open for 25 min')
         ->and($html)->toContain('#6fbf99');
 
@@ -212,7 +227,7 @@ test('a long resolution says its duration in days and hours, in the language of 
 
     expect(mailHtml($notification))->toContain('Resolved on 2026-09-18 17:32 (Europe/Rome), open for 1 d 3 h')
         ->and(mailHtml($notification, 'it'))->toContain('Risolto il 2026-09-18 17:32 (Europe/Rome), aperto per 1 g 3 h')
-        ->and(mailHtml(new AlertNotification($this->alert), 'it'))->toContain('Rilevato il 2026-09-17 14:02 (Europe/Rome)');
+        ->and(mailHtml(new AlertNotification($this->alert), 'it'))->toContain('Aperto il 2026-09-17 14:02 (Europe/Rome)');
 });
 
 test('the digest lists open and resolved warnings and links the wall', function () {
@@ -235,14 +250,19 @@ test('the digest lists open and resolved warnings and links the wall', function 
         ->and($html)->toContain('href="'.url('/acme/wall').'"');
 });
 
-test('a failed-jobs count cut at the jobs read is a lower bound in the value row and in the digest', function () {
+test('a failed-jobs count cut at the jobs read is a lower bound in the headline, the resolution value row and the digest', function () {
     $this->alert->update(['metric' => AlertRuleMetric::JobsFailedPerHour, 'threshold' => 150, 'value' => 200, 'unit' => 'job', 'detail' => ['failed' => 200, 'atLeast' => true]]);
     $digest = new WarningDigestNotification($this->team, collect([$this->alert]));
 
-    expect(mailHtml(new AlertNotification($this->alert)))->toContain('at least 200 jobs</td>')
-        ->and(mailHtml(new AlertNotification($this->alert), 'it'))->toContain('almeno 200 job</td>')
+    expect(mailHtml(new AlertNotification($this->alert)))->toContain('at least 200 jobs failed in the last hour')
+        ->and(mailHtml(new AlertNotification($this->alert), 'it'))->toContain('almeno 200')
         ->and(mailHtml($digest))->toContain('Failed jobs / hour · at least 200 jobs')
         ->and(mailHtml($digest, 'it'))->toContain('almeno 200 job');
+
+    $this->alert->update(['resolved_at' => now()]);
+
+    expect(mailHtml(new ResolvedNotification($this->alert)))->toContain('at least 200 jobs</td>')
+        ->and(mailHtml(new ResolvedNotification($this->alert), 'it'))->toContain('almeno 200 job</td>');
 });
 
 test('the test email names the organization', function () {

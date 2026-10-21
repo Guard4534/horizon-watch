@@ -15,7 +15,7 @@ const copy = computed(() => {
             return {
                 title: trans('Access denied'),
                 description: trans(
-                    'Your account cannot open this page. If you were removed from the organization, ask one of its administrators for a new invitation.',
+                    'Your account cannot open this page. If you were removed from the organization, ask one of its admins for a new invitation.',
                 ),
             };
         case 404:

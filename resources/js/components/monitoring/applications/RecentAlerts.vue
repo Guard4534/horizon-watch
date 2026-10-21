@@ -4,9 +4,9 @@ import { PhCheckCircle } from '@phosphor-icons/vue';
 import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { ruleIcon, ruleLabel } from '@/lib/alertRules';
-import { severityColor } from '@/lib/alerts';
-import { formatAgo, statusColor } from '@/lib/monitoring';
+import { ruleLabel } from '@/lib/alertRules';
+import { alertIcon, alertTone } from '@/lib/alerts';
+import { formatAgo } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 
 defineProps<{
@@ -33,7 +33,9 @@ const slug = useTeamSlug();
             class="nc-t-xs nc-tone-muted flex items-center gap-[9px]"
         >
             <PhCheckCircle :size="14" style="color: var(--st-ok)" />
-            {{ $t('No open anomaly on the environments you watch.') }}
+            {{
+                $t('No open or recent alerts on the environments you can see.')
+            }}
         </div>
         <div
             v-else
@@ -51,23 +53,10 @@ const slug = useTeamSlug();
                 "
             >
                 <component
-                    :is="
-                        alert.state === 'resolved'
-                            ? PhCheckCircle
-                            : ruleIcon(alert.metric)
-                    "
+                    :is="alertIcon(alert)"
                     :size="14"
                     class="mt-[2px] flex-none"
-                    :style="{
-                        color:
-                            alert.state === 'resolved'
-                                ? 'var(--st-ok)'
-                                : alert.state === 'muted'
-                                  ? 'var(--nc-neutral-500)'
-                                  : alert.environmentStatus
-                                    ? statusColor(alert.environmentStatus)
-                                    : severityColor(alert.severity),
-                    }"
+                    :style="{ color: alertTone(alert) }"
                 />
                 <div class="min-w-0">
                     <div class="nc-t-xs">
@@ -92,11 +81,7 @@ const slug = useTeamSlug();
                                   })
                         }}
                     </div>
-                    <AlertMarks
-                        v-if="alert.state === 'muted'"
-                        :alert="alert"
-                        class="mt-[3px]"
-                    />
+                    <AlertMarks :alert="alert" class="mt-[3px]" />
                 </div>
             </div>
         </div>

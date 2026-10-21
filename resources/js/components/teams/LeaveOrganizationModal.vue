@@ -53,6 +53,18 @@ function confirm(): void {
 
             <p class="nc-t-sm">{{ organization?.name }}</p>
 
+            <p
+                v-if="organization?.isLastAdmin"
+                class="nc-t-xs"
+                style="color: var(--st-warn)"
+            >
+                {{
+                    $t(
+                        'You are the only admin besides the owner: after this, nobody but the owner will be able to invite, remove or change members.',
+                    )
+                }}
+            </p>
+
             <DialogFooter class="gap-2">
                 <DialogClose as-child>
                     <button type="button" class="nc-btn nc-btn-secondary">

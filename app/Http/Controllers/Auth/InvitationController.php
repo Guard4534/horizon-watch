@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Actions\Teams\AcceptInvitation;
 use App\Actions\Teams\DeclineInvitation;
 use App\Actions\Teams\RegisterInvitedUser;
+use App\Data\Auth\PasswordPolicyData;
 use App\Data\Pages\InvitationPageData;
 use App\Data\Teams\AcceptInvitationData;
 use App\Enums\MemberVisibility;
@@ -38,6 +39,7 @@ class InvitationController extends Controller
                     : [],
                 state: $state,
                 authenticated: $user !== null,
+                passwordPolicy: PasswordPolicyData::current(),
             ),
         ]);
     }

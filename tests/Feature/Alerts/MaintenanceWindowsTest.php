@@ -186,14 +186,14 @@ test('a window that starts now mutes the open alerts it covers at once, a planne
     'later' => ['2026-09-18T11:00:00Z', false],
 ]);
 
-test('silencing an environment opens a window from now for the chosen minutes and mutes its alerts', function () {
+test('maintenance for an environment opens a window from now for the chosen minutes and mutes its alerts', function () {
     $alert = Alert::factory()->for($this->production)->critical()->create(['metric' => AlertRuleMetric::EndpointUnreachable]);
     $user = ($this->memberAs)(TeamRole::Member);
 
     $this->actingAs($user);
     ($this->silence)($this->production, 60)
         ->assertRedirect(route('environments.show', ['current_team' => $this->team->slug, 'environment' => $this->production->slug]))
-        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Alerts silenced.']);
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Maintenance window started.']);
 
     $window = MaintenanceWindow::query()->sole();
 
@@ -204,6 +204,18 @@ test('silencing an environment opens a window from now for the chosen minutes an
         ->and($window->reason)->toBeNull()
         ->and($window->created_by)->toBe($user->id)
         ->and($alert->fresh()->muted_until->toDateTimeString())->toBe('2026-09-18 11:00:00');
+});
+
+test('the italian quiet hours are a fascia di quiete, and only a per-alert mute is silenziare', function () {
+    $italian = json_decode(file_get_contents(lang_path('it.json')), true, flags: JSON_THROW_ON_ERROR);
+    $quiet = array_filter($italian, fn (string $key) => str_contains(strtolower($key), 'quiet hours'), ARRAY_FILTER_USE_KEY);
+
+    expect($quiet)->not->toBeEmpty()
+        ->and(array_filter($quiet, fn (string $text) => ! str_contains(strtolower($text), 'fascia di quiete')))->toBe([])
+        ->and(array_filter($italian, fn (string $text) => str_contains(strtolower($text), 'finestra di silenzio')))->toBe([])
+        ->and($italian['Maintenance for…'])->toBe('Manutenzione per…')
+        ->and($italian['Maintenance window started.'])->not->toContain('ilenzi')
+        ->and($italian['Mute'])->toBe('Silenzia');
 });
 
 test('the silence lasts one of the configured durations', function (mixed $minutes, bool $accepted) {
