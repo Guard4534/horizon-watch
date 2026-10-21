@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { readingProblemLabel } from '@/components/monitoring/environment/readings';
+import {
+    readingErrorLabel,
+    readingProblemLabel,
+} from '@/components/monitoring/environment/readings';
 import { formatRule } from '@/lib/alertRules';
 import { formatElapsed, statusColor, statusIcon } from '@/lib/monitoring';
 
@@ -56,7 +59,7 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
                     $t('Endpoint unreachable')
                 }}</template>
                 <template v-else-if="status === 'inactive'">{{
-                    $t('No active master supervisor')
+                    $t('Horizon inactive')
                 }}</template>
                 <template v-else-if="status === 'paused'">{{
                     $t('Horizon paused')
@@ -80,26 +83,7 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
                 }"
             >
                 <template v-if="status === 'unreachable'">
-                    <template v-if="readingError === 'unauthorized'">{{
-                        $t('Horizon refused the credentials')
-                    }}</template>
-                    <template v-else-if="readingError === 'not_horizon'">{{
-                        $t('The address does not answer like Horizon')
-                    }}</template>
-                    <template v-else-if="readingError === 'blocked'">{{
-                        $t('This address is not allowed')
-                    }}</template>
-                    <template
-                        v-else-if="readingError === 'password_unreadable'"
-                        >{{
-                            $t(
-                                'The stored password cannot be decrypted: enter it again',
-                            )
-                        }}</template
-                    >
-                    <template v-else>{{
-                        $t('Horizon does not answer')
-                    }}</template>
+                    {{ readingErrorLabel(readingError ?? 'unreachable') }}
                     <span
                         v-if="readingProblem"
                         class="[overflow-wrap:anywhere]"
@@ -117,7 +101,7 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
                 </template>
                 <template v-else-if="status === 'inactive'">{{
                     $t(
-                        'No active workers: jobs stay pending until a master supervisor starts again.',
+                        'No active master supervisor: jobs stay pending until one starts again.',
                     )
                 }}</template>
                 <template v-else-if="status === 'paused'">{{

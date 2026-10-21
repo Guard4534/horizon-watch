@@ -17,11 +17,13 @@ import QueueTable from '@/components/monitoring/environment/QueueTable.vue';
 import SilenceMenu from '@/components/monitoring/environment/SilenceMenu.vue';
 import TrendChart from '@/components/monitoring/environment/TrendChart.vue';
 import {
-    failedTone,
+    failedLastHourText,
     horizonStatusLabel,
     horizonStatusTone,
-    pendingTone,
+    isHealthy,
+    needsAttention,
     statusText,
+    thresholdTone,
 } from '@/components/monitoring/environment/readings';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import MetricTile from '@/components/nocturne/MetricTile.vue';
@@ -31,12 +33,11 @@ import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { isProductionType } from '@/lib/environments';
-import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
+import { failedWindowNote } from '@/lib/failedWindow';
 import {
     formatCount,
     formatWait,
     seriesRefreshInterval,
-    waitColor,
 } from '@/lib/monitoring';
 import {
     index as applicationsIndex,
@@ -71,7 +72,7 @@ const longRunningUnknown = computed(
         environment.value.status === 'unreachable',
 );
 
-type Tile = { label: string; value: string; color?: string; note: string };
+type Tile = { label: string; value: string; color?: string; note?: string };
 
 const maxWaitNote = computed(() => {
     const seconds = threshold('queue.max_wait');
@@ -102,44 +103,44 @@ const tiles = computed<Tile[]>(() => [
     {
         label: trans('Pending'),
         value: formatCount(environment.value.pending),
-        color: pendingTone(
+        color: thresholdTone(
+            environment.value,
+            'queue.pending',
             environment.value.pending,
-            threshold('queue.pending'),
         ),
         note: transChoice(':count queue|:count queues', page.queues.length),
     },
     {
         label: trans('Max wait'),
         value: formatWait(environment.value.maxWaitSeconds),
-        color: waitColor(
+        color: thresholdTone(
+            environment.value,
+            'queue.max_wait',
             environment.value.maxWaitSeconds,
-            threshold('queue.max_wait'),
         ),
         note: maxWaitNote.value,
     },
     {
         label: trans('Workers'),
         value: String(environment.value.workers),
-        color:
-            environment.value.status !== null && !environment.value.workers
-                ? 'var(--st-down)'
-                : 'var(--nc-text)',
         note: trans('active processes'),
     },
     {
         label: trans('Throughput'),
-        value: String(environment.value.jobsPerMinute),
-        color: 'var(--nc-text)',
-        note: trans('jobs/min'),
+        value: `${environment.value.jobsPerMinute}/min`,
     },
     {
-        label: failedLabel(environment.value.failedWindowMinutes),
-        value: formatCount(environment.value.failedInWindow),
-        color: failedTone(
+        label: trans('Failed · last hour'),
+        value: failedLastHourText(environment.value),
+        color: thresholdTone(
+            environment.value,
+            'jobs.failed_per_hour',
             environment.value.failedLastHour,
-            threshold('jobs.failed_per_hour'),
         ),
-        note: failedWindowNote(environment.value.failedWindowMinutes),
+        note: trans('Horizon: :count, :window', {
+            count: formatCount(environment.value.failedInWindow),
+            window: failedWindowNote(environment.value.failedWindowMinutes),
+        }),
     },
 ]);
 </script>
@@ -189,7 +190,10 @@ const tiles = computed<Tile[]>(() => [
                 </div>
             </div>
             <StatusPill
-                v-if="environment.status"
+                v-if="
+                    environment.status &&
+                    (needsAttention(environment) || isHealthy(environment))
+                "
                 :status="environment.status"
             />
             <span
@@ -342,7 +346,7 @@ const tiles = computed<Tile[]>(() => [
                 <QueueTable
                     :queues="page.queues"
                     :note="lastKnown"
-                    :wait-threshold="threshold('queue.max_wait')"
+                    :thresholds="environment.thresholds"
                 />
                 <FailedJobTable :jobs="page.failedJobs" :note="lastKnown" />
             </div>
@@ -350,6 +354,8 @@ const tiles = computed<Tile[]>(() => [
                 <LongRunningJobs
                     :jobs="page.longRunningJobs"
                     :threshold-seconds="threshold('job.runtime')"
+                    :thresholds="environment.thresholds"
+                    :polling-enabled="environment.pollingEnabled"
                     :unknown="longRunningUnknown"
                 />
                 <EffectiveRules

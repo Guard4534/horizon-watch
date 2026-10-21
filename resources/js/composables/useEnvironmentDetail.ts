@@ -1,7 +1,10 @@
 import { trans } from 'laravel-vue-i18n';
 import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
-import { formatAge } from '@/components/monitoring/environment/readings';
+import {
+    formatAge,
+    needsAttention,
+} from '@/components/monitoring/environment/readings';
 import { thresholdOf } from '@/lib/alertRules';
 
 export function useEnvironmentDetail(
@@ -25,7 +28,11 @@ export function useEnvironmentDetail(
     const incident = computed(() => {
         const status = environment.value.status;
 
-        return status !== null && status !== 'active' ? status : null;
+        return needsAttention(environment.value) &&
+            status !== null &&
+            status !== 'active'
+            ? status
+            : null;
     });
 
     const incidentAlert = computed(

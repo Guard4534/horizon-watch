@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { failedLabel, failedWindowShort } from '@/lib/failedWindow';
+import { failedWindowShort } from '@/lib/failedWindow';
 import { errorId, invalidField } from '@/lib/fieldErrors';
 import {
     formatMaintenanceTime,
@@ -47,10 +47,7 @@ describe('maintenance times', () => {
 });
 
 describe('failed windows', () => {
-    it('names the usual windows and any other one in minutes', () => {
-        expect(failedLabel(null)).toBe('Failed · mixed windows');
-        expect(failedLabel(1440)).toBe('Failed · 24h');
-        expect(failedLabel(60)).toBe('Failed · 60 min');
+    it('names the usual windows in short form and any other one in minutes', () => {
         expect(failedWindowShort(1440)).toBe('24h');
         expect(failedWindowShort(10080)).toBe('7 d');
         expect(failedWindowShort(60)).toBe('60 min');

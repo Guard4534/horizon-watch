@@ -8,24 +8,21 @@ import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
 import EnvironmentAlerts from '@/components/monitoring/environment/EnvironmentAlerts.vue';
 import IncidentBanner from '@/components/monitoring/environment/IncidentBanner.vue';
 import SilenceMenu from '@/components/monitoring/environment/SilenceMenu.vue';
+import QueueFlags from '@/components/monitoring/environment/QueueFlags.vue';
 import {
-    failedTone,
-    pendingTone,
+    failedLastHourText,
+    isHealthy,
+    needsAttention,
     statusText,
     statusTone,
+    thresholdTone,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import MetricTile from '@/components/nocturne/MetricTile.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { failedLabel } from '@/lib/failedWindow';
-import {
-    formatCount,
-    formatWait,
-    statusColor,
-    waitColor,
-} from '@/lib/monitoring';
+import { formatCount, formatWait } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
 const { page } = defineProps<{
@@ -33,51 +30,48 @@ const { page } = defineProps<{
 }>();
 
 const slug = useTeamSlug();
-const { environment, threshold, incident, incidentAlert, lastKnown } =
+const { environment, incident, incidentAlert, lastKnown } =
     useEnvironmentDetail(() => page);
 
 const tiles = computed(() => [
     {
         label: trans('Pending'),
         value: formatCount(environment.value.pending),
-        color: pendingTone(
+        color: thresholdTone(
+            environment.value,
+            'queue.pending',
             environment.value.pending,
-            threshold('queue.pending'),
         ),
     },
     {
         label: trans('Max wait'),
         value: formatWait(environment.value.maxWaitSeconds),
-        color: waitColor(
+        color: thresholdTone(
+            environment.value,
+            'queue.max_wait',
             environment.value.maxWaitSeconds,
-            threshold('queue.max_wait'),
         ),
     },
     {
         label: trans('Workers'),
         value: String(environment.value.workers),
-        color:
-            environment.value.status !== null && !environment.value.workers
-                ? 'var(--st-down)'
-                : 'var(--nc-text)',
     },
     {
-        label: failedLabel(environment.value.failedWindowMinutes),
-        value: formatCount(environment.value.failedInWindow),
-        color: failedTone(
+        label: trans('Failed · last hour'),
+        value: failedLastHourText(environment.value),
+        color: thresholdTone(
+            environment.value,
+            'jobs.failed_per_hour',
             environment.value.failedLastHour,
-            threshold('jobs.failed_per_hour'),
         ),
     },
     {
-        label: trans('Jobs/min'),
-        value: String(environment.value.jobsPerMinute),
-        color: 'var(--nc-text)',
+        label: trans('Throughput'),
+        value: `${environment.value.jobsPerMinute}/min`,
     },
     {
         label: trans('Nodes'),
         value: String(environment.value.nodeCount),
-        color: 'var(--nc-text)',
     },
 ]);
 </script>
@@ -122,9 +116,15 @@ const tiles = computed(() => [
                 style="font-size: 11px"
                 :style="{ color: statusTone(environment) }"
             >
-                <StatusLamp :status="environment.status" :size="6" />{{
-                    statusText(environment)
-                }}
+                <StatusLamp
+                    :status="
+                        needsAttention(environment) || isHealthy(environment)
+                            ? environment.status
+                            : null
+                    "
+                    :label="statusText(environment)"
+                    :size="6"
+                />{{ statusText(environment) }}
             </span>
         </div>
 
@@ -207,27 +207,23 @@ const tiles = computed(() => [
                     style="margin-top: var(--nc-space-2)"
                 >
                     <span
-                        class="size-[5px] flex-none rounded-full"
-                        :style="{ background: statusColor(queue.status) }"
-                    />
-                    <span
                         class="min-w-0 truncate"
                         style="letter-spacing: 0.01em"
                         >{{ queue.name }}</span
                     >
+                    <QueueFlags
+                        class="flex-none"
+                        :queue="queue"
+                        :thresholds="environment.thresholds"
+                        quiet
+                    />
                     <span
                         class="nc-num ml-auto flex-none"
                         style="color: var(--nc-neutral-300)"
                         >{{ formatCount(queue.pending) }}</span
                     >
                     <span
-                        class="nc-num w-[42px] flex-none text-right"
-                        :style="{
-                            color: waitColor(
-                                queue.waitSeconds,
-                                threshold('queue.max_wait'),
-                            ),
-                        }"
+                        class="nc-num nc-tone-soft w-[42px] flex-none text-right"
                         >{{ formatWait(queue.waitSeconds) }}</span
                     >
                 </div>

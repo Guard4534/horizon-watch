@@ -2,18 +2,22 @@
 
 namespace App\Data\Pages;
 
+use App\Enums\AlertSeverity;
 use Spatie\LaravelData\Data;
 
 class WallKpisData extends Data
 {
     public function __construct(
-        public int $environmentsUp,
-        public int $environmentsActive,
-        public int $environmentsTotal,
+        public int $environmentsHealthy,
+        public int $environmentsJudged,
+        public int $environmentsNeedingAttention,
         public int $openAnomalies,
+        public ?AlertSeverity $openAlertSeverity,
         public int $pendingTotal,
-        public int $failedTotal,
+        public int $failedLastHour,
+        public bool $failedLastHourCapped,
+        public ?AlertSeverity $failedSeverity,
+        public int $failedInWindow,
         public ?int $failedWindowMinutes,
-        public int $environmentsOverFailedRate,
     ) {}
 }

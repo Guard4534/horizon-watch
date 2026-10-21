@@ -19,9 +19,9 @@ const { throughput, maxWait, range, grid } = defineProps<{
 const { path } = useCurrentPath();
 
 const throughputLabel = computed(() =>
-    trans(':range, peak :count jobs/min', {
+    trans(':range, peak :value', {
         range: rangeLabel(range),
-        count: formatCount(Math.max(0, ...throughput)),
+        value: `${formatCount(Math.max(0, ...throughput))}/min`,
     }),
 );
 
@@ -32,8 +32,7 @@ const waitLabel = computed(() =>
     }),
 );
 
-const describe = (value: number) =>
-    trans(':count jobs/min', { count: String(value) });
+const describe = (value: number) => `${value}/min`;
 const describeWait = (value: number) =>
     trans('max wait :wait', { wait: formatWait(value) });
 
@@ -59,7 +58,7 @@ const selected = computed({
         </template>
         <div class="flex flex-col" style="gap: var(--nc-space-4)">
             <figure class="m-0">
-                <figcaption class="caption">{{ $t('jobs/min') }}</figcaption>
+                <figcaption class="caption">{{ $t('Throughput') }}</figcaption>
                 <TimeSeriesChart
                     :values="throughput"
                     :starts-at="grid.startsAt"

@@ -424,9 +424,9 @@ test('the environment page shows the rules of its name, and its thresholds follo
         ->assertInertia(fn (Assert $page) => $page
             ->has('page.rules', 8)
             ->where('page.rules', fn ($rules) => collect($rules)->where('origin', 'override')->pluck('metric')->all() === ['queue.pending'])
-            ->where('page.environment.thresholds', fn ($thresholds) => (float) $thresholds['queue.pending'] === 7000.0
-                && (float) $thresholds['queue.max_wait'] === 45.0
-                && (float) $thresholds['job.runtime'] === AlertRuleMetric::JobRuntime->defaultThreshold()));
+            ->where('page.environment.thresholds', fn ($thresholds) => (float) $thresholds['queue.pending']['value'] === 7000.0
+                && (float) $thresholds['queue.max_wait']['value'] === 45.0
+                && (float) $thresholds['job.runtime']['value'] === AlertRuleMetric::JobRuntime->defaultThreshold()));
 });
 
 test('an unknown scope answers 404 before its payload is validated', function () {

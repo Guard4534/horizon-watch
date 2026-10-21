@@ -30,7 +30,12 @@ const slug = useTeamSlug();
 const shared = usePage();
 const isMobile = useIsMobile();
 
-const watched = computed(() => page.environments.filter(hasMeasurement));
+const watched = computed(() =>
+    page.environments.filter(
+        (environment) =>
+            environment.pollingEnabled && hasMeasurement(environment),
+    ),
+);
 
 const stats = computed(() => [
     {

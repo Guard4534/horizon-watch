@@ -20,6 +20,7 @@ import {
 import { computed, onMounted, onUnmounted, watch } from 'vue';
 import {
     horizonStatusLabel,
+    readingErrorLabel,
     readingProblemLabel,
 } from '@/components/monitoring/environment/readings';
 import type { RouteDefinition } from '@/wayfinder';
@@ -189,22 +190,8 @@ const icon = computed(() => {
                         },
                     )
                 }}</span>
-                <span v-else-if="result?.error === 'unauthorized'">{{
-                    $t('Horizon refused the credentials')
-                }}</span>
-                <span v-else-if="result?.error === 'not_horizon'">{{
-                    $t('The address does not answer like Horizon')
-                }}</span>
-                <span v-else-if="result?.error === 'blocked'">{{
-                    $t('This address is not allowed')
-                }}</span>
-                <span v-else-if="result?.error === 'password_unreadable'">{{
-                    $t(
-                        'The stored password cannot be decrypted: enter it again',
-                    )
-                }}</span>
-                <span v-else-if="result?.error === 'unreachable'">{{
-                    $t('Horizon does not answer')
+                <span v-else-if="result?.error">{{
+                    readingErrorLabel(result.error)
                 }}</span>
                 <span v-else-if="outcome.state === 'throttled'">{{
                     $t('Too many attempts. Wait a minute and try again.')

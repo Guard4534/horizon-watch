@@ -31,10 +31,10 @@ test('the application list groups environments under each application', function
             ->where('page.environmentCount', 4)
             ->where('page.groups.0.application.id', 'invoice-desk')
             ->has('page.groups.0.environments', 3)
-            ->where('page.groups.0.triageCount', 1)
+            ->where('page.groups.0.attentionCount', 1)
             ->where('page.groups.1.application.id', 'acme-shop')
             ->has('page.groups.1.environments', 1)
-            ->where('page.groups.1.triageCount', 0));
+            ->where('page.groups.1.attentionCount', 0));
 });
 
 test('an application page shows one card per environment with its pending trend', function () {
@@ -68,4 +68,29 @@ test('an application is named after its production environment, or the first one
     $this->actingAs($this->user)
         ->get(route('applications.show', ['current_team' => $this->slug, 'application' => 'invoice-desk']))
         ->assertInertia(fn (Assert $page) => $page->where('page.application.domain', 'production.example.com'));
+});
+
+test('the application list leaves a paused collection out of the attention count', function () {
+    $shop = Application::query()->where('name', 'Acme Shop')->firstOrFail();
+    $paused = Environment::factory()->for($shop)->staging()->create(['polling_enabled' => false]);
+    Readings::record($paused, EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
+
+    $this->actingAs($this->user)
+        ->get(route('applications.index', ['current_team' => $this->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.groups.0.attentionCount', 1)
+            ->where('page.groups.1.application.id', 'acme-shop')
+            ->has('page.groups.1.environments', 2)
+            ->where('page.groups.1.attentionCount', 0)
+            ->missing('page.groups.1.triageCount'));
+});
+
+test('the worst status of an application page leaves a paused collection out', function () {
+    $shop = Application::query()->where('name', 'Acme Shop')->firstOrFail();
+    $paused = Environment::factory()->for($shop)->staging()->create(['polling_enabled' => false]);
+    Readings::record($paused, EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
+
+    $this->actingAs($this->user)
+        ->get(route('applications.show', ['current_team' => $this->slug, 'application' => 'acme-shop']))
+        ->assertInertia(fn (Assert $page) => $page->where('page.worstStatus', 'active'));
 });

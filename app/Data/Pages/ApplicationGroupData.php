@@ -12,6 +12,6 @@ class ApplicationGroupData extends Data
         public ApplicationData $application,
         /** @var array<int, EnvironmentData> */
         public array $environments,
-        public int $triageCount,
+        public int $attentionCount,
     ) {}
 }

@@ -7,29 +7,26 @@ import KpiCard from '@/components/nocturne/KpiCard.vue';
 import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
 import {
     calmStyle,
-    failedTone,
+    failedLastHourText,
     needsAttention,
-    pendingTone,
+    statusText,
     statusTone,
+    thresholdTone,
     troubledStyle,
 } from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { thresholdOf } from '@/lib/alertRules';
+import type { WallKpiKey } from '@/composables/useWallKpis';
+import { useWallKpis } from '@/composables/useWallKpis';
 import { failedWindowNote, failedWindowShort } from '@/lib/failedWindow';
-import {
-    formatCount,
-    formatWait,
-    statusColor,
-    statusIcon,
-    statusLabel,
-    waitColor,
-} from '@/lib/monitoring';
+import { formatCount, formatWait, statusIcon } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
+
+const MOBILE_KPIS: WallKpiKey[] = ['healthy', 'openAlerts', 'pending'];
 
 const {
     rows,
     totalCount,
-    problemCount,
+    attentionCount,
     waitingCount,
     typeLabel,
     search,
@@ -37,7 +34,7 @@ const {
 } = defineProps<{
     rows: App.Data.Monitoring.EnvironmentData[];
     totalCount: number;
-    problemCount: number;
+    attentionCount: number;
     waitingCount: number;
     typeLabel: string;
     search: string;
@@ -49,6 +46,11 @@ const emit = defineEmits<{ clear: [] }>();
 const filter = defineModel<'all' | 'problems'>('filter', { required: true });
 
 const slug = useTeamSlug();
+
+const wallKpis = useWallKpis(() => kpis);
+const tiles = computed(() =>
+    wallKpis.value.filter((kpi) => MOBILE_KPIS.includes(kpi.key)),
+);
 
 const narrowing = computed(() =>
     [typeLabel, search.trim() ? `"${search.trim()}"` : '']
@@ -67,23 +69,13 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
     <div class="flex flex-col" style="gap: var(--nc-space-3)">
         <div class="flex" style="gap: var(--nc-space-2)">
             <KpiCard
+                v-for="kpi in tiles"
+                :key="kpi.key"
                 compact
                 class="flex-1"
-                :label="$t('Healthy')"
-                :value="`${kpis.environmentsActive}/${kpis.environmentsTotal}`"
-            />
-            <KpiCard
-                compact
-                class="flex-1"
-                :label="$t('Issues')"
-                :value="String(problemCount)"
-                :color="problemCount ? 'var(--st-down)' : undefined"
-            />
-            <KpiCard
-                compact
-                class="flex-1"
-                :label="$t('Pending')"
-                :value="formatCount(kpis.pendingTotal)"
+                :label="kpi.label"
+                :value="kpi.value"
+                :color="kpi.color"
             />
         </div>
 
@@ -94,7 +86,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
             :options="[
                 {
                     value: 'problems',
-                    label: `${$t('Problems')} ${problemCount}`,
+                    label: `${$t('Needs attention')} ${attentionCount}`,
                 },
                 { value: 'all', label: `${$t('All')} ${totalCount}` },
             ]"
@@ -143,9 +135,10 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                             class="nc-num block"
                             style="font-size: 18px; line-height: 1.2"
                             :style="{
-                                color: pendingTone(
+                                color: thresholdTone(
+                                    environment,
+                                    'queue.pending',
                                     environment.pending,
-                                    thresholdOf(environment, 'queue.pending'),
                                 ),
                             }"
                             >{{ formatCount(environment.pending) }}</span
@@ -160,18 +153,16 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                     style="gap: 2px 8px"
                 >
                     <span
-                        v-if="environment.status !== null"
                         class="inline-flex items-center gap-[4px]"
                         style="font-weight: 500"
-                        :style="{ color: statusColor(environment.status) }"
+                        :style="{ color: statusTone(environment) }"
                         ><component
-                            :is="statusIcon(environment.status)"
+                            :is="statusIcon(environment.status!)"
                             v-if="needsAttention(environment)"
                             :size="13"
                             weight="bold"
-                        />{{ statusLabel(environment.status) }}</span
+                        />{{ statusText(environment) }}</span
                     >
-                    <span v-else>{{ $t('No reading yet') }}</span>
                     <MaintenanceBadge
                         v-if="environment.maintenanceUntil"
                         :until="environment.maintenanceUntil"
@@ -181,10 +172,12 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                     <span
                         class="ml-auto"
                         :style="{
-                            color: waitColor(
-                                environment.maxWaitSeconds,
-                                thresholdOf(environment, 'queue.max_wait'),
-                            ),
+                            color:
+                                thresholdTone(
+                                    environment,
+                                    'queue.max_wait',
+                                    environment.maxWaitSeconds,
+                                ) ?? 'var(--nc-neutral-400)',
                         }"
                         >{{
                             $t(':wait wait', {
@@ -196,21 +189,21 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                         :title="
                             failedWindowNote(environment.failedWindowMinutes)
                         "
-                        :style="{
-                            color: failedTone(
-                                environment.failedLastHour,
-                                thresholdOf(
+                        ><span
+                            :style="{
+                                color: thresholdTone(
                                     environment,
                                     'jobs.failed_per_hour',
+                                    environment.failedLastHour,
                                 ),
-                            ),
-                        }"
-                        >{{
-                            $t(':count failed', {
-                                count: String(environment.failedInWindow),
-                            })
-                        }}
-                        ·
+                            }"
+                            >{{
+                                $t(':count failed/h', {
+                                    count: failedLastHourText(environment),
+                                })
+                            }}</span
+                        >
+                        · {{ formatCount(environment.failedInWindow) }}
                         {{
                             failedWindowShort(environment.failedWindowMinutes)
                         }}</span
@@ -231,12 +224,10 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                 }}</template>
                 <template v-else-if="waitingCount > 0">{{
                     $t(
-                        'Nothing to handle. Some environments are still waiting for their first reading.',
+                        'Nothing needs attention. Some environments have no reading yet.',
                     )
                 }}</template>
-                <template v-else>{{
-                    $t('Nothing to handle: every environment is running.')
-                }}</template>
+                <template v-else>{{ $t('Nothing needs attention.') }}</template>
             </p>
         </div>
     </div>

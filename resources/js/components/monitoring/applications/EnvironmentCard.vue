@@ -4,16 +4,15 @@ import { computed } from 'vue';
 import {
     hasMeasurement,
     needsAttention,
-    pendingTone,
     statusText,
     statusTone,
+    thresholdTone,
     troubledStyle,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { thresholdOf } from '@/lib/alertRules';
-import { formatCount, formatWait, waitColor } from '@/lib/monitoring';
+import { formatCount, formatWait } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
 const { environment } = defineProps<{
@@ -93,9 +92,10 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                     style="font-size: 16px"
                     :style="{
                         color: hasNumbers
-                            ? pendingTone(
+                            ? thresholdTone(
+                                  environment,
+                                  'queue.pending',
                                   environment.pending,
-                                  thresholdOf(environment, 'queue.pending'),
                               )
                             : undefined,
                     }"
@@ -113,9 +113,10 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                     style="font-size: 16px"
                     :style="{
                         color: hasNumbers
-                            ? waitColor(
+                            ? thresholdTone(
+                                  environment,
+                                  'queue.max_wait',
                                   environment.maxWaitSeconds,
-                                  thresholdOf(environment, 'queue.max_wait'),
                               )
                             : undefined,
                     }"

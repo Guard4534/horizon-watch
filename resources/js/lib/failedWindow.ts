@@ -1,20 +1,5 @@
 import { trans } from 'laravel-vue-i18n';
 
-export function failedLabel(windowMinutes: number | null): string {
-    switch (windowMinutes) {
-        case null:
-            return trans('Failed · mixed windows');
-        case 1440:
-            return trans('Failed · 24h');
-        case 10080:
-            return trans('Failed · 7d');
-        default:
-            return trans('Failed · :minutes min', {
-                minutes: String(windowMinutes),
-            });
-    }
-}
-
 export function failedWindowNote(windowMinutes: number | null): string {
     switch (windowMinutes) {
         case null:

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { PhGearSix, PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
+import AttentionBadge from '@/components/monitoring/AttentionBadge.vue';
 import {
     statusText,
     needsAttention,
@@ -52,23 +53,10 @@ const { canManageApplications } = useVisibility();
                 style="letter-spacing: 0.01em"
                 >{{ group.application.domain }}</span
             >
-            <span
-                v-if="group.triageCount"
-                class="nc-tag nc-tag-sm nc-tone-down flex-none"
-                style="
-                    background: color-mix(
-                        in srgb,
-                        var(--st-down) 16%,
-                        transparent
-                    );
-                "
-                >{{
-                    $t(':count to triage', { count: String(group.triageCount) })
-                }}</span
-            >
-            <span v-else class="nc-tag nc-tag-sm nc-tag-neutral flex-none">
-                {{ $t('all good') }}
-            </span>
+            <AttentionBadge
+                :count="group.attentionCount"
+                :environments="group.environments"
+            />
             <template v-if="canManageApplications">
                 <Link
                     class="nc-btn nc-btn-ghost nc-t-xs ml-auto"

@@ -1,30 +1,128 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
-    failedTone,
+    displayState,
+    failedLastHourText,
     formatAge,
     hasMeasurement,
     horizonStatusTone,
+    isHealthy,
     needsAttention,
-    pendingTone,
+    readingErrorLabel,
     readingProblemLabel,
     secondsSince,
     statusText,
     statusTone,
+    thresholdTone,
     worstTone,
 } from '@/components/monitoring/environment/readings';
 
-describe('needsAttention', () => {
-    it.each<[App.Enums.EnvironmentStatus | null, boolean]>([
-        ['active', false],
-        [null, false],
-        ['degraded', true],
-        ['paused', true],
-        ['inactive', true],
-        ['unreachable', true],
-        ['stale', true],
-    ])('%s needs attention: %s', (status, expected) => {
-        expect(needsAttention({ status })).toBe(expected);
+type State = Parameters<typeof displayState>[0];
+
+const read: State = {
+    status: 'active',
+    watched: true,
+    pollingEnabled: true,
+    readingError: null,
+    stale: false,
+};
+
+describe('displayState', () => {
+    it.each<[string, Partial<State>, string]>([
+        [
+            'not visible beats everything',
+            {
+                watched: false,
+                pollingEnabled: false,
+                readingError: 'unreachable',
+            },
+            'hidden',
+        ],
+        [
+            'a paused collection beats a reading error',
+            {
+                pollingEnabled: false,
+                status: 'unreachable',
+                readingError: 'unauthorized',
+            },
+            'collection_off',
+        ],
+        [
+            'a reading error beats stale',
+            {
+                status: 'unreachable',
+                readingError: 'unauthorized',
+                stale: true,
+            },
+            'reading_error',
+        ],
+        [
+            'stale beats the stored status',
+            { status: 'stale', stale: true },
+            'stale',
+        ],
+        [
+            'a stale environment last known down stays down, as the server says',
+            { status: 'inactive', stale: true },
+            'inactive',
+        ],
+        ['no reading yet', { status: null }, 'waiting'],
+        ['otherwise the Horizon status', { status: 'degraded' }, 'degraded'],
+    ])('%s', (_, overrides, expected) => {
+        expect(displayState({ ...read, ...overrides })).toBe(expected);
     });
+});
+
+describe('one wording and one tone per state', () => {
+    it.each<[Partial<State>, string, string]>([
+        [
+            { watched: false, status: null },
+            'Not on your wall',
+            'var(--nc-neutral-500)',
+        ],
+        [
+            { pollingEnabled: false, status: 'inactive' },
+            'Collection paused',
+            'var(--nc-neutral-500)',
+        ],
+        [
+            { status: 'unreachable', readingError: 'not_horizon' },
+            'unreachable',
+            'var(--st-down)',
+        ],
+        [{ status: 'stale', stale: true }, 'not updated', 'var(--st-warn)'],
+        [{ status: null }, 'No reading yet', 'var(--nc-neutral-500)'],
+        [{ status: 'paused' }, 'Horizon paused', 'var(--st-off)'],
+        [{ status: 'degraded' }, 'degraded', 'var(--st-warn)'],
+        [{ status: 'active' }, 'active', 'var(--st-ok)'],
+    ])('%o reads %s', (overrides, text, tone) => {
+        const environment = { ...read, ...overrides };
+
+        expect(statusText(environment)).toBe(text);
+        expect(statusTone(environment)).toBe(tone);
+    });
+});
+
+describe('healthy and needs attention', () => {
+    it.each<[Partial<State>, boolean, boolean]>([
+        [{}, true, false],
+        [{ status: 'degraded' }, false, true],
+        [{ status: 'paused' }, false, true],
+        [{ status: 'inactive' }, false, true],
+        [{ status: 'unreachable', readingError: 'unreachable' }, false, true],
+        [{ status: 'stale', stale: true }, false, true],
+        [{ status: null }, false, false],
+        [{ pollingEnabled: false, status: 'inactive' }, false, false],
+        [{ pollingEnabled: false }, false, false],
+        [{ watched: false, status: null }, false, false],
+    ])(
+        '%o: healthy %s, needs attention %s',
+        (overrides, healthy, attention) => {
+            const environment = { ...read, ...overrides };
+
+            expect(isHealthy(environment)).toBe(healthy);
+            expect(needsAttention(environment)).toBe(attention);
+        },
+    );
 });
 
 describe('worstTone', () => {
@@ -45,28 +143,6 @@ describe('worstTone', () => {
     it('has no tone without a status', () => {
         expect(worstTone([])).toBeNull();
         expect(worstTone([{ status: null }])).toBeNull();
-    });
-});
-
-describe('statusText', () => {
-    it('explains an environment without a status', () => {
-        const environment = {
-            status: null,
-            watched: true,
-            pollingEnabled: true,
-        };
-
-        expect(statusText(environment)).toBe('waiting for the first reading');
-        expect(statusText({ ...environment, pollingEnabled: false })).toBe(
-            'Collection paused',
-        );
-        expect(statusText({ ...environment, watched: false })).toBe(
-            'Not on your wall',
-        );
-        expect(statusText({ ...environment, status: 'stale' })).toBe(
-            'not updated',
-        );
-        expect(statusTone(environment)).toBe('var(--nc-neutral-500)');
     });
 });
 
@@ -109,24 +185,96 @@ describe('formatAge', () => {
     });
 });
 
-describe('tones', () => {
-    it('only colours counts above the threshold', () => {
-        expect(pendingTone(100, 100)).toBe('var(--nc-text)');
-        expect(pendingTone(101, 100)).toBe('var(--st-down)');
-        expect(failedTone(5, null)).toBeUndefined();
-        expect(failedTone(6, 5)).toBe('var(--st-warn)');
+describe('thresholdTone', () => {
+    const environment = {
+        pollingEnabled: true,
+        thresholds: {
+            'queue.pending': { value: 100, severity: 'warning' as const },
+            'queue.max_wait': { value: 60, severity: 'critical' as const },
+        },
+    };
+
+    it('colours a figure only past its own threshold, with the rule severity', () => {
+        expect(
+            thresholdTone(environment, 'queue.pending', 100),
+        ).toBeUndefined();
+        expect(thresholdTone(environment, 'queue.pending', 101)).toBe(
+            'var(--st-warn)',
+        );
+        expect(thresholdTone(environment, 'queue.max_wait', 61)).toBe(
+            'var(--st-down)',
+        );
+        expect(
+            thresholdTone(environment, 'jobs.failed_per_hour', 5000),
+        ).toBeUndefined();
     });
 
-    it('greys out the Horizon status of a failed reading', () => {
+    it('leaves the last reading of a paused collection calm', () => {
         expect(
-            horizonStatusTone({ horizonStatus: 'running', readingError: null }),
-        ).toBe('var(--st-ok)');
+            thresholdTone(
+                { ...environment, pollingEnabled: false },
+                'queue.max_wait',
+                900,
+            ),
+        ).toBeUndefined();
+    });
+});
+
+describe('failedLastHourText', () => {
+    it('says at least when the last hour is capped', () => {
         expect(
-            horizonStatusTone({
-                horizonStatus: 'running',
-                readingError: 'unreachable',
+            failedLastHourText({
+                failedLastHour: 42,
+                failedLastHourCapped: false,
             }),
-        ).toBe('var(--nc-neutral-500)');
+        ).toBe('42');
+        expect(
+            failedLastHourText({
+                failedLastHour: 1250,
+                failedLastHourCapped: false,
+            }),
+        ).toBe('1.3k');
+        expect(
+            failedLastHourText({
+                failedLastHour: 50,
+                failedLastHourCapped: true,
+            }),
+        ).toBe('at least 50');
+    });
+});
+
+describe('horizonStatusTone', () => {
+    const tone = (
+        horizonStatus: App.Enums.HorizonStatus | null,
+        readingError: App.Enums.ReadingError | null = null,
+        pollingEnabled = true,
+    ) => horizonStatusTone({ horizonStatus, readingError, pollingEnabled });
+
+    it('uses the status colours, and greys out a failed reading', () => {
+        expect(tone('running')).toBe('var(--st-ok)');
+        expect(tone('paused')).toBe('var(--st-off)');
+        expect(tone('inactive')).toBe('var(--st-down)');
+        expect(tone(null)).toBe('var(--nc-neutral-500)');
+        expect(tone('running', 'unreachable')).toBe('var(--nc-neutral-500)');
+    });
+
+    it('greys out the last reading of a paused collection', () => {
+        expect(tone('inactive', null, false)).toBe('var(--nc-neutral-500)');
+    });
+});
+
+describe('readingErrorLabel', () => {
+    it.each<[App.Enums.ReadingError, string]>([
+        ['unreachable', 'Horizon does not answer'],
+        ['unauthorized', 'Horizon refused the credentials'],
+        ['not_horizon', 'The address does not answer like Horizon'],
+        ['blocked', 'This address is not allowed'],
+        [
+            'password_unreadable',
+            'The stored password cannot be decrypted: enter it again',
+        ],
+    ])('labels %s', (error, expected) => {
+        expect(readingErrorLabel(error)).toBe(expected);
     });
 });
 

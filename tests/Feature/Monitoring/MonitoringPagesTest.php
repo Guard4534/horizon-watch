@@ -78,11 +78,10 @@ test('the wall carries every environment and the key numbers', function () {
         ->get(route('wall', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->has('page.environments', 3)
-            ->where('page.kpis.environmentsTotal', 3)
             ->where('page.environments.0.id', 'invoice-desk-production')
             ->where('page.environments.0.status', 'inactive')
             ->where('page.kpis.openAnomalies', 2)
-            ->where('page.kpis.environmentsUp', 2)
+            ->where('page.kpis.environmentsHealthy', 1)->where('page.kpis.environmentsNeedingAttention', 2)
             ->has('page.anomalies', 2)
             ->has('page.throughput', 48)
             ->has('page.notifications', 1)
@@ -192,8 +191,7 @@ test('a restricted admin watches their own environments and configures every one
             ->has('page.environments', 1)
             ->where('page.environments.0.id', $watched->slug)
             ->where('page.environments.0.watched', true)
-            ->where('page.applicationCount', 1)
-            ->where('page.kpis.environmentsTotal', 1));
+            ->where('page.applicationCount', 1));
 
     $this->get(route('applications.index', ['current_team' => $team->slug]))
         ->assertOk()
@@ -208,7 +206,7 @@ test('a restricted admin watches their own environments and configures every one
             ->where('page.groups.1.environments.0.watched', false)
             ->where('page.groups.1.environments.0.status', null)
             ->where('page.groups.1.environments.0.readingError', null)
-            ->where('page.groups.1.triageCount', 0));
+            ->where('page.groups.1.attentionCount', 0));
 
     $this->get(route('applications.show', ['current_team' => $team->slug, 'application' => $theirs->slug]))
         ->assertOk()

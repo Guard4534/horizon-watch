@@ -26,6 +26,7 @@ class EnvironmentData extends Data
         public int $failedInWindow,
         public int $failedWindowMinutes,
         public int $failedLastHour,
+        public bool $failedLastHourCapped,
         public int $workers,
         public int $jobsPerMinute,
         public int $nodeCount,
@@ -39,7 +40,7 @@ class EnvironmentData extends Data
         public ?ReadingError $readingError,
         public ?ReadingProblemData $readingProblem,
         public ?HorizonStatus $horizonStatus,
-        /** @var array<string, float> */
+        /** @var array<string, ThresholdData> */
         public array $thresholds,
         public ?string $maintenanceUntil,
         public ?string $maintenanceReason,
@@ -52,8 +53,23 @@ class EnvironmentData extends Data
 
     public function severity(): int
     {
-        return $this->status === null
+        return $this->status === null || ! $this->pollingEnabled
             ? 2 * EnvironmentStatus::Degraded->severity() + 1
             : 2 * $this->status->severity();
+    }
+
+    public function isJudged(): bool
+    {
+        return $this->watched && $this->pollingEnabled && $this->status !== null;
+    }
+
+    public function isHealthy(): bool
+    {
+        return $this->isJudged() && $this->status?->isHealthy() === true;
+    }
+
+    public function needsAttention(): bool
+    {
+        return $this->isJudged() && $this->status?->isHealthy() === false;
     }
 }

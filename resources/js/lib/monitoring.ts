@@ -35,7 +35,7 @@ export function statusLabel(status: App.Enums.EnvironmentStatus): string {
         case 'degraded':
             return trans('degraded');
         case 'paused':
-            return trans('paused');
+            return trans('Horizon paused');
         case 'inactive':
             return trans('inactive');
         case 'unreachable':
@@ -95,22 +95,6 @@ export function formatWait(seconds: number): string {
     return minutes < 60
         ? `${minutes}m`
         : compact(Math.floor(minutes / 60), 'h', minutes % 60, 'm');
-}
-
-export function exceeds(value: number, threshold: number | null): boolean {
-    return threshold !== null && value > threshold;
-}
-
-export function waitColor(seconds: number, threshold: number | null): string {
-    if (threshold === null) {
-        return 'var(--nc-neutral-400)';
-    }
-
-    if (seconds > Math.max(300, threshold)) {
-        return 'var(--st-down)';
-    }
-
-    return seconds > threshold ? 'var(--st-warn)' : 'var(--nc-neutral-400)';
 }
 
 export function formatElapsed(minutes: number): string {

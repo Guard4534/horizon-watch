@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\AlertRuleMetric;
+use App\Enums\AlertSeverity;
 use App\Enums\EnvironmentStatus;
 use App\Models\AlertRule;
 use App\Models\Application;
@@ -34,7 +35,7 @@ beforeEach(function () {
     ]));
 });
 
-test('the queues of an environment are judged with the rules of its name', function () {
+test('the queue flags follow the rules of the environment name', function () {
     ($this->override)('production', AlertRuleMetric::QueueMaxWait, ['threshold' => 90]);
     ($this->override)('staging', AlertRuleMetric::QueuePending, ['threshold' => 100]);
 
@@ -47,15 +48,18 @@ test('the queues of an environment are judged with the rules of its name', funct
     Readings::record($this->staging, EnvironmentStatus::Degraded, state: ['queues' => $queues]);
 
     ($this->environmentPage)($this->production)->assertInertia(fn (Assert $page) => $page
-        ->where('page.queues.0.status', 'active')
-        ->where('page.queues.1.status', 'active'));
+        ->missing('page.queues.0.status')
+        ->where('page.queues.0.waitOverThreshold', false)
+        ->where('page.queues.1.waitOverThreshold', false)
+        ->where('page.queues.1.withoutWorkers', false));
 
     ($this->environmentPage)($this->staging)->assertInertia(fn (Assert $page) => $page
-        ->where('page.queues.0.status', 'degraded')
-        ->where('page.queues.1.status', 'degraded'));
+        ->where('page.queues.0.waitOverThreshold', true)
+        ->where('page.queues.1.waitOverThreshold', false)
+        ->where('page.queues.1.withoutWorkers', false));
 });
 
-test('a disabled rule does not degrade a queue', function () {
+test('a disabled rule raises no queue flag', function () {
     ($this->override)('production', AlertRuleMetric::WorkersMissing, ['enabled' => false]);
     ($this->override)('organization', AlertRuleMetric::QueueMaxWait, ['enabled' => false]);
 
@@ -63,11 +67,15 @@ test('a disabled rule does not degrade a queue', function () {
         ['name' => 'orphan', 'supervisor' => null, 'workers' => 0, 'pending' => 5, 'waitSeconds' => 500, 'runtimeSeconds' => null],
     ]]);
     Readings::record($this->staging, EnvironmentStatus::Active, state: ['queues' => [
-        ['name' => 'orphan', 'supervisor' => null, 'workers' => 0, 'pending' => 5, 'waitSeconds' => 1, 'runtimeSeconds' => null],
+        ['name' => 'orphan', 'supervisor' => null, 'workers' => 0, 'pending' => 5, 'waitSeconds' => 500, 'runtimeSeconds' => null],
     ]]);
 
-    ($this->environmentPage)($this->production)->assertInertia(fn (Assert $page) => $page->where('page.queues.0.status', 'active'));
-    ($this->environmentPage)($this->staging)->assertInertia(fn (Assert $page) => $page->where('page.queues.0.status', 'degraded'));
+    ($this->environmentPage)($this->production)->assertInertia(fn (Assert $page) => $page
+        ->where('page.queues.0.waitOverThreshold', false)
+        ->where('page.queues.0.withoutWorkers', false));
+    ($this->environmentPage)($this->staging)->assertInertia(fn (Assert $page) => $page
+        ->where('page.queues.0.waitOverThreshold', false)
+        ->where('page.queues.0.withoutWorkers', true));
 });
 
 test('the long jobs of an environment are the ones over the runtime rule of its name', function () {
@@ -96,23 +104,22 @@ test('every environment carries the thresholds of its own name', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->missing('page.failedPerHourThreshold')
             ->where('page.environments', fn ($environments) => collect($environments)->mapWithKeys(fn ($environment) => [
-                $environment['id'] => (float) $environment['thresholds']['queue.pending'],
+                $environment['id'] => (float) $environment['thresholds']['queue.pending']['value'],
             ])->sortKeys()->all() === [$this->production->slug => 5000.0, $this->staging->slug => 500.0]
-                && (float) collect($environments)->firstWhere('id', $this->staging->slug)['thresholds']['jobs.failed_per_hour']
+                && (float) collect($environments)->firstWhere('id', $this->staging->slug)['thresholds']['jobs.failed_per_hour']['value']
                     === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()));
 });
 
-test('the wall counts the environments over their own failure threshold', function () {
-    ($this->override)('production', AlertRuleMetric::JobsFailedPerHour, ['threshold' => 30]);
-    $preview = Environment::factory()->for($this->application)->create(['name' => 'preview']);
-    ($this->override)('preview', AlertRuleMetric::JobsFailedPerHour, ['threshold' => 10]);
+test('the failed KPI judges each environment by its own threshold and severity', function () {
+    ($this->override)('production', AlertRuleMetric::JobsFailedPerHour, ['threshold' => 30, 'severity' => AlertSeverity::Critical]);
 
     Readings::record($this->production, snapshot: ['failed_last_hour' => 25]);
     Readings::record($this->staging, snapshot: ['failed_last_hour' => 25]);
-    Readings::record($preview, snapshot: ['failed_last_hour' => 25]);
 
     $this->get(route('wall', ['current_team' => $this->team->slug]))
-        ->assertInertia(fn (Assert $page) => $page->where('page.kpis.environmentsOverFailedRate', 2));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.kpis.failedLastHour', 50)
+            ->where('page.kpis.failedSeverity', 'warning'));
 });
 
 test('the application page gives each environment its own thresholds', function () {
@@ -122,7 +129,7 @@ test('the application page gives each environment its own thresholds', function 
         ->assertInertia(fn (Assert $page) => $page
             ->missing('page.thresholds')
             ->where('page.environments', fn ($environments) => collect($environments)->mapWithKeys(fn ($environment) => [
-                $environment['id'] => (float) $environment['thresholds']['queue.max_wait'],
+                $environment['id'] => (float) $environment['thresholds']['queue.max_wait']['value'],
             ])->sortKeys()->all() === [$this->production->slug => 90.0, $this->staging->slug => 60.0]));
 });
 
@@ -135,16 +142,16 @@ test('a disabled rule leaves its metric out of the thresholds of the environment
         ->where('page.environment.thresholds', fn ($thresholds) => ! $thresholds->has('queue.pending') && $thresholds->has('queue.max_wait')));
 
     ($this->environmentPage)($this->staging)->assertInertia(fn (Assert $page) => $page
-        ->where('page.environment.thresholds', fn ($thresholds) => (float) $thresholds['queue.pending'] === AlertRuleMetric::QueuePending->defaultThreshold()));
+        ->where('page.environment.thresholds', fn ($thresholds) => (float) $thresholds['queue.pending']['value'] === AlertRuleMetric::QueuePending->defaultThreshold()));
 });
 
-test('the wall does not count an environment whose failure rule is disabled', function () {
+test('the failed KPI ignores an environment whose failure rule is disabled', function () {
     ($this->override)('production', AlertRuleMetric::JobsFailedPerHour, ['enabled' => false]);
     Readings::record($this->production, snapshot: ['failed_last_hour' => 25]);
-    Readings::record($this->staging, snapshot: ['failed_last_hour' => 25]);
+    Readings::record($this->staging, snapshot: ['failed_last_hour' => 5]);
 
     $this->get(route('wall', ['current_team' => $this->team->slug]))
-        ->assertInertia(fn (Assert $page) => $page->where('page.kpis.environmentsOverFailedRate', 1));
+        ->assertInertia(fn (Assert $page) => $page->where('page.kpis.failedSeverity', null));
 });
 
 test('a disabled runtime rule lists no long job', function () {
@@ -156,4 +163,15 @@ test('a disabled runtime rule lists no long job', function () {
 
     ($this->environmentPage)($this->production)->assertInertia(fn (Assert $page) => $page->has('page.longRunningJobs', 0));
     ($this->environmentPage)($this->staging)->assertInertia(fn (Assert $page) => $page->has('page.longRunningJobs', 1));
+});
+
+test('every threshold carries the severity of its rule', function () {
+    ($this->override)('production', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+    Readings::record($this->production);
+
+    ($this->environmentPage)($this->production)->assertInertia(fn (Assert $page) => $page
+        ->where('page.environment.thresholds', fn ($thresholds) => $thresholds['queue.pending']['severity'] === 'critical'
+            && (float) $thresholds['queue.pending']['value'] === AlertRuleMetric::QueuePending->defaultThreshold()
+            && $thresholds['queue.max_wait']['severity'] === 'warning'
+            && $thresholds['endpoint.unreachable']['severity'] === 'critical'));
 });

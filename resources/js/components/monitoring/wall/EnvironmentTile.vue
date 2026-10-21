@@ -7,22 +7,18 @@ import TrendLine from '@/components/nocturne/TrendLine.vue';
 import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
 import {
     calmStyle,
-    failedTone,
+    displayState,
+    failedLastHourText,
+    hasMeasurement,
     needsAttention,
-    pendingTone,
+    statusText,
+    statusTone,
+    thresholdTone,
     troubledStyle,
 } from '@/components/monitoring/environment/readings';
 import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
-import { thresholdOf } from '@/lib/alertRules';
-import { failedWindowNote } from '@/lib/failedWindow';
-import {
-    formatCount,
-    formatWait,
-    statusColor,
-    statusIcon,
-    statusLabel,
-    waitColor,
-} from '@/lib/monitoring';
+import { failedWindowNote, failedWindowShort } from '@/lib/failedWindow';
+import { formatCount, formatWait, statusIcon } from '@/lib/monitoring';
 
 const { environment } = defineProps<{
     environment: App.Data.Monitoring.EnvironmentData;
@@ -31,11 +27,9 @@ const { environment } = defineProps<{
 const environmentHref = useEnvironmentHref();
 
 const troubled = computed(() => needsAttention(environment));
-const tint = computed(() =>
-    environment.status === null
-        ? 'var(--nc-neutral-600)'
-        : statusColor(environment.status),
-);
+const tint = computed(() => statusTone(environment));
+const showsState = computed(() => displayState(environment) !== 'active');
+const measured = computed(() => hasMeasurement(environment));
 
 const tileStyle = computed(() =>
     troubled.value ? troubledStyle(tint.value) : calmStyle(),
@@ -58,25 +52,6 @@ const trend = computed(() => {
         ? { icon: PhTrendUp, label: `+${percent}%` }
         : { icon: PhTrendDown, label: `${percent}%` };
 });
-
-const failedColor = computed(() =>
-    failedTone(
-        environment.failedLastHour,
-        thresholdOf(environment, 'jobs.failed_per_hour'),
-    ),
-);
-
-const silence = computed<string | null>(() => {
-    if (!environment.pollingEnabled) {
-        return 'paused';
-    }
-
-    if (environment.stale) {
-        return 'stale';
-    }
-
-    return environment.lastReadingAt === null ? 'waiting' : null;
-});
 </script>
 
 <template>
@@ -95,26 +70,24 @@ const silence = computed<string | null>(() => {
                 :reason="environment.maintenanceReason"
                 compact
             />
-            <span
-                v-if="troubled && environment.status"
-                class="state"
-                :style="{ color: tint }"
-            >
+            <span v-if="showsState" class="state" :style="{ color: tint }">
                 <component
-                    :is="statusIcon(environment.status)"
+                    :is="statusIcon(environment.status!)"
+                    v-if="troubled"
                     :size="14"
                     weight="bold"
                     :class="{ 'nc-pulse': urgent }"
-                />{{ statusLabel(environment.status) }}
+                />{{ statusText(environment) }}
             </span>
         </span>
         <span class="nc-num mt-[10px] flex items-baseline gap-[6px]">
             <span
                 class="reading"
                 :style="{
-                    color: pendingTone(
+                    color: thresholdTone(
+                        environment,
+                        'queue.pending',
                         environment.pending,
-                        thresholdOf(environment, 'queue.pending'),
                     ),
                 }"
                 >{{ formatCount(environment.pending) }}</span
@@ -123,10 +96,12 @@ const silence = computed<string | null>(() => {
             <span
                 class="nc-t-xs ml-auto"
                 :style="{
-                    color: waitColor(
-                        environment.maxWaitSeconds,
-                        thresholdOf(environment, 'queue.max_wait'),
-                    ),
+                    color:
+                        thresholdTone(
+                            environment,
+                            'queue.max_wait',
+                            environment.maxWaitSeconds,
+                        ) ?? 'var(--nc-neutral-400)',
                 }"
                 >{{
                     $t(':wait wait', {
@@ -153,42 +128,38 @@ const silence = computed<string | null>(() => {
             >
                 <component :is="trend.icon" :size="12" />{{ trend.label }}
             </span>
-            <span>
-                <template v-if="silence === 'paused'">{{
-                    $t('Collection paused')
-                }}</template>
-                <template v-else-if="silence === 'stale'">{{
-                    $t('Not updated')
-                }}</template>
-                <template v-else-if="silence === 'waiting'">{{
-                    $t('No reading yet')
-                }}</template>
-                <template v-else>
-                    {{
-                        $tChoice(
-                            ':count node|:count nodes',
-                            environment.nodeCount,
-                        )
-                    }}
-                    ·
-                    {{
-                        $tChoice(
-                            ':count worker|:count workers',
-                            environment.workers,
-                        )
-                    }}
-                </template>
+            <span v-if="measured">
+                {{
+                    $tChoice(':count node|:count nodes', environment.nodeCount)
+                }}
+                ·
+                {{
+                    $tChoice(
+                        ':count worker|:count workers',
+                        environment.workers,
+                    )
+                }}
             </span>
             <span
                 class="ml-auto flex-none"
-                :style="{ color: failedColor }"
                 :title="failedWindowNote(environment.failedWindowMinutes)"
             >
-                {{
-                    $t(':count failed', {
-                        count: String(environment.failedInWindow),
-                    })
-                }}
+                <span
+                    :style="{
+                        color: thresholdTone(
+                            environment,
+                            'jobs.failed_per_hour',
+                            environment.failedLastHour,
+                        ),
+                    }"
+                    >{{
+                        $t(':count failed/h', {
+                            count: failedLastHourText(environment),
+                        })
+                    }}</span
+                >
+                · {{ formatCount(environment.failedInWindow) }}
+                {{ failedWindowShort(environment.failedWindowMinutes) }}
             </span>
         </span>
     </Link>

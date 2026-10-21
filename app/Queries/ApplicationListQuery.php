@@ -23,11 +23,9 @@ class ApplicationListQuery
             return new ApplicationGroupData(
                 application: $application,
                 environments: $own,
-                triageCount: count(array_filter(
+                attentionCount: count(array_filter(
                     $own,
-                    fn (EnvironmentData $environment) => $environment->watched
-                        && $environment->status !== null
-                        && ! $environment->status->isHealthy(),
+                    fn (EnvironmentData $environment) => $environment->needsAttention(),
                 )),
             );
         }, $this->monitoring->configurableApplications($team));

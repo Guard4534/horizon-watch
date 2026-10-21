@@ -302,10 +302,9 @@ test('a stale environment is a problem everywhere, not up', function () {
         [$stale->slug, EnvironmentStatus::Stale],
         [$fresh->slug, EnvironmentStatus::Active],
     ])
-        ->and($wall->kpis->environmentsUp)->toBe(1)
-        ->and($wall->kpis->environmentsActive)->toBe(1)
-        ->and($wall->kpis->environmentsTotal)->toBe(2)
-        ->and($applications->groups[0]->triageCount)->toBe(1);
+        ->and($wall->kpis->environmentsHealthy)->toBe(1)
+        ->and($wall->kpis->environmentsNeedingAttention)->toBe(1)
+        ->and($applications->groups[0]->attentionCount)->toBe(1);
 });
 
 test('a stale environment last known down stays down and is not counted as up', function (EnvironmentStatus $status) {
@@ -319,7 +318,7 @@ test('a stale environment last known down stays down and is not counted as up', 
 
     expect($data->stale)->toBeTrue()
         ->and($data->status)->toBe($status)
-        ->and($wall->kpis->environmentsUp)->toBe(0);
+        ->and($wall->kpis->environmentsHealthy)->toBe(0)->and($wall->kpis->environmentsNeedingAttention)->toBe(1);
 })->with([
     'unreachable' => [EnvironmentStatus::Unreachable],
     'inactive' => [EnvironmentStatus::Inactive],
@@ -358,8 +357,30 @@ test('a failed reading reports its reason and keeps the previous detail under th
         ->and($nodes)->toHaveCount(1)
         ->and($nodes[0]->status)->toBe(EnvironmentStatus::Unreachable)
         ->and($queues)->toHaveCount(3)
-        ->and(collect($queues)->every(fn ($queue) => $queue->status === EnvironmentStatus::Unreachable))->toBeTrue();
+        ->and(collect($queues)->every(fn ($queue) => ! $queue->waitOverThreshold && ! $queue->withoutWorkers))->toBeTrue();
 });
+
+test('queues are flagged only while the collection is on and the last reading is not down', function (EnvironmentStatus $status, bool $pollingEnabled, bool $flagged) {
+    $application = Application::factory()->for($this->team)->create();
+    $environment = Environment::factory()->for($application)->production()->create(['polling_enabled' => $pollingEnabled]);
+    Readings::record($environment, $status, state: [
+        'queues' => [
+            ['name' => 'default', 'supervisor' => null, 'workers' => 0, 'pending' => 5, 'waitSeconds' => 500, 'runtimeSeconds' => null],
+        ],
+    ]);
+
+    $queues = $this->repository->queues($this->team, $environment->slug);
+
+    expect($queues)->toHaveCount(1)
+        ->and($queues[0]->waitOverThreshold)->toBe($flagged)
+        ->and($queues[0]->withoutWorkers)->toBe($flagged);
+})->with([
+    'active' => [EnvironmentStatus::Active, true, true],
+    'degraded' => [EnvironmentStatus::Degraded, true, true],
+    'unreachable' => [EnvironmentStatus::Unreachable, true, false],
+    'inactive' => [EnvironmentStatus::Inactive, true, false],
+    'collection paused' => [EnvironmentStatus::Degraded, false, false],
+]);
 
 test('nodes and queues come from the stored detail', function () {
     $application = Application::factory()->for($this->team)->create();
@@ -385,11 +406,11 @@ test('nodes and queues come from the stored detail', function () {
         ['hostname' => 'queue-2.example.com', 'status' => 'paused', 'workers' => 0, 'supervisorCount' => 1, 'queueCount' => 1, 'seenSecondsAgo' => 0],
     ]);
 
-    expect(array_map(fn ($queue) => [$queue->name, $queue->supervisor, $queue->runtimeSeconds, $queue->status], $queues))->toBe([
-        ['default', 'supervisor-1', 0.25, EnvironmentStatus::Active],
-        ['emails', null, null, EnvironmentStatus::Degraded],
-        ['reports', 'supervisor-2', 2.0, EnvironmentStatus::Degraded],
-        ['imports', 'supervisor-2', 1.5, EnvironmentStatus::Degraded],
+    expect(array_map(fn ($queue) => [$queue->name, $queue->supervisor, $queue->runtimeSeconds, $queue->waitOverThreshold, $queue->withoutWorkers], $queues))->toBe([
+        ['default', 'supervisor-1', 0.25, false, false],
+        ['emails', null, null, false, true],
+        ['reports', 'supervisor-2', 2.0, true, false],
+        ['imports', 'supervisor-2', 1.5, false, false],
     ]);
 });
 

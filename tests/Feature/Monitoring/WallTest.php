@@ -1,11 +1,13 @@
 <?php
 
 use App\Enums\AlertRuleMetric;
+use App\Enums\AlertSeverity;
 use App\Enums\EnvironmentStatus;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\Alert;
+use App\Models\AlertRule;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
@@ -74,7 +76,7 @@ test('each watched environment carries what its group and tile draw', function (
             ->where('page.environments.1.pending', 200)
             ->where('page.environments.1.trend', [0, 0, 0, 0, 0, 0, 100, 100, 100, 200, 200, 200])
             ->where('page.environments.1.trendPercent', 100)
-            ->where('page.environments.1.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()));
+            ->where('page.environments.1.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour']['value'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()));
 });
 
 test('an environment hidden from the viewer is not on the wall at all', function () {
@@ -93,14 +95,14 @@ test('an environment hidden from the viewer is not on the wall at all', function
     $response->assertInertia(fn (Assert $page) => $page
         ->has('page.environments', 1)
         ->where('page.environments.0.id', $this->staging->slug)
-        ->where('page.kpis.environmentsTotal', 1)
         ->where('page.kpis.openAnomalies', 0)
+        ->where('page.kpis.openAlertSeverity', null)->where('page.kpis.environmentsNeedingAttention', 0)->where('page.kpis.environmentsJudged', 1)
         ->has('page.anomalies', 0));
 
     expect($response->getContent())->not->toContain($this->production->slug);
 });
 
-test('an environment never read is on the wall without a status, and is not counted as up', function () {
+test('an environment never read is on the wall without a status, and is not counted as healthy', function () {
     Readings::record($this->production);
 
     wallPage($this->admin, $this->team)
@@ -108,8 +110,8 @@ test('an environment never read is on the wall without a status, and is not coun
             ->where('page.environments.0.id', $this->staging->slug)
             ->where('page.environments.0.status', null)
             ->where('page.environments.0.lastReadingAt', null)
-            ->where('page.kpis.environmentsUp', 1)
-            ->where('page.kpis.environmentsTotal', 2)
+            ->where('page.kpis.environmentsHealthy', 1)->where('page.kpis.environmentsJudged', 1)
+            ->has('page.environments', 2)
             ->where('page.kpis.openAnomalies', 0));
 });
 
@@ -150,14 +152,17 @@ test('an application first appears on the wall at its worst environment', functi
         ]);
 });
 
-test('the phone counts only active environments as healthy', function () {
+test('healthy means active, on the desktop and on the phone alike', function () {
     Readings::record($this->production, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending]);
     Readings::record($this->staging);
 
     wallPage($this->admin, $this->team)
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.kpis.environmentsUp', 2)
-            ->where('page.kpis.environmentsActive', 1));
+            ->where('page.kpis.environmentsHealthy', 1)
+            ->where('page.kpis.environmentsNeedingAttention', 1)
+            ->where('page.kpis.environmentsJudged', 2)
+            ->missing('page.kpis.environmentsUp')
+            ->missing('page.kpis.environmentsActive'));
 });
 
 test('the failed KPI names the window the environments share', function (int $production, int $staging, ?int $expected) {
@@ -167,7 +172,7 @@ test('the failed KPI names the window the environments share', function (int $pr
     wallPage($this->admin, $this->team)
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.kpis.failedWindowMinutes', $expected)
-            ->where('page.kpis.failedTotal', 42));
+            ->where('page.kpis.failedInWindow', 42));
 })->with([
     'both a day' => [1440, 1440, 1440],
     'both a week' => [10080, 10080, 10080],
@@ -190,24 +195,30 @@ test('with nothing read yet the failed window is the default the rows carry', fu
         ->assertInertia(fn (Assert $page) => $page->where('page.kpis.failedWindowMinutes', 10080));
 });
 
-test('the failed warning counts environments over the last hour, not over the window count', function () {
+test('the failed KPI is the last hour, toned by the rules it breaks, with the window count beside it', function () {
     Readings::record($this->production, snapshot: ['pending' => 200, 'failed_in_window' => 5000, 'failed_window_minutes' => 60, 'failed_last_hour' => 3]);
     Readings::record($this->staging, snapshot: ['pending' => 100, 'failed_in_window' => 21, 'failed_window_minutes' => 10080, 'failed_last_hour' => 21]);
 
     wallPage($this->admin, $this->team)
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.kpis.environmentsOverFailedRate', 1)
-            ->where('page.kpis.failedTotal', 5021)
+            ->where('page.kpis.failedLastHour', 24)
+            ->where('page.kpis.failedLastHourCapped', false)
+            ->where('page.kpis.failedSeverity', 'warning')
+            ->where('page.kpis.failedInWindow', 5021)
+            ->missing('page.kpis.failedTotal')
+            ->missing('page.kpis.environmentsOverFailedRate')
             ->where('page.environments.0.failedLastHour', 3)
             ->where('page.environments.1.failedLastHour', 21));
 });
 
-test('a last hour exactly at the threshold does not warn, as the evaluator decides', function () {
+test('a last hour exactly at the threshold does not tone the failed KPI, as the evaluator decides', function () {
     Readings::record($this->production, snapshot: ['failed_last_hour' => 20]);
-    Readings::record($this->staging, snapshot: ['failed_last_hour' => 21]);
+    Readings::record($this->staging, snapshot: ['failed_last_hour' => 3]);
 
     wallPage($this->admin, $this->team)
-        ->assertInertia(fn (Assert $page) => $page->where('page.kpis.environmentsOverFailedRate', 1));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.kpis.failedLastHour', 23)
+            ->where('page.kpis.failedSeverity', null));
 });
 
 test('an anomaly open for more than a day shows its full age', function () {
@@ -285,3 +296,70 @@ test('the wall lists the most severe environments first, then the busiest', func
         ['active', 30],
     ]);
 });
+
+test('a paused collection sorts with the calm rows, whatever its last status', function () {
+    $other = Application::factory()->for($this->team)->create(['name' => 'Billing']);
+    $paused = Environment::factory()->for($other)->production()->create(['polling_enabled' => false]);
+    Readings::record($paused, EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
+    Readings::record($this->production, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending]);
+    Readings::record($this->staging);
+
+    $this->actingAs($this->admin);
+
+    $rows = app(WallQuery::class)->handle($this->team, $this->admin)->environments;
+
+    expect(array_map(fn ($row) => $row->id, $rows))->toBe([
+        $this->production->slug,
+        $paused->slug,
+        $this->staging->slug,
+    ]);
+});
+
+test('the wall KPIs count only the environments it judges', function () {
+    $other = Application::factory()->for($this->team)->create(['name' => 'Billing']);
+    $paused = Environment::factory()->for($other)->production()->create(['polling_enabled' => false]);
+    Environment::factory()->for($other)->staging()->create();
+    Readings::record($this->production, EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending], snapshot: ['pending' => 40, 'failed_last_hour' => 25, 'failed_in_window' => 300, 'jobs_per_minute' => 30]);
+    Readings::record($this->staging, snapshot: ['pending' => 10, 'failed_last_hour' => 2, 'failed_in_window' => 7, 'jobs_per_minute' => 12]);
+    Readings::record($paused, EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive], snapshot: ['pending' => 900, 'failed_last_hour' => 99, 'failed_in_window' => 999, 'failed_window_minutes' => 10080, 'jobs_per_minute' => 500]);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.jobsPerMinute', 42)
+            ->has('page.environments', 4)
+            ->where('page.kpis.environmentsJudged', 2)
+            ->where('page.kpis.environmentsHealthy', 1)
+            ->where('page.kpis.environmentsNeedingAttention', 1)
+            ->where('page.kpis.pendingTotal', 50)
+            ->where('page.kpis.failedLastHour', 27)
+            ->where('page.kpis.failedSeverity', 'warning')
+            ->where('page.kpis.failedInWindow', 307)
+            ->where('page.kpis.failedWindowMinutes', 1440));
+});
+
+test('the failed KPI takes the severity of the worst rule it breaks and says when it is a lower bound', function () {
+    AlertRule::factory()->for($this->team)->forScope('production')->inheriting()->create([
+        'metric' => AlertRuleMetric::JobsFailedPerHour,
+        'severity' => AlertSeverity::Critical,
+    ]);
+    Readings::record($this->production, snapshot: ['failed_last_hour' => 21]);
+    Readings::record($this->staging, snapshot: ['failed_last_hour' => 21, 'failed_last_hour_capped' => true]);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.kpis.failedLastHour', 42)
+            ->where('page.kpis.failedLastHourCapped', true)
+            ->where('page.kpis.failedSeverity', 'critical'));
+});
+
+test('the open alerts KPI takes the severity of the worst open alert', function (EnvironmentStatus $status, ?AlertRuleMetric $metric, ?string $severity) {
+    Readings::record($this->production, $status, $metric === null ? [] : [$metric]);
+    Readings::record($this->staging);
+
+    wallPage($this->admin, $this->team)
+        ->assertInertia(fn (Assert $page) => $page->where('page.kpis.openAlertSeverity', $severity));
+})->with([
+    'a paused horizon warns' => [EnvironmentStatus::Paused, AlertRuleMetric::HorizonPaused, 'warning'],
+    'an inactive horizon is critical' => [EnvironmentStatus::Inactive, AlertRuleMetric::HorizonMasterInactive, 'critical'],
+    'nothing open has no tone' => [EnvironmentStatus::Active, null, null],
+]);

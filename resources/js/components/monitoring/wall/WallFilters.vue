@@ -3,9 +3,9 @@ import { computed, useId } from 'vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import { envTypeColor } from '@/lib/monitoring';
 
-const { environments, problemCount, types } = defineProps<{
+const { environments, attentionCount, types } = defineProps<{
     environments: App.Data.Monitoring.EnvironmentData[];
-    problemCount: number;
+    attentionCount: number;
     types: App.Data.Pages.WallPageData['types'];
 }>();
 
@@ -49,7 +49,7 @@ const chips = computed(() =>
                     },
                     {
                         value: 'problems',
-                        label: `${$t('Problems')} ${problemCount}`,
+                        label: `${$t('Needs attention')} ${attentionCount}`,
                     },
                 ]"
             />

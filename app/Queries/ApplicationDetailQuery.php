@@ -23,7 +23,7 @@ class ApplicationDetailQuery
 
         $worstEnvironments = array_values(array_filter(
             $environments,
-            fn (EnvironmentData $environment) => $environment->watched && $environment->status !== null,
+            fn (EnvironmentData $environment) => $environment->isJudged(),
         ));
         usort($worstEnvironments, EnvironmentData::compareBySeverityThenPending(...));
 

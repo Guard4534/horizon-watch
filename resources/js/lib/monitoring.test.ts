@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
     envTypeColor,
-    exceeds,
     formatCount,
     formatDuration,
     formatElapsed,
@@ -9,7 +8,6 @@ import {
     seriesRefreshInterval,
     statusColor,
     statusLabel,
-    waitColor,
 } from '@/lib/monitoring';
 
 describe('formatCount', () => {
@@ -66,23 +64,6 @@ describe('formatElapsed', () => {
     });
 });
 
-describe('thresholds', () => {
-    it('does not exceed a threshold it only reaches', () => {
-        expect(exceeds(10, 10)).toBe(false);
-        expect(exceeds(11, 10)).toBe(true);
-        expect(exceeds(1000, null)).toBe(false);
-    });
-
-    it('turns a wait red past five minutes or the threshold, whichever is later', () => {
-        expect(waitColor(400, null)).toBe('var(--nc-neutral-400)');
-        expect(waitColor(60, 60)).toBe('var(--nc-neutral-400)');
-        expect(waitColor(61, 60)).toBe('var(--st-warn)');
-        expect(waitColor(301, 60)).toBe('var(--st-down)');
-        expect(waitColor(500, 600)).toBe('var(--nc-neutral-400)');
-        expect(waitColor(601, 600)).toBe('var(--st-down)');
-    });
-});
-
 describe('envTypeColor', () => {
     it('points at the identity token of the type', () => {
         expect(envTypeColor('production')).toBe('var(--env-production)');
@@ -94,6 +75,7 @@ describe('statuses', () => {
     it('labels a stale environment as not updated', () => {
         expect(statusLabel('stale')).toBe('not updated');
         expect(statusLabel('unreachable')).toBe('unreachable');
+        expect(statusLabel('paused')).toBe('Horizon paused');
     });
 
     it('keeps the status colours on the status tokens', () => {

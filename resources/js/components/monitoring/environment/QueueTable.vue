@@ -1,17 +1,12 @@
 <script setup lang="ts">
+import QueueFlags from '@/components/monitoring/environment/QueueFlags.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
-import {
-    formatCount,
-    formatWait,
-    statusColor,
-    statusLabel,
-    waitColor,
-} from '@/lib/monitoring';
+import { formatCount, formatWait } from '@/lib/monitoring';
 
-const { waitThreshold } = defineProps<{
+defineProps<{
     queues: App.Data.Monitoring.QueueData[];
     note?: string | null;
-    waitThreshold: number | null;
+    thresholds: App.Data.Monitoring.EnvironmentData['thresholds'];
 }>();
 </script>
 
@@ -35,7 +30,7 @@ const { waitThreshold } = defineProps<{
                         <th class="nc-right">{{ $t('Pending') }}</th>
                         <th class="nc-right">{{ $t('Wait') }}</th>
                         <th class="nc-right">{{ $t('Runtime') }}</th>
-                        <th>{{ $t('Status') }}</th>
+                        <th>{{ $t('Flags') }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -55,15 +50,7 @@ const { waitThreshold } = defineProps<{
                         <td class="nc-num nc-right">
                             {{ formatCount(queue.pending) }}
                         </td>
-                        <td
-                            class="nc-num nc-right"
-                            :style="{
-                                color: waitColor(
-                                    queue.waitSeconds,
-                                    waitThreshold,
-                                ),
-                            }"
-                        >
+                        <td class="nc-num nc-right">
                             {{ formatWait(queue.waitSeconds) }}
                         </td>
                         <td class="nc-num nc-right nc-tone-soft">
@@ -73,18 +60,11 @@ const { waitThreshold } = defineProps<{
                                     : `${queue.runtimeSeconds.toFixed(1)}s`
                             }}
                         </td>
-                        <td>
-                            <span
-                                class="nc-t-xs inline-flex items-center gap-[5px]"
-                                :style="{ color: statusColor(queue.status) }"
-                            >
-                                <span
-                                    class="size-[6px] rounded-full"
-                                    :style="{
-                                        background: statusColor(queue.status),
-                                    }"
-                                />{{ statusLabel(queue.status) }}
-                            </span>
+                        <td class="nc-t-xs">
+                            <QueueFlags
+                                :queue="queue"
+                                :thresholds="thresholds"
+                            />
                         </td>
                     </tr>
                 </tbody>

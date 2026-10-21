@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
     formatAge,
+    readingErrorLabel,
     secondsSince,
 } from '@/components/monitoring/environment/readings';
 
@@ -43,20 +44,8 @@ const tone = computed(() => {
         <template v-if="!pollingEnabled">{{
             $t('Collection paused')
         }}</template>
-        <template v-else-if="readingError === 'unauthorized'">{{
-            $t('Horizon refused the credentials')
-        }}</template>
-        <template v-else-if="readingError === 'not_horizon'">{{
-            $t('The address does not answer like Horizon')
-        }}</template>
-        <template v-else-if="readingError === 'blocked'">{{
-            $t('This address is not allowed')
-        }}</template>
-        <template v-else-if="readingError === 'password_unreadable'">{{
-            $t('The stored password cannot be decrypted: enter it again')
-        }}</template>
-        <template v-else-if="readingError === 'unreachable'">{{
-            $t('Horizon does not answer')
+        <template v-else-if="readingError">{{
+            readingErrorLabel(readingError)
         }}</template>
         <template v-else-if="stale">{{ $t('Not updated') }}</template>
         <template v-else-if="age">{{

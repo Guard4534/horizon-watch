@@ -1,29 +1,102 @@
 import { trans } from 'laravel-vue-i18n';
-import { exceeds, statusColor, statusLabel } from '@/lib/monitoring';
+import { severityColor } from '@/lib/alerts';
+import { formatCount, statusColor, statusLabel } from '@/lib/monitoring';
 
-type Environment = Pick<
+export type DisplayState =
+    | 'hidden'
+    | 'collection_off'
+    | 'reading_error'
+    | 'stale'
+    | 'waiting'
+    | App.Enums.EnvironmentStatus;
+
+type StateFields = Pick<
     App.Data.Monitoring.EnvironmentData,
-    'status' | 'watched' | 'pollingEnabled'
+    'status' | 'watched' | 'pollingEnabled' | 'readingError' | 'stale'
 >;
 
-export function statusTone(environment: Environment): string {
-    return environment.status
-        ? statusColor(environment.status)
-        : 'var(--nc-neutral-500)';
+const CALM: ReadonlyArray<DisplayState> = [
+    'hidden',
+    'collection_off',
+    'waiting',
+    'active',
+];
+
+export function displayState(environment: StateFields): DisplayState {
+    if (!environment.watched) {
+        return 'hidden';
+    }
+
+    if (!environment.pollingEnabled) {
+        return 'collection_off';
+    }
+
+    if (environment.readingError !== null) {
+        return 'reading_error';
+    }
+
+    if (environment.status === 'stale') {
+        return 'stale';
+    }
+
+    return environment.status ?? 'waiting';
 }
 
-export function statusText(environment: Environment): string {
-    if (environment.status) {
-        return statusLabel(environment.status);
-    }
+export function statusText(environment: StateFields): string {
+    const state = displayState(environment);
 
-    if (!environment.watched) {
-        return trans('Not on your wall');
+    switch (state) {
+        case 'hidden':
+            return trans('Not on your wall');
+        case 'collection_off':
+            return trans('Collection paused');
+        case 'reading_error':
+            return statusLabel('unreachable');
+        case 'waiting':
+            return trans('No reading yet');
+        default:
+            return statusLabel(state);
     }
+}
 
-    return environment.pollingEnabled
-        ? trans('waiting for the first reading')
-        : trans('Collection paused');
+export function statusTone(environment: StateFields): string {
+    const state = displayState(environment);
+
+    switch (state) {
+        case 'hidden':
+        case 'collection_off':
+        case 'waiting':
+            return 'var(--nc-neutral-500)';
+        case 'reading_error':
+            return statusColor('unreachable');
+        default:
+            return statusColor(state);
+    }
+}
+
+export function isHealthy(environment: StateFields): boolean {
+    return displayState(environment) === 'active';
+}
+
+export function needsAttention(environment: StateFields): boolean {
+    return !CALM.includes(displayState(environment));
+}
+
+export function readingErrorLabel(error: App.Enums.ReadingError): string {
+    switch (error) {
+        case 'unreachable':
+            return trans('Horizon does not answer');
+        case 'unauthorized':
+            return trans('Horizon refused the credentials');
+        case 'not_horizon':
+            return trans('The address does not answer like Horizon');
+        case 'blocked':
+            return trans('This address is not allowed');
+        case 'password_unreadable':
+            return trans(
+                'The stored password cannot be decrypted: enter it again',
+            );
+    }
 }
 
 export function hasMeasurement(
@@ -40,8 +113,38 @@ export function hasMeasurement(
     );
 }
 
-export function pendingTone(pending: number, threshold: number | null): string {
-    return exceeds(pending, threshold) ? 'var(--st-down)' : 'var(--nc-text)';
+export function thresholdTone(
+    environment: Pick<
+        App.Data.Monitoring.EnvironmentData,
+        'thresholds' | 'pollingEnabled'
+    >,
+    metric: App.Enums.AlertRuleMetric,
+    value: number,
+): string | undefined {
+    if (!environment.pollingEnabled) {
+        return undefined;
+    }
+
+    const threshold = environment.thresholds[metric] as
+        | App.Data.Monitoring.ThresholdData
+        | undefined;
+
+    return threshold && value > threshold.value
+        ? severityColor(threshold.severity)
+        : undefined;
+}
+
+export function failedLastHourText(
+    environment: Pick<
+        App.Data.Monitoring.EnvironmentData,
+        'failedLastHour' | 'failedLastHourCapped'
+    >,
+): string {
+    const count = formatCount(environment.failedLastHour);
+
+    return environment.failedLastHourCapped
+        ? trans('at least :count', { count })
+        : count;
 }
 
 const SEVERITY: Record<App.Enums.EnvironmentStatus, number> = {
@@ -62,12 +165,6 @@ export function worstTone(
         .sort((a, b) => SEVERITY[a] - SEVERITY[b]);
 
     return statuses[0] ? statusColor(statuses[0]) : null;
-}
-
-export function needsAttention(
-    environment: Pick<App.Data.Monitoring.EnvironmentData, 'status'>,
-): boolean {
-    return environment.status !== null && environment.status !== 'active';
 }
 
 export function troubledStyle(tone: string): Record<string, string> {
@@ -107,15 +204,6 @@ export function secondsSince(iso: string, now: number): number {
     return Math.max(0, Math.floor((now - Date.parse(iso)) / 1000));
 }
 
-export function failedTone(
-    failedLastHour: number,
-    perHourThreshold: number | null,
-): string | undefined {
-    return exceeds(failedLastHour, perHourThreshold)
-        ? 'var(--st-warn)'
-        : undefined;
-}
-
 export function horizonStatusLabel(status: App.Enums.HorizonStatus): string {
     switch (status) {
         case 'running':
@@ -127,26 +215,30 @@ export function horizonStatusLabel(status: App.Enums.HorizonStatus): string {
     }
 }
 
+const HORIZON_STATUS: Record<
+    App.Enums.HorizonStatus,
+    App.Enums.EnvironmentStatus
+> = {
+    running: 'active',
+    paused: 'paused',
+    inactive: 'inactive',
+};
+
 export function horizonStatusTone(
     environment: Pick<
         App.Data.Monitoring.EnvironmentData,
-        'horizonStatus' | 'readingError'
+        'horizonStatus' | 'readingError' | 'pollingEnabled'
     >,
 ): string {
-    if (environment.readingError !== null) {
+    if (
+        !environment.pollingEnabled ||
+        environment.readingError !== null ||
+        environment.horizonStatus === null
+    ) {
         return 'var(--nc-neutral-500)';
     }
 
-    switch (environment.horizonStatus) {
-        case 'running':
-            return 'var(--st-ok)';
-        case 'paused':
-            return 'var(--st-warn)';
-        case 'inactive':
-            return 'var(--st-down)';
-        default:
-            return 'var(--nc-neutral-500)';
-    }
+    return statusColor(HORIZON_STATUS[environment.horizonStatus]);
 }
 
 export function readingProblemLabel(

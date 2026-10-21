@@ -18,8 +18,11 @@ import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { useVisibility } from '@/composables/useVisibility';
-import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
-import { needsAttention } from '@/components/monitoring/environment/readings';
+import { useWallKpis } from '@/composables/useWallKpis';
+import {
+    displayState,
+    needsAttention,
+} from '@/components/monitoring/environment/readings';
 import { formatCount } from '@/lib/monitoring';
 import { rangeLabel } from '@/lib/timeSeries';
 import {
@@ -42,14 +45,13 @@ const { page } = defineProps<{
 useLivePoll();
 
 const throughputLabel = computed(() =>
-    trans(':range, peak :count jobs/min', {
+    trans(':range, peak :value', {
         range: rangeLabel('3h'),
-        count: formatCount(Math.max(0, ...page.throughput)),
+        value: `${formatCount(Math.max(0, ...page.throughput))}/min`,
     }),
 );
 
-const describeThroughput = (value: number) =>
-    trans(':count jobs/min', { count: String(value) });
+const describeThroughput = (value: number) => `${value}/min`;
 
 const isMobile = useIsMobile();
 
@@ -101,7 +103,7 @@ watch([chosenFilter, environmentType, needle], () => {
     router.replace({ url, preserveState: true, preserveScroll: true });
 });
 
-const problems = computed(() => page.environments.filter(needsAttention));
+const attention = computed(() => page.environments.filter(needsAttention));
 
 const firstRun = computed(
     () =>
@@ -113,8 +115,9 @@ const firstRun = computed(
 
 const waitingCount = computed(
     () =>
-        page.environments.filter((environment) => environment.status === null)
-            .length,
+        page.environments.filter(
+            (environment) => displayState(environment) === 'waiting',
+        ).length,
 );
 
 function clearNarrowing(): void {
@@ -125,7 +128,7 @@ function clearNarrowing(): void {
 const shown = computed(() => {
     const wanted = needle.value.trim().toLowerCase();
 
-    return (filter.value === 'problems' ? problems.value : page.environments)
+    return (filter.value === 'problems' ? attention.value : page.environments)
         .filter(
             (environment) =>
                 !environmentType.value ||
@@ -166,38 +169,7 @@ const groups = computed(() => {
 
 const openGroups = ref<Record<string, boolean | undefined>>({});
 
-const kpis = computed(() => [
-    {
-        label: trans('Environments up'),
-        value: `${page.kpis.environmentsUp} / ${page.kpis.environmentsTotal}`,
-        color:
-            page.kpis.environmentsUp + waitingCount.value ===
-            page.kpis.environmentsTotal
-                ? 'var(--nc-text)'
-                : 'var(--st-warn)',
-        note: trans('across all applications'),
-    },
-    {
-        label: trans('Anomalies'),
-        value: String(page.kpis.openAnomalies),
-        color: page.kpis.openAnomalies ? 'var(--st-down)' : 'var(--nc-text)',
-        note: trans('to triage'),
-    },
-    {
-        label: trans('Pending jobs'),
-        value: formatCount(page.kpis.pendingTotal),
-        color: 'var(--nc-text)',
-        note: trans('sum of every queue'),
-    },
-    {
-        label: failedLabel(page.kpis.failedWindowMinutes),
-        value: formatCount(page.kpis.failedTotal),
-        color: page.kpis.environmentsOverFailedRate
-            ? 'var(--st-warn)'
-            : 'var(--nc-text)',
-        note: failedWindowNote(page.kpis.failedWindowMinutes),
-    },
-]);
+const kpis = useWallKpis(() => page.kpis);
 </script>
 
 <template>
@@ -250,7 +222,7 @@ const kpis = computed(() => [
             v-model:filter="filter"
             :rows="shown"
             :total-count="page.environments.length"
-            :problem-count="problems.length"
+            :attention-count="page.kpis.environmentsNeedingAttention"
             :waiting-count="waitingCount"
             :type-label="typeLabel"
             :search="needle"
@@ -270,7 +242,7 @@ const kpis = computed(() => [
             >
                 <KpiCard
                     v-for="kpi in kpis"
-                    :key="kpi.label"
+                    :key="kpi.key"
                     :label="kpi.label"
                     :value="kpi.value"
                     :color="kpi.color"
@@ -283,8 +255,8 @@ const kpis = computed(() => [
                 v-model:environment-type="environmentType"
                 v-model:search="needle"
                 :environments="page.environments"
-                :problem-count="problems.length"
                 :types="page.types"
+                :attention-count="page.kpis.environmentsNeedingAttention"
             />
 
             <ApplicationGroup
@@ -296,7 +268,15 @@ const kpis = computed(() => [
                 :environments="group.environments"
             />
             <p v-if="groups.length === 0" class="nc-t-sm nc-tone-muted">
-                {{ $t('No environment matches these filters.') }}
+                {{
+                    filter !== 'problems' || environmentType || needle.trim()
+                        ? $t('No environment matches these filters.')
+                        : waitingCount > 0
+                          ? $t(
+                                'Nothing needs attention. Some environments have no reading yet.',
+                            )
+                          : $t('Nothing needs attention.')
+                }}
             </p>
         </div>
 
@@ -322,8 +302,8 @@ const kpis = computed(() => [
                     style="gap: var(--nc-space-4)"
                 >
                     <span>{{
-                        $t(':count jobs/min now', {
-                            count: String(page.jobsPerMinute),
+                        $t(':value now', {
+                            value: `${page.jobsPerMinute}/min`,
                         })
                     }}</span>
                     <span class="ml-auto">{{ $t('last 3 hours') }}</span>

@@ -3,7 +3,6 @@
 namespace App\Monitoring;
 
 use App\Alerts\EffectiveRules;
-use App\Alerts\RuleSet;
 use App\Data\Applications\EnvironmentFormData;
 use App\Data\Monitoring\AlertActorData;
 use App\Data\Monitoring\AlertData;
@@ -22,6 +21,7 @@ use App\Data\Monitoring\ReadingProblemData;
 use App\Data\Monitoring\RuleScopeData;
 use App\Data\Monitoring\SentNotificationData;
 use App\Data\Monitoring\SeriesGridData;
+use App\Data\Monitoring\ThresholdData;
 use App\Data\Pages\AlertCountsData;
 use App\Data\Pages\NotificationSummaryData;
 use App\Enums\AlertRuleMetric;
@@ -238,6 +238,9 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
         }
 
         $rules = $this->effectiveRules->forEnvironment($environment);
+        $measured = $environment->polling_enabled && ! $state->status->isDown();
+        $wait = $rules->for(AlertRuleMetric::QueueMaxWait);
+        $workers = $rules->for(AlertRuleMetric::WorkersMissing);
 
         return array_map(fn (array $queue) => new QueueData(
             name: $queue['name'],
@@ -246,7 +249,8 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             pending: $queue['pending'],
             waitSeconds: $queue['waitSeconds'],
             runtimeSeconds: $queue['runtimeSeconds'] === null ? null : (float) $queue['runtimeSeconds'],
-            status: $this->queueStatus($state, $queue, $rules),
+            waitOverThreshold: $measured && $wait->enabled && $queue['waitSeconds'] > $wait->threshold,
+            withoutWorkers: $measured && $workers->enabled && $queue['workers'] === 0 && $queue['pending'] > 0,
         ), $state->queues);
     }
 
@@ -756,23 +760,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
     }
 
     /**
-     * @param  array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}  $queue
-     */
-    private function queueStatus(EnvironmentState $state, array $queue, RuleSet $rules): EnvironmentStatus
-    {
-        $breaks = fn (AlertRuleMetric $metric, bool $breached) => $breached && $rules->for($metric)->enabled;
-
-        return match (true) {
-            $state->status->isDown(), $state->status === EnvironmentStatus::Paused => $state->status,
-            $breaks(AlertRuleMetric::QueueMaxWait, $queue['waitSeconds'] > $rules->for(AlertRuleMetric::QueueMaxWait)->threshold),
-            $breaks(AlertRuleMetric::QueuePending, $queue['pending'] > $rules->for(AlertRuleMetric::QueuePending)->threshold),
-            $breaks(AlertRuleMetric::WorkersMissing, $queue['workers'] === 0 && $queue['pending'] > 0) => EnvironmentStatus::Degraded,
-            default => EnvironmentStatus::Active,
-        };
-    }
-
-    /**
-     * @return array<string, float>
+     * @return array<string, ThresholdData>
      */
     private function thresholdsOf(Environment $environment): array
     {
@@ -780,7 +768,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
 
         foreach ($this->effectiveRules->forEnvironment($environment)->rules as $metric => $rule) {
             if ($rule->enabled) {
-                $thresholds[$metric] = $rule->threshold;
+                $thresholds[$metric] = new ThresholdData($rule->threshold, $rule->severity);
             }
         }
 
@@ -842,6 +830,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             failedInWindow: $this->snapshotNumber($state, 'failed_in_window'),
             failedWindowMinutes: $this->snapshotNumber($state, 'failed_window_minutes') ?: HorizonStats::DEFAULT_FAILED_WINDOW_MINUTES,
             failedLastHour: $this->snapshotNumber($state, 'failed_last_hour'),
+            failedLastHourCapped: (bool) $state?->getAttribute('snapshot_failed_last_hour_capped'),
             workers: $this->snapshotNumber($state, 'workers'),
             jobsPerMinute: $this->snapshotNumber($state, 'jobs_per_minute'),
             nodeCount: $this->snapshotNumber($state, 'node_count'),

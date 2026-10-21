@@ -1,41 +1,19 @@
 <script setup lang="ts">
-import { trans } from 'laravel-vue-i18n';
-import { computed } from 'vue';
 import {
-    failedTone,
+    failedLastHourText,
     hasMeasurement,
-    pendingTone,
     statusText,
     statusTone,
+    thresholdTone,
 } from '@/components/monitoring/environment/readings';
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
-import { thresholdOf } from '@/lib/alertRules';
-import { failedLabel, failedWindowShort } from '@/lib/failedWindow';
-import { formatCount, formatWait, waitColor } from '@/lib/monitoring';
+import { failedWindowNote, failedWindowShort } from '@/lib/failedWindow';
+import { formatCount, formatWait } from '@/lib/monitoring';
 
-const { environments } = defineProps<{
+defineProps<{
     environments: App.Data.Monitoring.EnvironmentData[];
 }>();
-
-const windows = computed(
-    () =>
-        new Set(
-            environments
-                .filter(hasMeasurement)
-                .map((environment) => environment.failedWindowMinutes),
-        ),
-);
-
-const header = computed(() => {
-    if (windows.value.size === 0) {
-        return trans('Failed');
-    }
-
-    return windows.value.size === 1
-        ? failedLabel([...windows.value][0])
-        : failedLabel(null);
-});
 </script>
 
 <template>
@@ -47,11 +25,9 @@ const header = computed(() => {
                         <th>{{ $t('Environment') }}</th>
                         <th class="nc-right">{{ $t('Pending') }}</th>
                         <th class="nc-right">{{ $t('Max wait') }}</th>
-                        <th class="nc-right">
-                            {{ header }}
-                        </th>
+                        <th class="nc-right">{{ $t('Failed · last hour') }}</th>
                         <th class="nc-right">{{ $t('Workers') }}</th>
-                        <th class="nc-right">{{ $t('jobs/min') }}</th>
+                        <th class="nc-right">{{ $t('Throughput') }}</th>
                     </tr>
                 </thead>
                 <tbody class="nc-num">
@@ -85,12 +61,10 @@ const header = computed(() => {
                             <td
                                 class="nc-right"
                                 :style="{
-                                    color: pendingTone(
+                                    color: thresholdTone(
+                                        environment,
+                                        'queue.pending',
                                         environment.pending,
-                                        thresholdOf(
-                                            environment,
-                                            'queue.pending',
-                                        ),
                                     ),
                                 }"
                             >
@@ -99,38 +73,40 @@ const header = computed(() => {
                             <td
                                 class="nc-right"
                                 :style="{
-                                    color: waitColor(
+                                    color: thresholdTone(
+                                        environment,
+                                        'queue.max_wait',
                                         environment.maxWaitSeconds,
-                                        thresholdOf(
-                                            environment,
-                                            'queue.max_wait',
-                                        ),
                                     ),
                                 }"
                             >
                                 {{ formatWait(environment.maxWaitSeconds) }}
                             </td>
-                            <td
-                                class="nc-right"
-                                :style="{
-                                    color: failedTone(
-                                        environment.failedLastHour,
-                                        thresholdOf(
+                            <td class="nc-right">
+                                <span
+                                    :style="{
+                                        color: thresholdTone(
                                             environment,
                                             'jobs.failed_per_hour',
+                                            environment.failedLastHour,
                                         ),
-                                    ),
-                                }"
-                            >
-                                {{ formatCount(environment.failedInWindow)
-                                }}<span
-                                    v-if="windows.size > 1"
+                                    }"
+                                    >{{ failedLastHourText(environment) }}</span
+                                ><span
+                                    :title="
+                                        failedWindowNote(
+                                            environment.failedWindowMinutes,
+                                        )
+                                    "
                                     style="
-                                        margin-left: 4px;
+                                        margin-left: 6px;
                                         font-size: 11px;
                                         color: var(--nc-neutral-500);
                                     "
                                     >{{
+                                        formatCount(environment.failedInWindow)
+                                    }}
+                                    {{
                                         failedWindowShort(
                                             environment.failedWindowMinutes,
                                         )
@@ -141,7 +117,7 @@ const header = computed(() => {
                                 {{ environment.workers }}
                             </td>
                             <td class="nc-right">
-                                {{ environment.jobsPerMinute }}
+                                {{ `${environment.jobsPerMinute}/min` }}
                             </td>
                         </template>
                     </tr>

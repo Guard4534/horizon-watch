@@ -3,13 +3,20 @@ import { computed } from 'vue';
 import { trans } from 'laravel-vue-i18n';
 import { statusColor, statusLabel } from '@/lib/monitoring';
 
-const { status, size = 8 } = defineProps<{
+const {
+    status,
+    size = 8,
+    label,
+} = defineProps<{
     status: App.Enums.EnvironmentStatus | null;
     size?: number;
+    label?: string;
 }>();
 
-const label = computed(() =>
-    status === null ? trans('No reading yet') : statusLabel(status),
+const text = computed(
+    () =>
+        label ??
+        (status === null ? trans('No reading yet') : statusLabel(status)),
 );
 
 const style = computed(() => ({
@@ -24,7 +31,7 @@ const style = computed(() => ({
         class="inline-block flex-none rounded-full"
         :style="style"
         role="img"
-        :aria-label="label"
-        :title="label"
+        :aria-label="text"
+        :title="text"
     />
 </template>

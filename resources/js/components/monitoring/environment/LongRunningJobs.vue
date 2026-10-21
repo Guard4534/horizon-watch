@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { thresholdTone } from '@/components/monitoring/environment/readings';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useLocale } from '@/composables/useLocale';
 import { formatDuration } from '@/lib/monitoring';
@@ -7,21 +8,24 @@ import { formatClock } from '@/lib/timeSeries';
 const {
     jobs,
     thresholdSeconds,
+    thresholds,
+    pollingEnabled,
     unknown = false,
 } = defineProps<{
     jobs: App.Data.Monitoring.LongRunningJobData[];
     thresholdSeconds: number | null;
+    thresholds: App.Data.Monitoring.EnvironmentData['thresholds'];
+    pollingEnabled: boolean;
     unknown?: boolean;
 }>();
 
 const { locale } = useLocale();
 
 function color(seconds: number): string {
-    if (thresholdSeconds === null) return 'var(--nc-neutral-400)';
-
-    if (seconds > 300) return 'var(--st-down)';
-
-    return seconds > thresholdSeconds ? 'var(--st-warn)' : 'var(--st-ok)';
+    return (
+        thresholdTone({ thresholds, pollingEnabled }, 'job.runtime', seconds) ??
+        'var(--nc-neutral-400)'
+    );
 }
 
 function width(seconds: number): string {

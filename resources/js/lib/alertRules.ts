@@ -12,10 +12,14 @@ import { trans } from 'laravel-vue-i18n';
 import type { Component } from 'vue';
 
 export function thresholdOf(
-    environment: App.Data.Monitoring.EnvironmentData,
+    environment: Pick<App.Data.Monitoring.EnvironmentData, 'thresholds'>,
     metric: App.Enums.AlertRuleMetric,
 ): number | null {
-    return environment.thresholds[metric] ?? null;
+    const threshold = environment.thresholds[metric] as
+        | App.Data.Monitoring.ThresholdData
+        | undefined;
+
+    return threshold?.value ?? null;
 }
 
 const ICONS: Record<App.Enums.AlertRuleMetric, Component> = {

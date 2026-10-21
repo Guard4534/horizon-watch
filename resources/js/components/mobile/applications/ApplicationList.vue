@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { PhCaretRight } from '@phosphor-icons/vue';
+import AttentionBadge from '@/components/monitoring/AttentionBadge.vue';
 import {
     needsAttention,
+    statusText,
     statusTone,
-    worstTone,
 } from '@/components/monitoring/environment/readings';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { envTypeColor } from '@/lib/monitoring';
@@ -15,20 +16,6 @@ defineProps<{
 }>();
 
 const slug = useTeamSlug();
-
-const badgeStyle = (group: App.Data.Pages.ApplicationGroupData) => {
-    const tone = group.triageCount ? worstTone(group.environments) : null;
-
-    return tone
-        ? {
-              background: `color-mix(in srgb, ${tone} 18%, transparent)`,
-              color: tone,
-          }
-        : {
-              background: 'var(--nc-neutral-900)',
-              color: 'var(--nc-neutral-500)',
-          };
-};
 
 const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
     background: envTypeColor(environment.type),
@@ -61,7 +48,7 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
                         :key="environment.id"
                         class="size-[7px] flex-none rounded-full"
                         :style="dotStyle(environment)"
-                        :title="environment.name"
+                        :title="`${environment.name} · ${statusText(environment)}`"
                     />
                     <span
                         class="nc-num nc-tone-faint"
@@ -75,23 +62,10 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
                     >
                 </span>
             </span>
-            <span
-                class="nc-num flex-none"
-                style="
-                    font-size: 11px;
-                    padding: 1px 7px;
-                    border-radius: var(--nc-radius-sm);
-                "
-                :style="badgeStyle(group)"
-                :title="
-                    group.triageCount
-                        ? $t(':count to triage', {
-                              count: String(group.triageCount),
-                          })
-                        : $t('all good')
-                "
-                >{{ group.triageCount || '✓' }}</span
-            >
+            <AttentionBadge
+                :count="group.attentionCount"
+                :environments="group.environments"
+            />
             <PhCaretRight :size="14" class="nc-tone-faint flex-none" />
         </Link>
     </div>
