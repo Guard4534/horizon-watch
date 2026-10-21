@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import QueueFlags from '@/components/monitoring/environment/QueueFlags.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
-import { formatCount, formatWait } from '@/lib/monitoring';
+import { formatCount, formatRuntime, formatSeconds } from '@/lib/monitoring';
 
 defineProps<{
     queues: App.Data.Monitoring.QueueData[];
@@ -51,13 +51,13 @@ defineProps<{
                             {{ formatCount(queue.pending) }}
                         </td>
                         <td class="nc-num nc-right">
-                            {{ formatWait(queue.waitSeconds) }}
+                            {{ formatSeconds(queue.waitSeconds) }}
                         </td>
                         <td class="nc-num nc-right nc-tone-soft">
                             {{
                                 queue.runtimeSeconds === null
                                     ? '—'
-                                    : `${queue.runtimeSeconds.toFixed(1)}s`
+                                    : formatRuntime(queue.runtimeSeconds)
                             }}
                         </td>
                         <td class="nc-t-xs">

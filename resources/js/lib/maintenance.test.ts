@@ -2,32 +2,12 @@ import { describe, expect, it } from 'vite-plus/test';
 import { failedWindowShort } from '@/lib/failedWindow';
 import { errorId, invalidField } from '@/lib/fieldErrors';
 import {
-    formatMaintenanceTime,
     fromLocalInput,
     silenceDurationLabel,
     toLocalInput,
 } from '@/lib/maintenance';
 
 describe('maintenance times', () => {
-    const now = new Date(2026, 9, 14, 10, 0);
-
-    it('shows the date only for another day', () => {
-        expect(
-            formatMaintenanceTime(
-                new Date(2026, 9, 14, 22, 15).toISOString(),
-                'en',
-                now,
-            ),
-        ).toBe('22:15');
-        expect(
-            formatMaintenanceTime(
-                new Date(2026, 9, 16, 6, 0).toISOString(),
-                'en',
-                now,
-            ),
-        ).toBe('Fri, Oct 16, 06:00');
-    });
-
     it('round-trips a datetime-local value through UTC', () => {
         const at = new Date(2026, 9, 25, 2, 30);
 
@@ -47,10 +27,11 @@ describe('maintenance times', () => {
 });
 
 describe('failed windows', () => {
-    it('names the usual windows in short form and any other one in minutes', () => {
-        expect(failedWindowShort(1440)).toBe('24h');
+    it('names every window with the duration fragment', () => {
+        expect(failedWindowShort(1440)).toBe('1 d');
         expect(failedWindowShort(10080)).toBe('7 d');
-        expect(failedWindowShort(60)).toBe('60 min');
+        expect(failedWindowShort(60)).toBe('1 h');
+        expect(failedWindowShort(90)).toBe('1 h 30 min');
     });
 });
 

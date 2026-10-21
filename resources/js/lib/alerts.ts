@@ -6,6 +6,7 @@ import {
 } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import type { Component } from 'vue';
+import { formatInstant } from '@/lib/datetime';
 
 export const MUTE_DURATIONS: App.Enums.MuteDuration[] = [
     '1h',
@@ -51,22 +52,6 @@ export function isMuted(alert: App.Data.Monitoring.AlertData): boolean {
     return alert.mutedUntilResolved || alert.mutedUntil !== null;
 }
 
-function formatMutedUntil(
-    iso: string,
-    locale: string,
-    now: Date = new Date(),
-): string {
-    const until = new Date(iso);
-    const sameDay = until.toDateString() === now.toDateString();
-
-    return new Intl.DateTimeFormat(locale, {
-        ...(sameDay ? {} : { weekday: 'short' }),
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-    }).format(until);
-}
-
 export function mutedText(
     alert: App.Data.Monitoring.AlertData,
     locale: string,
@@ -83,7 +68,7 @@ export function mutedText(
         return null;
     }
 
-    const time = formatMutedUntil(alert.mutedUntil, locale);
+    const time = formatInstant(alert.mutedUntil, locale);
 
     if (alert.mutedForMaintenance) {
         return trans('Muted for maintenance until :time', { time });

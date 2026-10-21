@@ -3,7 +3,7 @@ import { PhBellSlash, PhCheckCircle, PhPauseCircle } from '@phosphor-icons/vue';
 import { computed } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import { mutedText } from '@/lib/alerts';
-import { formatElapsed } from '@/lib/monitoring';
+import { formatAgo } from '@/lib/monitoring';
 
 const { alert } = defineProps<{
     alert: App.Data.Monitoring.AlertData;
@@ -33,7 +33,7 @@ const muted = computed(() => mutedText(alert, locale.value));
             <span class="min-w-0">{{
                 $t('Handled by :name · :elapsed', {
                     name: alert.handledBy.name,
-                    elapsed: formatElapsed(alert.handledMinutesAgo ?? 0),
+                    elapsed: formatAgo((alert.handledMinutesAgo ?? 0) * 60),
                 })
             }}</span>
         </span>

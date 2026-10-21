@@ -6,6 +6,7 @@ import BrandMark from '@/components/nocturne/BrandMark.vue';
 import { useLastRefresh } from '@/composables/useLastRefresh';
 import { useLiveConnection } from '@/composables/useLiveConnection';
 import { useRefreshInterval } from '@/composables/useRefreshInterval';
+import { formatSeconds } from '@/lib/monitoring';
 
 const {
     title,
@@ -32,7 +33,7 @@ const secondLine = computed(
 const { interval, options, set } = useRefreshInterval();
 
 function label(ms: number): string {
-    return ms < 60000 ? `${ms / 1000}s` : `${ms / 60000} min`;
+    return formatSeconds(ms / 1000);
 }
 
 function choose(event: Event): void {

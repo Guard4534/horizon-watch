@@ -345,7 +345,7 @@ test('an alert goes on the wire as the documented version 1 body', function () {
 
     [$request] = receivedRequests();
 
-    expect($request['body'])->toBe('{"version":1,"event":"alert.opened","delivery_id":"'.$job->deliveryId.'","alert":{"id":"'.$alert->id.'","rule":"job.runtime","severity":"critical","summary":"Città · production — A job has been running for 300 s","value":300,"threshold":120,"unit":"s","detail":{"value_is_lower_bound":false,"longest_job":"App\\\\Jobs\\\\ImportCatalog","longest_job_queue":"imports","queues_without_workers":[]},"application":"Città","environment":"production","opened_at":"2026-09-17T12:02:00Z","resolved_at":null,"url":"https://horizon-watch.example.com/'.$team->slug.'/environments/citta-production"},"organization":{"name":"Acme","slug":"'.$team->slug.'"},"sent_at":"2026-09-17T12:02:04Z"}')
+    expect($request['body'])->toBe('{"version":1,"event":"alert.opened","delivery_id":"'.$job->deliveryId.'","alert":{"id":"'.$alert->id.'","rule":"job.runtime","severity":"critical","summary":"Città · production — A job has been running for 5 min","value":300,"threshold":120,"unit":"s","detail":{"value_is_lower_bound":false,"longest_job":"App\\\\Jobs\\\\ImportCatalog","longest_job_queue":"imports","queues_without_workers":[]},"application":"Città","environment":"production","opened_at":"2026-09-17T12:02:00Z","resolved_at":null,"url":"https://horizon-watch.example.com/'.$team->slug.'/environments/citta-production"},"organization":{"name":"Acme","slug":"'.$team->slug.'"},"sent_at":"2026-09-17T12:02:04Z"}')
         ->and($request['headers']['x-horizon-watch-signature'])->toBe(Signature::sign(WEBHOOK_TEST_SECRET, 1_789_646_524, $request['body']));
 });
 

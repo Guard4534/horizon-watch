@@ -2,7 +2,7 @@
 import { useElementSize } from '@vueuse/core';
 import { computed, ref, useTemplateRef } from 'vue';
 import { useLocale } from '@/composables/useLocale';
-import { formatWait } from '@/lib/monitoring';
+import { formatSecondsCompact } from '@/lib/monitoring';
 import {
     axisTicks,
     formatAxisCount,
@@ -60,7 +60,10 @@ const primaryMax = computed(() =>
 const leftTicks = computed(() =>
     axisTicks(primaryMax.value).map((value) => ({
         value,
-        text: unit === 'seconds' ? formatWait(value) : formatAxisCount(value),
+        text:
+            unit === 'seconds'
+                ? formatSecondsCompact(value)
+                : formatAxisCount(value),
     })),
 );
 

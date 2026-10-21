@@ -12,7 +12,7 @@ import {
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatCount, formatWait } from '@/lib/monitoring';
+import { formatCount, formatSeconds } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
 const { environment } = defineProps<{
@@ -122,7 +122,7 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                     }"
                     >{{
                         hasNumbers
-                            ? formatWait(environment.maxWaitSeconds)
+                            ? formatSeconds(environment.maxWaitSeconds)
                             : '—'
                     }}</span
                 >

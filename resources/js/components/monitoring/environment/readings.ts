@@ -182,24 +182,6 @@ export function calmStyle(): Record<string, string> {
     };
 }
 
-export function formatAge(seconds: number): string {
-    const value = Math.max(0, Math.floor(seconds));
-
-    if (value < 60) {
-        return `${value} s`;
-    }
-
-    if (value < 3600) {
-        return `${Math.floor(value / 60)} min`;
-    }
-
-    if (value < 172800) {
-        return `${Math.floor(value / 3600)} h`;
-    }
-
-    return trans(':days d', { days: String(Math.floor(value / 86400)) });
-}
-
 export function secondsSince(iso: string, now: number): number {
     return Math.max(0, Math.floor((now - Date.parse(iso)) / 1000));
 }

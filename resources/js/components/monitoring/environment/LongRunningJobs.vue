@@ -2,8 +2,9 @@
 import { thresholdTone } from '@/components/monitoring/environment/readings';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useLocale } from '@/composables/useLocale';
-import { formatDuration } from '@/lib/monitoring';
-import { formatClock } from '@/lib/timeSeries';
+import { formatThreshold } from '@/lib/alertRules';
+import { formatInstant } from '@/lib/datetime';
+import { formatSeconds } from '@/lib/monitoring';
 
 const {
     jobs,
@@ -42,7 +43,7 @@ function width(seconds: number): string {
                 thresholdSeconds === null
                     ? $t('rule disabled')
                     : $t('threshold :value', {
-                          value: `${thresholdSeconds}s`,
+                          value: formatThreshold(thresholdSeconds, 's'),
                       })
             }}</span>
         </template>
@@ -68,7 +69,7 @@ function width(seconds: number): string {
                     <span
                         class="nc-num ml-auto flex-none"
                         :style="{ color: color(job.elapsedSeconds) }"
-                        >{{ formatDuration(job.elapsedSeconds) }}</span
+                        >{{ formatSeconds(job.elapsedSeconds) }}</span
                     >
                 </div>
                 <div
@@ -87,7 +88,7 @@ function width(seconds: number): string {
                     {{
                         $t('queue :queue · started at :time', {
                             queue: job.queue,
-                            time: formatClock(new Date(job.startedAt), locale),
+                            time: formatInstant(job.startedAt, locale),
                         })
                     }}
                 </div>

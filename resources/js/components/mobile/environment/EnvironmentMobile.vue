@@ -22,7 +22,7 @@ import MetricTile from '@/components/nocturne/MetricTile.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatCount, formatWait } from '@/lib/monitoring';
+import { formatCount, formatSeconds } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
 const { page } = defineProps<{
@@ -45,7 +45,7 @@ const tiles = computed(() => [
     },
     {
         label: trans('Max wait'),
-        value: formatWait(environment.value.maxWaitSeconds),
+        value: formatSeconds(environment.value.maxWaitSeconds),
         color: thresholdTone(
             environment.value,
             'queue.max_wait',
@@ -223,8 +223,8 @@ const tiles = computed(() => [
                         >{{ formatCount(queue.pending) }}</span
                     >
                     <span
-                        class="nc-num nc-tone-soft w-[42px] flex-none text-right"
-                        >{{ formatWait(queue.waitSeconds) }}</span
+                        class="nc-num nc-tone-soft min-w-[42px] flex-none text-right whitespace-nowrap"
+                        >{{ formatSeconds(queue.waitSeconds) }}</span
                     >
                 </div>
             </div>

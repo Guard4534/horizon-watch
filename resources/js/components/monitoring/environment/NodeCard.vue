@@ -2,8 +2,7 @@
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
-import { formatAge } from '@/components/monitoring/environment/readings';
-import { statusColor, statusLabel } from '@/lib/monitoring';
+import { formatSeconds, statusColor, statusLabel } from '@/lib/monitoring';
 
 const { node } = defineProps<{
     node: App.Data.Monitoring.NodeData;
@@ -61,7 +60,11 @@ const figures = computed(() => [
             </div>
         </div>
         <div class="nc-num nc-t-2xs nc-tone-faint mt-[var(--nc-space-3)]">
-            {{ $t('seen :time ago', { time: formatAge(node.seenSecondsAgo) }) }}
+            {{
+                $t('seen :time ago', {
+                    time: formatSeconds(node.seenSecondsAgo, 1),
+                })
+            }}
         </div>
     </div>
 </template>

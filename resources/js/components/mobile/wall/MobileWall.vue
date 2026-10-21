@@ -18,7 +18,7 @@ import { useTeamSlug } from '@/composables/useTeamSlug';
 import type { WallKpiKey } from '@/composables/useWallKpis';
 import { useWallKpis } from '@/composables/useWallKpis';
 import { failedWindowNote, failedWindowShort } from '@/lib/failedWindow';
-import { formatCount, formatWait, statusIcon } from '@/lib/monitoring';
+import { formatCount, formatSeconds, statusIcon } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
 const MOBILE_KPIS: WallKpiKey[] = ['healthy', 'openAlerts', 'pending'];
@@ -181,7 +181,7 @@ function rowStyle(environment: App.Data.Monitoring.EnvironmentData) {
                         }"
                         >{{
                             $t(':wait wait', {
-                                wait: formatWait(environment.maxWaitSeconds),
+                                wait: formatSeconds(environment.maxWaitSeconds),
                             })
                         }}</span
                     >

@@ -118,8 +118,8 @@ test('every rule has its own headline and detail', function (AlertRuleMetric $me
     'unreachable' => [AlertRuleMetric::EndpointUnreachable, 3, [], 'Endpoint unreachable for 3 min', null],
     'paused' => [AlertRuleMetric::HorizonPaused, 20, [], 'Horizon paused for 20 min', null],
     'one pending job' => [AlertRuleMetric::QueuePending, 1, [], '1 job pending', null],
-    'max wait' => [AlertRuleMetric::QueueMaxWait, 95, ['waitSeconds' => 95], 'Oldest job waiting 95 s', null],
-    'runtime' => [AlertRuleMetric::JobRuntime, 300, ['job' => 'App\Jobs\BuildReport', 'queue' => 'reports', 'seconds' => 300], 'A job has been running for 300 s', 'App\Jobs\BuildReport on queue reports'],
+    'max wait' => [AlertRuleMetric::QueueMaxWait, 95, ['waitSeconds' => 95], 'Oldest job waiting 1 min 35 s', null],
+    'runtime' => [AlertRuleMetric::JobRuntime, 300, ['job' => 'App\Jobs\BuildReport', 'queue' => 'reports', 'seconds' => 300], 'A job has been running for 5 min', 'App\Jobs\BuildReport on queue reports'],
     'failed' => [AlertRuleMetric::JobsFailedPerHour, 31, ['failed' => 31], '31 jobs failed in the last hour', null],
     'one failed job' => [AlertRuleMetric::JobsFailedPerHour, 1, ['failed' => 1], '1 job failed in the last hour', null],
     'failed past the jobs that were read' => [AlertRuleMetric::JobsFailedPerHour, 200, ['failed' => 200, 'atLeast' => true], 'at least 200 jobs failed in the last hour', null],
@@ -136,7 +136,7 @@ test('the rule row names the rule, compares the way the rule fires and translate
 })->with([
     'inactive' => [AlertRuleMetric::HorizonMasterInactive, 5, 14, 'Horizon inactive ≥ 5 min</td>', 'Horizon inattivo ≥ 5 min</td>'],
     'workers' => [AlertRuleMetric::WorkersMissing, 4, 4, 'Missing workers ≥ 4</td>', 'Worker mancanti ≥ 4</td>'],
-    'max wait' => [AlertRuleMetric::QueueMaxWait, 60, 95, 'Max wait &gt; 60s</td>', 'Max wait &gt; 60s</td>'],
+    'max wait' => [AlertRuleMetric::QueueMaxWait, 60, 95, 'Max wait &gt; 60 s</td>', 'Max wait &gt; 60 s</td>'],
     'pending' => [AlertRuleMetric::QueuePending, 2000, 2345, '2,345 jobs</td>', 'Job pending &gt; 2.000</td>'],
     'one failed job' => [AlertRuleMetric::JobsFailedPerHour, 1, 1, '1 job</td>', '1 job</td>'],
     'runtime' => [AlertRuleMetric::JobRuntime, 120, 300, '300 s</td>', '300 s</td>'],
@@ -155,6 +155,19 @@ test('a state rule headline reads its duration in minutes, hours and days', func
     'hours and minutes' => [AlertRuleMetric::HorizonMasterInactive, 1437, 'Horizon inactive for 23 h 57 min', 'Horizon inattivo da 23 h 57 min'],
     'whole days' => [AlertRuleMetric::EndpointUnreachable, 2880, 'Endpoint unreachable for 2 d<', 'Endpoint non raggiungibile da 2 g<'],
     'days and hours' => [AlertRuleMetric::EndpointUnreachable, 3000, 'Endpoint unreachable for 2 d 2 h', 'Endpoint non raggiungibile da 2 g 2 h'],
+]);
+
+test('a waiting or running job headline reads its duration in spaced units', function (AlertRuleMetric $metric, float $seconds, string $english, string $italian) {
+    $this->alert->update(['metric' => $metric, 'value' => $seconds, 'detail' => [], 'unit' => $metric->unit()]);
+    $notification = new AlertNotification($this->alert);
+
+    expect(mailHtml($notification))->toContain($english)
+        ->and(mailHtml($notification, 'it'))->toContain($italian);
+})->with([
+    'seconds, rounded down' => [AlertRuleMetric::QueueMaxWait, 42.7, 'Oldest job waiting 42 s', 'Job più vecchio in attesa da 42 s'],
+    'minutes and seconds' => [AlertRuleMetric::QueueMaxWait, 95, 'Oldest job waiting 1 min 35 s', 'Job più vecchio in attesa da 1 min 35 s'],
+    'hours and minutes' => [AlertRuleMetric::JobRuntime, 3725, 'A job has been running for 1 h 2 min', 'Un job è in esecuzione da 1 h 2 min'],
+    'a whole day' => [AlertRuleMetric::JobRuntime, 86400, 'A job has been running for 1 d<', 'Un job è in esecuzione da 1 g<'],
 ]);
 
 test('an italian alert email ends with an italian footer', function () {
@@ -187,6 +200,10 @@ test('a resolution email says how long the alert lasted', function () {
         ->and($html)->toContain('Back within the threshold: Pending jobs')
         ->and($html)->toContain('Resolved on 2026-09-17 14:27 (Europe/Rome), open for 25 min')
         ->and($html)->toContain('#6fbf99');
+
+    $this->alert->update(['resolved_at' => CarbonImmutable::parse('2026-09-17 12:02:40', 'UTC')]);
+
+    expect(mailHtml(new ResolvedNotification($this->alert)))->toContain('open for 40 s');
 });
 
 test('a long resolution says its duration in days and hours, in the language of the mail', function () {

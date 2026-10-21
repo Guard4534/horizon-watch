@@ -8,6 +8,7 @@ use App\Enums\AlertSeverity;
 use App\Models\Alert;
 use App\Models\NotificationSetting;
 use App\Models\Team;
+use App\Support\Duration;
 use Carbon\CarbonImmutable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Number;
@@ -75,12 +76,12 @@ final class AlertMail
         $value = self::number($alert->value ?? 0);
 
         return match ($alert->metric) {
-            AlertRuleMetric::HorizonMasterInactive => __('Horizon inactive for :duration', ['duration' => self::duration($alert->value ?? 0)]),
-            AlertRuleMetric::EndpointUnreachable => __('Endpoint unreachable for :duration', ['duration' => self::duration($alert->value ?? 0)]),
-            AlertRuleMetric::HorizonPaused => __('Horizon paused for :duration', ['duration' => self::duration($alert->value ?? 0)]),
+            AlertRuleMetric::HorizonMasterInactive => __('Horizon inactive for :duration', ['duration' => self::minutes($alert->value ?? 0)]),
+            AlertRuleMetric::EndpointUnreachable => __('Endpoint unreachable for :duration', ['duration' => self::minutes($alert->value ?? 0)]),
+            AlertRuleMetric::HorizonPaused => __('Horizon paused for :duration', ['duration' => self::minutes($alert->value ?? 0)]),
             AlertRuleMetric::QueuePending => trans_choice(':jobs job pending|:jobs jobs pending', $alert->value ?? 0, ['jobs' => $value]),
-            AlertRuleMetric::QueueMaxWait => __('Oldest job waiting :seconds s', ['seconds' => $value]),
-            AlertRuleMetric::JobRuntime => __('A job has been running for :seconds s', ['seconds' => $value]),
+            AlertRuleMetric::QueueMaxWait => __('Oldest job waiting :duration', ['duration' => self::seconds($alert->value ?? 0)]),
+            AlertRuleMetric::JobRuntime => __('A job has been running for :duration', ['duration' => self::seconds($alert->value ?? 0)]),
             AlertRuleMetric::JobsFailedPerHour => trans_choice(':jobs job failed in the last hour|:jobs jobs failed in the last hour', $alert->value ?? 0, [
                 'jobs' => ($alert->detail['atLeast'] ?? false) === true ? __('at least :count', ['count' => $value]) : $value,
             ]),
@@ -91,28 +92,6 @@ final class AlertMail
     public static function resolvedHeadline(Alert $alert): string
     {
         return __('Back within the threshold: :rule', ['rule' => self::ruleLabel($alert->metric)]);
-    }
-
-    public static function duration(float|int $minutes): string
-    {
-        $total = max(0, (int) round($minutes));
-        $days = intdiv($total, 1440);
-        $hours = intdiv($total % 1440, 60);
-        $rest = $total % 60;
-
-        if ($days > 0) {
-            return $hours === 0
-                ? __(':days d', ['days' => self::number($days)])
-                : __(':days d :hours h', ['days' => self::number($days), 'hours' => (string) $hours]);
-        }
-
-        if ($hours > 0) {
-            return $rest === 0
-                ? __(':hours h', ['hours' => (string) $hours])
-                : __(':hours h :minutes min', ['hours' => (string) $hours, 'minutes' => (string) $rest]);
-        }
-
-        return __(':minutes min', ['minutes' => (string) $rest]);
     }
 
     public static function detail(Alert $alert): ?string
@@ -150,7 +129,7 @@ final class AlertMail
         return __('Resolved on :time (:timezone), open for :duration', [
             'time' => self::time($resolvedAt, $timezone),
             'timezone' => $timezone,
-            'duration' => self::duration($alert->opened_at->diffInMinutes($resolvedAt)),
+            'duration' => Duration::format((int) $alert->opened_at->diffInSeconds($resolvedAt)),
         ]);
     }
 
@@ -221,19 +200,22 @@ final class AlertMail
 
     public static function threshold(float|int $threshold, string $unit): string
     {
-        $number = self::number($threshold);
-
-        return match ($unit) {
-            'min' => __(':minutes min', ['minutes' => $number]),
-            's' => $number.__('s'),
-            'job', '' => $number,
-            default => $number.' '.$unit,
-        };
+        return in_array($unit, ['job', ''], true) ? self::number($threshold) : self::withUnit($threshold, $unit);
     }
 
     public static function number(float|int $value): string
     {
         return (string) Number::format($value, maxPrecision: 2, locale: app()->getLocale());
+    }
+
+    private static function minutes(float|int $minutes): string
+    {
+        return Duration::format(max(0, (int) round($minutes)) * 60);
+    }
+
+    private static function seconds(float|int $seconds): string
+    {
+        return Duration::format((int) floor($seconds));
     }
 
     private static function runningJob(string $job, string $queue): string

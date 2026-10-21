@@ -1,16 +1,5 @@
-import {
-    afterEach,
-    beforeEach,
-    describe,
-    expect,
-    it,
-    vi,
-} from 'vite-plus/test';
-import {
-    formatRelative,
-    losingTheLastAdmin,
-    roleTagClass,
-} from '@/lib/members';
+import { describe, expect, it } from 'vite-plus/test';
+import { losingTheLastAdmin, roleTagClass } from '@/lib/members';
 
 const admin = { role: 'admin' as const };
 const member = { role: 'member' as const };
@@ -44,32 +33,5 @@ describe('roleTagClass', () => {
         expect(roleTagClass('owner')).toBe('nc-tag nc-tag-accent');
         expect(roleTagClass('admin')).toBe('nc-tag nc-tag-accent');
         expect(roleTagClass('viewer')).toBe('nc-tag nc-tag-outline');
-    });
-});
-
-describe('formatRelative', () => {
-    beforeEach(() => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date('2026-10-14T10:00:00Z'));
-    });
-
-    afterEach(() => {
-        vi.useRealTimers();
-    });
-
-    it('picks the largest whole unit', () => {
-        expect(formatRelative('2026-10-17T10:00:00Z', 'en')).toBe('in 3 days');
-        expect(formatRelative('2026-10-14T08:00:00Z', 'en')).toBe(
-            '2 hours ago',
-        );
-        expect(formatRelative('2026-10-14T10:05:00Z', 'en')).toBe(
-            'in 5 minutes',
-        );
-        expect(formatRelative('2026-10-15T10:00:00Z', 'it')).toBe('domani');
-    });
-
-    it('shows a dash for a missing or broken date', () => {
-        expect(formatRelative(null, 'en')).toBe('—');
-        expect(formatRelative('not a date', 'en')).toBe('—');
     });
 });

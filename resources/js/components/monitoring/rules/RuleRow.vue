@@ -3,7 +3,7 @@ import { computed, ref, useId, watch } from 'vue';
 import type { RuleField, RuleValues } from '@/lib/alertRules';
 import {
     RULE_FIELDS,
-    formatDuration,
+    formatRuleFor,
     formatThreshold,
     overriddenFieldCount,
     ruleHint,
@@ -355,7 +355,7 @@ function readNumber(event: Event): number | null {
             >
                 {{ formatThreshold(shown.threshold, rule.unit) }}
                 <div v-if="shown.forMinutes" class="nc-t-2xs nc-tone-muted">
-                    {{ formatDuration(shown.forMinutes) }}
+                    {{ formatRuleFor(shown.forMinutes) }}
                 </div>
             </div>
             <div

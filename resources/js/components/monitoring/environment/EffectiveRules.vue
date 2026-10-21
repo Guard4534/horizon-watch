@@ -4,7 +4,7 @@ import { computed } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import {
-    formatDuration,
+    formatRuleFor,
     formatThreshold,
     ruleIcon,
     ruleLabel,
@@ -67,7 +67,7 @@ const scope = computed(() => environmentName.toLowerCase());
                         !rule.enabled
                             ? $t('Disabled')
                             : rule.forMinutes
-                              ? `${formatThreshold(rule.threshold, rule.unit)} · ${formatDuration(rule.forMinutes)}`
+                              ? `${formatThreshold(rule.threshold, rule.unit)} · ${formatRuleFor(rule.forMinutes)}`
                               : formatThreshold(rule.threshold, rule.unit)
                     }}</span
                 >

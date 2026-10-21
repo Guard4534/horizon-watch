@@ -5,7 +5,7 @@ import SectionCard from '@/components/nocturne/SectionCard.vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import TimeSeriesChart from '@/components/nocturne/TimeSeriesChart.vue';
 import { useCurrentPath } from '@/composables/useCurrentPath';
-import { formatCount, formatWait } from '@/lib/monitoring';
+import { formatCount, formatSeconds } from '@/lib/monitoring';
 import { rangeLabel } from '@/lib/timeSeries';
 import { replaceVisit } from '@/lib/visits';
 
@@ -28,13 +28,13 @@ const throughputLabel = computed(() =>
 const waitLabel = computed(() =>
     trans(':range, peak max wait :wait', {
         range: rangeLabel(range),
-        wait: formatWait(Math.max(0, ...maxWait)),
+        wait: formatSeconds(Math.max(0, ...maxWait)),
     }),
 );
 
 const describe = (value: number) => `${value}/min`;
 const describeWait = (value: number) =>
-    trans('max wait :wait', { wait: formatWait(value) });
+    trans('max wait :wait', { wait: formatSeconds(value) });
 
 const selected = computed({
     get: () => range,
@@ -50,9 +50,9 @@ const selected = computed({
                 v-model="selected"
                 name="range"
                 :options="[
-                    { value: '3h', label: '3h' },
-                    { value: '24h', label: '24h' },
-                    { value: '7d', label: $t(':days d', { days: '7' }) },
+                    { value: '3h', label: formatSeconds(3 * 3600) },
+                    { value: '24h', label: formatSeconds(86400) },
+                    { value: '7d', label: formatSeconds(7 * 86400) },
                 ]"
             />
         </template>

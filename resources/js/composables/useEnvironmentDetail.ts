@@ -1,11 +1,9 @@
 import { trans } from 'laravel-vue-i18n';
 import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
-import {
-    formatAge,
-    needsAttention,
-} from '@/components/monitoring/environment/readings';
+import { needsAttention } from '@/components/monitoring/environment/readings';
 import { thresholdOf } from '@/lib/alertRules';
+import { formatSeconds } from '@/lib/monitoring';
 
 export function useEnvironmentDetail(
     source: () => App.Data.Pages.EnvironmentDetailPageData,
@@ -51,7 +49,7 @@ export function useEnvironmentDetail(
 
         return ages.length
             ? trans('last known · :time ago', {
-                  time: formatAge(Math.min(...ages)),
+                  time: formatSeconds(Math.min(...ages), 1),
               })
             : trans('last known');
     });

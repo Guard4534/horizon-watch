@@ -10,6 +10,7 @@ import { computed, useTemplateRef } from 'vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import type { ConnectionOutcome } from '@/components/monitoring/applications/ConnectionTest.vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
+import { formatSeconds } from '@/lib/monitoring';
 import type { RouteDefinition } from '@/wayfinder';
 
 const { environment, auto = false } = defineProps<{
@@ -95,7 +96,7 @@ defineExpose({
                         ? `${$t('basic auth')} · ${environment.basicAuthUser}`
                         : $t('no auth')
                 }}
-                · {{ environment.pollIntervalSeconds }} {{ $t('seconds') }}
+                · {{ formatSeconds(environment.pollIntervalSeconds) }}
                 <template v-if="!environment.pollingEnabled">
                     · {{ $t('Collection paused') }}</template
                 >

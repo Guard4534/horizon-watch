@@ -61,35 +61,3 @@ export function losingTheLastAdmin(
         members.filter((member) => member.role === 'admin').length === 1
     );
 }
-
-export function formatRelative(iso: string | null, locale: string): string {
-    if (!iso) {
-        return '—';
-    }
-
-    const target = new Date(iso);
-
-    if (Number.isNaN(target.getTime())) {
-        return '—';
-    }
-
-    const seconds = (target.getTime() - Date.now()) / 1000;
-
-    const units: [Intl.RelativeTimeFormatUnit, number][] = [
-        ['day', 86400],
-        ['hour', 3600],
-        ['minute', 60],
-    ];
-
-    const formatter = new Intl.RelativeTimeFormat(locale, {
-        numeric: 'auto',
-    });
-
-    for (const [unit, size] of units) {
-        if (Math.abs(seconds) >= size) {
-            return formatter.format(Math.round(seconds / size), unit);
-        }
-    }
-
-    return formatter.format(Math.round(seconds), 'second');
-}

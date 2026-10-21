@@ -5,6 +5,7 @@ import { useClipboard } from '@vueuse/core';
 import { trans } from 'laravel-vue-i18n';
 import { ref } from 'vue';
 import { toast } from 'vue-sonner';
+import { secondsSince } from '@/components/monitoring/environment/readings';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import {
     Dialog,
@@ -16,7 +17,9 @@ import {
 } from '@/components/ui/dialog';
 import { useLocale } from '@/composables/useLocale';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatRelative, roleTagClass } from '@/lib/members';
+import { formatInstant } from '@/lib/datetime';
+import { roleTagClass } from '@/lib/members';
+import { formatAgo } from '@/lib/monitoring';
 import {
     destroy as revokeInvitation,
     link as invitationLink,
@@ -124,10 +127,26 @@ async function createLink(): Promise<void> {
                             {{ invitation.visibilityLabel }}
                         </td>
                         <td class="nc-t-xs nc-tone-muted">
-                            {{ formatRelative(invitation.invitedAt, locale) }}
+                            {{
+                                invitation.invitedAt
+                                    ? formatAgo(
+                                          secondsSince(
+                                              invitation.invitedAt,
+                                              Date.now(),
+                                          ),
+                                      )
+                                    : '—'
+                            }}
                         </td>
                         <td class="nc-t-xs nc-tone-muted">
-                            {{ formatRelative(invitation.expiresAt, locale) }}
+                            {{
+                                invitation.expiresAt
+                                    ? formatInstant(
+                                          invitation.expiresAt,
+                                          locale,
+                                      )
+                                    : '—'
+                            }}
                         </td>
                         <td class="text-right whitespace-nowrap">
                             <button

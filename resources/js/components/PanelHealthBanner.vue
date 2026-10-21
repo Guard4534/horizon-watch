@@ -2,7 +2,7 @@
 import { usePage } from '@inertiajs/vue3';
 import { PhHeartbeat } from '@phosphor-icons/vue';
 import { computed } from 'vue';
-import { formatAge } from '@/components/monitoring/environment/readings';
+import { formatSeconds } from '@/lib/monitoring';
 
 const page = usePage();
 
@@ -29,7 +29,12 @@ const unhealthy = computed(
                     <template v-else>{{
                         $t(
                             'Its scheduler last ran :time ago: no environment is read and no alert is sent until it runs again.',
-                            { time: formatAge(health.schedulerSecondsAgo) },
+                            {
+                                time: formatSeconds(
+                                    health.schedulerSecondsAgo,
+                                    1,
+                                ),
+                            },
                         )
                     }}</template>
                 </div>
@@ -42,7 +47,11 @@ const unhealthy = computed(
                     {{
                         $t(
                             'A background job has been waiting :time for a worker: readings and alert notifications are late.',
-                            { time: formatAge(health.oldestWaitSeconds ?? 0) },
+                            {
+                                time: formatSeconds(
+                                    health.oldestWaitSeconds ?? 0,
+                                ),
+                            },
                         )
                     }}
                 </div>

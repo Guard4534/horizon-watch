@@ -14,7 +14,7 @@ import {
     severityIcon,
     severityLabel,
 } from '@/lib/alerts';
-import { formatElapsed } from '@/lib/monitoring';
+import { formatAgo } from '@/lib/monitoring';
 
 defineProps<{
     alerts: App.Data.Monitoring.AlertData[];
@@ -105,8 +105,8 @@ const environmentHref = useEnvironmentHref();
                         >
                             {{
                                 $t('resolved :elapsed', {
-                                    elapsed: formatElapsed(
-                                        alert.resolvedMinutesAgo,
+                                    elapsed: formatAgo(
+                                        alert.resolvedMinutesAgo * 60,
                                     ),
                                 })
                             }}

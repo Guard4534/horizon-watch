@@ -8,7 +8,7 @@ import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { ruleLabel } from '@/lib/alertRules';
 import { severityColor, severityIcon } from '@/lib/alerts';
-import { formatElapsed } from '@/lib/monitoring';
+import { formatAgo } from '@/lib/monitoring';
 
 defineProps<{
     alerts: App.Data.Monitoring.AlertData[];
@@ -66,8 +66,8 @@ const environmentHref = useEnvironmentHref();
                                 v-if="alert.resolvedMinutesAgo !== null"
                                 >{{
                                     $t('resolved :elapsed', {
-                                        elapsed: formatElapsed(
-                                            alert.resolvedMinutesAgo,
+                                        elapsed: formatAgo(
+                                            alert.resolvedMinutesAgo * 60,
                                         ),
                                     })
                                 }}</template

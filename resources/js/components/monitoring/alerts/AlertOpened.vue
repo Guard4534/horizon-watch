@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatElapsed } from '@/lib/monitoring';
+import { formatAgo } from '@/lib/monitoring';
 
 defineProps<{
     alert: App.Data.Monitoring.AlertData;
@@ -7,5 +7,5 @@ defineProps<{
 </script>
 
 <template>
-    {{ formatElapsed(alert.minutesAgo) }}
+    {{ formatAgo(alert.minutesAgo * 60) }}
 </template>

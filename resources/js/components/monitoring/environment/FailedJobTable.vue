@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import SectionCard from '@/components/nocturne/SectionCard.vue';
-import { formatElapsed } from '@/lib/monitoring';
+import { formatAgo } from '@/lib/monitoring';
 
 defineProps<{
     jobs: App.Data.Monitoring.FailedJobData[];
@@ -53,7 +53,7 @@ defineProps<{
                             {{ job.tries }}
                         </td>
                         <td class="nc-t-xs nc-tone-faint whitespace-nowrap">
-                            {{ formatElapsed(job.minutesAgo) }}
+                            {{ formatAgo(job.minutesAgo * 60) }}
                         </td>
                     </tr>
                 </tbody>

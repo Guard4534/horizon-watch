@@ -6,7 +6,7 @@ import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCondition, ruleIcon, ruleLabel } from '@/lib/alertRules';
 import { isMuted, severityColor } from '@/lib/alerts';
-import { formatElapsed } from '@/lib/monitoring';
+import { formatAgo } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 
 const { compact = false } = defineProps<{
@@ -49,7 +49,7 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                             }}</span>
                             <span class="nc-num nc-t-2xs nc-tone-muted">{{
                                 $t('opened :elapsed', {
-                                    elapsed: formatElapsed(alert.minutesAgo),
+                                    elapsed: formatAgo(alert.minutesAgo * 60),
                                 })
                             }}</span>
                         </div>

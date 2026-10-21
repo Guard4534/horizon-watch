@@ -16,6 +16,7 @@ import AlertEmailsToggle from '@/components/settings/AlertEmailsToggle.vue';
 import TeamSwitcher from '@/components/TeamSwitcher.vue';
 import { useMobileOnlyPage } from '@/composables/useMobileOnlyPage';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { quietHoursSummary } from '@/lib/datetime';
 import { logout } from '@/routes';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 import { index as membersIndex } from '@/routes/members';
@@ -85,9 +86,11 @@ const isMobile = useMobileOnlyPage(profileEdit());
                 <PhMoon :size="16" class="icon" />
                 <span class="label">{{ $t('Quiet hours') }}</span>
                 <span class="value nc-num">{{
-                    page.quietFrom && page.quietTo
-                        ? `${page.quietFrom} → ${page.quietTo} (${page.timezone})`
-                        : $t('None')
+                    quietHoursSummary(
+                        page.quietFrom,
+                        page.quietTo,
+                        page.timezone,
+                    )
                 }}</span>
                 <PhCaretRight :size="13" class="caret" />
             </Link>

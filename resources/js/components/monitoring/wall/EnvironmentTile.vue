@@ -18,7 +18,7 @@ import {
 } from '@/components/monitoring/environment/readings';
 import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { failedWindowNote, failedWindowShort } from '@/lib/failedWindow';
-import { formatCount, formatWait, statusIcon } from '@/lib/monitoring';
+import { formatCount, formatSeconds, statusIcon } from '@/lib/monitoring';
 
 const { environment } = defineProps<{
     environment: App.Data.Monitoring.EnvironmentData;
@@ -105,7 +105,7 @@ const trend = computed(() => {
                 }"
                 >{{
                     $t(':wait wait', {
-                        wait: formatWait(environment.maxWaitSeconds),
+                        wait: formatSeconds(environment.maxWaitSeconds),
                     })
                 }}</span
             >

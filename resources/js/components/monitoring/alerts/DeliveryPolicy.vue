@@ -4,6 +4,7 @@ import { PhEnvelopeSimple, PhWebhooksLogo } from '@phosphor-icons/vue';
 import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { formatSeconds } from '@/lib/monitoring';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 
 defineProps<{
@@ -32,8 +33,8 @@ const slug = useTeamSlug();
             <li>
                 <template v-if="summary.repeatMinutes">{{
                     $t(
-                        'A critical alert is sent as soon as it opens, then again every :minutes minutes until it clears, gets muted or is handled.',
-                        { minutes: String(summary.repeatMinutes) },
+                        'A critical alert is sent as soon as it opens, then again every :interval until it clears, gets muted or is handled.',
+                        { interval: formatSeconds(summary.repeatMinutes * 60) },
                     )
                 }}</template>
                 <template v-else>{{
@@ -43,7 +44,11 @@ const slug = useTeamSlug();
                 }}</template>
             </li>
             <li>
-                {{ $t('Warnings are grouped into a digest every 15 minutes.') }}
+                {{
+                    $t('Warnings are grouped into a digest every :interval.', {
+                        interval: formatSeconds(15 * 60),
+                    })
+                }}
             </li>
             <li>
                 <template v-if="summary.quietFrom && summary.quietTo">{{

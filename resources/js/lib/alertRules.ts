@@ -10,6 +10,7 @@ import {
 } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import type { Component } from 'vue';
+import { formatNumber, formatSeconds } from '@/lib/monitoring';
 
 export function thresholdOf(
     environment: Pick<App.Data.Monitoring.EnvironmentData, 'thresholds'>,
@@ -107,23 +108,15 @@ export function unitLabel(unit: string): string {
 }
 
 export function formatThreshold(threshold: number, unit: string): string {
-    const value = Number.isInteger(threshold)
-        ? String(threshold)
-        : threshold.toFixed(1);
+    const value = formatNumber(threshold);
 
-    switch (unit) {
-        case 's':
-            return `${value}${unitLabel(unit)}`;
-        case 'job':
-        case '':
-            return value;
-        default:
-            return `${value} ${unitLabel(unit)}`;
-    }
+    return unit === 'job' || unit === ''
+        ? value
+        : `${value} ${unitLabel(unit)}`;
 }
 
-export function formatDuration(minutes: number): string {
-    return trans('for :minutes min', { minutes: String(minutes) });
+export function formatRuleFor(minutes: number): string {
+    return trans('for :duration', { duration: formatSeconds(minutes * 60) });
 }
 
 function comparison(metric: App.Enums.AlertRuleMetric): string {

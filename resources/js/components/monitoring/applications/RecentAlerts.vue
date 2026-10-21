@@ -6,7 +6,7 @@ import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { ruleIcon, ruleLabel } from '@/lib/alertRules';
 import { severityColor } from '@/lib/alerts';
-import { formatElapsed, statusColor } from '@/lib/monitoring';
+import { formatAgo, statusColor } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 
 defineProps<{
@@ -83,12 +83,12 @@ const slug = useTeamSlug();
                         {{
                             alert.resolvedMinutesAgo !== null
                                 ? $t('resolved :elapsed', {
-                                      elapsed: formatElapsed(
-                                          alert.resolvedMinutesAgo,
+                                      elapsed: formatAgo(
+                                          alert.resolvedMinutesAgo * 60,
                                       ),
                                   })
                                 : $t('opened :elapsed', {
-                                      elapsed: formatElapsed(alert.minutesAgo),
+                                      elapsed: formatAgo(alert.minutesAgo * 60),
                                   })
                         }}
                     </div>

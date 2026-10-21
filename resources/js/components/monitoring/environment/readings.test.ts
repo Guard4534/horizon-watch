@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vite-plus/test';
 import {
     displayState,
     failedLastHourText,
-    formatAge,
     hasMeasurement,
     horizonStatusTone,
     isHealthy,
@@ -164,19 +163,7 @@ describe('hasMeasurement', () => {
     });
 });
 
-describe('formatAge', () => {
-    it.each([
-        [-5, '0 s'],
-        [59.9, '59 s'],
-        [60, '1 min'],
-        [3599, '59 min'],
-        [3600, '1 h'],
-        [172799, '47 h'],
-        [172800, '2 d'],
-    ])('formats %d seconds as %s', (seconds, expected) => {
-        expect(formatAge(seconds)).toBe(expected);
-    });
-
+describe('secondsSince', () => {
     it('never counts a reading from the future', () => {
         const now = Date.parse('2026-10-14T10:00:00Z');
 

@@ -5,7 +5,7 @@ import {
     readingProblemLabel,
 } from '@/components/monitoring/environment/readings';
 import { formatRule } from '@/lib/alertRules';
-import { formatElapsed, statusColor, statusIcon } from '@/lib/monitoring';
+import { formatAgo, statusColor, statusIcon } from '@/lib/monitoring';
 
 const {
     status,
@@ -26,7 +26,7 @@ const {
 const color = computed(() => statusColor(status));
 const icon = computed(() => statusIcon(status));
 
-const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
+const since = computed(() => (alert ? formatAgo(alert.minutesAgo * 60) : null));
 </script>
 
 <template>

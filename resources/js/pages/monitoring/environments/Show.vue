@@ -32,11 +32,12 @@ import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { formatThreshold } from '@/lib/alertRules';
 import { isProductionType } from '@/lib/environments';
 import { failedWindowNote } from '@/lib/failedWindow';
 import {
     formatCount,
-    formatWait,
+    formatSeconds,
     seriesRefreshInterval,
 } from '@/lib/monitoring';
 import {
@@ -79,7 +80,7 @@ const maxWaitNote = computed(() => {
 
     return seconds === null
         ? trans('rule disabled')
-        : trans('threshold :value', { value: `${seconds}s` });
+        : trans('threshold :value', { value: formatThreshold(seconds, 's') });
 });
 
 const tiles = computed<Tile[]>(() => [
@@ -112,7 +113,7 @@ const tiles = computed<Tile[]>(() => [
     },
     {
         label: trans('Max wait'),
-        value: formatWait(environment.value.maxWaitSeconds),
+        value: formatSeconds(environment.value.maxWaitSeconds),
         color: thresholdTone(
             environment.value,
             'queue.max_wait',

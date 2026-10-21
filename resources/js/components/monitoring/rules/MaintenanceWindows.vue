@@ -7,12 +7,9 @@ import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { formatInstant } from '@/lib/datetime';
 import { errorId, invalidField } from '@/lib/fieldErrors';
-import {
-    formatMaintenanceTime,
-    fromLocalInput,
-    toLocalInput,
-} from '@/lib/maintenance';
+import { fromLocalInput, toLocalInput } from '@/lib/maintenance';
 import {
     destroy as endWindow,
     store as storeWindow,
@@ -116,7 +113,7 @@ function end(maintenance: App.Data.Monitoring.MaintenanceWindowData): void {
 function period(
     maintenance: App.Data.Monitoring.MaintenanceWindowData,
 ): string {
-    return `${formatMaintenanceTime(maintenance.startsAt, locale.value)} → ${formatMaintenanceTime(maintenance.endsAt, locale.value)}`;
+    return `${formatInstant(maintenance.startsAt, locale.value)} → ${formatInstant(maintenance.endsAt, locale.value)}`;
 }
 </script>
 

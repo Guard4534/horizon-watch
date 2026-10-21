@@ -74,62 +74,72 @@ export function formatCount(value: number): string {
     }).format(scaled)}${suffix}`;
 }
 
-function compact(
-    major: number,
-    majorUnit: string,
-    minor: number,
-    minorUnit: string,
-): string {
-    return minor > 0
-        ? `${major}${majorUnit} ${minor}${minorUnit}`
-        : `${major}${majorUnit}`;
+const DURATION_UNITS: readonly {
+    size: number;
+    label: (value: string) => string;
+}[] = [
+    { size: 86400, label: (days) => trans(':days d', { days }) },
+    { size: 3600, label: (hours) => trans(':hours h', { hours }) },
+    { size: 60, label: (minutes) => trans(':minutes min', { minutes }) },
+    { size: 1, label: (seconds) => trans(':seconds s', { seconds }) },
+];
+
+/**
+ * A duration rounded down to at most two units, each spaced from its number:
+ * 45 s, 1 min 30 s, 1 h 5 min, 2 d 3 h. App\Support\Duration mirrors it.
+ */
+export function formatSeconds(seconds: number, parts: 1 | 2 = 2): string {
+    const total = Number.isFinite(seconds)
+        ? Math.max(0, Math.floor(seconds))
+        : 0;
+    const index = DURATION_UNITS.findIndex(({ size }) => total >= size);
+    const major =
+        DURATION_UNITS[index === -1 ? DURATION_UNITS.length - 1 : index];
+    const minor =
+        parts === 2 && index !== -1 ? DURATION_UNITS[index + 1] : undefined;
+    const text = major.label(String(Math.floor(total / major.size)));
+
+    if (minor === undefined) {
+        return text;
+    }
+
+    const count = Math.floor((total % major.size) / minor.size);
+
+    return count > 0 ? `${text} ${minor.label(String(count))}` : text;
 }
 
-export function formatWait(seconds: number): string {
-    if (seconds < 60) {
-        return `${Math.round(seconds)}s`;
+/** Average job runtime: one decimal under a minute (0.4 s), since Horizon reports sub-second runtimes. */
+export function formatRuntime(seconds: number): string {
+    const rounded = Math.round(seconds * 10) / 10;
+
+    if (rounded >= 60) {
+        return formatSeconds(rounded);
     }
 
-    const minutes = Math.round(seconds / 60);
-
-    return minutes < 60
-        ? `${minutes}m`
-        : compact(Math.floor(minutes / 60), 'h', minutes % 60, 'm');
+    return trans(':seconds s', {
+        seconds: new Intl.NumberFormat(getActiveLanguage(), {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+        }).format(rounded),
+    });
 }
 
-export function formatElapsed(minutes: number): string {
-    if (minutes < 1) {
-        return trans('less than a minute ago');
-    }
-
-    if (minutes < 60) {
-        return trans(':minutes min ago', { minutes: String(minutes) });
-    }
-
-    if (minutes < 1440) {
-        return trans(':hours h ago', {
-            hours: String(Math.floor(minutes / 60)),
-        });
-    }
-
-    return trans(':days d ago', { days: String(Math.floor(minutes / 1440)) });
+/** Chart axes only: one unit, no space (30s, 2min, 12h, 2d). */
+export function formatSecondsCompact(seconds: number): string {
+    return formatSeconds(seconds, 1).replace(' ', '');
 }
 
-export function formatDuration(seconds: number): string {
-    if (seconds < 60) {
-        return `${seconds}s`;
-    }
+export function formatAgo(seconds: number): string {
+    return seconds < 60
+        ? trans('less than a minute ago')
+        : trans(':time ago', { time: formatSeconds(seconds, 1) });
+}
 
-    if (seconds < 3600) {
-        return compact(Math.floor(seconds / 60), 'm', seconds % 60, 's');
-    }
-
-    return compact(
-        Math.floor(seconds / 3600),
-        'h',
-        Math.floor((seconds % 3600) / 60),
-        'm',
-    );
+/** Thresholds and alert values: exact and grouped, like AlertMail::number(). */
+export function formatNumber(value: number): string {
+    return new Intl.NumberFormat(getActiveLanguage(), {
+        maximumFractionDigits: 2,
+    }).format(value);
 }
 
 export function seriesRefreshInterval(ms: number, stepSeconds: number): number {

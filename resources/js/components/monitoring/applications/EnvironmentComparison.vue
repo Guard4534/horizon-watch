@@ -9,7 +9,7 @@ import {
 import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { failedWindowNote, failedWindowShort } from '@/lib/failedWindow';
-import { formatCount, formatWait } from '@/lib/monitoring';
+import { formatCount, formatSeconds } from '@/lib/monitoring';
 
 defineProps<{
     environments: App.Data.Monitoring.EnvironmentData[];
@@ -80,7 +80,7 @@ defineProps<{
                                     ),
                                 }"
                             >
-                                {{ formatWait(environment.maxWaitSeconds) }}
+                                {{ formatSeconds(environment.maxWaitSeconds) }}
                             </td>
                             <td class="nc-right">
                                 <span

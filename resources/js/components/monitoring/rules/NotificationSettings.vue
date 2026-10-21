@@ -7,8 +7,10 @@ import WarningNotice from '@/components/monitoring/WarningNotice.vue';
 import WebhookSecret from '@/components/monitoring/rules/WebhookSecret.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { quietHoursSummary } from '@/lib/datetime';
 import { hostOf } from '@/lib/environments';
 import { errorId, invalidField } from '@/lib/fieldErrors';
+import { formatSeconds } from '@/lib/monitoring';
 import {
     test as testNotification,
     update as updateSettings,
@@ -377,8 +379,8 @@ const movesHost = computed(
                             :value="minutes"
                         >
                             {{
-                                $t('every :minutes min while open', {
-                                    minutes: String(minutes),
+                                $t('every :interval while open', {
+                                    interval: formatSeconds(minutes * 60),
                                 })
                             }}
                         </option>
@@ -534,9 +536,11 @@ const movesHost = computed(
                 <div class="nc-label">{{ $t('Quiet hours') }}</div>
                 <div class="nc-num">
                     {{
-                        summary.quietFrom && summary.quietTo
-                            ? `${summary.quietFrom} → ${summary.quietTo} · ${summary.timezone}`
-                            : $t('None')
+                        quietHoursSummary(
+                            summary.quietFrom,
+                            summary.quietTo,
+                            summary.timezone,
+                        )
                     }}
                 </div>
             </div>
@@ -546,8 +550,10 @@ const movesHost = computed(
                     {{
                         summary.repeatMinutes === null
                             ? $t('first detection only')
-                            : $t('every :minutes min while open', {
-                                  minutes: String(summary.repeatMinutes),
+                            : $t('every :interval while open', {
+                                  interval: formatSeconds(
+                                      summary.repeatMinutes * 60,
+                                  ),
                               })
                     }}
                 </div>

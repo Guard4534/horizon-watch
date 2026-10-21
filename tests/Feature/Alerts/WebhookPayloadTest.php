@@ -115,7 +115,7 @@ test('a repeated critical alert carries the running job and its queue', function
             'id' => $alert->id,
             'rule' => 'job.runtime',
             'severity' => 'critical',
-            'summary' => 'Shop · production — A job has been running for 300 s',
+            'summary' => 'Shop · production — A job has been running for 5 min',
             'value' => 300.0,
             'threshold' => 120.0,
             'unit' => 's',
@@ -265,6 +265,21 @@ test('the summary is written in the language of the panel', function () {
     ]);
 
     expect(WebhookPayload::forAlert($alert, WebhookPayload::OPENED)['alert']['summary'])->toBe('Shop · production — 2.500 job pending');
+});
+
+test('the summary writes durations in spaced units, the number fields stay raw', function () {
+    $alert = payloadAlert($this->environment, [
+        'metric' => AlertRuleMetric::QueueMaxWait,
+        'severity' => 'warning',
+        'value' => 95,
+        'detail' => [],
+    ]);
+
+    $sent = WebhookPayload::forAlert($alert, WebhookPayload::OPENED)['alert'];
+
+    expect($sent['summary'])->toBe('Shop · production — Oldest job waiting 1 min 35 s')
+        ->and($sent['value'])->toBe(95.0)
+        ->and($sent['unit'])->toBe('s');
 });
 
 test('the readme examples have the shape of what is sent', function () {

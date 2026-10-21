@@ -1,4 +1,5 @@
 import { trans } from 'laravel-vue-i18n';
+import { formatSeconds } from '@/lib/monitoring';
 
 export function failedWindowNote(windowMinutes: number | null): string {
     switch (windowMinutes) {
@@ -16,12 +17,5 @@ export function failedWindowNote(windowMinutes: number | null): string {
 }
 
 export function failedWindowShort(windowMinutes: number): string {
-    switch (windowMinutes) {
-        case 1440:
-            return '24h';
-        case 10080:
-            return trans(':days d', { days: '7' });
-        default:
-            return `${windowMinutes} min`;
-    }
+    return formatSeconds(windowMinutes * 60);
 }

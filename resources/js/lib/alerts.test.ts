@@ -82,12 +82,12 @@ describe('mutedText', () => {
         );
     });
 
-    it('adds the weekday when the mute ends on another day', () => {
+    it('adds the weekday, day and month when the mute ends on another day', () => {
         const muted = alert({
             mutedUntil: new Date(2026, 9, 15, 9, 5).toISOString(),
         });
 
-        expect(mutedText(muted, 'en')).toBe('Muted until Thu 09:05');
+        expect(mutedText(muted, 'en')).toBe('Muted until Thu, Oct 15, 09:05');
     });
 
     it('credits a maintenance window over the person', () => {

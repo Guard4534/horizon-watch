@@ -2,7 +2,7 @@
 import { trans } from 'laravel-vue-i18n';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { channelIcon } from '@/lib/alerts';
-import { formatElapsed } from '@/lib/monitoring';
+import { formatAgo } from '@/lib/monitoring';
 
 defineProps<{
     notifications: App.Data.Monitoring.SentNotificationData[];
@@ -162,7 +162,7 @@ function text(
                     </div>
                 </div>
                 <span class="nc-num nc-t-2xs nc-tone-faint flex-none">{{
-                    formatElapsed(notification.minutesAgo)
+                    formatAgo(notification.minutesAgo * 60)
                 }}</span>
             </div>
         </div>

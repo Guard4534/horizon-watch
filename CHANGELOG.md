@@ -98,6 +98,14 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   of their id, the throughput and max-wait chart is split into two charts with one scale each,
   environment overrides use one Customize switch per rule, and the panel has a new brand mark
   and icons.
+- Durations read the same everywhere: rounded down, with at most two units, each spaced from
+  its number (`45 s`, `1 min 30 s`, `1 h 5 min`, `2 d 3 h`, a day from 24 hours), on the panel,
+  in alert emails and in the webhook `summary` (`A job has been running for 5 min`). Only
+  chart axes keep a compact form. Thresholds keep the unit they are set in
+  (`Max wait > 60 s`), thresholds and alert values are grouped the way the language writes
+  numbers, and a time on another day shows its weekday, day and month. In the webhook payload
+  only the wording of `summary` changes: `value`, `threshold` and `unit` are the same numbers
+  as before.
 - An environment's Horizon URL, as you open it in the browser, is the only address the panel
   asks for. Applications no longer have a domain: the one shown next to an application is the
   host of its production environment's Horizon URL, or of its first environment. The wizard asks

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 import {
     formatCondition,
     formatRule,
+    formatRuleFor,
     formatThreshold,
     overriddenFieldCount,
     ruleFields,
@@ -33,7 +34,7 @@ const rule = (
 describe('formatRule', () => {
     it.each<[App.Enums.AlertRuleMetric, number, string, string]>([
         ['queue.pending', 100, 'job', 'Pending jobs > 100'],
-        ['queue.max_wait', 90, 's', 'Max wait > 90s'],
+        ['queue.max_wait', 90, 's', 'Max wait > 90 s'],
         ['job.runtime', 10, 'min', 'Job runtime > 10 min'],
         ['jobs.failed_per_hour', 2.5, '', 'Failed jobs / hour > 2.5'],
         ['workers.missing', 1, '', 'Missing workers ≥ 1'],
@@ -54,18 +55,27 @@ describe('formatCondition', () => {
             'no active master supervisor for 2 min',
         );
         expect(formatCondition('queue.pending', 2000, 'job')).toBe(
-            'total across all queues above 2000',
+            'total across all queues above 2,000',
         );
     });
 });
 
 describe('formatThreshold', () => {
-    it('keeps one decimal and attaches the unit', () => {
-        expect(formatThreshold(2.25, '')).toBe('2.3');
-        expect(formatThreshold(30, 's')).toBe('30s');
+    it('writes the exact number, grouped, with the unit it was set in', () => {
+        expect(formatThreshold(2.25, '')).toBe('2.25');
+        expect(formatThreshold(30, 's')).toBe('30 s');
+        expect(formatThreshold(90, 's')).toBe('90 s');
         expect(formatThreshold(5, 'min')).toBe('5 min');
-        expect(formatThreshold(50, 'job')).toBe('50');
+        expect(formatThreshold(2000, 'job')).toBe('2,000');
         expect(formatThreshold(7, 'MB')).toBe('7 MB');
+    });
+});
+
+describe('formatRuleFor', () => {
+    it('writes how long a breach must last as a duration', () => {
+        expect(formatRuleFor(5)).toBe('for 5 min');
+        expect(formatRuleFor(60)).toBe('for 1 h');
+        expect(formatRuleFor(90)).toBe('for 1 h 30 min');
     });
 });
 

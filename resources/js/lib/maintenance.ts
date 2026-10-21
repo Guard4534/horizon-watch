@@ -1,26 +1,9 @@
 import { trans } from 'laravel-vue-i18n';
-
-export function formatMaintenanceTime(
-    iso: string,
-    locale: string,
-    now: Date = new Date(),
-): string {
-    const at = new Date(iso);
-    const sameDay = at.toDateString() === now.toDateString();
-
-    return new Intl.DateTimeFormat(locale, {
-        ...(sameDay
-            ? {}
-            : { weekday: 'short', day: 'numeric', month: 'short' }),
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-    }).format(at);
-}
+import { formatInstant } from '@/lib/datetime';
 
 export function maintenanceUntilText(iso: string, locale: string): string {
     return trans('In maintenance until :time', {
-        time: formatMaintenanceTime(iso, locale),
+        time: formatInstant(iso, locale),
     });
 }
 

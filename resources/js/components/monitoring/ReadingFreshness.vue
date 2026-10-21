@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
-    formatAge,
     readingErrorLabel,
     secondsSince,
 } from '@/components/monitoring/environment/readings';
+import { formatSeconds } from '@/lib/monitoring';
 
 const { lastReadingAt, stale, pollingEnabled, readingError } = defineProps<{
     lastReadingAt: string | null;
@@ -23,7 +23,9 @@ onMounted(() => {
 onUnmounted(() => clearInterval(timer));
 
 const age = computed(() =>
-    lastReadingAt ? formatAge(secondsSince(lastReadingAt, now.value)) : null,
+    lastReadingAt
+        ? formatSeconds(secondsSince(lastReadingAt, now.value), 1)
+        : null,
 );
 
 const tone = computed(() => {

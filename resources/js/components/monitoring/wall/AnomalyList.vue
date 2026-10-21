@@ -8,7 +8,7 @@ import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatCondition, ruleIcon, ruleLabel } from '@/lib/alertRules';
 import { channelIcon, channelLabel } from '@/lib/alerts';
-import { formatElapsed } from '@/lib/monitoring';
+import { formatAgo } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 import { show as showEnvironment } from '@/routes/environments';
 
@@ -83,7 +83,7 @@ function color(alert: App.Data.Monitoring.AlertData): string {
                             <span class="min-w-0 truncate"
                                 >{{ alert.applicationName }} /
                                 {{ alert.environmentName }} ·
-                                {{ formatElapsed(alert.minutesAgo) }}</span
+                                {{ formatAgo(alert.minutesAgo * 60) }}</span
                             >
                         </div>
                         <div

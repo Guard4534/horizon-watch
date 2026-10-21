@@ -522,9 +522,10 @@ for missing workers, and has stayed there for the duration set on the rule, if a
 | `workers.missing`         | _(empty)_ | queues with waiting jobs and no worker           |
 
 `severity` is `critical` or `warning`, as set on the rule. `summary` is one line for people,
-in the panel's default language (`APP_LOCALE`): `Back within the threshold: …` once the alert
-has resolved. Do not parse it, read the other fields instead. `detail` always has the same
-four keys:
+in the panel's default language (`APP_LOCALE`), with durations written as on the panel (`45 s`,
+`1 min 30 s`, `1 h 5 min`, `2 d 3 h`): `Back within the threshold: …` once the alert has
+resolved. Do not parse it, read the other fields instead. `detail` always has the same four
+keys:
 
 - `value_is_lower_bound`: `true` when there were more failed jobs than the panel reads, so
   `value` is a minimum (`jobs.failed_per_hour`)
@@ -547,7 +548,7 @@ resolved since the previous digest has `resolved_at` set:
             "id": "01992f41-7c2d-7e3f-8a1b-2c3d4e5f6a7b",
             "rule": "job.runtime",
             "severity": "warning",
-            "summary": "Shop · production — A job has been running for 300 s",
+            "summary": "Shop · production — A job has been running for 5 min",
             "value": 300,
             "threshold": 120,
             "unit": "s",
