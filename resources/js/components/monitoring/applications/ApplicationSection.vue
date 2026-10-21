@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { PhGearSix, PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
+import { PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
 import AttentionBadge from '@/components/monitoring/AttentionBadge.vue';
 import {
     statusText,
@@ -79,7 +79,7 @@ const { canManageApplications } = useVisibility();
                     "
                     :title="$t('Edit application')"
                 >
-                    <PhGearSix :size="14" />
+                    <PhPencilSimple :size="14" />
                 </Link>
             </template>
         </div>

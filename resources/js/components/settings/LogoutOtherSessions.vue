@@ -90,7 +90,7 @@ const passwordInput = useTemplateRef('passwordInput');
                         />
                     </div>
 
-                    <DialogFooter class="gap-2">
+                    <DialogFooter>
                         <DialogClose as-child>
                             <button
                                 type="button"

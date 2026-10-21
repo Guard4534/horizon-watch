@@ -56,7 +56,7 @@ class ApplicationController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Application created.')]);
 
-        return to_route('applications.edit', ['current_team' => $current_team->slug, 'application' => $application->slug]);
+        return to_route('applications.show', ['current_team' => $current_team->slug, 'application' => $application->slug]);
     }
 
     public function edit(Team $current_team, Application $application, ApplicationEditQuery $query): Response

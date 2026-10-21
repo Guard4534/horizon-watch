@@ -7,6 +7,7 @@ import {
     leavesSuggestion,
     suggestHorizonUrl,
     suggestType,
+    switchBasicAuth,
     typeForName,
 } from '@/lib/environments';
 
@@ -238,5 +239,45 @@ describe('leavesSuggestion', () => {
                 'https://staging.shop.example.com/horizon',
             ),
         ).toBe(false);
+    });
+});
+
+describe('switchBasicAuth', () => {
+    it('sends no credentials once the switch is off and keeps the username aside', () => {
+        expect(
+            switchBasicAuth(
+                false,
+                { basicAuthUser: 'ops', basicAuthPassword: 'secret' },
+                null,
+            ),
+        ).toEqual({
+            basicAuthUser: null,
+            basicAuthPassword: null,
+            stashedUser: 'ops',
+        });
+    });
+
+    it('brings back the username but never the password when switched on again', () => {
+        expect(
+            switchBasicAuth(
+                true,
+                { basicAuthUser: null, basicAuthPassword: null },
+                'ops',
+            ),
+        ).toEqual({
+            basicAuthUser: 'ops',
+            basicAuthPassword: null,
+            stashedUser: 'ops',
+        });
+    });
+
+    it('starts empty when nothing was typed before', () => {
+        expect(
+            switchBasicAuth(
+                true,
+                { basicAuthUser: null, basicAuthPassword: null },
+                null,
+            ).basicAuthUser,
+        ).toBeNull();
     });
 });

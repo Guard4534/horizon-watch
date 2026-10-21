@@ -14,7 +14,6 @@ export function useEnvironmentDetail(
         App.Enums.EnvironmentStatus,
         'active'
     > | null>;
-    incidentAlert: ComputedRef<App.Data.Monitoring.AlertData | null>;
     lastKnown: ComputedRef<string | null>;
 } {
     const page = computed(source);
@@ -33,10 +32,6 @@ export function useEnvironmentDetail(
             : null;
     });
 
-    const incidentAlert = computed(
-        () => page.value.alerts.find((alert) => alert.state === 'open') ?? null,
-    );
-
     const lastKnown = computed(() => {
         if (
             environment.value.readingError === null &&
@@ -54,5 +49,5 @@ export function useEnvironmentDetail(
             : trans('last known');
     });
 
-    return { environment, threshold, incident, incidentAlert, lastKnown };
+    return { environment, threshold, incident, lastKnown };
 }

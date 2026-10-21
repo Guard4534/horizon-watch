@@ -222,6 +222,16 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   the rest of the panel.
 - Pages load faster: missing indexes, memberships read once per request, and environment pages
   that load only their own readings.
+- Creating an application opens its page instead of its edit form. The environment page offers
+  **Edit environment** to those who manage applications, on desktop and phone.
+- The application page lists its environments once, as cards that also show the jobs failed in
+  the last hour, the workers and the throughput; the comparison table is gone.
+- The environment forms have one **Basic auth** switch. On Edit environment it starts on when
+  credentials are stored, and turning it off and saving removes the stored username and
+  password. The interval field is called **Collection interval**, and Add environment tests the
+  connection when you leave the URL field.
+- Every form submits on Enter, edit pages enable **Save** only when something changed, and
+  destructive actions are marked in red.
 
 ### Fixed
 

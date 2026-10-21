@@ -388,3 +388,10 @@ test('the wizard rows call the field Horizon URL in their rule messages too', fu
         'environments' => [[...($this->environmentPayload)('production'), 'horizonUrl' => '']],
     ])->assertInvalid(['environments.0.horizonUrl' => 'The Horizon URL field is required.']);
 });
+
+test('creating an application lands on its page', function () {
+    $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
+        'application' => ['name' => 'Ledger'],
+        'environments' => [($this->environmentPayload)('production')],
+    ])->assertRedirect(route('applications.show', ['current_team' => $this->team->slug, 'application' => 'ledger']));
+});

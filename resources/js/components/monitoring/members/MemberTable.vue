@@ -2,6 +2,7 @@
 import { useForm, usePage } from '@inertiajs/vue3';
 import { PhDotsThree, PhShieldCheck } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
+import FormErrors from '@/components/FormErrors.vue';
 import Avatar from '@/components/nocturne/Avatar.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import LeaveOrganizationModal from '@/components/teams/LeaveOrganizationModal.vue';
@@ -165,18 +166,11 @@ function confirmRemove() {
 
 <template>
     <SectionCard :title="`${$t('Members')} · ${members.length}`">
-        <div
-            v-if="errors.length && manualFor === null"
-            class="nc-t-xs nc-tone-down mb-[var(--nc-space-3)]"
-            style="
-                border-radius: var(--nc-radius-md);
-                border: 1px solid var(--st-down);
-                padding: 8px 10px;
-            "
-            role="alert"
-        >
-            <p v-for="message in errors" :key="message">{{ message }}</p>
-        </div>
+        <FormErrors
+            v-if="manualFor === null"
+            class="mb-[var(--nc-space-3)]"
+            :errors="errors"
+        />
 
         <div class="overflow-x-auto">
             <table class="nc-table">
@@ -358,9 +352,11 @@ function confirmRemove() {
                 </DialogDescription>
             </DialogHeader>
 
-            <div
+            <form
+                id="manual-visibility-form"
                 class="flex max-h-[45vh] flex-col overflow-y-auto"
                 style="gap: var(--nc-space-2)"
+                @submit.prevent="saveManual"
             >
                 <label
                     v-for="environment in environments"
@@ -390,18 +386,11 @@ function confirmRemove() {
                         )
                     }}
                 </div>
-            </div>
+            </form>
 
-            <p
-                v-for="message in errors"
-                :key="message"
-                class="nc-t-xs nc-tone-down"
-                role="alert"
-            >
-                {{ message }}
-            </p>
+            <FormErrors :errors="errors" />
 
-            <DialogFooter class="gap-2">
+            <DialogFooter>
                 <button
                     type="button"
                     class="nc-btn nc-btn-secondary"
@@ -410,10 +399,10 @@ function confirmRemove() {
                     {{ $t('Cancel') }}
                 </button>
                 <button
-                    type="button"
+                    type="submit"
+                    form="manual-visibility-form"
                     class="nc-btn nc-btn-primary"
                     :disabled="form.processing"
-                    @click="saveManual"
                 >
                     {{ $t('Save') }}
                 </button>
@@ -441,7 +430,7 @@ function confirmRemove() {
 
             <p class="nc-t-sm">{{ removing?.name }}</p>
 
-            <DialogFooter class="gap-2">
+            <DialogFooter>
                 <button
                     type="button"
                     class="nc-btn nc-btn-secondary"
@@ -482,7 +471,7 @@ function confirmRemove() {
                 <span class="nc-tone-muted">· {{ transferring?.email }}</span>
             </p>
 
-            <DialogFooter class="gap-2">
+            <DialogFooter>
                 <button
                     type="button"
                     class="nc-btn nc-btn-secondary"

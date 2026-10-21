@@ -4,29 +4,24 @@ import {
     readingErrorLabel,
     readingProblemLabel,
 } from '@/components/monitoring/environment/readings';
-import { formatRule } from '@/lib/alertRules';
-import { formatAgo, statusColor, statusIcon } from '@/lib/monitoring';
+import { statusColor, statusIcon } from '@/lib/monitoring';
 
 const {
     status,
     readingError,
     readingProblem = null,
-    alert,
     hasEarlierReading,
     compact = false,
 } = defineProps<{
     status: Exclude<App.Enums.EnvironmentStatus, 'active'>;
     readingError: App.Enums.ReadingError | null;
     readingProblem?: App.Data.Monitoring.ReadingProblemData | null;
-    alert: App.Data.Monitoring.AlertData | null;
     hasEarlierReading: boolean;
     compact?: boolean;
 }>();
 
 const color = computed(() => statusColor(status));
 const icon = computed(() => statusIcon(status));
-
-const since = computed(() => (alert ? formatAgo(alert.minutesAgo * 60) : null));
 </script>
 
 <template>
@@ -68,9 +63,6 @@ const since = computed(() => (alert ? formatAgo(alert.minutesAgo * 60) : null));
                     $t('Readings are not updated')
                 }}</template>
                 <template v-else>{{ $t('Threshold exceeded') }}</template>
-                <span v-if="since" class="nc-num nc-t-2xs nc-tone-muted">
-                    · {{ $t('opened :elapsed', { elapsed: since }) }}</span
-                >
             </div>
             <div
                 class="mt-[3px]"
@@ -93,9 +85,7 @@ const since = computed(() => (alert ? formatAgo(alert.minutesAgo * 60) : null));
                     <template v-if="hasEarlierReading">
                         ·
                         {{
-                            $t(
-                                'The counters read zero until it answers again; nodes and queues are the last known.',
-                            )
+                            $t('The counters read zero until it answers again.')
                         }}
                     </template>
                 </template>
@@ -111,7 +101,7 @@ const since = computed(() => (alert ? formatAgo(alert.minutesAgo * 60) : null));
                 }}</template>
                 <template v-else-if="status === 'stale'">{{
                     $t(
-                        'No reading has arrived for several intervals: the scheduler or the workers of Horizon Watch may be stopped, and no alert is evaluated meanwhile. The figures are the last known.',
+                        'No reading has arrived for several intervals: the scheduler or the workers of Horizon Watch may be stopped, and no alert is evaluated meanwhile.',
                     )
                 }}</template>
                 <template v-else>{{
@@ -119,13 +109,6 @@ const since = computed(() => (alert ? formatAgo(alert.minutesAgo * 60) : null));
                         'Jobs are being consumed, but at least one threshold is exceeded.',
                     )
                 }}</template>
-            </div>
-            <div
-                v-if="alert && !compact"
-                class="nc-t-2xs nc-tone-muted mt-[5px]"
-            >
-                {{ $t('Rule:') }}
-                <span :title="alert.metric">{{ formatRule(alert) }}</span>
             </div>
         </div>
     </div>

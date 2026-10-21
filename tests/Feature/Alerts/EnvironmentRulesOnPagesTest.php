@@ -175,3 +175,18 @@ test('every threshold carries the severity of its rule', function () {
             && $thresholds['queue.max_wait']['severity'] === 'warning'
             && $thresholds['endpoint.unreachable']['severity'] === 'critical'));
 });
+
+test('a renamed environment keeps its address and takes the alert overrides of its new name', function () {
+    ($this->override)('staging', AlertRuleMetric::QueuePending, ['threshold' => 100]);
+    ($this->override)('qa', AlertRuleMetric::QueuePending, ['threshold' => 250]);
+    Readings::record($this->staging);
+    $slug = $this->staging->slug;
+
+    $this->staging->update(['name' => 'qa']);
+
+    expect($this->staging->fresh()->slug)->toBe($slug);
+
+    ($this->environmentPage)($this->staging->fresh())->assertInertia(fn (Assert $page) => $page
+        ->where('page.environment.name', 'qa')
+        ->where('page.environment.thresholds', fn ($thresholds) => (float) $thresholds['queue.pending']['value'] === 250.0));
+});

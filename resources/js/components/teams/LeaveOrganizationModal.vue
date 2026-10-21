@@ -65,7 +65,7 @@ function confirm(): void {
                 }}
             </p>
 
-            <DialogFooter class="gap-2">
+            <DialogFooter>
                 <DialogClose as-child>
                     <button type="button" class="nc-btn nc-btn-secondary">
                         {{ $t('Cancel') }}

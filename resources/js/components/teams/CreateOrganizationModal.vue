@@ -66,7 +66,7 @@ function handleOpenChange(value: boolean) {
                     <InputError :field="id" :message="errors.name" />
                 </div>
 
-                <DialogFooter class="gap-2">
+                <DialogFooter>
                     <DialogClose as-child>
                         <button type="button" class="nc-btn nc-btn-secondary">
                             {{ $t('Cancel') }}

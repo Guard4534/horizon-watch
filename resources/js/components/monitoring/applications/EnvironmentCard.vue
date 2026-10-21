@@ -2,6 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import {
+    failedLastHourText,
     hasMeasurement,
     needsAttention,
     statusText,
@@ -128,6 +129,43 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                 >
                 <span class="nc-micro nc-tone-faint block">{{
                     $t('Max wait')
+                }}</span>
+            </span>
+            <span>
+                <span
+                    class="block"
+                    style="font-size: 16px"
+                    :style="{
+                        color: hasNumbers
+                            ? thresholdTone(
+                                  environment,
+                                  'jobs.failed_per_hour',
+                                  environment.failedLastHour,
+                              )
+                            : undefined,
+                    }"
+                    >{{
+                        hasNumbers ? failedLastHourText(environment) : '—'
+                    }}</span
+                >
+                <span class="nc-micro nc-tone-faint block leading-tight">{{
+                    $t('Failed · last hour')
+                }}</span>
+            </span>
+            <span>
+                <span class="block" style="font-size: 16px">{{
+                    hasNumbers ? environment.workers : '—'
+                }}</span>
+                <span class="nc-micro nc-tone-faint block">{{
+                    $t('Workers')
+                }}</span>
+            </span>
+            <span>
+                <span class="block" style="font-size: 16px">{{
+                    hasNumbers ? `${environment.jobsPerMinute}/min` : '—'
+                }}</span>
+                <span class="nc-micro nc-tone-faint block">{{
+                    $t('Throughput')
                 }}</span>
             </span>
             <span>

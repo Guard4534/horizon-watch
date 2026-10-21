@@ -72,6 +72,7 @@ class EnvironmentFormData extends Data
     {
         return [
             'horizonUrl' => __('Horizon URL'),
+            'pollIntervalSeconds' => __('collection interval'),
         ];
     }
 

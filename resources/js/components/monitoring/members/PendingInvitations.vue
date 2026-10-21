@@ -168,7 +168,7 @@ async function createLink(): Promise<void> {
                             </button>
                             <button
                                 type="button"
-                                class="nc-btn nc-btn-ghost nc-t-xs nc-tone-soft"
+                                class="nc-btn nc-btn-ghost nc-t-xs nc-tone-down"
                                 :disabled="busy === invitation.id"
                                 @click="act(invitation, revokeInvitation)"
                             >

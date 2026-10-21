@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { Head, Link, usePage } from '@inertiajs/vue3';
-import { PhGearSix, PhPlus } from '@phosphor-icons/vue';
+import { Head, Link } from '@inertiajs/vue3';
+import { PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
+import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import EnvironmentCard from '@/components/monitoring/applications/EnvironmentCard.vue';
-import EnvironmentComparison from '@/components/monitoring/applications/EnvironmentComparison.vue';
 import RecentAlerts from '@/components/monitoring/applications/RecentAlerts.vue';
 import { hasMeasurement } from '@/components/monitoring/environment/readings';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { useVisibility } from '@/composables/useVisibility';
 import { formatCount, statusColor, statusLabel } from '@/lib/monitoring';
 import {
     edit as editApplication,
@@ -27,7 +28,7 @@ const { page } = defineProps<{
 useLivePoll();
 
 const slug = useTeamSlug();
-const shared = usePage();
+const { canManageApplications } = useVisibility();
 const isMobile = useIsMobile();
 
 const watched = computed(() =>
@@ -39,12 +40,8 @@ const watched = computed(() =>
 
 const stats = computed(() => [
     {
-        label: 'Environments',
-        value: String(page.environments.length),
-        color: 'var(--nc-text)',
-    },
-    {
-        label: 'Nodes',
+        key: 'nodes',
+        label: trans('Nodes'),
         value: String(
             watched.value.reduce(
                 (sum, environment) => sum + environment.nodeCount,
@@ -54,7 +51,8 @@ const stats = computed(() => [
         color: 'var(--nc-text)',
     },
     {
-        label: 'Pending',
+        key: 'pending',
+        label: trans('Pending'),
         value: formatCount(
             watched.value.reduce(
                 (sum, environment) => sum + environment.pending,
@@ -64,7 +62,8 @@ const stats = computed(() => [
         color: 'var(--nc-text)',
     },
     {
-        label: 'Worst status',
+        key: 'worstStatus',
+        label: trans('Worst status'),
         value: page.worstStatus ? statusLabel(page.worstStatus) : '—',
         color: page.worstStatus
             ? statusColor(page.worstStatus)
@@ -105,7 +104,7 @@ const stats = computed(() => [
                     </div>
                 </div>
                 <div
-                    v-if="shared.props.canManageApplications"
+                    v-if="canManageApplications"
                     class="ml-auto flex flex-wrap"
                     style="gap: var(--nc-space-2)"
                 >
@@ -129,7 +128,9 @@ const stats = computed(() => [
                             })
                         "
                     >
-                        <PhGearSix :size="14" />{{ $t('Edit application') }}
+                        <PhPencilSimple :size="14" />{{
+                            $t('Edit application')
+                        }}
                     </Link>
                 </div>
             </div>
@@ -142,22 +143,11 @@ const stats = computed(() => [
             >
                 <div
                     v-for="stat in stats"
-                    :key="stat.label"
+                    :key="stat.key"
                     class="nc-card"
                     style="padding: var(--nc-space-3) var(--nc-space-4)"
                 >
-                    <div class="nc-label">
-                        <template v-if="stat.label === 'Environments'">{{
-                            $t('Environments')
-                        }}</template>
-                        <template v-else-if="stat.label === 'Nodes'">{{
-                            $t('Nodes')
-                        }}</template>
-                        <template v-else-if="stat.label === 'Worst status'">{{
-                            $t('Worst status')
-                        }}</template>
-                        <template v-else>{{ $t('Pending') }}</template>
-                    </div>
+                    <div class="nc-label">{{ stat.label }}</div>
                     <div
                         class="nc-num"
                         style="
@@ -198,10 +188,6 @@ const stats = computed(() => [
         </div>
 
         <div class="flex flex-col" style="gap: var(--nc-space-4)">
-            <EnvironmentComparison
-                v-if="page.environments.length"
-                :environments="page.environments"
-            />
             <RecentAlerts
                 :application-id="page.application.id"
                 :alerts="page.recentAlerts"

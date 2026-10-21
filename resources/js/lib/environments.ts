@@ -126,3 +126,27 @@ export function followSuggestion<T>(
 export function leavesSuggestion(typed: string, suggestion: string): boolean {
     return typed !== suggestion;
 }
+
+export type BasicAuthCredentials = {
+    basicAuthUser: string | null;
+    basicAuthPassword: string | null;
+};
+
+/**
+ * The credentials an environment form holds after its basic-auth switch moves. Off sends no
+ * credentials, so saving removes the stored ones; on again brings back the username typed before,
+ * never the password.
+ */
+export function switchBasicAuth(
+    on: boolean,
+    current: BasicAuthCredentials,
+    stashedUser: string | null,
+): BasicAuthCredentials & { stashedUser: string | null } {
+    return on
+        ? { basicAuthUser: stashedUser, basicAuthPassword: null, stashedUser }
+        : {
+              basicAuthUser: null,
+              basicAuthPassword: null,
+              stashedUser: current.basicAuthUser,
+          };
+}

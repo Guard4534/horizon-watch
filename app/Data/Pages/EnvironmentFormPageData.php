@@ -4,6 +4,7 @@ namespace App\Data\Pages;
 
 use App\Data\Applications\ApplicationFormData;
 use App\Data\Applications\EnvironmentSummaryData;
+use App\Data\Applications\PollIntervalData;
 use Spatie\LaravelData\Data;
 
 class EnvironmentFormPageData extends Data
@@ -15,6 +16,7 @@ class EnvironmentFormPageData extends Data
         public array $types,
         public bool $hasPassword,
         public string $applicationSlug,
+        public PollIntervalData $pollInterval,
         public ?string $slug = null,
         public ?string $domain = null,
         public ?string $baseHorizonUrl = null,

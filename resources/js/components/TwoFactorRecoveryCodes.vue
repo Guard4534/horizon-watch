@@ -2,7 +2,7 @@
 import { Form } from '@inertiajs/vue3';
 import { PhArrowsClockwise, PhEye, PhEyeSlash } from '@phosphor-icons/vue';
 import { nextTick, onUnmounted, ref, useTemplateRef } from 'vue';
-import AlertError from '@/components/AlertError.vue';
+import FormErrors from '@/components/FormErrors.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
 import { regenerateRecoveryCodes } from '@/routes/two-factor';
@@ -85,7 +85,7 @@ onUnmounted(hideRecoveryCodes);
                     !confirmingRegeneration
                 "
                 type="button"
-                class="nc-btn nc-btn-secondary w-fit"
+                class="nc-btn nc-btn-ghost nc-tone-down w-fit"
                 @click="confirmingRegeneration = true"
             >
                 <PhArrowsClockwise :size="16" /> {{ $t('Regenerate codes') }}
@@ -111,7 +111,7 @@ onUnmounted(hideRecoveryCodes);
                 v-bind="regenerateRecoveryCodes.form()"
                 method="post"
                 :options="{ preserveScroll: true }"
-                class="flex flex-none gap-2"
+                class="nc-actions flex-none"
                 @success="regenerated"
                 #default="{ processing }"
             >
@@ -135,7 +135,10 @@ onUnmounted(hideRecoveryCodes);
         </div>
         <div v-if="isRecoveryCodesVisible">
             <div v-if="errors?.length" class="mt-6">
-                <AlertError :errors="errors" />
+                <FormErrors
+                    :errors="errors"
+                    :title="$t('Something went wrong.')"
+                />
             </div>
             <div v-else class="mt-3 space-y-3">
                 <div

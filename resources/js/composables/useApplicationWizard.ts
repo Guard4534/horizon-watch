@@ -49,6 +49,7 @@ export type ApplicationWizard = {
     rememberTest: (key: number, instance: unknown) => void;
     testAgain: () => Promise<void>;
     submit: () => void;
+    advance: () => void;
 };
 
 const SUGGESTED_NAMES = [
@@ -60,7 +61,9 @@ const SUGGESTED_NAMES = [
     'testing',
 ];
 
-export function useApplicationWizard(): ApplicationWizard {
+export function useApplicationWizard(
+    pollInterval: App.Data.Applications.PollIntervalData,
+): ApplicationWizard {
     const slug = useTeamSlug();
 
     const step = ref(1);
@@ -80,7 +83,7 @@ export function useApplicationWizard(): ApplicationWizard {
             horizonUrl: '',
             basicAuthUser: null,
             basicAuthPassword: null,
-            pollIntervalSeconds: 15,
+            pollIntervalSeconds: pollInterval.default,
             pollingEnabled: true,
         };
     };
@@ -268,6 +271,16 @@ export function useApplicationWizard(): ApplicationWizard {
         });
     };
 
+    const advance = (): void => {
+        if (step.value === 1 && applicationFilled.value) {
+            step.value = 2;
+        } else if (step.value === 2 && environmentsFilled.value) {
+            step.value = 3;
+        } else if (step.value === 3 && !form.processing) {
+            submit();
+        }
+    };
+
     return {
         step,
         form,
@@ -285,5 +298,6 @@ export function useApplicationWizard(): ApplicationWizard {
         rememberTest,
         testAgain,
         submit,
+        advance,
     };
 }

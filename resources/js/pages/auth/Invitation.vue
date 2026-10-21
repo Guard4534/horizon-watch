@@ -130,27 +130,7 @@ const flushOnSignOut = () => router.flushAll();
                 }}
             </p>
 
-            <div
-                class="flex gap-[var(--nc-space-2)]"
-                style="margin-top: var(--nc-space-4)"
-            >
-                <Form
-                    v-bind="accept.form(page.code)"
-                    v-slot="{ processing }"
-                    class="flex-1"
-                    data-test="invitation-accept-form"
-                >
-                    <button
-                        type="submit"
-                        class="nc-btn nc-btn-primary nc-btn-block"
-                        :disabled="processing"
-                        data-test="invitation-accept-button"
-                    >
-                        <Spinner v-if="processing" />
-                        {{ $t('Accept invitation') }}
-                    </button>
-                </Form>
-
+            <div class="nc-actions" style="margin-top: var(--nc-space-4)">
                 <Form
                     v-bind="decline.form(page.code)"
                     v-slot="{ processing }"
@@ -163,6 +143,22 @@ const flushOnSignOut = () => router.flushAll();
                         data-test="invitation-decline-button"
                     >
                         {{ $t('Decline') }}
+                    </button>
+                </Form>
+
+                <Form
+                    v-bind="accept.form(page.code)"
+                    v-slot="{ processing }"
+                    data-test="invitation-accept-form"
+                >
+                    <button
+                        type="submit"
+                        class="nc-btn nc-btn-primary"
+                        :disabled="processing"
+                        data-test="invitation-accept-button"
+                    >
+                        <Spinner v-if="processing" />
+                        {{ $t('Accept invitation') }}
                     </button>
                 </Form>
             </div>

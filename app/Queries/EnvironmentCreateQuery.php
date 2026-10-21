@@ -4,6 +4,7 @@ namespace App\Queries;
 
 use App\Data\Applications\ApplicationFormData;
 use App\Data\Applications\EnvironmentFormData;
+use App\Data\Applications\PollIntervalData;
 use App\Data\Pages\EnvironmentFormPageData;
 use App\Enums\EnvironmentType;
 use App\Models\Application;
@@ -21,6 +22,7 @@ class EnvironmentCreateQuery
             types: EnvironmentType::options(),
             hasPassword: false,
             applicationSlug: $application->slug,
+            pollInterval: PollIntervalData::fromConfig(),
             domain: $primary === null ? null : HorizonUrl::host($primary->horizon_url),
             baseHorizonUrl: $primary === null ? null : HorizonUrl::normalize(EnvironmentFormData::withoutUserinfo($primary->horizon_url)),
             baseEnvironmentName: $primary?->name,

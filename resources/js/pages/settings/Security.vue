@@ -111,14 +111,16 @@ defineOptions({
                 />
             </div>
 
-            <button
-                type="submit"
-                class="nc-btn nc-btn-primary"
-                :disabled="processing"
-                data-test="update-password-button"
-            >
-                {{ $t('Save') }}
-            </button>
+            <div class="nc-actions">
+                <button
+                    type="submit"
+                    class="nc-btn nc-btn-primary"
+                    :disabled="processing"
+                    data-test="update-password-button"
+                >
+                    {{ $t('Save') }}
+                </button>
+            </div>
         </Form>
     </div>
 

@@ -3,7 +3,7 @@ import { Form } from '@inertiajs/vue3';
 import { useClipboard } from '@vueuse/core';
 import { PhCheck, PhCopy, PhScan } from '@phosphor-icons/vue';
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
-import AlertError from '@/components/AlertError.vue';
+import FormErrors from '@/components/FormErrors.vue';
 import InputError from '@/components/InputError.vue';
 import {
     Dialog,
@@ -129,7 +129,11 @@ watch(
                 class="relative flex w-auto flex-col items-center justify-center space-y-5"
             >
                 <template v-if="!showVerificationStep">
-                    <AlertError v-if="errors?.length" :errors="errors" />
+                    <FormErrors
+                        v-if="errors?.length"
+                        :errors="errors"
+                        :title="$t('Something went wrong.')"
+                    />
                     <template v-else>
                         <div
                             class="relative mx-auto aspect-square w-64 overflow-hidden"
@@ -253,10 +257,10 @@ watch(
                                 />
                             </div>
 
-                            <div class="flex w-full items-center gap-3">
+                            <div class="nc-actions w-full">
                                 <button
                                     type="button"
-                                    class="nc-btn nc-btn-secondary flex-1"
+                                    class="nc-btn nc-btn-secondary"
                                     :disabled="processing"
                                     @click="showVerificationStep = false"
                                 >
@@ -264,7 +268,7 @@ watch(
                                 </button>
                                 <button
                                     type="submit"
-                                    class="nc-btn nc-btn-primary flex-1"
+                                    class="nc-btn nc-btn-primary"
                                     :disabled="processing || code.length < 6"
                                 >
                                     {{ $t('Confirm') }}

@@ -43,6 +43,10 @@ const outcome = defineModel<ConnectionOutcome>('outcome', {
     default: () => ({ state: 'idle' }),
 });
 
+const emit = defineEmits<{
+    run: [];
+}>();
+
 let attempt = 0;
 
 const failureOf = (error: unknown): ConnectionOutcome => {
@@ -73,6 +77,7 @@ const failureOf = (error: unknown): ConnectionOutcome => {
 const run = async (): Promise<void> => {
     const current = ++attempt;
     outcome.value = { state: 'testing' };
+    emit('run');
 
     try {
         const response = await http.getClient().request({

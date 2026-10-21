@@ -2,6 +2,7 @@
 
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
+use App\Enums\TeamRole;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\Application;
 use App\Models\Environment;
@@ -102,4 +103,22 @@ test('the live poll of the page leaves the series alone', function () {
         ->assertJsonMissingPath('props.series');
 
     expect(array_filter(array_column(DB::getQueryLog(), 'query'), fn (string $sql) => str_contains($sql, '), s.captured_at')))->toBe([]);
+});
+
+test('the environment page tells the front end who may edit the environment', function () {
+    $team = $this->user->currentTeam;
+    $member = User::factory()->create();
+    $viewer = User::factory()->create();
+    $team->members()->attach($member, ['role' => TeamRole::Member->value]);
+    $team->members()->attach($viewer, ['role' => TeamRole::Viewer->value]);
+
+    $url = route('environments.show', ['current_team' => $this->slug, 'environment' => 'invoice-desk-staging']);
+
+    $this->actingAs($this->user)->get($url)
+        ->assertInertia(fn (Assert $page) => $page->where('canManageApplications', true));
+
+    foreach ([$member, $viewer] as $user) {
+        $this->actingAs($user)->get($url)
+            ->assertInertia(fn (Assert $page) => $page->where('canManageApplications', false));
+    }
 });

@@ -248,3 +248,25 @@ test('the wizard asks only the application name before the environments', functi
     expect($wizard)->not->toContain('horizonPath')->not->toContain('application.host')->toContain('type-follows-name')
         ->and($form)->not->toContain('host');
 });
+
+test('every environment form page sends the collection interval limits from the configuration', function () {
+    config([
+        'horizon-watch.readings.poll_interval_seconds.default' => 30,
+        'horizon-watch.readings.poll_interval_seconds.min' => 15,
+        'horizon-watch.readings.poll_interval_seconds.max' => 600,
+    ]);
+
+    $pages = collect(($this->routes)())->only(['monitoring/applications/Create', 'monitoring/environments/Create', 'monitoring/environments/Edit']);
+
+    expect($pages)->toHaveCount(3);
+
+    foreach ($pages as $url) {
+        $this->actingAs($this->admin)
+            ->get($url)
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('page.pollInterval.default', 30)
+                ->where('page.pollInterval.min', 15)
+                ->where('page.pollInterval.max', 600)
+                ->where('page.pollInterval.step', 15));
+    }
+});

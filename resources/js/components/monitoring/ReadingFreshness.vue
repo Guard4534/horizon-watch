@@ -6,11 +6,18 @@ import {
 } from '@/components/monitoring/environment/readings';
 import { formatSeconds } from '@/lib/monitoring';
 
-const { lastReadingAt, stale, pollingEnabled, readingError } = defineProps<{
+const {
+    lastReadingAt,
+    stale,
+    pollingEnabled,
+    readingError,
+    hideReason = false,
+} = defineProps<{
     lastReadingAt: string | null;
     stale: boolean;
     pollingEnabled: boolean;
     readingError: App.Enums.ReadingError | null;
+    hideReason?: boolean;
 }>();
 
 const now = ref(Date.now());
@@ -33,6 +40,10 @@ const tone = computed(() => {
         return 'var(--nc-neutral-400)';
     }
 
+    if (hideReason) {
+        return 'var(--nc-neutral-500)';
+    }
+
     if (readingError) {
         return 'var(--st-down)';
     }
@@ -46,16 +57,22 @@ const tone = computed(() => {
         <template v-if="!pollingEnabled">{{
             $t('Collection paused')
         }}</template>
-        <template v-else-if="readingError">{{
+        <template v-else-if="readingError !== null && !hideReason">{{
             readingErrorLabel(readingError)
         }}</template>
-        <template v-else-if="stale">{{ $t('Not updated') }}</template>
+        <template v-else-if="stale && !hideReason">{{
+            $t('Not updated')
+        }}</template>
         <template v-else-if="age">{{
             $t('Last reading :time ago', { time: age })
         }}</template>
         <template v-else>{{ $t('No reading yet') }}</template>
         <template
-            v-if="age && (!pollingEnabled || readingError !== null || stale)"
+            v-if="
+                age &&
+                (!pollingEnabled ||
+                    (!hideReason && (readingError !== null || stale)))
+            "
         >
             ·
             <span class="nc-tone-muted">{{

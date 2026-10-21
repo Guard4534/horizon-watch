@@ -67,12 +67,11 @@ test('every list of applications counts the environments needing attention with 
     'mobile application list' => 'components/mobile/applications/ApplicationList.vue',
 ]);
 
-test('the application table tones the last hour and keeps the window count as a neutral note', function () {
-    expect(stateAndNumbersSource('components/monitoring/applications/EnvironmentComparison.vue'))
+test('the application cards tone the last hour and write the throughput unit on the value', function () {
+    expect(stateAndNumbersSource('components/monitoring/applications/EnvironmentCard.vue'))
         ->toContain("\$t('Failed · last hour')")
         ->toMatch("/thresholdTone\(\s*environment,\s*'jobs\.failed_per_hour',\s*environment\.failedLastHour,?\s*\)/")
         ->toContain('failedLastHourText(environment)')
-        ->toContain('formatCount(environment.failedInWindow)')
         ->not->toMatch('/thresholdTone\([^)]*failedInWindow/')
         ->not->toContain('failedTone')
         ->toContain("\$t('Throughput')")

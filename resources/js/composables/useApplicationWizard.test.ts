@@ -27,6 +27,8 @@ vi.mock('@/routes/applications', () => ({
 
 const BASE_URL = 'https://shop.example.com/horizon';
 
+const POLL_INTERVAL = { default: 30, min: 15, max: 300, step: 15 };
+
 const reachable = (yes: boolean) =>
     ({
         state: 'done',
@@ -43,7 +45,7 @@ const reachable = (yes: boolean) =>
     }) as const;
 
 async function wizardFor(baseUrl = BASE_URL) {
-    const wizard = useApplicationWizard();
+    const wizard = useApplicationWizard(POLL_INTERVAL);
 
     wizard.form.application.name = 'Billing';
     wizard.form.environments[0].horizonUrl = baseUrl;
@@ -59,7 +61,7 @@ beforeEach(() => {
 
 describe('useApplicationWizard', () => {
     it('starts with a production environment whose URL is typed by hand', () => {
-        const { form, rows } = useApplicationWizard();
+        const { form, rows } = useApplicationWizard(POLL_INTERVAL);
 
         expect(form.application).toEqual({ name: '' });
         expect(form.environments).toEqual([
@@ -69,7 +71,7 @@ describe('useApplicationWizard', () => {
                 horizonUrl: '',
                 basicAuthUser: null,
                 basicAuthPassword: null,
-                pollIntervalSeconds: 15,
+                pollIntervalSeconds: 30,
                 pollingEnabled: true,
             },
         ]);
@@ -97,7 +99,7 @@ describe('useApplicationWizard', () => {
     });
 
     it('falls back to an unnamed staging environment once the usual names are taken', () => {
-        const { form, addEnvironment } = useApplicationWizard();
+        const { form, addEnvironment } = useApplicationWizard(POLL_INTERVAL);
 
         for (let added = 0; added < 6; added++) {
             addEnvironment();
@@ -165,7 +167,7 @@ describe('useApplicationWizard', () => {
     });
 
     it('needs the application name, and a name and a URL for every environment', async () => {
-        const wizard = useApplicationWizard();
+        const wizard = useApplicationWizard(POLL_INTERVAL);
 
         expect(wizard.applicationFilled.value).toBe(false);
         expect(wizard.environmentsFilled.value).toBe(false);
@@ -313,5 +315,43 @@ describe('useApplicationWizard', () => {
         });
 
         expect(unplacedErrors.value).toEqual(['Too many environments.']);
+    });
+
+    it('takes the collection interval default from the server', async () => {
+        const { form, addEnvironment } = await wizardFor();
+
+        addEnvironment();
+
+        expect(
+            form.environments.map(
+                (environment) => environment.pollIntervalSeconds,
+            ),
+        ).toEqual([30, 30]);
+    });
+
+    it('advances on Enter only when the step is filled, and submits on the last one', async () => {
+        const wizard = await wizardFor();
+
+        wizard.step.value = 1;
+        wizard.form.application.name = ' ';
+        wizard.advance();
+        expect(wizard.step.value).toBe(1);
+
+        wizard.form.application.name = 'Billing';
+        wizard.advance();
+        expect(wizard.step.value).toBe(2);
+
+        wizard.form.environments[0].horizonUrl = '';
+        wizard.advance();
+        expect(wizard.step.value).toBe(2);
+
+        wizard.form.environments[0].horizonUrl =
+            'https://billing.example.com/horizon';
+        wizard.advance();
+        expect(wizard.step.value).toBe(3);
+        expect(inertia.post).not.toHaveBeenCalled();
+
+        wizard.advance();
+        expect(inertia.post).toHaveBeenCalledOnce();
     });
 });

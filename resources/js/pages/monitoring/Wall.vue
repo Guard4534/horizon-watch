@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
+import { PhArrowRight, PhPlus, PhStackSimple } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed, ref, watch } from 'vue';
 import MobileWall from '@/components/mobile/wall/MobileWall.vue';
@@ -199,7 +199,7 @@ const kpis = useWallKpis(() => page.kpis);
                 style="margin-top: var(--nc-space-2)"
                 :href="applicationsIndex(slug)"
             >
-                <PhPlus :size="14" />{{ $t('Add environment') }}
+                {{ $t('Go to applications') }}<PhArrowRight :size="14" />
             </Link>
             <Link
                 v-else-if="canManageApplications"

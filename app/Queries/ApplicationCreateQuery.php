@@ -2,6 +2,7 @@
 
 namespace App\Queries;
 
+use App\Data\Applications\PollIntervalData;
 use App\Data\Pages\ApplicationFormPageData;
 use App\Enums\EnvironmentType;
 
@@ -12,6 +13,7 @@ class ApplicationCreateQuery
         return new ApplicationFormPageData(
             application: null,
             types: EnvironmentType::options(),
+            pollInterval: PollIntervalData::fromConfig(),
             maxEnvironments: config()->integer('horizon-watch.limits.wizard_environments'),
         );
     }

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { PhArrowSquareOut, PhShieldCheck } from '@phosphor-icons/vue';
+import {
+    PhArrowSquareOut,
+    PhPencilSimple,
+    PhShieldCheck,
+} from '@phosphor-icons/vue';
 import { trans, transChoice } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import EnvironmentMobile from '@/components/mobile/environment/EnvironmentMobile.vue';
@@ -32,6 +36,7 @@ import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { useVisibility } from '@/composables/useVisibility';
 import { formatThreshold } from '@/lib/alertRules';
 import { isProductionType } from '@/lib/environments';
 import { failedWindowNote } from '@/lib/failedWindow';
@@ -44,7 +49,7 @@ import {
     index as applicationsIndex,
     show as showApplication,
 } from '@/routes/applications';
-import { testConnection } from '@/routes/environments';
+import { edit as editEnvironment, testConnection } from '@/routes/environments';
 
 defineOptions({
     layout: { title: 'Environment detail', live: true },
@@ -61,9 +66,11 @@ useLivePoll(['series'], (ms) =>
 );
 
 const slug = useTeamSlug();
+const { canManageApplications } = useVisibility();
 const isMobile = useIsMobile();
-const { environment, threshold, incident, incidentAlert, lastKnown } =
-    useEnvironmentDetail(() => page);
+const { environment, threshold, incident, lastKnown } = useEnvironmentDetail(
+    () => page,
+);
 
 const longRunningUnknown = computed(
     () =>
@@ -232,6 +239,18 @@ const tiles = computed<Tile[]>(() => [
                     "
                     :payload="null"
                 />
+                <Link
+                    v-if="canManageApplications"
+                    class="nc-btn nc-btn-ghost nc-t-xs"
+                    :href="
+                        editEnvironment({
+                            current_team: slug,
+                            environment: environment.id,
+                        })
+                    "
+                >
+                    <PhPencilSimple :size="14" />{{ $t('Edit environment') }}
+                </Link>
                 <a
                     :href="environment.horizonUrl"
                     target="_blank"
@@ -258,6 +277,7 @@ const tiles = computed<Tile[]>(() => [
                 :stale="environment.stale"
                 :polling-enabled="environment.pollingEnabled"
                 :reading-error="environment.readingError"
+                :hide-reason="incident !== null"
             />
             <template v-if="environment.latencyMs !== null">
                 <span>·</span>
@@ -274,7 +294,6 @@ const tiles = computed<Tile[]>(() => [
             :status="incident"
             :reading-error="environment.readingError"
             :reading-problem="environment.readingProblem"
-            :alert="incidentAlert"
             :has-earlier-reading="page.nodes.length + page.queues.length > 0"
         />
 

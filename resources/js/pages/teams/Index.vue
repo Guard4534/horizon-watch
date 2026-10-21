@@ -126,8 +126,9 @@ function switchTo(team: Organization): void {
                     <button
                         v-if="team.role !== 'owner'"
                         type="button"
-                        class="nc-btn nc-btn-ghost"
+                        class="nc-btn nc-btn-ghost nc-tone-down"
                         data-test="team-leave-button"
+                        :title="$t('Leave the organization')"
                         :aria-label="$t('Leave the organization')"
                         @click="leaving = team"
                     >
@@ -137,8 +138,9 @@ function switchTo(team: Organization): void {
                     <button
                         v-if="team.role === 'owner'"
                         type="button"
-                        class="nc-btn nc-btn-ghost"
+                        class="nc-btn nc-btn-ghost nc-tone-down"
                         data-test="team-delete-button"
+                        :title="$t('Delete the organization')"
                         :aria-label="$t('Delete the organization')"
                         @click="deleting = team"
                     >

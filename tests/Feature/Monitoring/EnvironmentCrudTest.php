@@ -1084,3 +1084,19 @@ test('the first save of an environment stored before 1.0 with an untidy URL keep
         ->and($environment->fresh()->poll_interval_seconds)->toBe(60)
         ->and(EnvironmentState::query()->where('environment_id', $environment->id)->exists())->toBeTrue();
 });
+
+test('adding an environment lands on its application page', function () {
+    $this->actingAs($this->admin)->post(
+        route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+        ($this->validPayload)(['name' => 'staging', 'horizonUrl' => 'https://staging.example.com/horizon']),
+    )->assertRedirect(route('applications.show', ['current_team' => $this->team->slug, 'application' => $this->application->slug]));
+});
+
+test('a rejected interval is named after the collection interval field', function () {
+    $this->actingAs($this->admin)
+        ->post(
+            route('environments.store', ['current_team' => $this->team->slug, 'application' => $this->application->slug]),
+            ($this->validPayload)(['pollIntervalSeconds' => 20]),
+        )
+        ->assertInvalid(['pollIntervalSeconds' => 'The collection interval field must be a multiple of 15.']);
+});

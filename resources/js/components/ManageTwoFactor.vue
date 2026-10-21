@@ -46,7 +46,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                 }}
             </p>
 
-            <div>
+            <div class="nc-actions w-full">
                 <button
                     v-if="hasSetupData"
                     type="button"
@@ -81,7 +81,11 @@ onUnmounted(() => clearTwoFactorAuthData());
                 }}
             </p>
 
-            <Form v-bind="disable.form()" #default="{ processing }">
+            <Form
+                v-bind="disable.form()"
+                class="nc-actions w-full"
+                #default="{ processing }"
+            >
                 <button
                     type="submit"
                     class="nc-btn nc-btn-danger"

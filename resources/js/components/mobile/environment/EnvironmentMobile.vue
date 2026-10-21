@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { PhArrowSquareOut, PhCaretLeft } from '@phosphor-icons/vue';
+import {
+    PhArrowSquareOut,
+    PhCaretLeft,
+    PhPencilSimple,
+} from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
@@ -22,16 +26,18 @@ import MetricTile from '@/components/nocturne/MetricTile.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { useVisibility } from '@/composables/useVisibility';
 import { formatCount, formatSeconds } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
+import { edit as editEnvironment } from '@/routes/environments';
 
 const { page } = defineProps<{
     page: App.Data.Pages.EnvironmentDetailPageData;
 }>();
 
 const slug = useTeamSlug();
-const { environment, incident, incidentAlert, lastKnown } =
-    useEnvironmentDetail(() => page);
+const { canManageApplications } = useVisibility();
+const { environment, incident, lastKnown } = useEnvironmentDetail(() => page);
 
 const tiles = computed(() => [
     {
@@ -141,6 +147,7 @@ const tiles = computed(() => [
                     :stale="environment.stale"
                     :polling-enabled="environment.pollingEnabled"
                     :reading-error="environment.readingError"
+                    :hide-reason="incident !== null"
                 />
             </div>
 
@@ -157,7 +164,6 @@ const tiles = computed(() => [
                 :status="incident"
                 :reading-error="environment.readingError"
                 :reading-problem="environment.readingProblem"
-                :alert="incidentAlert"
                 :has-earlier-reading="
                     page.nodes.length + page.queues.length > 0
                 "
@@ -267,6 +273,20 @@ const tiles = computed(() => [
                     :choices="page.silenceChoices"
                     block
                 />
+                <Link
+                    v-if="canManageApplications"
+                    class="nc-btn nc-btn-secondary nc-t-xs"
+                    :href="
+                        editEnvironment({
+                            current_team: slug,
+                            environment: environment.id,
+                        })
+                    "
+                    :title="$t('Edit environment')"
+                    :aria-label="$t('Edit environment')"
+                >
+                    <PhPencilSimple :size="13" />
+                </Link>
                 <a
                     :href="environment.horizonUrl"
                     target="_blank"

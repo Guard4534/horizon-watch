@@ -29,7 +29,7 @@ const organization = defineModel<App.Data.Teams.UserTeamData | null>(
                 :key="organization.slug"
                 v-bind="update.form(organization.slug)"
                 class="space-y-6"
-                v-slot="{ errors, processing }"
+                v-slot="{ errors, processing, isDirty }"
                 @success="organization = null"
             >
                 <DialogHeader>
@@ -66,7 +66,7 @@ const organization = defineModel<App.Data.Teams.UserTeamData | null>(
                     />
                 </div>
 
-                <DialogFooter class="gap-2">
+                <DialogFooter>
                     <DialogClose as-child>
                         <button type="button" class="nc-btn nc-btn-secondary">
                             {{ $t('Cancel') }}
@@ -77,7 +77,7 @@ const organization = defineModel<App.Data.Teams.UserTeamData | null>(
                         type="submit"
                         class="nc-btn nc-btn-primary"
                         data-test="rename-team-submit"
-                        :disabled="processing"
+                        :disabled="processing || !isDirty"
                     >
                         {{ $t('Save') }}
                     </button>

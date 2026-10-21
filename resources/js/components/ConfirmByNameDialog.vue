@@ -94,7 +94,11 @@ const submit = () => {
                 </li>
             </ul>
 
-            <form class="nc-field" @submit.prevent="submit">
+            <form
+                id="confirm-by-name-form"
+                class="nc-field"
+                @submit.prevent="submit"
+            >
                 <label for="confirm-by-name">
                     {{ $t('Type :name to confirm', { name: resourceName }) }}
                 </label>
@@ -121,10 +125,10 @@ const submit = () => {
                     </button>
                 </DialogClose>
                 <button
-                    type="button"
+                    type="submit"
+                    form="confirm-by-name-form"
                     class="nc-btn nc-btn-danger"
                     :disabled="!matches || form.processing"
-                    @click="submit"
                 >
                     {{ confirmLabel }}
                 </button>

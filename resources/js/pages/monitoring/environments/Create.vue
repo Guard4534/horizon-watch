@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, useTemplateRef } from 'vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useSuggestedHorizonUrl } from '@/composables/useSuggestedHorizonUrl';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { useBlurConnectionTest } from '@/composables/useBlurConnectionTest';
 import { typeForName } from '@/lib/environments';
 import {
     show,
@@ -32,7 +33,7 @@ const form = useForm<{
         horizonUrl: '',
         basicAuthUser: null,
         basicAuthPassword: null,
-        pollIntervalSeconds: 15,
+        pollIntervalSeconds: page.pollInterval.default,
         pollingEnabled: true,
     },
 });
@@ -62,6 +63,15 @@ const testPayload = computed<App.Data.Applications.TestConnectionData>(() => ({
     basicAuthUser: form.environment.basicAuthUser,
     basicAuthPassword: form.environment.basicAuthPassword,
 }));
+
+const auth = ref(false);
+
+const connection = useTemplateRef('connection');
+
+const { onUrlBlur, noteTested } = useBlurConnectionTest(
+    () => testPayload.value,
+    () => connection.value?.run(),
+);
 
 const errors = computed(
     () => form.errors as Record<string, string | undefined>,
@@ -109,44 +119,51 @@ const submit = () => {
         </div>
 
         <SectionCard :title="$t('Environment')">
-            <EnvironmentForm
-                v-model="form.environment"
-                v-model:type-edited="typeEdited"
-                :types="page.types"
-                :errors="errors"
-                :has-password="page.hasPassword"
-                type-follows-name
-                @url-input="onUrlInput"
-            />
-            <div
-                class="mt-[var(--nc-space-4)] flex flex-wrap items-center"
-                style="gap: var(--nc-space-3)"
+            <form
+                class="flex flex-col"
+                style="gap: var(--nc-space-4)"
+                novalidate
+                @submit.prevent="submit"
             >
-                <button
-                    type="button"
-                    class="nc-btn nc-btn-primary"
-                    :disabled="form.processing"
-                    @click="submit"
-                >
-                    {{ $t('Add environment') }}
-                </button>
-                <Link
-                    class="nc-btn nc-btn-secondary"
-                    :href="
-                        show({
-                            current_team: slug,
-                            application: page.applicationSlug,
-                        })
-                    "
-                    >{{ $t('Cancel') }}</Link
-                >
+                <EnvironmentForm
+                    v-model="form.environment"
+                    v-model:auth="auth"
+                    v-model:type-edited="typeEdited"
+                    :types="page.types"
+                    :errors="errors"
+                    :has-password="page.hasPassword"
+                    :poll-interval="page.pollInterval"
+                    type-follows-name
+                    @url-input="onUrlInput"
+                    @url-blur="onUrlBlur"
+                />
                 <ConnectionTest
-                    class="ml-auto"
+                    ref="connection"
                     :url="testUnsavedConnection(slug)"
                     :payload="testPayload"
                     :disabled="form.environment.horizonUrl.trim() === ''"
+                    @run="noteTested"
                 />
-            </div>
+                <div class="nc-actions">
+                    <Link
+                        class="nc-btn nc-btn-secondary"
+                        :href="
+                            show({
+                                current_team: slug,
+                                application: page.applicationSlug,
+                            })
+                        "
+                        >{{ $t('Cancel') }}</Link
+                    >
+                    <button
+                        type="submit"
+                        class="nc-btn nc-btn-primary"
+                        :disabled="form.processing"
+                    >
+                        {{ $t('Add environment') }}
+                    </button>
+                </div>
+            </form>
         </SectionCard>
     </div>
 </template>

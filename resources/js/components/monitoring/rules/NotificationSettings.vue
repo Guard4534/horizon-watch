@@ -2,13 +2,15 @@
 import { router, useForm, usePage } from '@inertiajs/vue3';
 import { PhEnvelopeSimple, PhWebhooksLogo } from '@phosphor-icons/vue';
 import { computed, ref, useId, watch } from 'vue';
+import FormErrors from '@/components/FormErrors.vue';
+import InputError from '@/components/InputError.vue';
 import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
 import WarningNotice from '@/components/monitoring/WarningNotice.vue';
 import WebhookSecret from '@/components/monitoring/rules/WebhookSecret.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { hostOf } from '@/lib/environments';
-import { errorId, invalidField } from '@/lib/fieldErrors';
+import { invalidField } from '@/lib/fieldErrors';
 import { formatSeconds } from '@/lib/monitoring';
 import {
     test as testNotification,
@@ -194,19 +196,12 @@ const movesHost = computed(
                             )
                         "
                     />
-                    <div
+                    <InputError
                         v-if="recipientErrors.length"
-                        :id="errorId(`${id}-recipients`)"
-                        role="alert"
-                    >
-                        <div
-                            v-for="message in recipientErrors"
-                            :key="message"
-                            class="field-error"
-                        >
-                            {{ message }}
-                        </div>
-                    </div>
+                        size="sm"
+                        :field="`${id}-recipients`"
+                        :message="recipientErrors.join(' ')"
+                    />
                     <div class="field-hint">
                         {{
                             $t(
@@ -239,14 +234,12 @@ const movesHost = computed(
                             invalidField(`${id}-webhook`, errors.webhookUrl)
                         "
                     />
-                    <div
+                    <InputError
                         v-if="errors.webhookUrl"
-                        :id="errorId(`${id}-webhook`)"
-                        class="field-error"
-                        role="alert"
-                    >
-                        {{ errors.webhookUrl }}
-                    </div>
+                        size="sm"
+                        :field="`${id}-webhook`"
+                        :message="errors.webhookUrl"
+                    />
                     <div class="field-hint">
                         {{ $t('JSON POST with severity, rule and metrics') }}
                     </div>
@@ -302,22 +295,18 @@ const movesHost = computed(
                             "
                         />
                     </div>
-                    <div
+                    <InputError
                         v-if="errors.quietFrom"
-                        :id="errorId(`${id}-quiet-from`)"
-                        class="field-error"
-                        role="alert"
-                    >
-                        {{ errors.quietFrom }}
-                    </div>
-                    <div
+                        size="sm"
+                        :field="`${id}-quiet-from`"
+                        :message="errors.quietFrom"
+                    />
+                    <InputError
                         v-if="errors.quietTo"
-                        :id="errorId(`${id}-quiet-to`)"
-                        class="field-error"
-                        role="alert"
-                    >
-                        {{ errors.quietTo }}
-                    </div>
+                        size="sm"
+                        :field="`${id}-quiet-to`"
+                        :message="errors.quietTo"
+                    />
                     <div class="field-hint">
                         {{ $t('criticals still get through') }}
                     </div>
@@ -342,14 +331,12 @@ const movesHost = computed(
                             :value="zone"
                         />
                     </datalist>
-                    <div
+                    <InputError
                         v-if="errors.timezone"
-                        :id="errorId(`${id}-timezone`)"
-                        class="field-error"
-                        role="alert"
-                    >
-                        {{ errors.timezone }}
-                    </div>
+                        size="sm"
+                        :field="`${id}-timezone`"
+                        :message="errors.timezone"
+                    />
                     <div class="field-hint">
                         {{ $t('the quiet hours follow this time zone') }}
                     </div>
@@ -382,14 +369,12 @@ const movesHost = computed(
                             {{ $t('first detection only') }}
                         </option>
                     </select>
-                    <div
+                    <InputError
                         v-if="errors.repeatMinutes"
-                        :id="errorId(`${id}-repeat`)"
-                        class="field-error"
-                        role="alert"
-                    >
-                        {{ errors.repeatMinutes }}
-                    </div>
+                        size="sm"
+                        :field="`${id}-repeat`"
+                        :message="errors.repeatMinutes"
+                    />
                     <div class="field-hint">{{ $t('criticals only') }}</div>
                 </div>
             </div>
@@ -463,23 +448,6 @@ const movesHost = computed(
                     <PhWebhooksLogo :size="13" />
                     {{ $t('Send to webhook') }}
                 </button>
-                <div class="ml-auto flex" style="gap: var(--nc-space-2)">
-                    <button
-                        type="button"
-                        class="nc-btn nc-btn-secondary"
-                        :disabled="!form.isDirty || form.processing"
-                        @click="cancel"
-                    >
-                        {{ $t('Cancel') }}
-                    </button>
-                    <button
-                        type="submit"
-                        class="nc-btn nc-btn-primary"
-                        :disabled="!form.isDirty || form.processing"
-                    >
-                        {{ $t('Save') }}
-                    </button>
-                </div>
             </div>
             <div class="field-hint" style="margin-top: var(--nc-space-2)">
                 {{
@@ -488,8 +456,23 @@ const movesHost = computed(
                     )
                 }}
             </div>
-            <div v-if="testError" class="field-error" role="alert">
-                {{ testError }}
+            <FormErrors class="mt-[var(--nc-space-2)]" :errors="[testError]" />
+            <div class="nc-actions" style="margin-top: var(--nc-space-4)">
+                <button
+                    type="button"
+                    class="nc-btn nc-btn-secondary"
+                    :disabled="!form.isDirty || form.processing"
+                    @click="cancel"
+                >
+                    {{ $t('Discard changes') }}
+                </button>
+                <button
+                    type="submit"
+                    class="nc-btn nc-btn-primary"
+                    :disabled="!form.isDirty || form.processing"
+                >
+                    {{ $t('Save') }}
+                </button>
             </div>
         </form>
     </SectionCard>
@@ -525,13 +508,6 @@ const movesHost = computed(
     margin-top: 4px;
     font-size: 11px;
     color: var(--nc-text-faint);
-}
-
-.field-error {
-    margin-top: 4px;
-    font-size: 11px;
-    line-height: 1.35;
-    color: var(--st-down);
 }
 
 .signature {

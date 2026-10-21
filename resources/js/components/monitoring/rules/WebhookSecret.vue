@@ -96,7 +96,7 @@ function regenerate(): void {
         {{ $t('Signing secret set') }}
         <button
             type="button"
-            class="nc-btn nc-btn-ghost nc-t-xs"
+            class="nc-btn nc-btn-ghost nc-t-xs nc-tone-down"
             :disabled="regenerating"
             @click="confirming = true"
         >
@@ -122,7 +122,7 @@ function regenerate(): void {
                     }}
                 </DialogDescription>
             </DialogHeader>
-            <DialogFooter class="gap-2">
+            <DialogFooter>
                 <button
                     type="button"
                     class="nc-btn nc-btn-secondary"
@@ -132,7 +132,7 @@ function regenerate(): void {
                 </button>
                 <button
                     type="button"
-                    class="nc-btn nc-btn-primary"
+                    class="nc-btn nc-btn-danger"
                     :disabled="regenerating"
                     @click="regenerate"
                 >

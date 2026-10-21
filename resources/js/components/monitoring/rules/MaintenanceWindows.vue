@@ -3,12 +3,13 @@ import { router, useForm } from '@inertiajs/vue3';
 import { PhWrench } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed, ref, useId } from 'vue';
+import InputError from '@/components/InputError.vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { formatInstant } from '@/lib/datetime';
-import { errorId, invalidField } from '@/lib/fieldErrors';
+import { invalidField } from '@/lib/fieldErrors';
 import { fromLocalInput, toLocalInput } from '@/lib/maintenance';
 import {
     destroy as endWindow,
@@ -152,14 +153,12 @@ function period(
                         {{ targetLabel(target) }}
                     </option>
                 </select>
-                <div
+                <InputError
                     v-if="targetError"
-                    :id="errorId(`${id}-target`)"
-                    class="field-error"
-                    role="alert"
-                >
-                    {{ targetError }}
-                </div>
+                    size="sm"
+                    :field="`${id}-target`"
+                    :message="targetError"
+                />
             </div>
 
             <div class="nc-field wide">
@@ -174,14 +173,12 @@ function period(
                     :placeholder="$t('Deploy, database upgrade…')"
                     v-bind="invalidField(`${id}-reason`, errors.reason)"
                 />
-                <div
+                <InputError
                     v-if="errors.reason"
-                    :id="errorId(`${id}-reason`)"
-                    class="field-error"
-                    role="alert"
-                >
-                    {{ errors.reason }}
-                </div>
+                    size="sm"
+                    :field="`${id}-reason`"
+                    :message="errors.reason"
+                />
             </div>
 
             <div class="nc-field">
@@ -193,14 +190,12 @@ function period(
                     type="datetime-local"
                     v-bind="invalidField(`${id}-starts`, errors.startsAt)"
                 />
-                <div
+                <InputError
                     v-if="errors.startsAt"
-                    :id="errorId(`${id}-starts`)"
-                    class="field-error"
-                    role="alert"
-                >
-                    {{ errors.startsAt }}
-                </div>
+                    size="sm"
+                    :field="`${id}-starts`"
+                    :message="errors.startsAt"
+                />
             </div>
 
             <div class="nc-field">
@@ -212,14 +207,12 @@ function period(
                     type="datetime-local"
                     v-bind="invalidField(`${id}-ends`, errors.endsAt)"
                 />
-                <div
+                <InputError
                     v-if="errors.endsAt"
-                    :id="errorId(`${id}-ends`)"
-                    class="field-error"
-                    role="alert"
-                >
-                    {{ errors.endsAt }}
-                </div>
+                    size="sm"
+                    :field="`${id}-ends`"
+                    :message="errors.endsAt"
+                />
                 <div v-else class="field-hint">
                     {{
                         $t('at most :days days, in your local time', {
@@ -229,7 +222,7 @@ function period(
                 </div>
             </div>
 
-            <div class="submit">
+            <div class="nc-actions">
                 <button
                     type="submit"
                     class="nc-btn nc-btn-primary"
@@ -334,7 +327,12 @@ function period(
                             <button
                                 v-if="maintenance.canDelete"
                                 type="button"
-                                class="nc-btn nc-btn-ghost nc-t-xs nc-tone-soft"
+                                class="nc-btn nc-btn-ghost nc-t-xs"
+                                :class="
+                                    maintenance.active
+                                        ? 'nc-tone-soft'
+                                        : 'nc-tone-down'
+                                "
                                 :disabled="busy === maintenance.id"
                                 @click="end(maintenance)"
                             >
@@ -373,9 +371,7 @@ function period(
     grid-column: span 3;
 }
 
-.window-form > .submit {
-    display: flex;
-    justify-content: flex-end;
+.window-form > .nc-actions {
     align-self: end;
 }
 
@@ -388,10 +384,6 @@ function period(
     .window-form > .wide {
         grid-column: auto;
     }
-
-    .window-form > .submit {
-        justify-content: stretch;
-    }
 }
 
 .is-ended {
@@ -402,12 +394,5 @@ function period(
     margin-top: 4px;
     font-size: 11px;
     color: var(--nc-text-faint);
-}
-
-.field-error {
-    margin-top: 4px;
-    font-size: 11px;
-    line-height: 1.35;
-    color: var(--st-down);
 }
 </style>

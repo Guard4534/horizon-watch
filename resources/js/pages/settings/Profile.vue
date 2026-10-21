@@ -25,6 +25,7 @@ const email = ref(user.value.email);
 const changesEmail = computed(
     () => email.value.trim().toLowerCase() !== user.value.email,
 );
+const currentPassword = ref('');
 </script>
 
 <template>
@@ -39,10 +40,16 @@ const changesEmail = computed(
 
         <Form
             v-bind="ProfileController.update.form()"
-            :reset-on-success="['current_password']"
-            :reset-on-error="['current_password']"
+            :transform="
+                (data) =>
+                    changesEmail
+                        ? { ...data, current_password: currentPassword }
+                        : data
+            "
+            set-defaults-on-success
             class="space-y-6"
-            v-slot="{ errors, processing }"
+            v-slot="{ errors, processing, isDirty }"
+            @finish="currentPassword = ''"
         >
             <div class="nc-field">
                 <label for="name">{{ $t('Name') }}</label>
@@ -80,10 +87,14 @@ const changesEmail = computed(
                 }}</label>
                 <PasswordInput
                     id="current_password"
-                    name="current_password"
+                    :value="currentPassword"
                     required
                     autocomplete="current-password"
                     :placeholder="$t('Current password')"
+                    @input="
+                        currentPassword = ($event.target as HTMLInputElement)
+                            .value
+                    "
                     v-bind="
                         invalidField(
                             'current_password',
@@ -104,14 +115,16 @@ const changesEmail = computed(
                 />
             </div>
 
-            <button
-                type="submit"
-                class="nc-btn nc-btn-primary"
-                :disabled="processing"
-                data-test="update-profile-button"
-            >
-                {{ $t('Save') }}
-            </button>
+            <div class="nc-actions">
+                <button
+                    type="submit"
+                    class="nc-btn nc-btn-primary"
+                    :disabled="processing || !isDirty"
+                    data-test="update-profile-button"
+                >
+                    {{ $t('Save') }}
+                </button>
+            </div>
         </Form>
     </div>
 

@@ -202,6 +202,14 @@ samp,
     margin-top: var(--nc-space-2);
 }
 
+.nc-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--nc-space-2);
+}
+
 .nc-field > label {
     display: block;
     font-size: 12px;

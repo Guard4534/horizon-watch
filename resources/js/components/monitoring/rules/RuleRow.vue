@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue';
+import InputError from '@/components/InputError.vue';
 import type { RuleField, RuleValues } from '@/lib/alertRules';
 import {
     RULE_FIELDS,
@@ -13,7 +14,7 @@ import {
     unitLabel,
 } from '@/lib/alertRules';
 import { severityColor, severityLabel } from '@/lib/alerts';
-import { errorId, invalidField } from '@/lib/fieldErrors';
+import { invalidField } from '@/lib/fieldErrors';
 
 const {
     rule,
@@ -160,14 +161,12 @@ function readNumber(event: Event): number | null {
                         unitLabel(rule.unit)
                     }}</span>
                 </div>
-                <div
+                <InputError
                     v-if="errors.threshold"
-                    :id="errorId(`${id}-threshold`)"
-                    class="field-error"
-                    role="alert"
-                >
-                    {{ errors.threshold }}
-                </div>
+                    size="sm"
+                    :field="`${id}-threshold`"
+                    :message="errors.threshold"
+                />
                 <div
                     v-if="!rule.isStateRule"
                     class="mt-[6px] flex items-center gap-[6px]"
@@ -204,14 +203,12 @@ function readNumber(event: Event): number | null {
                         unitLabel('min')
                     }}</span>
                 </div>
-                <div
+                <InputError
                     v-if="errors.forMinutes"
-                    :id="errorId(`${id}-forMinutes`)"
-                    class="field-error"
-                    role="alert"
-                >
-                    {{ errors.forMinutes }}
-                </div>
+                    size="sm"
+                    :field="`${id}-forMinutes`"
+                    :message="errors.forMinutes"
+                />
             </div>
 
             <div class="cell">
@@ -238,14 +235,12 @@ function readNumber(event: Event): number | null {
                         <option value="critical">{{ $t('Critical') }}</option>
                     </select>
                 </div>
-                <div
+                <InputError
                     v-if="errors.severity"
-                    :id="errorId(`${id}-severity`)"
-                    class="field-error"
-                    role="alert"
-                >
-                    {{ errors.severity }}
-                </div>
+                    size="sm"
+                    :field="`${id}-severity`"
+                    :message="errors.severity"
+                />
             </div>
 
             <div class="cell">
@@ -278,14 +273,12 @@ function readNumber(event: Event): number | null {
                         {{ $t('Email') }}
                     </label>
                 </div>
-                <div
+                <InputError
                     v-if="errors.notifyByEmail"
-                    :id="errorId(`${id}-notifyByEmail`)"
-                    class="field-error"
-                    role="alert"
-                >
-                    {{ errors.notifyByEmail }}
-                </div>
+                    size="sm"
+                    :field="`${id}-notifyByEmail`"
+                    :message="errors.notifyByEmail"
+                />
             </div>
 
             <div class="cell">
@@ -314,14 +307,12 @@ function readNumber(event: Event): number | null {
                         {{ $t('Active') }}
                     </label>
                 </div>
-                <div
+                <InputError
                     v-if="errors.enabled"
-                    :id="errorId(`${id}-enabled`)"
-                    class="field-error"
-                    role="alert"
-                >
-                    {{ errors.enabled }}
-                </div>
+                    size="sm"
+                    :field="`${id}-enabled`"
+                    :message="errors.enabled"
+                />
             </div>
 
             <div v-if="environmentScope" class="cell">
@@ -424,13 +415,6 @@ function readNumber(event: Event): number | null {
 
 .check.is-inherited input:checked + .nc-track {
     background: var(--nc-neutral-700);
-}
-
-.field-error {
-    margin-top: 4px;
-    font-size: 11px;
-    line-height: 1.35;
-    color: var(--st-down);
 }
 
 .read-value {

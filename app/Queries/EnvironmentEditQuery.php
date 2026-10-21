@@ -5,6 +5,7 @@ namespace App\Queries;
 use App\Data\Applications\ApplicationFormData;
 use App\Data\Applications\EnvironmentFormData;
 use App\Data\Applications\EnvironmentSummaryData;
+use App\Data\Applications\PollIntervalData;
 use App\Data\Pages\EnvironmentFormPageData;
 use App\Enums\EnvironmentType;
 use App\Models\Environment;
@@ -27,6 +28,7 @@ class EnvironmentEditQuery
             types: EnvironmentType::options(),
             hasPassword: StoredPasswordStaysWithItsAddress::hasStoredPassword($environment),
             applicationSlug: $environment->application->slug,
+            pollInterval: PollIntervalData::fromConfig(),
             slug: $environment->slug,
         );
     }
