@@ -296,7 +296,7 @@ test('a stale environment is a problem everywhere, not up', function () {
     $this->actingAs($this->user);
 
     $wall = app(WallQuery::class)->handle($this->team, $this->user);
-    $applications = app(ApplicationListQuery::class)->handle($this->team);
+    $applications = app(ApplicationListQuery::class)->handle($this->team, $this->user);
 
     expect(array_map(fn ($environment) => [$environment->id, $environment->status], $wall->environments))->toBe([
         [$stale->slug, EnvironmentStatus::Stale],

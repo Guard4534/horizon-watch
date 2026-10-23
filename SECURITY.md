@@ -69,8 +69,10 @@ Consequences to take seriously:
 
 The stored password is never shown again, never logged, never included in an exception and
 never sent to the browser. `HorizonTarget` redacts itself when it is serialised or dumped. The
-basic-auth user is sent only to the edit forms, which only the people who may manage
-applications open; every other page says only that the environment uses basic auth.
+basic-auth user is sent only to the edit forms and the configuration export, which only the
+people who may manage applications open; the export never carries the password. Every other page
+says only that the environment uses basic auth, and whether its password is still missing
+(**Password needed**).
 
 Invitation codes are not secrets the panel needs to read back, so they are not encrypted but
 hashed: the database keeps the SHA-256 of each code, and the plain code exists only in the

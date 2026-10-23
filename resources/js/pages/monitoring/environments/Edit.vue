@@ -5,6 +5,7 @@ import { computed, ref } from 'vue';
 import ConfirmByNameDialog from '@/components/ConfirmByNameDialog.vue';
 import DangerZoneCard from '@/components/DangerZoneCard.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import PasswordNeededTag from '@/components/monitoring/PasswordNeededTag.vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
@@ -34,6 +35,11 @@ const storedCredentials = computed(
 );
 
 const auth = ref(storedCredentials.value);
+
+const passwordNeeded = computed(
+    () =>
+        (page.environment?.basicAuthUser ?? null) !== null && !page.hasPassword,
+);
 
 const form = useForm<{
     environment: App.Data.Applications.EnvironmentFormData;
@@ -112,6 +118,19 @@ const submit = () => {
                 novalidate
                 @submit.prevent="submit"
             >
+                <p
+                    v-if="passwordNeeded"
+                    class="nc-t-xs nc-tone-soft flex flex-wrap items-center"
+                    style="gap: var(--nc-space-2)"
+                    role="status"
+                >
+                    <PasswordNeededTag />
+                    {{
+                        $t(
+                            'This environment has a basic-auth username but no stored password: enter it so that collection signs in to Horizon.',
+                        )
+                    }}
+                </p>
                 <EnvironmentForm
                     v-model="form.environment"
                     v-model:auth="auth"

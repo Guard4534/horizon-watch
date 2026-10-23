@@ -127,3 +127,10 @@ test('a user outside the organization has no permission at all', function () {
         ->and(Gate::forUser($stranger)->allows('update', $this->environment))->toBeFalse()
         ->and(Gate::forUser($stranger)->allows('muteAlert', $this->team))->toBeFalse();
 });
+
+test('only owner and admin can export and import the configuration', function () {
+    expect(Gate::forUser($this->owner)->allows('transferConfiguration', $this->team))->toBeTrue()
+        ->and(Gate::forUser($this->admin)->allows('transferConfiguration', $this->team))->toBeTrue()
+        ->and(Gate::forUser($this->member)->allows('transferConfiguration', $this->team))->toBeFalse()
+        ->and(Gate::forUser($this->viewer)->allows('transferConfiguration', $this->team))->toBeFalse();
+});

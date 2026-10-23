@@ -666,6 +666,9 @@ Encrypt every stored secret again with the current application key, after a key 
 docker compose -f compose.prod.yaml run --rm web artisan secrets:reencrypt
 ```
 
+Export or import an organization's applications, environments and alert rules, see
+[Moving the configuration to another panel](#moving-the-configuration-to-another-panel).
+
 ## Watching the panel
 
 Polling, alerts and notifications all depend on the scheduler and the queue workers, so a
@@ -865,6 +868,44 @@ docker compose -f compose.prod.yaml run --rm web artisan secrets:reencrypt
 It lists every secret no configured key can decrypt and fails while there is one; set those
 again (see [Troubleshooting](#troubleshooting)) and run it once more. When it succeeds, remove
 the old key from `APP_PREVIOUS_KEYS` and restart.
+
+## Moving the configuration to another panel
+
+An organization's applications, environments and alert rules travel as one JSON file: to a new
+server, to a fresh install after a major upgrade, or to a staging panel. The file never holds a
+secret: no basic-auth password, no webhook signing secret and no credentials inside a URL (they
+are stripped). Notification settings, maintenance windows, members, invitations, readings and
+alerts stay behind.
+
+In the panel, admins and owners use **Export** and **Import** on the Applications page. Import
+shows a preview first, with every application, environment and rule marked new, changed (with
+the fields that differ), unchanged or invalid (with the reason). Changed items are left as they
+are unless you turn on **Update existing items**; nothing is ever deleted, and one invalid item
+blocks the import until the file is fixed. Every item goes through the same checks as the forms,
+the Horizon URL check at save included, so a hand-edited file can do no more than the forms can.
+The file is at most 1 MB.
+
+From the command line the organization is named by its slug, the first part of the panel's
+addresses after the host. `-` reads the file from standard input, so it does not have to be inside
+the container; `--dry-run` prints the preview and changes nothing; `--update` updates the items
+that differ. The export writes to standard output (`--output=path` writes inside the container,
+where a `run --rm` file is lost):
+
+```bash
+docker compose -f compose.prod.yaml run --rm -T web artisan applications:export shop > shop.json
+docker compose -f compose.prod.yaml run --rm -T web artisan applications:import shop - --dry-run < shop.json
+docker compose -f compose.prod.yaml run --rm -T web artisan applications:import shop - < shop.json
+```
+
+The organization must exist on the target panel: create it first. Applications are matched by
+name whatever the case, environments by name within their application, alert rules by scope and
+metric. An environment with a basic-auth user arrives without its password and with collection
+paused, marked **Password needed** on the application page, the environment page and its edit
+form: type the password there, then turn collection on. An environment that already exists with
+the same user and the same scheme, host and port in its Horizon URL keeps its stored password.
+
+`version` in the file is the version of the file format. A newer panel reads the files of an older
+one; an older panel refuses a newer file and asks to be updated first.
 
 ## Troubleshooting
 

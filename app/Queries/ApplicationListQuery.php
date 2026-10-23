@@ -8,13 +8,15 @@ use App\Data\Pages\ApplicationGroupData;
 use App\Data\Pages\ApplicationListPageData;
 use App\Enums\EnvironmentStatus;
 use App\Models\Team;
+use App\Models\User;
 use App\Monitoring\MonitoringRepository;
+use Illuminate\Support\Facades\Gate;
 
 class ApplicationListQuery
 {
     public function __construct(private MonitoringRepository $monitoring) {}
 
-    public function handle(Team $team): ApplicationListPageData
+    public function handle(Team $team, User $viewer): ApplicationListPageData
     {
         $environments = $this->monitoring->configurableEnvironments($team);
 
@@ -30,6 +32,10 @@ class ApplicationListQuery
             );
         }, $this->monitoring->configurableApplications($team));
 
-        return new ApplicationListPageData($groups, count($environments));
+        return new ApplicationListPageData(
+            groups: $groups,
+            environmentCount: count($environments),
+            canTransferConfiguration: Gate::forUser($viewer)->allows('transferConfiguration', $team),
+        );
     }
 }

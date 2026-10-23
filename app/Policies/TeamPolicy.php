@@ -79,6 +79,13 @@ class TeamPolicy
         return $user->hasTeamPermission($team, TeamPermission::ManageAlertRules);
     }
 
+    public function transferConfiguration(User $user, Team $team): bool
+    {
+        return $user->hasTeamPermission($team, TeamPermission::ManageApplications)
+            && $user->hasTeamPermission($team, TeamPermission::ManageCredentials)
+            && $user->hasTeamPermission($team, TeamPermission::ManageAlertRules);
+    }
+
     public function muteAlert(User $user, Team $team): bool
     {
         return $user->hasTeamPermission($team, TeamPermission::MuteAlert);

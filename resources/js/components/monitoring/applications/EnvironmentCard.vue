@@ -10,6 +10,7 @@ import {
     thresholdTone,
     troubledStyle,
 } from '@/components/monitoring/environment/readings';
+import PasswordNeededTag from '@/components/monitoring/PasswordNeededTag.vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
@@ -72,6 +73,12 @@ const hasNumbers = computed(() => hasMeasurement(environment));
             style="letter-spacing: 0.01em"
         >
             {{ environment.horizonUrl.replace(/^https?:\/\//, '') }}
+        </span>
+        <span
+            v-if="environment.passwordNeeded"
+            class="mt-[var(--nc-space-2)] block"
+        >
+            <PasswordNeededTag />
         </span>
         <span
             v-if="!environment.watched"

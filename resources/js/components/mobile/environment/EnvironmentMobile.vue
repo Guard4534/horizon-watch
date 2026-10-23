@@ -8,6 +8,7 @@ import {
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
+import PasswordNeededTag from '@/components/monitoring/PasswordNeededTag.vue';
 import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
 import EnvironmentAlerts from '@/components/monitoring/environment/EnvironmentAlerts.vue';
 import IncidentBanner from '@/components/monitoring/environment/IncidentBanner.vue';
@@ -139,6 +140,10 @@ const tiles = computed(() => [
                     :reading-error="environment.readingError"
                     :hide-reason="incident !== null"
                 />
+            </div>
+
+            <div v-if="environment.passwordNeeded">
+                <PasswordNeededTag />
             </div>
 
             <div v-if="environment.maintenanceUntil">

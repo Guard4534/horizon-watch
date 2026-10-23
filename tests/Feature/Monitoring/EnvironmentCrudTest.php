@@ -245,7 +245,7 @@ test('touching credentials requires the manage-credentials permission in additio
 
     $this->actingAs($this->admin)->patch(
         route('environments.update', ['current_team' => $this->team->slug, 'environment' => $bare->slug]),
-        ($this->validPayload)(['name' => 'develop', 'basicAuthUser' => 'someone-else', 'basicAuthPassword' => null]),
+        ($this->validPayload)(['name' => 'develop', 'basicAuthUser' => 'someone-else', 'basicAuthPassword' => null, 'pollingEnabled' => false]),
     )->assertForbidden();
 
     $bare->refresh();

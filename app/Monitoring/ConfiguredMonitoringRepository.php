@@ -847,6 +847,7 @@ class ConfiguredMonitoringRepository implements MonitoringRepository
             thresholds: $this->thresholdsOf($environment),
             maintenanceUntil: $maintenance?->ends_at->toIso8601String(),
             maintenanceReason: $maintenance?->reason,
+            passwordNeeded: $environment->waitsForPassword(),
         );
     }
 

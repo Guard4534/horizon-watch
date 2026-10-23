@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Concerns\GeneratesUniqueSlugs;
 use App\Concerns\ReplacesUnreadableSecrets;
 use App\Enums\EnvironmentType;
+use App\Rules\StoredPasswordStaysWithItsAddress;
 use Carbon\CarbonImmutable;
 use Database\Factories\EnvironmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -116,6 +117,15 @@ class Environment extends Model
             'last_polled_at' => 'immutable_datetime',
             'next_poll_at' => 'immutable_datetime',
         ];
+    }
+
+    /**
+     * A basic-auth user without a stored password: the environment waits for someone to type it
+     * (an import never brings one), and its collection stays paused until then.
+     */
+    public function waitsForPassword(): bool
+    {
+        return $this->basic_auth_user !== null && ! StoredPasswordStaysWithItsAddress::hasStoredPassword($this);
     }
 
     public function getRouteKeyName(): string

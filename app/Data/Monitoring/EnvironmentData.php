@@ -44,6 +44,7 @@ class EnvironmentData extends Data
         public array $thresholds,
         public ?string $maintenanceUntil,
         public ?string $maintenanceReason,
+        public bool $passwordNeeded,
     ) {}
 
     public static function compareBySeverityThenPending(self $a, self $b): int

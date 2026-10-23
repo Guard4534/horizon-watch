@@ -6,6 +6,7 @@ import { computed } from 'vue';
 import PageHeader from '@/components/PageHeader.vue';
 import EnvironmentMobile from '@/components/mobile/environment/EnvironmentMobile.vue';
 import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
+import PasswordNeededTag from '@/components/monitoring/PasswordNeededTag.vue';
 import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EffectiveRules from '@/components/monitoring/environment/EffectiveRules.vue';
@@ -234,6 +235,10 @@ const tiles = computed<Tile[]>(() => [
             <template v-if="environment.usesBasicAuth">
                 <span>·</span>
                 <span>{{ $t('basic auth') }}</span>
+            </template>
+            <template v-if="environment.passwordNeeded">
+                <span>·</span>
+                <PasswordNeededTag />
             </template>
             <span>·</span>
             <ReadingFreshness

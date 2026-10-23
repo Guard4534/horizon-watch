@@ -5,6 +5,7 @@ use App\Http\Controllers\Monitoring\AlertController;
 use App\Http\Controllers\Monitoring\AlertRuleController;
 use App\Http\Controllers\Monitoring\AlertSettingsController;
 use App\Http\Controllers\Monitoring\ApplicationController;
+use App\Http\Controllers\Monitoring\ConfigurationController;
 use App\Http\Controllers\Monitoring\ConnectionTestController;
 use App\Http\Controllers\Monitoring\EnvironmentController;
 use App\Http\Controllers\Monitoring\MaintenanceWindowController;
@@ -104,6 +105,14 @@ Route::middleware('can:manageAlertRules,current_team')->group(function () {
     Route::post('alert-settings/test', [AlertSettingsController::class, 'test'])
         ->middleware('throttle:test-notification')
         ->name('alert-settings.test');
+});
+
+Route::middleware('can:transferConfiguration,current_team')->group(function () {
+    Route::get('configuration/export', [ConfigurationController::class, 'download'])->name('configuration.download');
+    Route::get('configuration/import', [ConfigurationController::class, 'show'])->name('configuration.show');
+    Route::post('configuration/import/file', [ConfigurationController::class, 'upload'])->name('configuration.upload');
+    Route::delete('configuration/import/file', [ConfigurationController::class, 'discard'])->name('configuration.discard');
+    Route::post('configuration/import', [ConfigurationController::class, 'apply'])->name('configuration.apply');
 });
 
 Route::post('alerts/{alert}/mute', [AlertActionController::class, 'mute'])->name('alerts.mute');

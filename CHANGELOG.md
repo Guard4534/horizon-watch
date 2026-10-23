@@ -88,6 +88,14 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   `compose.prod.yaml` passes it on.
 - The README covers reverse proxies (Caddy and nginx, HSTS), the default alert rules, roles
   and visibility, sizing, backups with `pg_dump`, upgrading and the compatibility promise.
+- Configuration export and import. **Export** on the Applications page, or
+  `artisan applications:export {organization}`, writes an organization's
+  applications, environments and alert rules to one JSON file without any secret. **Import**, or
+  `artisan applications:import {organization} {path|-} [--update] [--dry-run]`, previews the file,
+  creates what is new, updates what differs only when asked and never deletes anything; every item
+  is checked like in the forms. Environments with a basic-auth user arrive with collection paused,
+  marked **Password needed**, until their password is typed. See the README's _Moving the
+  configuration to another panel_.
 
 ### Changed
 
@@ -170,6 +178,9 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
 - **Upgrade note:** in production the panel sends mail only over SMTP and `compose.prod.yaml`
   no longer passes `MAIL_MAILER` on, so no other transport, the log mailer included, can be
   chosen. Password reset emails go through the queue.
+- **Upgrade note:** an environment saved by 0.1.0 with a basic-auth user and no password is now
+  marked **Password needed**. It keeps collecting as before, but it cannot get another user, or
+  have collection turned back on once paused, until its password is typed.
 - Releases are built only after every CI job, the smoke tests included, has passed on the tag.
   `latest` follows stable releases only, and the release notes are the matching section of this
   file. The `compose.prod.yaml` attached to a release runs that exact version, and the README

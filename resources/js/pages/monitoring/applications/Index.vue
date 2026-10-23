@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
+import {
+    PhDownloadSimple,
+    PhPlus,
+    PhStackSimple,
+    PhUploadSimple,
+} from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import ApplicationList from '@/components/mobile/applications/ApplicationList.vue';
 import VisibilityEmptyState from '@/components/monitoring/VisibilityEmptyState.vue';
@@ -10,6 +15,10 @@ import { useTeamSlug } from '@/composables/useTeamSlug';
 import { useVisibility } from '@/composables/useVisibility';
 import { hostOf } from '@/lib/environments';
 import { create as createApplication } from '@/routes/applications';
+import {
+    download as downloadConfiguration,
+    show as showConfiguration,
+} from '@/routes/configuration';
 
 defineOptions({
     layout: { title: 'Applications' },
@@ -68,6 +77,31 @@ const groups = computed(() => {
                 :placeholder="$t('Search application')"
                 :aria-label="$t('Search application')"
             />
+            <template v-if="page.canTransferConfiguration">
+                <a
+                    class="nc-btn nc-btn-secondary"
+                    :href="downloadConfiguration(slug).url"
+                    download
+                    :title="
+                        $t(
+                            'Download applications, environments and alert rules as a file',
+                        )
+                    "
+                >
+                    <PhDownloadSimple :size="14" />{{ $t('Export') }}
+                </a>
+                <Link
+                    class="nc-btn nc-btn-secondary"
+                    :href="showConfiguration(slug)"
+                    :title="
+                        $t(
+                            'Bring applications, environments and alert rules from a file',
+                        )
+                    "
+                >
+                    <PhUploadSimple :size="14" />{{ $t('Import') }}
+                </Link>
+            </template>
             <Link
                 v-if="canManageApplications"
                 class="nc-btn nc-btn-primary"
