@@ -10,6 +10,8 @@ interface HorizonReader
 {
     public const int JOBS_PER_PAGE = 50;
 
+    public const int FAILED_RATE_MINUTES = 60;
+
     /**
      * @param  array<string, float|null>|null  $knownRuntimes
      *

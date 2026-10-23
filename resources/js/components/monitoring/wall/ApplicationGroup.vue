@@ -26,6 +26,15 @@ const slug = useTeamSlug();
 
 const troubled = computed(() => environments.filter(needsAttention));
 
+// WallQuery sends the environments worst first and Wall.vue keeps that order
+// in each group, so the first one that needs attention and has a status has
+// the worst status (an environment without a status sorts before `active`).
+const worstStatus = computed(
+    () =>
+        troubled.value.find((environment) => environment.status !== null)
+            ?.status ?? null,
+);
+
 const expanded = computed(() => forced.value ?? troubled.value.length > 0);
 
 const pending = computed(() =>
@@ -72,7 +81,7 @@ const pending = computed(() =>
             >
             <AttentionBadge
                 :count="troubled.length"
-                :environments="environments"
+                :worst-status="worstStatus"
             />
             <span
                 v-if="!expanded"

@@ -20,19 +20,19 @@ defineOptions({
 });
 
 const { page } = defineProps<{
-    page: App.Data.Pages.ApplicationFormPageData;
+    page: App.Data.Pages.ApplicationEditPageData;
 }>();
 
 const slug = useTeamSlug();
 
-const application = computed(() => page.slug ?? '');
-const name = computed(() => page.application?.name ?? '');
+const application = computed(() => page.slug);
+const name = computed(() => page.application.name);
 
 const form = useForm<{
     application: App.Data.Applications.ApplicationFormData;
 }>({
     application: {
-        name: page.application?.name ?? '',
+        name: page.application.name,
     },
 });
 

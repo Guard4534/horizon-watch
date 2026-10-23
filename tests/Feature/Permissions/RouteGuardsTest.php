@@ -85,3 +85,21 @@ test('the routes left to their controller still exist and still have no route ch
         ->and(changesState($route))->toBeTrue()
         ->and(hasRoleOrAbilityCheck($route))->toBeFalse();
 })->with(routesLeftToTheirController());
+
+test('every account settings route needs a signed-in user', function () {
+    $settings = collect(Route::getRoutes()->getRoutes())
+        ->filter(fn (RoutingRoute $route) => $route->uri() === 'settings' || str_starts_with($route->uri(), 'settings/'));
+
+    $unguarded = $settings
+        ->reject(fn (RoutingRoute $route) => in_array('auth', $route->gatherMiddleware(), true))
+        ->map(fn (RoutingRoute $route) => $route->getName() ?? $route->uri())
+        ->values()
+        ->all();
+
+    expect($settings->count())->toBeGreaterThanOrEqual(13)
+        ->and($unguarded)->toBe([]);
+});
+
+test('the account settings routes are declared in one signed-in group', function () {
+    expect(substr_count((string) file_get_contents(base_path('routes/settings.php')), "Route::middleware(['auth'])->group("))->toBe(1);
+});

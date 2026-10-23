@@ -2,6 +2,7 @@
 
 namespace App\Monitoring;
 
+use App\Actions\Monitoring\DispatchDuePolls;
 use App\Enums\SeriesRange;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
@@ -98,7 +99,7 @@ class StoredReadings
     private function series(array $environmentIds, SeriesRange $range, SeriesAggregate $aggregate): array
     {
         $points = self::seriesPoints();
-        $tick = config()->integer('horizon-watch.readings.poll_tick_seconds');
+        $tick = DispatchDuePolls::TICK_SECONDS;
         $slack = config()->integer('horizon-watch.readings.poll_slack_seconds');
         $values = array_fill(0, $points, 0.0);
 

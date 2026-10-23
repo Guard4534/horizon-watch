@@ -473,13 +473,11 @@ test('the application filter offers only the applications with an environment th
 test('an alert carries the longest job and the queues without workers it was opened for', function () {
     Alert::factory()->for($this->production)->create([
         'metric' => AlertRuleMetric::JobRuntime,
-        'unit' => 's',
         'value' => 300,
         'detail' => ['job' => 'App\Jobs\BuildReport', 'queue' => 'reports', 'seconds' => 300],
     ]);
     Alert::factory()->for($this->staging)->create([
         'metric' => AlertRuleMetric::WorkersMissing,
-        'unit' => '',
         'value' => 2,
         'detail' => ['queues' => ['default', 'emails']],
     ]);
@@ -495,7 +493,6 @@ test('an alert carries the longest job and the queues without workers it was ope
 test('a failed-jobs count read past the jobs that were listed is marked as a lower bound', function (array $detail, bool $lowerBound) {
     Alert::factory()->for($this->production)->create([
         'metric' => AlertRuleMetric::JobsFailedPerHour,
-        'unit' => 'job',
         'value' => 200,
         'detail' => $detail,
     ]);

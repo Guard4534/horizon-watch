@@ -56,7 +56,7 @@ const { canManageApplications } = useVisibility();
             >
             <AttentionBadge
                 :count="group.attentionCount"
-                :environments="group.environments"
+                :worst-status="group.worstStatus"
             />
             <template v-if="canManageApplications">
                 <Link

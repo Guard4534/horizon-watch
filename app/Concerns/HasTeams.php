@@ -91,7 +91,7 @@ trait HasTeams
     /**
      * @return Collection<int, UserTeamData>
      */
-    public function toUserTeams(bool $includeCurrent = false): Collection
+    public function toUserTeams(): Collection
     {
         $teams = $this->teams()->get();
         $admins = $this->adminCounts($teams
@@ -101,8 +101,7 @@ trait HasTeams
             ->all());
 
         return $teams
-            ->map(fn (Team $team) => ! $includeCurrent && $this->isCurrentTeam($team) ? null : $this->toUserTeam($team, $admins[$team->id] ?? 0))
-            ->filter()
+            ->map(fn (Team $team) => $this->toUserTeam($team, $admins[$team->id] ?? 0))
             ->values();
     }
 

@@ -147,26 +147,6 @@ export function failedLastHourText(
         : count;
 }
 
-const SEVERITY: Record<App.Enums.EnvironmentStatus, number> = {
-    inactive: 0,
-    unreachable: 0,
-    paused: 1,
-    stale: 1,
-    degraded: 2,
-    active: 3,
-};
-
-export function worstTone(
-    environments: Pick<App.Data.Monitoring.EnvironmentData, 'status'>[],
-): string | null {
-    const statuses = environments
-        .map((environment) => environment.status)
-        .filter((status): status is App.Enums.EnvironmentStatus => !!status)
-        .sort((a, b) => SEVERITY[a] - SEVERITY[b]);
-
-    return statuses[0] ? statusColor(statuses[0]) : null;
-}
-
 export function troubledStyle(tone: string): Record<string, string> {
     return {
         background: `color-mix(in srgb, ${tone} 13%, var(--nc-surface))`,

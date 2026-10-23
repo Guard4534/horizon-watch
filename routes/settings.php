@@ -18,9 +18,7 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('throttle:current-password')
         ->name('profile.update');
     Route::patch('settings/alert-emails', AlertEmailsController::class)->name('alert-emails.update');
-});
 
-Route::middleware(['auth'])->group(function () {
     Route::delete('settings/profile', [ProfileController::class, 'destroy'])
         ->middleware('throttle:current-password')
         ->name('profile.destroy');

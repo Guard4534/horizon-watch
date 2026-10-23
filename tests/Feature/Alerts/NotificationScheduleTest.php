@@ -61,7 +61,6 @@ test('digests are due on the clock quarters only', function () {
 
 test('the scheduled repetition queues the overdue critical alerts', function () {
     Alert::factory()->for($this->environment)->critical()->create([
-        'notified' => true,
         'last_notified_at' => now()->subMinutes(30),
     ]);
 
@@ -110,7 +109,6 @@ test('each scheduled repetition reads the rules afresh too', function () {
 
 test('the scheduled repetition also catches up a resolution whose notice was lost', function () {
     $alert = Alert::factory()->for($this->environment)->critical()->create([
-        'notified' => true,
         'last_notified_at' => now()->subMinutes(20),
         'resolved_at' => now()->subMinutes(2),
     ]);
@@ -127,12 +125,10 @@ test('a failing step of the per-minute run does not stop the other, and is repor
     Exceptions::fake();
     Alert::factory()->for($this->environment)->critical()->create([
         'metric' => AlertRuleMetric::HorizonMasterInactive,
-        'notified' => true,
         'last_notified_at' => now()->subHour(),
     ]);
     Alert::factory()->for($this->environment)->critical()->create([
         'metric' => AlertRuleMetric::EndpointUnreachable,
-        'notified' => true,
         'last_notified_at' => now()->subMinutes(20),
         'resolved_at' => now()->subMinutes(2),
     ]);

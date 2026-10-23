@@ -4,6 +4,7 @@ namespace App\Queries;
 
 use App\Data\Monitoring\EnvironmentData;
 use App\Data\Pages\ApplicationDetailPageData;
+use App\Enums\EnvironmentStatus;
 use App\Models\Team;
 use App\Monitoring\MonitoringRepository;
 
@@ -21,17 +22,14 @@ class ApplicationDetailQuery
         ));
         $resolved = $this->monitoring->latestResolvedAlerts($team, $application->id, config()->integer('horizon-watch.pages.resolved_alerts'));
 
-        $worstEnvironments = array_values(array_filter(
-            $environments,
-            fn (EnvironmentData $environment) => $environment->isJudged(),
-        ));
-        usort($worstEnvironments, EnvironmentData::compareBySeverityThenPending(...));
-
         return new ApplicationDetailPageData(
             application: $application,
             environments: $environments,
             recentAlerts: [...$this->monitoring->liveAlertsOf($team, $application->id), ...$resolved],
-            worstStatus: $worstEnvironments[0]->status ?? null,
+            worstStatus: EnvironmentStatus::worstOf(array_map(
+                fn (EnvironmentData $environment) => $environment->status,
+                array_filter($environments, fn (EnvironmentData $environment) => $environment->isJudged()),
+            )),
         );
     }
 }

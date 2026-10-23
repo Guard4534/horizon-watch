@@ -216,7 +216,7 @@ test('the poll tick is scheduled every fifteen seconds, without overlapping and 
         ?? throw new RuntimeException('No scheduled event dispatch-due-polls.');
 
     expect($event->expression)->toBe('* * * * *')
-        ->and($event->repeatSeconds)->toBe(15)
+        ->and($event->repeatSeconds)->toBe(DispatchDuePolls::TICK_SECONDS)
         ->and($event->withoutOverlapping)->toBeTrue()
         ->and($event->expiresAt)->toBe(1)
         ->and($event->onOneServer)->toBeTrue();

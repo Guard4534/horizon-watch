@@ -85,7 +85,7 @@ final class SyntheticAlerts
         $warning = $open->first(fn (Alert $alert) => $alert->severity === AlertSeverity::Warning && ! $alert->metric->isStateRule());
 
         foreach ($open->where('severity', AlertSeverity::Critical) as $alert) {
-            $alert->forceFill(['notified' => true, 'last_notified_at' => $alert->last_seen_at->subMinutes(9)]);
+            $alert->forceFill(['last_notified_at' => $alert->last_seen_at->subMinutes(9)]);
             $this->log($alert, SentNotificationKind::CriticalAlert, $alert->last_notified_at);
         }
 
@@ -129,13 +129,11 @@ final class SyntheticAlerts
                 'environment_name' => $environment->name,
                 'environment_type' => $environment->type,
                 'threshold' => $metric->defaultThreshold(),
-                'unit' => $metric->unit(),
                 'value' => $value,
                 'detail' => $detail,
                 'opened_at' => $openedAt,
                 'last_seen_at' => $openedAt->addMinutes(5 + $index * 3),
                 'resolved_at' => $openedAt->addMinutes(6 + $index * 3),
-                'notified' => $critical,
                 'last_notified_at' => $critical ? $openedAt : null,
                 'digested_at' => $critical ? null : $openedAt->addMinutes(15),
                 'resolution_notified_at' => $critical ? $openedAt->addMinutes(6 + $index * 3) : null,

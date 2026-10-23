@@ -132,10 +132,23 @@ test('an alert copies its environment and casts its columns', function () {
         ->and($alert->opened_at)->toBeInstanceOf(CarbonImmutable::class)
         ->and($alert->last_seen_at)->toBeInstanceOf(CarbonImmutable::class)
         ->and($alert->muted_indefinitely)->toBeFalse()
-        ->and($alert->notified)->toBeFalse()
+        ->and($alert->wasNotified())->toBeFalse()
         ->and($alert->environment->is($environment))->toBeTrue()
         ->and($alert->team->is($environment->application->team))->toBeTrue()
         ->and($environment->application->team->alerts()->sole()->is($alert))->toBeTrue();
+});
+
+test('an alert was notified once a notice time is written, and its unit follows its rule', function () {
+    $environment = Environment::factory()->create();
+    $alert = Alert::factory()->for($environment)->create(['metric' => AlertRuleMetric::QueueMaxWait]);
+
+    expect($alert->wasNotified())->toBeFalse()
+        ->and($alert->unit)->toBe('s');
+
+    $alert->forceFill(['last_notified_at' => now()])->save();
+
+    expect($alert->fresh()->wasNotified())->toBeTrue()
+        ->and($alert->fresh()->unit)->toBe('s');
 });
 
 test('an alert records who muted and who handled it', function () {

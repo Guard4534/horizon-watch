@@ -20,3 +20,11 @@ test('only inactive and unreachable count as down', function () {
         ->and(EnvironmentStatus::Active->isHealthy())->toBeTrue()
         ->and(EnvironmentStatus::Degraded->isHealthy())->toBeFalse();
 });
+
+test('the worst of several statuses is the most severe, and there is none without a status', function () {
+    expect(EnvironmentStatus::worstOf([EnvironmentStatus::Active, EnvironmentStatus::Stale, null, EnvironmentStatus::Degraded]))->toBe(EnvironmentStatus::Stale)
+        ->and(EnvironmentStatus::worstOf([EnvironmentStatus::Degraded, EnvironmentStatus::Unreachable]))->toBe(EnvironmentStatus::Unreachable)
+        ->and(EnvironmentStatus::worstOf([EnvironmentStatus::Active]))->toBe(EnvironmentStatus::Active)
+        ->and(EnvironmentStatus::worstOf([null]))->toBeNull()
+        ->and(EnvironmentStatus::worstOf([]))->toBeNull();
+});

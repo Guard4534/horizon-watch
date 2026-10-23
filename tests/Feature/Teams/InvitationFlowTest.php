@@ -256,8 +256,7 @@ test('a guest opens the invitation, sees it is open, and registers to accept it'
 
     $user = User::where('email', 'invited@example.com')->firstOrFail();
 
-    expect($user->email_verified_at)->not->toBeNull()
-        ->and($user->teamRole($this->team))->toBe(TeamRole::Member);
+    expect($user->teamRole($this->team))->toBe(TeamRole::Member);
 
     $this->assertAuthenticatedAs($user);
 });

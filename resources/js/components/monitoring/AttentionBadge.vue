@@ -1,19 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import {
-    needsAttention,
-    worstTone,
-} from '@/components/monitoring/environment/readings';
+import { statusColor } from '@/lib/monitoring';
 
-const { count, environments } = defineProps<{
+const { count, worstStatus } = defineProps<{
     count: number;
-    environments: App.Data.Monitoring.EnvironmentData[];
+    worstStatus: App.Enums.EnvironmentStatus | null;
 }>();
 
-const tone = computed(
-    () =>
-        worstTone(environments.filter(needsAttention)) ??
-        'var(--nc-neutral-500)',
+const tone = computed(() =>
+    worstStatus ? statusColor(worstStatus) : 'var(--nc-neutral-500)',
 );
 </script>
 

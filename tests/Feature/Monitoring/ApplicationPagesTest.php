@@ -94,3 +94,25 @@ test('the worst status of an application page leaves a paused collection out', f
         ->get(route('applications.show', ['current_team' => $this->slug, 'application' => 'acme-shop']))
         ->assertInertia(fn (Assert $page) => $page->where('page.worstStatus', 'active'));
 });
+
+test('each application group carries the worst status among the environments that need attention', function () {
+    $this->actingAs($this->user)
+        ->get(route('applications.index', ['current_team' => $this->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.groups.0.application.id', 'invoice-desk')
+            ->where('page.groups.0.worstStatus', 'inactive')
+            ->where('page.groups.1.application.id', 'acme-shop')
+            ->where('page.groups.1.worstStatus', null));
+});
+
+test('a paused collection does not set the worst status of its application', function () {
+    $billing = Application::factory()->for($this->user->currentTeam)->create(['name' => 'Billing']);
+    Readings::record(Environment::factory()->for($billing)->production()->create(), EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending]);
+    Readings::record(Environment::factory()->for($billing)->staging()->create(), EnvironmentStatus::Paused, [AlertRuleMetric::HorizonPaused]);
+    Readings::record(Environment::factory()->for($billing)->demo()->create(['polling_enabled' => false]), EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
+
+    $this->actingAs($this->user)
+        ->get(route('applications.index', ['current_team' => $this->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.groups', fn ($groups) => collect($groups)->firstWhere('application.id', 'billing')['worstStatus'] === 'paused'));
+});

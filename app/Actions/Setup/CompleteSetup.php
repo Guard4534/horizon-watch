@@ -30,7 +30,6 @@ class CompleteSetup
                 'name' => $data->name,
                 'email' => $data->email,
                 'password' => $data->password,
-                'email_verified_at' => now(),
                 'is_instance_admin' => true,
                 'alert_emails' => true,
             ]);

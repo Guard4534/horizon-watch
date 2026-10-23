@@ -12,7 +12,6 @@ import {
     statusText,
     statusTone,
     thresholdTone,
-    worstTone,
 } from '@/components/monitoring/environment/readings';
 
 type State = Parameters<typeof displayState>[0];
@@ -122,27 +121,6 @@ describe('healthy and needs attention', () => {
             expect(needsAttention(environment)).toBe(attention);
         },
     );
-});
-
-describe('worstTone', () => {
-    it('takes the colour of the worst status', () => {
-        expect(
-            worstTone([
-                { status: 'active' },
-                { status: 'stale' },
-                { status: null },
-            ]),
-        ).toBe('var(--st-warn)');
-        expect(
-            worstTone([{ status: 'degraded' }, { status: 'unreachable' }]),
-        ).toBe('var(--st-down)');
-        expect(worstTone([{ status: 'active' }])).toBe('var(--st-ok)');
-    });
-
-    it('has no tone without a status', () => {
-        expect(worstTone([])).toBeNull();
-        expect(worstTone([{ status: null }])).toBeNull();
-    });
 });
 
 describe('hasMeasurement', () => {

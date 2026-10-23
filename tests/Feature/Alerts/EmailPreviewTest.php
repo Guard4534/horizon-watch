@@ -22,7 +22,6 @@ beforeEach(function () {
     $this->alert = Alert::factory()->for($this->production)->critical()->create([
         'metric' => AlertRuleMetric::QueuePending,
         'threshold' => 2000,
-        'unit' => 'job',
         'value' => 4312,
     ]);
 

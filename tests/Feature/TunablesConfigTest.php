@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Monitoring\DispatchDuePolls;
 use App\Data\Applications\ApplicationWizardData;
 use App\Data\Applications\EnvironmentFormData;
 use App\Enums\AlertRuleMetric;
@@ -81,16 +82,16 @@ test('horizon: the failed-jobs threshold stops one below the failed jobs a readi
     'absurd' => [0, 4, 1.0],
 ]);
 
-test('readings: the failed-rate window follows the configuration', function (int $minutes, int $expected) {
-    config(['horizon-watch.readings.failed_rate_minutes' => $minutes]);
+test('readings: the failed-jobs window and the poll tick are fixed, since only one value of each is safe', function () {
+    expect(config('horizon-watch.readings'))->not->toHaveKeys(['failed_rate_minutes', 'poll_tick_seconds'])
+        ->and(HorizonReader::FAILED_RATE_MINUTES)->toBe(60)
+        ->and(DispatchDuePolls::TICK_SECONDS)->toBe(15);
 
-    $job = new HorizonFailedJob(name: 'App\\Jobs\\Sync', queue: 'default', exception: 'RuntimeException', attempts: 1, failedAt: CarbonImmutable::now()->subMinutes(30));
+    $recent = new HorizonFailedJob(name: 'App\\Jobs\\Sync', queue: 'default', exception: 'RuntimeException', attempts: 1, failedAt: CarbonImmutable::now()->subMinutes(59));
+    $old = new HorizonFailedJob(name: 'App\\Jobs\\Sync', queue: 'default', exception: 'RuntimeException', attempts: 1, failedAt: CarbonImmutable::now()->subMinutes(61));
 
-    expect(app(StatusEvaluator::class)->failedLastHour([$job]))->toBe($expected);
-})->with([
-    'default' => [60, 1],
-    'narrowed' => [20, 0],
-]);
+    expect(app(StatusEvaluator::class)->failedLastHour([$recent, $old]))->toBe(1);
+});
 
 test('readings: a poll interval left out takes the configured default', function () {
     config(['horizon-watch.readings.poll_interval_seconds.default' => 45]);

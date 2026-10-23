@@ -57,7 +57,7 @@ const slug = useTeamSlug();
             </span>
             <AttentionBadge
                 :count="group.attentionCount"
-                :environments="group.environments"
+                :worst-status="group.worstStatus"
             />
             <PhCaretRight :size="14" class="nc-tone-faint flex-none" />
         </Link>

@@ -29,7 +29,7 @@ class HandleInertiaRequests extends Middleware
         $user = $request->user();
         $teams = null;
         $userTeams = function () use ($user, &$teams) {
-            return $teams ??= $user?->toUserTeams(includeCurrent: true) ?? collect();
+            return $teams ??= $user?->toUserTeams() ?? collect();
         };
 
         return [

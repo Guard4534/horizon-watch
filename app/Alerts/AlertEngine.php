@@ -257,7 +257,6 @@ final class AlertEngine
             'environment_name' => $environment->name,
             'environment_type' => $environment->type,
             'threshold' => $rule->threshold,
-            'unit' => $rule->metric->unit(),
             'value' => $value,
             'detail' => $detail,
             'opened_at' => $at,
@@ -265,7 +264,6 @@ final class AlertEngine
             'muted_until' => $maintenance?->ends_at,
             'muted_indefinitely' => false,
             'maintenance_window_id' => $maintenance?->id,
-            'notified' => false,
             'created_at' => $timestamp,
             'updated_at' => $timestamp,
         ])->getAttributes();
@@ -284,7 +282,7 @@ final class AlertEngine
             'last_seen_at' => $at,
             'value' => $value,
             'detail' => $detail,
-            'severity' => $alert->notified && $alert->severity === AlertSeverity::Critical ? $alert->severity : $rule->severity,
+            'severity' => $alert->wasNotified() && $alert->severity === AlertSeverity::Critical ? $alert->severity : $rule->severity,
             'threshold' => $rule->threshold,
         ])->save();
     }

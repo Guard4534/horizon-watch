@@ -4,6 +4,7 @@ namespace App\Data\Pages;
 
 use App\Data\Monitoring\ApplicationData;
 use App\Data\Monitoring\EnvironmentData;
+use App\Enums\EnvironmentStatus;
 use Spatie\LaravelData\Data;
 
 class ApplicationGroupData extends Data
@@ -13,5 +14,6 @@ class ApplicationGroupData extends Data
         /** @var array<int, EnvironmentData> */
         public array $environments,
         public int $attentionCount,
+        public ?EnvironmentStatus $worstStatus,
     ) {}
 }

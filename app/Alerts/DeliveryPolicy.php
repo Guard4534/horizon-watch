@@ -33,7 +33,7 @@ final readonly class DeliveryPolicy
         if ($alert->severity !== AlertSeverity::Critical
             || $alert->state($now) !== AlertState::Open
             || $alert->handled_at !== null
-            || $alert->last_notified_at !== null
+            || $alert->wasNotified()
             || ! $this->watched($alert)) {
             return;
         }
@@ -49,7 +49,7 @@ final readonly class DeliveryPolicy
 
         if ($team === null
             || $resolvedAt === null
-            || ! $alert->notified
+            || ! $alert->wasNotified()
             || $alert->resolution_notified_at !== null
             || $alert->muted_indefinitely
             || $alert->muted_until?->gt($resolvedAt) === true) {
@@ -102,7 +102,7 @@ final readonly class DeliveryPolicy
         $alerts = $this->deliverable($now)
             ->whereNotNull('alerts.resolved_at')
             ->where('alerts.resolved_at', '>=', $now->subMinutes(config()->integer('horizon-watch.notifications.resolution_catch_up_minutes')))
-            ->where('alerts.notified', true)
+            ->whereNotNull('alerts.last_notified_at')
             ->whereNull('alerts.resolution_notified_at')
             ->where('alerts.muted_indefinitely', false)
             ->where(fn (Builder $unmuted) => $unmuted
@@ -254,7 +254,7 @@ final readonly class DeliveryPolicy
                 ->where(fn (Builder $query) => $previous === null
                     ? $query->whereNull('last_notified_at')
                     : $query->where('last_notified_at', '<=', $previous))
-                ->update(['notified' => true, 'last_notified_at' => $now]);
+                ->update(['last_notified_at' => $now]);
 
             if ($claimed === 0) {
                 return;
@@ -291,7 +291,7 @@ final readonly class DeliveryPolicy
             $claimed = Alert::query()
                 ->whereKey($alert->id)
                 ->whereNotNull('resolved_at')
-                ->where('notified', true)
+                ->whereNotNull('last_notified_at')
                 ->whereNull('resolution_notified_at')
                 ->update(['resolution_notified_at' => $now]);
 

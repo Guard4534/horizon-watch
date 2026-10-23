@@ -68,8 +68,6 @@ final readonly class HorizonClient implements HorizonReader
         private int $metricsConcurrency,
         #[Config('horizon-watch.horizon.exception_length')]
         private int $exceptionLength,
-        #[Config('horizon-watch.readings.failed_rate_minutes')]
-        private int $failedRateMinutes,
         #[Config('horizon-watch.http_timeout_seconds', 5)]
         private int $timeoutSeconds = 5,
         #[Config('horizon-watch.read_budget_seconds', 20)]
@@ -507,7 +505,7 @@ final readonly class HorizonClient implements HorizonReader
         $oldest = end($page['jobs']);
         $failedAt = is_array($oldest) ? $this->timestamp($oldest['failed_at'] ?? null) : null;
 
-        return $failedAt !== null && $failedAt->gte(CarbonImmutable::now()->subMinutes($this->failedRateMinutes));
+        return $failedAt !== null && $failedAt->gte(CarbonImmutable::now()->subMinutes(self::FAILED_RATE_MINUTES));
     }
 
     /**

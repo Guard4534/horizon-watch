@@ -216,3 +216,32 @@ test('every new password field shows the one password policy', function () {
         expect($sources[$path])->toContain('passwordPolicy.description');
     }
 });
+
+test('the organizations page reads the shared memberships instead of a second copy from its controller', function () {
+    expect(scriptSources()['pages/teams/Index.vue'])
+        ->not->toMatch('/defineProps<\{\s*teams:/')
+        ->toContain('page.props.teams');
+
+    expect((string) file_get_contents(app_path('Http/Controllers/Teams/TeamController.php')))
+        ->toContain("Inertia::render('teams/Index')")
+        ->not->toContain("'teams' => \$request->user()->toUserTeams(");
+});
+
+test('the client never ranks environment statuses itself', function () {
+    $ranking = collect(scriptSources())
+        ->filter(fn (string $source) => str_contains($source, 'worstTone')
+            || preg_match('/Record<App\.Enums\.EnvironmentStatus,\s*number>/', $source) === 1)
+        ->keys()
+        ->values()
+        ->all();
+
+    expect($ranking)->toBe([]);
+});
+
+test('the wall keeps the worst first order of the server inside each application group', function () {
+    $sources = scriptSources();
+
+    foreach (['pages/monitoring/Wall.vue', 'components/monitoring/wall/ApplicationGroup.vue'] as $path) {
+        expect($sources[$path])->not->toMatch('/\.(sort|toSorted)\(/');
+    }
+});

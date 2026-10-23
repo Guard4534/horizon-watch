@@ -21,6 +21,22 @@ enum EnvironmentStatus: string
         };
     }
 
+    /**
+     * @param  iterable<self|null>  $statuses
+     */
+    public static function worstOf(iterable $statuses): ?self
+    {
+        $worst = null;
+
+        foreach ($statuses as $status) {
+            if ($status !== null && ($worst === null || $status->severity() < $worst->severity())) {
+                $worst = $status;
+            }
+        }
+
+        return $worst;
+    }
+
     public function isHealthy(): bool
     {
         return $this === self::Active;

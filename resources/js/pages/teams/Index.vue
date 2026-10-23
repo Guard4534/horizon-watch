@@ -22,11 +22,8 @@ defineOptions({
 
 type Organization = App.Data.Teams.UserTeamData;
 
-defineProps<{
-    teams: Organization[];
-}>();
-
 const page = usePage();
+const teams = computed<Organization[]>(() => page.props.teams);
 const canCreateOrganizations = computed(
     () => page.props.canCreateOrganizations,
 );

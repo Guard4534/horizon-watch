@@ -29,7 +29,6 @@ class AlertFactory extends Factory
             'environment_name' => fn (array $attributes) => $this->environment($attributes)->name,
             'environment_type' => fn (array $attributes) => $this->environment($attributes)->type,
             'threshold' => fn (array $attributes) => AlertRuleMetric::from($this->value($attributes['metric']))->defaultThreshold(),
-            'unit' => fn (array $attributes) => AlertRuleMetric::from($this->value($attributes['metric']))->unit(),
             'value' => 2500,
             'detail' => ['pending' => 2500],
             'opened_at' => now()->subMinutes(10),
@@ -41,7 +40,6 @@ class AlertFactory extends Factory
             'handled_at' => null,
             'handled_by' => null,
             'last_notified_at' => null,
-            'notified' => false,
             'digested_at' => null,
         ];
     }

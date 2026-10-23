@@ -64,14 +64,14 @@ test('the wizard receives every environment type and nothing to edit', function 
     $this->actingAs($this->admin)
         ->get(route('applications.create', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.application', null)
-            ->where('page.slug', null)
+            ->missing('page.application')
+            ->missing('page.slug')
             ->has('page.types', 6)
             ->where('page.types.0.value', 'production')
             ->where('page.types.0.label', 'Production'));
 });
 
-test('the application edit page carries the slug its form submits to', function () {
+test('the application edit page carries only the application and the slug its form submits to', function () {
     $this->actingAs($this->admin)
         ->get(route('applications.edit', [
             'current_team' => $this->team->slug,
@@ -80,7 +80,8 @@ test('the application edit page carries the slug its form submits to', function 
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.slug', 'invoicer')
             ->where('page.application.name', 'Invoicer')
-            ->missing('page.application.host'));
+            ->missing('page.application.host')
+            ->where('page', fn ($props) => collect($props)->keys()->sort()->values()->all() === ['application', 'slug']));
 });
 
 test('the environment edit page shows the username and whether a password is set', function () {
@@ -269,4 +270,13 @@ test('every environment form page sends the collection interval limits from the 
                 ->where('page.pollInterval.max', 600)
                 ->where('page.pollInterval.step', 15));
     }
+});
+
+test('the application edit page, which only renames, receives no collection interval limits', function () {
+    $this->actingAs($this->admin)
+        ->get(route('applications.edit', [
+            'current_team' => $this->team->slug,
+            'application' => $this->application->slug,
+        ]))
+        ->assertInertia(fn (Assert $page) => $page->missing('page.pollInterval'));
 });

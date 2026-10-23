@@ -59,13 +59,11 @@ test('an unsupported language is rejected', function () {
 });
 
 test('the shared user exposes only what the pages need', function () {
-    $user = User::factory()->create(['name' => 'Ada Example']);
+    $user = User::factory()->create(['name' => 'Ada Example', 'email' => 'ada@example.com']);
 
     $this->actingAs($user)
         ->get('/settings/profile')
         ->assertInertia(fn (Assert $page) => $page
-            ->where('auth.user.name', 'Ada Example')
-            ->missing('auth.user.password')
-            ->missing('auth.user.remember_token')
-            ->missing('auth.user.two_factor_secret'));
+            ->where('auth.user', ['name' => 'Ada Example', 'email' => 'ada@example.com'])
+            ->has('locale'));
 });

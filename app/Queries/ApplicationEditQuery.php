@@ -3,19 +3,15 @@
 namespace App\Queries;
 
 use App\Data\Applications\ApplicationFormData;
-use App\Data\Applications\PollIntervalData;
-use App\Data\Pages\ApplicationFormPageData;
-use App\Enums\EnvironmentType;
+use App\Data\Pages\ApplicationEditPageData;
 use App\Models\Application;
 
 class ApplicationEditQuery
 {
-    public function handle(Application $application): ApplicationFormPageData
+    public function handle(Application $application): ApplicationEditPageData
     {
-        return new ApplicationFormPageData(
+        return new ApplicationEditPageData(
             application: ApplicationFormData::from($application),
-            types: EnvironmentType::options(),
-            pollInterval: PollIntervalData::fromConfig(),
             slug: $application->slug,
         );
     }

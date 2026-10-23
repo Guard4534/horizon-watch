@@ -2,6 +2,7 @@
 
 namespace App\Data\Applications;
 
+use App\Actions\Monitoring\DispatchDuePolls;
 use Spatie\LaravelData\Data;
 
 class PollIntervalData extends Data
@@ -19,7 +20,7 @@ class PollIntervalData extends Data
             default: config()->integer('horizon-watch.readings.poll_interval_seconds.default'),
             min: config()->integer('horizon-watch.readings.poll_interval_seconds.min'),
             max: config()->integer('horizon-watch.readings.poll_interval_seconds.max'),
-            step: config()->integer('horizon-watch.readings.poll_tick_seconds'),
+            step: DispatchDuePolls::TICK_SECONDS,
         );
     }
 }

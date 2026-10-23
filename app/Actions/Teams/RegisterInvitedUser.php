@@ -24,7 +24,6 @@ class RegisterInvitedUser
                 'name' => $data->name,
                 'email' => $locked->email,
                 'password' => $data->password,
-                'email_verified_at' => now(),
             ]);
 
             $acceptInvitation->handle($locked, $user);

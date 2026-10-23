@@ -11,7 +11,6 @@ class ApplicationCreateQuery
     public function handle(): ApplicationFormPageData
     {
         return new ApplicationFormPageData(
-            application: null,
             types: EnvironmentType::options(),
             pollInterval: PollIntervalData::fromConfig(),
             maxEnvironments: config()->integer('horizon-watch.limits.wizard_environments'),

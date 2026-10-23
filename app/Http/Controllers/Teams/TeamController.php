@@ -22,11 +22,9 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class TeamController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(): Response
     {
-        return Inertia::render('teams/Index', [
-            'teams' => $request->user()->toUserTeams(includeCurrent: true),
-        ]);
+        return Inertia::render('teams/Index');
     }
 
     public function store(SaveTeamRequest $request, CreateTeam $createTeam): RedirectResponse

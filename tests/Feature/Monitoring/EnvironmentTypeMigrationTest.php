@@ -57,8 +57,6 @@ beforeEach(function () {
             'environment_name' => 'old',
             'environment_color' => $color,
             'threshold' => 1000,
-            'unit' => 'job',
-            'notified' => false,
             'opened_at' => now(),
             'last_seen_at' => now(),
             'created_at' => now(),

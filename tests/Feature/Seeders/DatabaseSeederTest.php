@@ -119,6 +119,6 @@ test('the demo organization carries alerts that match its readings, some muted, 
         ->and($resolved->every(fn (Alert $alert) => $alert->resolved_at->gte(now()->subHours(48))
             && $alert->resolved_at->lte(now())
             && $alert->opened_at->lt($alert->resolved_at)))->toBeTrue()
-        ->and($resolved->every(fn (Alert $alert) => $alert->notified === ($alert->resolution_notified_at !== null)))->toBeTrue()
+        ->and($resolved->every(fn (Alert $alert) => $alert->wasNotified() === ($alert->resolution_notified_at !== null)))->toBeTrue()
         ->and(AlertNotification::query()->where('target', 'like', '%://%')->exists())->toBeFalse();
 });

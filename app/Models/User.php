@@ -26,7 +26,6 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Locale|null $locale
  * @property bool $alert_emails
  * @property bool $is_instance_admin
- * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
@@ -39,7 +38,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property-read Collection<int, Membership> $teamMemberships
  * @property-read Collection<int, Team> $teams
  */
-#[Fillable(['name', 'email', 'password', 'email_verified_at', 'current_team_id', 'locale', 'alert_emails'])]
+#[Fillable(['name', 'email', 'password', 'current_team_id', 'locale', 'alert_emails'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements HasLocalePreference
 {
@@ -81,7 +80,6 @@ class User extends Authenticatable implements HasLocalePreference
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'locale' => Locale::class,

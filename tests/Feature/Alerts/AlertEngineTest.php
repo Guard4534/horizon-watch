@@ -156,7 +156,7 @@ test('a breached threshold opens one alert with the environment and rule copied 
         ->and($alert->opened_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
         ->and($alert->last_seen_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
         ->and($alert->resolved_at)->toBeNull()
-        ->and($alert->notified)->toBeFalse();
+        ->and($alert->wasNotified())->toBeFalse();
 
     Event::assertDispatchedTimes(AlertOpened::class, 1);
     Event::assertDispatched(AlertOpened::class, fn (AlertOpened $event) => $event->alertId === $alert->id);
@@ -548,7 +548,7 @@ test('a quiet resolution is never told, neither by the catch-up nor by the diges
 
     ($this->poll)(($this->reading)(['workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 95, processes: 7)]]));
 
-    Alert::query()->where('metric', AlertRuleMetric::QueuePending)->update(['notified' => true, 'last_notified_at' => now()]);
+    Alert::query()->where('metric', AlertRuleMetric::QueuePending)->update(['last_notified_at' => now()]);
     Alert::query()->where('metric', AlertRuleMetric::QueueMaxWait)->update(['digested_at' => now()]);
 
     if ($disabled) {
@@ -892,7 +892,7 @@ test('the first active reading after an inactive one judges the thresholds again
 test('a notified alert keeps its severity when the rule is lowered, so its resolution is still told', function () {
     ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
     ($this->poll)(($this->pending)(2500));
-    Alert::query()->update(['notified' => true]);
+    Alert::query()->update(['last_notified_at' => now()]);
 
     AlertRule::query()->update(['severity' => AlertSeverity::Warning]);
     $this->travel(15)->seconds();
@@ -918,7 +918,7 @@ test('an alert not notified yet follows a lowered severity', function () {
 
 test('a notified warning is still raised to critical', function () {
     ($this->poll)(($this->pending)(2500));
-    Alert::query()->update(['notified' => true]);
+    Alert::query()->update(['last_notified_at' => now()]);
 
     ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
     $this->travel(15)->seconds();
@@ -1601,7 +1601,7 @@ test('an alert that opens and resolves within a window, or a notified one that r
     ($this->poll)(($this->pending)(2500));
 
     if ($notifiedBefore) {
-        Alert::query()->update(['notified' => true, 'last_notified_at' => now()]);
+        Alert::query()->update(['last_notified_at' => now()]);
     }
 
     MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 10:00:00', '2026-09-17 10:30:00')->create();
@@ -1638,7 +1638,6 @@ test('a window that starts between two readings holds back the repeats and the d
     NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com']]);
     Alert::factory()->for($this->environment)->critical()->create([
         'metric' => AlertRuleMetric::EndpointUnreachable,
-        'notified' => true,
         'last_notified_at' => now()->subHours(2),
     ]);
     Alert::factory()->for($this->environment)->warning()->create();
