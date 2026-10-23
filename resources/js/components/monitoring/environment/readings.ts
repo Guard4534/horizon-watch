@@ -82,6 +82,17 @@ export function needsAttention(environment: StateFields): boolean {
     return !CALM.includes(displayState(environment));
 }
 
+export function collectionPaused(
+    environments: ReadonlyArray<
+        Pick<App.Data.Monitoring.EnvironmentData, 'pollingEnabled'>
+    >,
+): boolean {
+    return (
+        environments.length > 0 &&
+        environments.every((environment) => !environment.pollingEnabled)
+    );
+}
+
 export function readingErrorLabel(error: App.Enums.ReadingError): string {
     switch (error) {
         case 'unreachable':

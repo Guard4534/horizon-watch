@@ -15,9 +15,9 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
 
 ### Added
 
-- Maintenance windows silence the alerts of an environment, an application or the whole
+- Maintenance windows mute the alerts of an environment, an application or the whole
   organization for up to 31 days while readings go on. Plan one under Alert settings, or use
-  **Silence for…** on an environment page for 30 minutes to 4 hours. The wall and the
+  **Maintenance for…** on an environment page for 30 minutes to 4 hours. The wall and the
   environment page mark environments in maintenance.
 - Threshold rules can wait for the breach to last up to 60 minutes (**for … min**) before they
   open an alert, so a value hovering around its threshold no longer opens and resolves an alert
@@ -41,19 +41,20 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   runs the same checks, or only those of a scheduler or worker container with `--role`.
 - `HORIZON_WATCH_HEARTBEAT_URL`, off by default, is called every minute while the panel is
   healthy, for a dead man's switch such as healthchecks.io.
-- A banner tells everyone signed in when the panel itself has stopped reading or falls behind.
+- A banner tells everyone logged in when the panel itself has stopped reading or falls behind.
 - Webhook payloads carry `"version": 1`, and each alert in them a `summary` line and a
   `detail` object: the longest-running job and its queue, the queues without workers, and
   whether the failed-jobs count is a lower bound. The README documents the full contract:
   events, rule and unit values, the digest, and which alerts reach the webhook.
-- After the webhook secret is regenerated, deliveries carry `X-Horizon-Watch-Previous-Signature`,
+- After the signing secret is regenerated, deliveries carry `X-Horizon-Watch-Previous-Signature`,
   signed with the old secret, for 24 hours, so the receiver can switch at its own pace.
 - The delivery log says why an alert email or a webhook did not go out: the mail server was
   unreachable, refused the login or refused the message, or the receiver answered with a given
   HTTP status.
-- The running version shows at the bottom of the sidebar, in `artisan about` and in
-  `GET /health`, and Horizon reads, webhooks and heartbeats identify themselves as
-  `HorizonWatch/<version>`.
+- The running version, such as `1.0.0`, shows at the bottom of the sidebar, in
+  `artisan about` and in `GET /health`, and Horizon reads, webhooks and heartbeats identify
+  themselves as `HorizonWatch/<version>`. Git tags keep their `v` (`v1.0.0`); the version
+  never carries it.
 - While no SMTP server is set, admins can create a new link for a pending invitation from the
   Members page and hand it over themselves; instance admins can do so at any time. Each new
   link replaces the earlier ones, the emailed one included.
@@ -78,7 +79,7 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   send.
 - Failed queue jobs are pruned after 7 days.
 - Error pages for 403, 404, 419, 500 and 503 in the panel's style and language, and toasts on
-  the sign-in pages.
+  the login pages.
 - The environment page lists every open alert, muted ones included, and the application page
   shows muted alerts too.
 - The open-alert count shows in the browser tab title and on the phone's tab bar.
@@ -106,6 +107,11 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   numbers, and a time on another day shows its weekday, day and month. In the webhook payload
   only the wording of `summary` changes: `value`, `threshold` and `unit` are the same numbers
   as before.
+- Where a time is entered or a maintenance end is shown, the panel names its time zone. Alert
+  settings say that quiet hours and alert emails use the organization's time zone, and the
+  maintenance form, the list of maintenance windows and the maintenance badge name the
+  browser time zone their times are given in. `.env.example` lists
+  `HORIZON_WATCH_DEFAULT_TIMEZONE`.
 - An environment's Horizon URL, as you open it in the browser, is the only address the panel
   asks for. Applications no longer have a domain: the one shown next to an application is the
   host of its production environment's Horizon URL, or of its first environment. The wizard asks
@@ -125,7 +131,7 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   `MAIL_TIMEOUT`. Before upgrading, remove from `.env` any of them you did not set on purpose,
   such as values left over from `.env.example`: with the bundled database `DB_HOST` must stay
   `postgres` and `DB_DATABASE` and `DB_USERNAME` must stay `horizon_watch`, or `web` keeps
-  restarting with `database not reachable`, and a changed `APP_NAME` signs everyone out.
+  restarting with `database not reachable`, and a changed `APP_NAME` logs everyone out.
 - **Upgrade note:** only instance admins can create organizations by default. Set
   `HORIZON_WATCH_ORG_CREATION=everyone` to keep the 0.1.0 behaviour.
 - **Upgrade note:** download the new `compose.prod.yaml`. It adds the `notifier` service (with
@@ -150,6 +156,12 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   `?type=production`.
 - **Upgrade note:** applications lose their domain field. Nothing else is lost: each environment
   keeps its Horizon URL, and the domain shown next to the application now comes from those URLs.
+- **Upgrade note:** the database drops the columns nothing reads any more:
+  `applications.host`, `environments.color` and `environments.is_production` (replaced by
+  `environments.type`), `alerts.notified`, `alerts.unit` and `users.email_verified_at`, and
+  renames `alerts.environment_color` to `alerts.environment_type`. Only reports or scripts of
+  your own that read those columns need a change; the webhook payload keeps every field, `unit`
+  included.
 - **Upgrade note:** webhooks queued by 0.1.0, including those waiting for a retry, are sent as
   they were built, without `version`, `summary` and `detail`. If your receiver needs those
   fields, let the `notifications` queue empty before upgrading.
@@ -174,7 +186,7 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
 - Deleting an organization takes effect at once and its readings are deleted in the background;
   deleting an application or an environment deletes its readings in chunks.
 - People without an organization land on the organizations page instead of looping between
-  the home and login pages, also right after signing in, two-factor challenge included, or
+  the home and login pages, also right after logging in, two-factor challenge included, or
   declining an invitation. The navigation leaves out the organization pages until they join one.
 - Renaming an organization or an environment keeps its slug, so bookmarks, open walls and the
   links in alerts already sent keep working.
@@ -188,7 +200,7 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
 - `/up` also checks the database.
 - The `web` container stops when php-fpm or nginx cannot start, so its restart policy takes over
   instead of leaving the panel answering 502.
-- The poll interval moves in steps of 15 seconds, the pace at which the scheduler queues
+- The collection interval moves in steps of 15 seconds, the pace at which the scheduler queues
   readings.
 - Horizon's per-queue runtimes are read again only every 5 minutes, or when a new queue appears,
   instead of at every reading.
@@ -203,15 +215,20 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   webhook receives every alert the panel announces. 0.1.0 described it as a per-rule
   notification channel.
 - The account created by `/setup` starts with alert emails turned on.
-- Horizon reads, webhook deliveries and heartbeats send `User-Agent: HorizonWatch/<version>`.
+- Horizon reads, webhook deliveries and heartbeats send `User-Agent: HorizonWatch/<version>`
+  (`HorizonWatch/1.0.0`).
   Horizon reads used Guzzle's default and the other two sent `HorizonWatch`: update any
   allowlist or firewall rule that matched the old value.
 - Without `MAIL_HOST`, the SMTP mailer has no host instead of falling back to `127.0.0.1`.
 - Invitation emails are written in the language of whoever sends or resends them, instead of
   always in `APP_LOCALE`.
 - Abbreviated counts use the decimal separator of the language, such as `1,2k` in Italian.
-- The wall calls its pending total **Pending jobs**, like the alert rule, instead of
-  **Queued jobs**.
+- The wall calls its pending total **Pending**, as the environment page and the phone do,
+  instead of **Queued jobs**.
+- Healthy means status active and nothing else: a degraded environment now needs attention.
+  The wall's **Healthy** figure, the **Needs attention** filter and the badge of each
+  application count the same environments, on the desktop and on the phone; an environment
+  whose collection is paused counts in neither.
 - The favicon and the home-screen icon are the mark of the panel instead of the Laravel logo.
 - Search engines are asked to stay out: `robots.txt` disallows everything and every page says
   `noindex`.
@@ -272,17 +289,19 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   the webhook delivery is logged as not delivered with its own error, and regenerating the
   secret works.
 - With a different application key, the two-factor challenge answered 500. It now says the
-  secret can no longer be read and asks for an administrator.
+  secret can no longer be read and to ask whoever runs the panel to turn two-factor
+  authentication off.
 - An environment whose readings stopped arriving kept its last status, so it could stay green,
-  out of the **Problems** filter and counted as up. It is now shown as _not updated_, unless it
-  was last known down, and counts as a problem everywhere.
+  out of the **Needs attention** filter and counted as healthy. It is now shown as _not
+  updated_, unless it was last known down, and needs attention everywhere.
 - The live dot in the header stayed green while the page could not refresh, and a failed
   refresh could cover a wall left on a screen with an error dialog. The dot now turns red and
   the error is not shown for automatic refreshes.
 - Start times of long-running jobs were in UTC; they are in the viewer's time zone, like every
   other time. Long waits read in hours and days instead of hundreds of minutes.
 - Changing the range of a chart could be overwritten by a refresh still in flight.
-- The phone's **Up** figure counted differently from the desktop's **Environments up**.
+- The phone's **Up** figure counted differently from the desktop's **Environments up**; both
+  now show the same **Healthy** figure.
 - The queue table and the application search had no empty state, and the environment page kept
   two columns on narrow desktop windows.
 - Typing the wrong name in a confirmation dialog and pressing Enter still submitted it.
@@ -319,7 +338,7 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
 - Changing the email address needs the current password, and the old address gets a notice.
 - Changing or resetting the password logs out every other session of the account.
 - The forgot-password form answers the same way whether an account exists or not, and is rate
-  limited per address and per account. Sign-in also stops an account for the rest of the hour
+  limited per address and per account. Login also stops an account for the rest of the hour
   after 30 failed attempts, from whatever address, and every form that checks the current
   password is rate limited.
 - Invitation codes are stored as SHA-256 hashes. **Upgrade note:** upgrading hashes the pending

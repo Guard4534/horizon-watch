@@ -487,3 +487,12 @@ test('a window ended within the second it started is deleted', function () {
     expect(MaintenanceWindow::query()->count())->toBe(0)
         ->and($alert->fresh()->state(CarbonImmutable::now()))->toBe(AlertState::Open);
 });
+
+test('the maintenance form and list name the browser time zone in its own case', function () {
+    $source = file_get_contents(resource_path('js/components/monitoring/rules/MaintenanceWindows.vue'));
+
+    expect($source)
+        ->toContain('const timeZone = browserTimeZone();')
+        ->toMatch("/\\\$t\\(\\s*'at most :days days, in your time zone \\(:timezone\\)',\\s*\\{\\s*days: String\\(maxDays\\),\\s*timezone: timeZone,/")
+        ->toMatch('/<th>\s*\{\{ \$t\(\'When\'\) \}\}\s*<span class="normal-case">\(\{\{ timeZone \}\}\)<\/span>\s*<\/th>/');
+});

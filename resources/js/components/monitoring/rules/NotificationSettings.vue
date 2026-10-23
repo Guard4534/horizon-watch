@@ -338,7 +338,11 @@ const movesHost = computed(
                         :message="errors.timezone"
                     />
                     <div class="field-hint">
-                        {{ $t('the quiet hours follow this time zone') }}
+                        {{
+                            $t(
+                                'Quiet hours and alert emails use this time zone',
+                            )
+                        }}
                     </div>
                 </div>
 

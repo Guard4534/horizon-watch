@@ -6,7 +6,11 @@ import {
     it,
     vi,
 } from 'vite-plus/test';
-import { formatInstant, quietHoursSummary } from '@/lib/datetime';
+import {
+    browserTimeZone,
+    formatInstant,
+    quietHoursSummary,
+} from '@/lib/datetime';
 
 describe('formatInstant', () => {
     const now = new Date(2026, 9, 14, 10, 0);
@@ -62,5 +66,26 @@ describe('quietHoursSummary', () => {
     it('says none without both ends', () => {
         expect(quietHoursSummary(null, null, 'UTC')).toBe('None');
         expect(quietHoursSummary('22:00', null, 'UTC')).toBe('None');
+    });
+});
+
+describe('browserTimeZone', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('names the zone the browser formats times in', () => {
+        expect(browserTimeZone()).toBe('Europe/Rome');
+    });
+
+    it('falls back to UTC when the browser names no zone', () => {
+        const real = new Intl.DateTimeFormat().resolvedOptions();
+
+        vi.spyOn(
+            Intl.DateTimeFormat.prototype,
+            'resolvedOptions',
+        ).mockReturnValue({ ...real, timeZone: '' });
+
+        expect(browserTimeZone()).toBe('UTC');
     });
 });

@@ -109,13 +109,13 @@ server {
 }
 ```
 
-Besides protecting the session cookie, HTTPS keeps the one-time webhook secret out of the
+Besides protecting the session cookie, HTTPS keeps the one-time signing secret out of the
 browser history: the page that shows it asks the browser to encrypt its history entry, which
 browsers only do in a secure context.
 
 ## First run
 
-Until the first account exists, whoever opens the panel can create the administrator and so
+Until the first account exists, whoever opens the panel can create the instance admin account and so
 take the instance. With `HORIZON_WATCH_SETUP_TOKEN` set, `/setup` asks for that token first;
 without it, keep the port out of reach of anyone else until you have been through setup, for
 example with `HORIZON_WATCH_PORT=127.0.0.1:8080` and an SSH tunnel. The token is only ever
@@ -123,7 +123,7 @@ checked by `/setup`, and it must be at least 16 characters long: with a shorter 
 refuses every attempt until you change it and restart.
 
 Open the panel — your `APP_URL`, or `http://localhost:8080` by default. The first visit lands
-on `/setup` and asks you to create the administrator and the first organization; from then on
+on `/setup` and asks you to create the instance admin account and the first organization; from then on
 `/setup` is closed and everyone else joins by invitation.
 
 The account created by `/setup` is the instance admin. By default only instance admins can
@@ -139,25 +139,41 @@ Then, in order:
 
 1. **Applications** → **Add application**. A wizard creates the application and its
    environments together, in three steps:
-    - **Application**: a name, the primary domain (`shop.example.com`) and the Horizon path,
-      `horizon` unless the application moved it with `HORIZON_PATH`.
+    - **Application**: a name.
     - **Environments**: one per installation, with a name (`production`, `staging`, …), a
-      color, the URL of its Horizon dashboard, the basic-auth user and password if the dashboard
-      is behind one, and how often to poll it (15 to 300 seconds, in steps of 15: the scheduler
-      queues readings every 15 seconds). The URL is suggested from the domain and the path,
-      `https://shop.example.com/horizon` for `production` and
-      `https://staging.shop.example.com/horizon` for `staging`; change it when your hosts are
-      named otherwise. Give basic-auth credentials an `https://` address: over `http://` the
-      password travels in clear on every poll, and the form warns you. Tick **Production
-      environment** on every production installation: members who see everything except
-      production never see those environments. The box is ticked for you when the name is
-      `production`, `prod`, `prd` or `live`, alone or followed by a suffix such as
-      `production-eu`.
+      type, the **Horizon URL**, the basic-auth user and password if the dashboard is behind
+      one, and the **Collection interval** (15 to 300 seconds, in steps of 15: the scheduler
+      queues readings every 15 seconds). The Horizon URL is the address of the Horizon
+      dashboard as you open it in the browser, such as `https://shop.example.com/horizon`, or
+      the moved address if the application changed `HORIZON_PATH`. The first row asks for it;
+      every other row suggests one from it until you edit that row's URL by hand: the same
+      host for a row of type Production, `<name>.<host>` for the others, so `staging` gets
+      `https://staging.shop.example.com/horizon`. A first host that starts with the first
+      row's name, such as `production.shop.example.com`, loses that label first. Give
+      basic-auth credentials an `https://` address: over `http://` the password travels in
+      clear on every poll, and the form warns you.
     - **Verify** reads every dashboard once and tells you what it found, or why it failed,
       before you save.
 
-    **Add environment** on the application's page adds another one later, with the same
-    **Test connection**.
+    The type is Production, Pre-production, Staging, Development, Testing or Demo. It gives the
+    environment its colour, and members who see everything except production never see an
+    environment of type Production. Until you pick one, the type follows the name:
+    `production`, `prod`, `prd` or `live` suggest Production; `preprod`, `pre-production` or
+    `uat` Pre-production; `staging` or `stage` Staging; `develop`, `development` or `dev`
+    Development; `test`, `testing` or `qa` Testing; `demo` Demo; alone or followed by `-`, `.`
+    or `_` and a suffix, such as `production-eu`. Any other name starts as Staging, so an
+    environment is Production only when its name says so or you pick it.
+
+    When you save, the panel trims the Horizon URL, writes its scheme and host in lower case
+    and removes trailing slashes and a trailing `/api…` part:
+    `https://Shop.example.com/horizon/api/stats/` is stored as `https://shop.example.com/horizon`.
+    It refuses a scheme other than `http` and `https`, credentials, a query string or a
+    fragment, and an IP address on a network the panel does not call (see
+    [Troubleshooting](#troubleshooting)).
+
+    **Add environment** on the application's page adds another one later. It suggests the
+    Horizon URL in the same way, from the application's production environment (or its first
+    one), and runs **Test connection** when you leave the URL field.
 
 2. **Alert settings** → review the thresholds (see [Alert rules](#alert-rules)). Every
    organization starts with the defaults and you can override any rule for a single
@@ -166,8 +182,8 @@ Then, in order:
    so a queue hovering around its threshold does not open and resolve an alert at every
    reading. A reading back under the threshold starts the wait again; a failed reading does
    not, unless the endpoint stays unreadable for longer than the stale window.
-3. **Alert settings → Notifications** → add the email recipients, and the webhook URL if you
-   want one. While no member receives alert emails and there is neither an extra address nor
+3. **Alert settings → Notifications** → add any **Extra addresses** beyond the members who
+   turn on alert emails, and the webhook URL if you want one. While no member receives alert emails and there is neither an extra address nor
    a webhook, the wall, the alerts page and this card warn that alerts reach nobody. The
    warning looks only at who could be told: it stays quiet when you turn email off on every
    rule, or when the only members with alert emails see none of the environments.
@@ -202,8 +218,8 @@ Each rule can be turned off, given another threshold or severity, and emailed or
 threshold rules, from pending jobs down, can also wait for the breach to last up to 60 minutes
 (see [First run](#first-run)). **Emailed** decides only whether the alert also goes to the
 recipients' inboxes: the webhook receives every alert (see [Webhook](#webhook)). Critical alerts
-are sent as they open and repeated while they stay open; warnings go into a digest every 15
-minutes (see [Notifications](#notifications)).
+are sent as they open and, unless the repeat is **first detection only**, again while they stay
+open; warnings go into a digest every 15 minutes (see [Notifications](#notifications)).
 
 ## Roles and visibility
 
@@ -212,12 +228,12 @@ Each member of an organization has one role:
 | Role   | Can                                                                                                                            |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | Viewer | see the wall, the applications, the environments and the alerts                                                                |
-| Member | also mute alerts, plan maintenance windows, mark anomalies handled and test connections                                        |
+| Member | also mute alerts, plan maintenance windows, mark alerts as handled and test connections                                        |
 | Admin  | also create and edit applications, environments and alert settings, invite, remove and change members, rename the organization |
 | Owner  | also delete the organization and hand it to another member                                                                     |
 
 The Members page shows the same matrix. Admins and the owner always see every environment.
-Viewers and members see all of them, everything except the environments marked as production,
+Viewers and members see all of them, everything except the environments of type Production,
 or a hand-picked list; they receive alert emails only for what they see. An organization has
 one owner, who can transfer ownership to another member from the Members page and becomes an
 admin. An account that owns an organization other people belong to cannot be deleted until it
@@ -228,14 +244,15 @@ organizations, and they can always create an invitation link (see [First run](#f
 
 ## What the monitored application needs
 
-Horizon Watch reads `<horizon dashboard URL>/api/stats`, `/api/masters`, `/api/workload`,
+Horizon Watch reads `<Horizon URL>/api/stats`, `/api/masters`, `/api/workload`,
 `/api/jobs/failed`, `/api/jobs/pending` and the per-queue metrics. So the monitored
 application needs:
 
-- **Horizon installed and reachable over HTTP.** The default path is `/horizon`; if you moved
-  it with `HORIZON_PATH`, give Horizon Watch the moved URL. Either the dashboard URL or the
-  same URL ending in `/api` is accepted. An address copied from a Horizon screen, such as
-  `/horizon/dashboard`, is not: **Test connection** suggests the dashboard URL instead.
+- **Horizon installed and reachable over HTTP.** Give Horizon Watch the Horizon URL, the
+  dashboard as you open it in the browser: `/horizon` by default, or the path set with
+  `HORIZON_PATH`. A URL ending in `/api` is trimmed to the dashboard URL when you save. An
+  address copied from a Horizon screen, such as `/horizon/dashboard`, is not the dashboard:
+  **Test connection** suggests the dashboard URL instead.
 - **A way in.** Horizon's `viewHorizon` gate guards those routes outside the `local`
   environment. The simplest arrangement that does not open the dashboard to the world is to
   put HTTP basic auth in front of it at the web-server level and give Horizon Watch the
@@ -278,7 +295,7 @@ default except `DB_PASSWORD`, and the mail server.
 | `HORIZON_WATCH_ALERT_RETENTION_DAYS`   | `90`                                        | Days resolved alerts and finished maintenance windows are kept, at least 1               |
 | `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` | `false`                                     | Refuse Horizon addresses that resolve to a private network                               |
 | `HORIZON_WATCH_ORG_CREATION`           | `admins`                                    | Who may create organizations: `admins` (instance admins only) or `everyone`              |
-| `HORIZON_WATCH_DEFAULT_TIMEZONE`       | `UTC`                                       | Time zone new organizations start with                                                   |
+| `HORIZON_WATCH_DEFAULT_TIMEZONE`       | `UTC`                                       | Time zone of organizations that chose none; their quiet hours and alert emails use it    |
 | `HORIZON_WATCH_HEARTBEAT_URL`          | _(empty)_                                   | Dead man's switch called every minute; see [Watching the panel](#watching-the-panel)     |
 | `APP_NAME`                             | `Horizon Watch`                             | Name in the browser tab, sidebar, installed app and as email sender; see below           |
 | `APP_URL`                              | `http://localhost:8080`                     | Public URL, used in emails, password reset links and webhook payloads                    |
@@ -304,12 +321,12 @@ default except `DB_PASSWORD`, and the mail server.
 | `MAIL_FROM_NAME`                       | `APP_NAME`                                  | Sender name of invitations and alert emails                                              |
 | `MAIL_TIMEOUT`                         | `10`                                        | Seconds an unresponsive SMTP server may hold a send; keep it below 30                    |
 
-Renaming `APP_NAME` signs everyone out, and the panel shows its scheduler and workers as stale
+Renaming `APP_NAME` logs everyone out, and the panel shows its scheduler and workers as stale
 until they next run, because the session cookie and the cache prefix are derived from it.
 
 Readings, resolved alerts and finished maintenance windows are pruned once a day. The newest
 reading of each environment is never pruned, so an environment paused for longer than the
-retention still shows its last numbers. The same daily run forgets replaced webhook secrets
+retention still shows its last numbers. The same daily run forgets replaced signing secrets
 whose overlap has ended.
 
 `TRUSTED_PROXIES` decides which addresses may tell the panel the client's address and scheme
@@ -375,10 +392,10 @@ failed run left behind.
 A worker reads one environment at a time, usually in well under a second, but in up to 20
 seconds when Horizon is slow or does not answer. To keep up even when endpoints are that slow,
 set `HORIZON_WATCH_WORKERS` to about `(20 × unresponsive + healthy) / interval`, rounded up,
-where `interval` is the poll interval in seconds. For 30 environments polled every 15 seconds,
+where `interval` is the collection interval in seconds. For 30 environments polled every 15 seconds,
 the default of 2 workers is enough while they all answer, 9 keep up with 5 of them down, and 40
 with all of them down: size it for how many endpoints may go dark at the same time. A reading
-that waits in the queue longer than its environment's poll interval is dropped, and the worker
+that waits in the queue longer than its environment's collection interval is dropped, and the worker
 log says so (`A poll waited in the queue longer than its interval and was dropped.`): when that
 line keeps coming back, raise `HORIZON_WATCH_WORKERS`. A reading that crashes or runs past its
 30-second limit is stored as unreachable, so the endpoint-unreachable rule still fires.
@@ -397,10 +414,13 @@ interval shrinks it in proportion. Alerts and notifications add little next to t
 
 ## Notifications
 
-Critical alerts are sent as they open, repeat while they stay open (every 15, 30 or 60
-minutes, your choice) and are sent again when they resolve. Warnings are collected into a
-digest every 15 minutes. Each organization has its own recipients, its own quiet settings and
-its own webhook.
+Critical alerts are sent as they open and again when they resolve. While one stays open it is
+sent again at the **Alert repeat** interval, every 15, 30 or 60 minutes, until it resolves, is
+muted or is marked as handled; with **first detection only** it is sent once. Warnings are
+collected into a digest every 15 minutes. Each organization has its own recipients, quiet
+hours, time zone and webhook. The time zone (Alert settings → Notifications) decides when the
+quiet hours fall and the times printed in alert emails; until an organization saves one, it
+follows `HORIZON_WATCH_DEFAULT_TIMEZONE`.
 
 A resolution goes only to the addresses, and to the webhook host, that received the alert
 while it was open. An alert that resolves before its notice goes out is not announced at all:
@@ -420,11 +440,13 @@ log names the exception class behind each failure, never the address.
 
 ### Maintenance windows
 
-Before a deploy or a planned Horizon restart, silence what you are about to touch instead of
-pausing its collection. A maintenance window covers one environment, one application or the
-whole organization, from a start to an end (at most 31 days later), with an optional reason.
-Schedule one under Alert settings → Maintenance windows, or use **Silence for…** on an
-environment page to start one at once for 30 minutes to 4 hours.
+Before a deploy or a planned Horizon restart, put what you are about to touch in maintenance
+instead of pausing its collection. A maintenance window covers one environment, one application
+or the whole organization, from a start to an end (at most 31 days later), with an optional
+reason. Schedule one under Alert settings → Maintenance windows, or use **Maintenance for…** on
+an environment page to start one at once for 30 minutes to 4 hours. The form, the list of
+windows and the maintenance badge give times in your browser's time zone and name it, because
+each viewer may sit in another zone than the organization's.
 
 During a window the readings go on, so the charts and the history stay complete, but every
 alert of what it covers is muted until the window ends: one that opens is created muted, one
@@ -445,10 +467,10 @@ An organization can send its alerts to one webhook URL (Alert settings → Notif
 panel `POST`s JSON with these headers:
 
 - `Content-Type: application/json`, `User-Agent: HorizonWatch/<version>` (for example
-  `HorizonWatch/v1.0.0`)
+  `HorizonWatch/1.0.0`)
 - `X-Horizon-Watch-Timestamp`: the Unix time of the send
 - `X-Horizon-Watch-Signature`: `sha256=` followed by the hex HMAC-SHA256 of
-  `<timestamp>.<raw body>`, keyed with the organization's webhook secret
+  `<timestamp>.<raw body>`, keyed with the organization's signing secret
 - `X-Horizon-Watch-Previous-Signature`: the same, keyed with the secret it replaced, for 24
   hours after the secret is regenerated
 
@@ -647,9 +669,9 @@ docker compose -f compose.prod.yaml run --rm web artisan secrets:reencrypt
 ## Watching the panel
 
 Polling, alerts and notifications all depend on the scheduler and the queue workers, so a
-stopped or stuck one would silence every alert. Horizon Watch checks itself in several ways.
+stopped or stuck one would stop every alert. Horizon Watch checks itself in several ways.
 
-`GET /health` answers JSON without signing in: `200` while everything keeps up, `503` when the
+`GET /health` answers JSON without logging in: `200` while everything keeps up, `503` when the
 database is unreachable, when the scheduler has not dispatched the due polls or repeated the
 open alerts for 2 minutes, or when a queued job has waited more than 5 minutes for a worker.
 Point an uptime monitor at it. The digests, sent every 15 minutes, are not part of the check: a
@@ -659,7 +681,7 @@ applications you watch:
 ```json
 {
     "status": "ok",
-    "version": "v1.0.0",
+    "version": "1.0.0",
     "checks": {
         "database": { "ok": true },
         "scheduler": { "ok": true, "last_run_seconds_ago": 9 },
@@ -692,9 +714,9 @@ The call follows the address rules of webhooks: no redirects, link-local and clo
 addresses refused, and private networks refused when `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` is
 `true`. It is off by default, so the panel makes no outbound call you did not ask for.
 
-Inside the panel, everyone signed in sees a banner while the scheduler is late or the queues
-fall behind. An environment without a reading for three poll intervals is shown as _not
-updated_ (or keeps its status when it was last known down) and counts as a problem on the wall,
+Inside the panel, everyone logged in sees a banner while the scheduler is late or the queues
+fall behind. An environment without a reading for three collection intervals is shown as _not
+updated_ (or keeps its status when it was last known down) and needs attention on the wall,
 and the dot next to _refresh every_ turns red when the page itself cannot refresh.
 
 When php-fpm or nginx cannot start at all, the `web` container stops instead of answering 502
@@ -750,8 +772,9 @@ a newer one has migrated: to go back, restore the backup taken before the upgrad
 worker finishes the job it holds and php-fpm the requests it serves.
 
 The running version shows at the bottom of the sidebar (and of the profile page on a phone), in
-`artisan about` and in `GET /health`. It comes from the image: a release image carries its tag,
-an image you build yourself says `dev` unless you pass `--build-arg VERSION=…`. The panel reads
+`artisan about` and in `GET /health`, without the `v` of the git tag: the image of `v1.0.0`
+says `1.0.0`. It comes from the image: an image you build yourself says `dev` unless you pass
+`--build-arg VERSION=…`, and a leading `v` there is dropped too. The panel reads
 Horizon and calls webhooks and the heartbeat as `HorizonWatch/<version>`.
 
 ### From 0.1.0
@@ -771,8 +794,9 @@ Horizon and calls webhooks and the heartbeat as `HorizonWatch/<version>`.
   `proxy_set_header Host $host;` (see [Behind a reverse proxy](#behind-a-reverse-proxy)).
 - Let the queues empty before you stop 0.1.0: invitation emails and webhooks still queued from
   it are sent the old way or fail. The upgrade notes in [CHANGELOG.md](CHANGELOG.md) list the
-  rest: only instance admins create organizations, admins see every environment, and
-  production environments are marked from their names.
+  rest: only instance admins create organizations, admins see every environment, every
+  environment gets a type from its colour and name, which makes some of them Production, and
+  applications lose their domain field.
 
 ## Backup and restore
 
@@ -851,7 +875,7 @@ log fallback by design. Until then, admins can hand over invitations with **New 
 Members page.
 
 **`/setup` keeps appearing.** No user exists yet, so every route redirects there. If you have
-already created the administrator and still land on `/setup`, the panel is talking to an
+already created the instance admin account and still land on `/setup`, the panel is talking to an
 empty database — check `DB_*` and that the `postgres` container is the one holding your
 volume. Deleting the last account opens `/setup` again on purpose.
 
@@ -889,10 +913,16 @@ everyone is logged out once:
   `artisan users:reset-two-factor` (see [Running commands](#running-commands)); they log in
   with their password and set it up again.
 
-**A Horizon URL is refused when saved.** The panel refuses credentials and query strings in
-the URL, non-HTTP schemes, and — when `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` is `true` —
-addresses that resolve to a private network, including carrier-grade NAT (`100.64.0.0/10`,
-used by Tailscale). Link-local and cloud metadata addresses are always refused.
+**A Horizon URL or a webhook URL is refused when saved.** The panel refuses a scheme other
+than `http` and `https`, credentials, a query string or a fragment in the URL. It also refuses
+an IP address on a network it does not call, saying
+_This address points to a network the panel does not call._ Link-local and cloud metadata
+addresses are always refused; private networks, carrier-grade NAT (`100.64.0.0/10`, used by
+Tailscale) included, are refused when `HORIZON_WATCH_BLOCK_PRIVATE_NETWORKS` is `true`. A host
+name is not looked up when you save: it is resolved and checked at every call, so a Horizon URL
+whose name resolves to a refused network fails its readings with _This address is not
+allowed_, and a webhook delivery to such a name is logged as not delivered, _the address
+points to a network the panel does not call_.
 
 ## Development
 

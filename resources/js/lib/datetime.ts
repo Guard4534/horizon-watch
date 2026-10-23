@@ -24,3 +24,7 @@ export function quietHoursSummary(
 ): string {
     return from && to ? `${from} → ${to} · ${timezone}` : trans('None');
 }
+
+export function browserTimeZone(): string {
+    return new Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}

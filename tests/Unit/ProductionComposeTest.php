@@ -88,3 +88,31 @@ test('the name of the panel can be changed without building the image again', fu
     expect($compose)->toContain('APP_NAME: ${APP_NAME:-Horizon Watch}')
         ->and($readme)->toContain('| `APP_NAME`');
 });
+
+test('the example environment file lists every operator setting of the panel with its default', function () {
+    $config = (string) file_get_contents(dirname(__DIR__, 2).'/config/horizon-watch.php');
+    $example = (string) file_get_contents(dirname(__DIR__, 2).'/.env.example');
+
+    preg_match_all("/env\\('(HORIZON_WATCH_[A-Z_]+)', ([^)]+)\\)/", $config, $settings, PREG_SET_ORDER);
+
+    expect($settings)->not->toBeEmpty();
+
+    foreach ($settings as [, $name, $default]) {
+        expect($example)->toContain("\n# {$name}=".trim($default, "'")."\n");
+    }
+});
+
+test('release images carry the bare version, while the git tags keep their v', function () {
+    $workflow = (string) file_get_contents(dirname(__DIR__, 2).'/.github/workflows/release.yml');
+
+    expect($workflow)->toContain("tags: ['v*']")
+        ->toContain('run: echo "value=${REF#v}" >> "$GITHUB_OUTPUT"')
+        ->toContain('VERSION=${{ steps.version.outputs.value }}')
+        ->not->toContain('VERSION=${{ github.ref_name }}');
+
+    foreach (['bug_report', 'feature_request'] as $template) {
+        expect((string) file_get_contents(dirname(__DIR__, 2)."/.github/ISSUE_TEMPLATE/{$template}.yml"))
+            ->toContain("\n      placeholder: 1.0.0\n")
+            ->not->toContain('placeholder: v1.0.0');
+    }
+});

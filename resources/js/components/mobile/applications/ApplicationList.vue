@@ -3,6 +3,7 @@ import { Link } from '@inertiajs/vue3';
 import { PhCaretRight } from '@phosphor-icons/vue';
 import AttentionBadge from '@/components/monitoring/AttentionBadge.vue';
 import {
+    collectionPaused,
     statusText,
     statusTone,
 } from '@/components/monitoring/environment/readings';
@@ -58,6 +59,7 @@ const slug = useTeamSlug();
             <AttentionBadge
                 :count="group.attentionCount"
                 :worst-status="group.worstStatus"
+                :paused="collectionPaused(group.environments)"
             />
             <PhCaretRight :size="14" class="nc-tone-faint flex-none" />
         </Link>

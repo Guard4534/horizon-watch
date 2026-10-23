@@ -8,7 +8,11 @@ class Version
     {
         $version = trim(config()->string('horizon-watch.version'));
 
-        return $version === '' ? 'dev' : $version;
+        if ($version === '') {
+            return 'dev';
+        }
+
+        return preg_match('/^v\d/', $version) === 1 ? substr($version, 1) : $version;
     }
 
     public static function userAgent(): string

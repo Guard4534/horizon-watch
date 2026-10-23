@@ -45,6 +45,6 @@ class RegenerateWebhookSecret
 
     private function missingUrlMessage(): string
     {
-        return __('Save a webhook address first.');
+        return __('Save a webhook URL first.');
     }
 }

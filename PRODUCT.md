@@ -68,7 +68,7 @@ cannot truthfully claim all at once:
   deliberately not part of 1.0.
 - Alert behaviour that users rely on: severities (warning, critical), sustained thresholds,
   quiet hours, repeat intervals, digests of warnings, muting, "handled" marks, and maintenance
-  windows that silence alerts without stopping readings.
+  windows that mute alerts without stopping readings.
 - The panel watches itself: a stopped scheduler or worker is reported on every page and on
   `/health`.
 
@@ -77,8 +77,8 @@ cannot truthfully claim all at once:
 - Interface in English and Italian; `APP_LOCALE` sets the default.
 - Organizations are created only by instance admins by default
   (`HORIZON_WATCH_ORG_CREATION=admins|everyone`).
-- "Everything except production" visibility uses an explicit production flag on each
-  environment.
+- "Everything except production" visibility follows the environment type: it hides every
+  environment of type Production.
 - Out of scope for 1.0, deferred on purpose: chat channels, per-organization API tokens, an
   update check, maintenance start/end webhook events, a CI job against a real Horizon.
 

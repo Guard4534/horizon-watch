@@ -33,7 +33,7 @@ Pin an image tag in production, as the `compose.prod.yaml` of each release does,
 Horizon Watch is invite-only and has no anonymous surface beyond the login and password reset
 pages, the invitation pages, `GET /health` and the `/setup` page, which is open only while no
 account exists. Deleting the last account opens it again. Whoever reaches `/setup` first claims
-the instance, so a panel reachable by others before its administrator exists should set
+the instance, so a panel reachable by others before its instance admin exists should set
 `HORIZON_WATCH_SETUP_TOKEN`: `/setup` then refuses anyone who does not type that token, compared
 in constant time and rate limited, and refuses everyone while the token is shorter than 16
 characters, since a client on a trusted network can spread its attempts over forged addresses. Without it, keep the panel unreachable until setup is done.
@@ -85,6 +85,10 @@ is the one place where a user can make the server talk to an address of their ch
 
 - Only `http` and `https`; no credentials in the URL, no query string, no fragment, no
   non-printable characters.
+- When a Horizon URL or a webhook URL is saved, the same rules run without a DNS lookup: an
+  IP address the guard would refuse is refused at once, with "This address points to a
+  network the panel does not call.", and a host name is resolved and checked at every
+  request.
 - Link-local and cloud metadata addresses (`169.254.0.0/16`, `fe80::/10`, the AWS and GCP
   IPv6 metadata addresses, Alibaba's metadata address, Azure's WireServer
   `168.63.129.16`, `metadata.google.internal`), broadcast, multicast and unspecified
@@ -110,19 +114,24 @@ is the one place where a user can make the server talk to an address of their ch
   and jobs per list, 4 pages of jobs and 100 runtime requests per reading, all inside the
   read budget.
 
-The same guard runs on webhook URLs, which additionally must not carry credentials, a query
-string or a fragment: put any token in the path.
+The same guard runs on webhook URLs: put any token in the path.
 
 ### Outgoing webhooks
 
 Every webhook delivery is signed. `X-Horizon-Watch-Signature` is `sha256=` followed by the
-hex HMAC-SHA256 of `<timestamp>.<raw body>`, keyed with the organization's webhook secret,
+hex HMAC-SHA256 of `<timestamp>.<raw body>`, keyed with the organization's signing secret,
 and `X-Horizon-Watch-Timestamp` carries the time of the send. Receivers must verify the
 signature with a constant-time comparison and reject old timestamps; the README has a worked
 example.
 
-The secret is shown once, when the first URL is saved or when it is regenerated. Serve the
-panel over HTTPS so that the page showing it can ask the browser to encrypt that history
+A new signing secret is issued, and shown once, when the first URL is saved, when the URL
+moves to another host and when it is regenerated. A move to another host always issues a new
+secret and forgets the old one at once, without the 24-hour previous signature: the receiver on
+the old host knows the old secret and must not be able to sign for the new one. Give the new
+secret to the new receiver before its first delivery. A change of path on the same host keeps
+the secret, and removing the URL forgets it. After a regeneration, deliveries also carry
+`X-Horizon-Watch-Previous-Signature`, made with the replaced secret, for 24 hours. Serve the
+panel over HTTPS so that the page showing a secret can ask the browser to encrypt that history
 entry — browsers only honour that in a secure context.
 
 ### Credentials in logs and errors
@@ -157,7 +166,7 @@ published port directly can claim any source address and defeat the per-address 
 the login, password reset and setup pages. Publish the port only to the proxy, or narrow
 `TRUSTED_PROXIES` to the addresses your proxy actually uses; `*` lets any client anywhere do
 the same. The login also has a per-account limit on failed attempts that ignores the address:
-once an account collects 30 failed sign-ins within an hour, it cannot sign in, even with the
+once an account collects 30 failed logins within an hour, it cannot log in, even with the
 right password, until the hour is over. Anyone who knows the address can keep an account locked
 this way; that is the price of stopping password guessing from rotating addresses. Reset emails
 for one account are likewise capped at five an hour.
@@ -189,7 +198,7 @@ Caddy and nginx examples.
 - It does not audit the Horizon installations it watches: it reads them, and whatever they
   answer is what you see.
 - There is no built-in TLS and no protection against a host operator who can read the volumes.
-- Rate limits cover these endpoints, not the rest of the panel: sign-in (5 a minute per address
+- Rate limits cover these endpoints, not the rest of the panel: login (5 a minute per address
   and account, 30 failures an hour per account), the two-factor challenge (5 a minute),
   password reset requests (5 a minute per address, 5 an hour per account), every form that
   checks the current password and password changes (6 a minute per user), setup (10 a minute),

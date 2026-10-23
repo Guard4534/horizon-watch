@@ -5,6 +5,7 @@ import { computed } from 'vue';
 import AttentionBadge from '@/components/monitoring/AttentionBadge.vue';
 import EnvironmentTile from '@/components/monitoring/wall/EnvironmentTile.vue';
 import {
+    collectionPaused,
     needsAttention,
     statusText,
     statusTone,
@@ -82,6 +83,7 @@ const pending = computed(() =>
             <AttentionBadge
                 :count="troubled.length"
                 :worst-status="worstStatus"
+                :paused="collectionPaused(environments)"
             />
             <span
                 v-if="!expanded"

@@ -34,7 +34,7 @@ body:
       description: >-
         Shown at the bottom of the sidebar, by `artisan about` and by `GET /health`; if it says
         `dev`, the commit you built.
-      placeholder: v1.0.0
+      placeholder: 1.0.0
     validations:
       required: true
 

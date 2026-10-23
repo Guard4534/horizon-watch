@@ -285,7 +285,7 @@ test('regenerating without an address is refused', function (bool $withRow) {
 
     $this->actingAs($this->admin)
         ->post(route('alert-settings.regenerate-secret', ['current_team' => $this->team->slug]))
-        ->assertSessionHasErrors(['webhookUrl' => 'Save a webhook address first.']);
+        ->assertSessionHasErrors(['webhookUrl' => 'Save a webhook URL first.']);
 
     expect(NotificationSetting::query()->count())->toBe($withRow ? 1 : 0);
     ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', null));
@@ -298,7 +298,7 @@ test('a session value that is not a sealed secret is ignored', function () {
         ->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', null));
 });
 
-test('the settings are validated', function (array $overrides, string $error) {
+test('the settings are validated', function (array $overrides, string|array $error) {
     $this->actingAs($this->admin);
 
     ($this->save)($overrides)->assertSessionHasErrors($error);
@@ -309,9 +309,9 @@ test('the settings are validated', function (array $overrides, string $error) {
     'too many recipients' => [['recipients' => array_map(fn (int $i) => "ops{$i}@example.com", range(1, 21))], 'recipients'],
     'recipients as a string' => [['recipients' => 'ops@example.com'], 'recipients'],
     'recipients missing' => [['recipients' => null], 'recipients'],
-    'an address with credentials' => [['webhookUrl' => 'https://user:pass@hooks.example.com/horizon'], 'webhookUrl'],
-    'an address with a query' => [['webhookUrl' => 'https://hooks.example.com/horizon?token=abc'], 'webhookUrl'],
-    'an address with a fragment' => [['webhookUrl' => 'https://hooks.example.com/horizon#abc'], 'webhookUrl'],
+    'an address with credentials' => [['webhookUrl' => 'https://user:pass@hooks.example.com/horizon'], ['webhookUrl' => 'The webhook URL cannot hold credentials: put a token in its path.']],
+    'an address with a query' => [['webhookUrl' => 'https://hooks.example.com/horizon?token=abc'], ['webhookUrl' => 'The webhook URL cannot have a query string or a fragment: put a token in its path.']],
+    'an address with a fragment' => [['webhookUrl' => 'https://hooks.example.com/horizon#abc'], ['webhookUrl' => 'The webhook URL cannot have a query string or a fragment: put a token in its path.']],
     'a non-http address' => [['webhookUrl' => 'ftp://hooks.example.com/horizon'], 'webhookUrl'],
     'the metadata address' => [['webhookUrl' => 'http://169.254.169.254/latest'], 'webhookUrl'],
     'the metadata name' => [['webhookUrl' => 'http://metadata.google.internal/hook'], 'webhookUrl'],

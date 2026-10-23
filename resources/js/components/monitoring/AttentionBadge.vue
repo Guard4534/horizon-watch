@@ -2,9 +2,10 @@
 import { computed } from 'vue';
 import { statusColor } from '@/lib/monitoring';
 
-const { count, worstStatus } = defineProps<{
+const { count, worstStatus, paused } = defineProps<{
     count: number;
     worstStatus: App.Enums.EnvironmentStatus | null;
+    paused: boolean;
 }>();
 
 const tone = computed(() =>
@@ -25,6 +26,6 @@ const tone = computed(() =>
         }}</span
     >
     <span v-else class="nc-tag nc-tag-sm nc-tag-neutral flex-none">{{
-        $t('all good')
+        paused ? $t('Collection paused') : $t('all good')
     }}</span>
 </template>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
+    collectionPaused,
     displayState,
     failedLastHourText,
     hasMeasurement,
@@ -121,6 +122,21 @@ describe('healthy and needs attention', () => {
             expect(needsAttention(environment)).toBe(attention);
         },
     );
+});
+
+describe('collectionPaused', () => {
+    it.each<[string, boolean[], boolean]>([
+        ['every collection paused', [false, false], true],
+        ['one collection on', [false, true], false],
+        ['every collection on', [true], false],
+        ['no environment', [], false],
+    ])('%s: %s', (_, polling, paused) => {
+        expect(
+            collectionPaused(
+                polling.map((pollingEnabled) => ({ ...read, pollingEnabled })),
+            ),
+        ).toBe(paused);
+    });
 });
 
 describe('hasMeasurement', () => {

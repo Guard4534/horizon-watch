@@ -123,6 +123,34 @@ No generic service classes.
   (`vue-tsc` asks for it), a `lang/<code>.json` and a `lang/<code>/` folder modelled on the
   Italian ones, and the code in the `APP_LOCALE` row of the README.
 
+### Glossary
+
+One concept, one word, in both languages. New strings and the documentation use these terms; a
+string that needs another word for one of these concepts is a bug.
+
+| English                       | Italian                                           | Rule                                                                                                                                 |
+| ----------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Owner, Admin, Member, Viewer  | Proprietario, Amministratore, Membro, Osservatore | The four organization roles, printed from `TeamRole::label()`, never as the raw value. Admin names only the organization role.       |
+| instance admin                | amministratore dell’istanza                       | The panel-wide role of the account created at `/setup`; never shortened to admin.                                                    |
+| Horizon URL                   | URL Horizon                                       | The Horizon dashboard address as opened in the browser, the only address an environment has; never domain, host or path.             |
+| Type                          | Tipo                                              | The environment type: Production, Pre-production, Staging, Development, Testing, Demo. It sets the colour and what production means. |
+| healthy                       | regolare                                          | Status `active`, and nothing else.                                                                                                   |
+| needs attention               | da gestire                                        | Every evaluated state that is not healthy: the filter, the KPI, the badge, the empty states. A paused collection is neither.         |
+| alert, opened, resolved       | alert, aperto, risolto                            | The object and what happens to it; never anomaly or incident. The list is Open alerts / Alert aperti.                                |
+| Mark as handled, Handled by … | Segna come gestito, Gestito da …                  | The action, and the state it leaves.                                                                                                 |
+| Mute                          | Silenzia                                          | Only the per-alert action.                                                                                                           |
+| maintenance, Maintenance for… | manutenzione, Manutenzione per…                   | Whatever creates a maintenance window.                                                                                               |
+| Quiet hours                   | Fascia di quiete                                  | The daily hours, in the organization time zone, when only criticals go out.                                                          |
+| Extra addresses               | Indirizzi aggiuntivi                              | The admin list of email addresses beyond the members.                                                                                |
+| destination                   | destinazione                                      | Any place a notification goes: an address or the webhook.                                                                            |
+| signing secret                | segreto di firma                                  | The key of the webhook signature, always by this name.                                                                               |
+| webhook URL                   | URL del webhook                                   | The address the organization's webhook deliveries go to; never webhook address.                                                      |
+| Password needed               | Password da inserire                              | The mark of an environment with a basic-auth user and no stored password, as an import leaves it; its collection stays paused.       |
+| Log in, Log out               | Accedi, Esci                                      | The login and logout actions, in every label and text.                                                                               |
+
+Delivery errors are sentences (`deliveryErrorLabel` in `resources/js/lib/alerts.ts`), never the
+codes of `App\Enums\DeliveryError`.
+
 ## Tests
 
 Tests run on PostgreSQL, against the `testing` database. To run a suite in parallel with
@@ -261,6 +289,11 @@ README documents them, and a change that breaks one of them waits for the next m
 2. Run the live Horizon test by hand (see [Tests](#tests)), then merge to `main`.
 3. Tag the merge commit `vx.y.z` and push the tag. A tag with a suffix, such as `v1.1.0-rc.1`, is
    a pre-release.
+
+The version the panel reports is the tag without its `v`: for the tag `v1.0.0` the release
+workflow builds the image with `VERSION=1.0.0`, which the sidebar, `artisan about`,
+`GET /health` and the `User-Agent` show. `Version::current()` drops a leading `v` from a
+hand-built `VERSION` too.
 
 The release workflow then runs every CI job on the tag, including both smoke tests, and stops
 if one fails or if a stable tag has no `CHANGELOG.md` section (a pre-release falls back to

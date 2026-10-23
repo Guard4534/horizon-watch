@@ -8,7 +8,7 @@ import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { formatInstant } from '@/lib/datetime';
+import { browserTimeZone, formatInstant } from '@/lib/datetime';
 import { invalidField } from '@/lib/fieldErrors';
 import { fromLocalInput, toLocalInput } from '@/lib/maintenance';
 import {
@@ -25,6 +25,7 @@ const { windows, targets, maxDays } = defineProps<{
 const slug = useTeamSlug();
 const id = useId();
 const { locale } = useLocale();
+const timeZone = browserTimeZone();
 
 type WindowForm = {
     target: string;
@@ -215,9 +216,13 @@ function period(
                 />
                 <div v-else class="field-hint">
                     {{
-                        $t('at most :days days, in your local time', {
-                            days: String(maxDays),
-                        })
+                        $t(
+                            'at most :days days, in your time zone (:timezone)',
+                            {
+                                days: String(maxDays),
+                                timezone: timeZone,
+                            },
+                        )
                     }}
                 </div>
             </div>
@@ -250,7 +255,10 @@ function period(
                 <thead>
                     <tr>
                         <th>{{ $t('Covers') }}</th>
-                        <th>{{ $t('When') }}</th>
+                        <th>
+                            {{ $t('When') }}
+                            <span class="normal-case">({{ timeZone }})</span>
+                        </th>
                         <th>{{ $t('Reason') }}</th>
                         <th></th>
                     </tr>

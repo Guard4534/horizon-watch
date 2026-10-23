@@ -46,7 +46,7 @@ const hasNumbers = computed(() => hasMeasurement(environment));
         :class="{ 'env-card-link': environment.watched }"
         :style="cardStyle"
     >
-        <span class="flex items-center gap-2">
+        <span class="flex flex-wrap items-center gap-2">
             <span class="min-w-0">
                 <EnvPill
                     :name="environment.name"

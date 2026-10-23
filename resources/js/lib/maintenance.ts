@@ -1,9 +1,10 @@
 import { trans } from 'laravel-vue-i18n';
-import { formatInstant } from '@/lib/datetime';
+import { browserTimeZone, formatInstant } from '@/lib/datetime';
 
 export function maintenanceUntilText(iso: string, locale: string): string {
-    return trans('In maintenance until :time', {
+    return trans('In maintenance until :time (:timezone)', {
         time: formatInstant(iso, locale),
+        timezone: browserTimeZone(),
     });
 }
 

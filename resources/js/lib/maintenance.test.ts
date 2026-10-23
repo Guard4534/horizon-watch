@@ -1,8 +1,16 @@
-import { describe, expect, it } from 'vite-plus/test';
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vite-plus/test';
 import { failedWindowShort } from '@/lib/failedWindow';
 import { errorId, invalidField } from '@/lib/fieldErrors';
 import {
     fromLocalInput,
+    maintenanceUntilText,
     silenceDurationLabel,
     toLocalInput,
 } from '@/lib/maintenance';
@@ -44,5 +52,25 @@ describe('field errors', () => {
         });
         expect(invalidField('email', null)).toEqual({});
         expect(invalidField('email')).toEqual({});
+    });
+});
+
+describe('maintenance badge text', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(2026, 9, 14, 10, 0));
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('names the browser time zone the end is given in', () => {
+        expect(
+            maintenanceUntilText(
+                new Date(2026, 9, 14, 22, 15).toISOString(),
+                'en',
+            ),
+        ).toBe('In maintenance until 22:15 (Europe/Rome)');
     });
 });

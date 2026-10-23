@@ -3,8 +3,9 @@ import { Link } from '@inertiajs/vue3';
 import { PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
 import AttentionBadge from '@/components/monitoring/AttentionBadge.vue';
 import {
-    statusText,
+    collectionPaused,
     needsAttention,
+    statusText,
     statusTone,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
@@ -57,6 +58,7 @@ const { canManageApplications } = useVisibility();
             <AttentionBadge
                 :count="group.attentionCount"
                 :worst-status="group.worstStatus"
+                :paused="collectionPaused(group.environments)"
             />
             <template v-if="canManageApplications">
                 <Link
