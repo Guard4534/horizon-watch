@@ -98,6 +98,7 @@ server {
     ssl_certificate_key /etc/ssl/horizon-watch/privkey.pem;
 
     add_header Strict-Transport-Security "max-age=31536000" always;
+    client_max_body_size 2m;
 
     location / {
         proxy_pass http://127.0.0.1:8080;
@@ -108,6 +109,9 @@ server {
     }
 }
 ```
+
+nginx refuses request bodies over 1 MB by default. `client_max_body_size 2m` lets a
+configuration file of up to 1 MB reach the import, with room for the upload around it.
 
 Besides protecting the session cookie, HTTPS keeps the one-time signing secret out of the
 browser history: the page that shows it asks the browser to encrypt its history entry, which
@@ -250,7 +254,8 @@ application needs:
 
 - **Horizon installed and reachable over HTTP.** Give Horizon Watch the Horizon URL, the
   dashboard as you open it in the browser: `/horizon` by default, or the path set with
-  `HORIZON_PATH`. A URL ending in `/api` is trimmed to the dashboard URL when you save. An
+  `HORIZON_PATH`. A URL ending in `/api` is trimmed to the dashboard URL when you save,
+  unless `/api` is its whole path: a Horizon served at `/api` is read at `/api/api/stats`. An
   address copied from a Horizon screen, such as `/horizon/dashboard`, is not the dashboard:
   **Test connection** suggests the dashboard URL instead.
 - **A way in.** Horizon's `viewHorizon` gate guards those routes outside the `local`

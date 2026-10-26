@@ -169,3 +169,13 @@ test('the file is readable JSON and its name carries the organization slug and t
         ->toEndWith("}\n")
         ->and($this->exporter->fileName($this->team))->toBe('horizon-watch-example-organization-2026-10-16.json');
 });
+
+test('the names applications share, in any case, are reported once each', function () {
+    expect($this->exporter->sharedApplicationNames($this->team))->toBe([]);
+
+    Application::factory()->for($this->team)->create(['name' => 'billing']);
+    Application::factory()->for($this->team)->create(['name' => 'BILLING']);
+    Application::factory()->for(Team::factory())->create(['name' => 'Acme Shop']);
+
+    expect($this->exporter->sharedApplicationNames($this->team))->toBe(['Billing']);
+});

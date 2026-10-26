@@ -29,7 +29,7 @@ beforeEach(function () {
 
     $this->environmentPayload = fn (string $name = 'production'): array => [
         'name' => $name,
-        'type' => (EnvironmentType::suggestFor($name) ?? EnvironmentType::Staging)->value,
+        'type' => (EnvironmentType::tryFrom($name) ?? EnvironmentType::Staging)->value,
         'horizonUrl' => 'https://'.$name.'.invoicer.example.com/horizon/api',
         'basicAuthUser' => null,
         'basicAuthPassword' => null,
@@ -242,6 +242,59 @@ test('renaming an application does not change its slug', function () {
         ->and($this->application->slug)->toBe($originalSlug);
 });
 
+test('the wizard refuses a name another application of the organization has, in any case', function (string $name) {
+    $this->actingAs($this->admin)
+        ->post(route('applications.store', ['current_team' => $this->team->slug]), [
+            'application' => ['name' => $name],
+            'environments' => [($this->environmentPayload)()],
+        ])
+        ->assertInvalid(['application.name' => 'Another application of this organization already has this name.']);
+
+    expect(Application::where('team_id', $this->team->id)->count())->toBe(1);
+})->with([
+    'the same name' => 'Invoice Desk',
+    'another case' => 'invoice DESK',
+]);
+
+test('another organization may use the same application name', function () {
+    $other = Team::factory()->create();
+    $other->members()->attach($this->admin, ['role' => TeamRole::Admin->value]);
+
+    $this->actingAs($this->admin)
+        ->post(route('applications.store', ['current_team' => $other->slug]), [
+            'application' => ['name' => 'Invoice Desk'],
+            'environments' => [($this->environmentPayload)()],
+        ])
+        ->assertValid()
+        ->assertRedirect();
+
+    expect(Application::where('team_id', $other->id)->where('name', 'Invoice Desk')->exists())->toBeTrue();
+});
+
+test('renaming an application refuses the name of another one, in any case, but not its own', function () {
+    Application::factory()->for($this->team)->create(['name' => 'Billing']);
+    $url = route('applications.update', ['current_team' => $this->team->slug, 'application' => $this->application->slug]);
+
+    $this->actingAs($this->admin)->patch($url, ['name' => 'BILLING'])
+        ->assertInvalid(['name' => 'Another application of this organization already has this name.']);
+
+    expect($this->application->refresh()->name)->toBe('Invoice Desk');
+
+    $this->actingAs($this->admin)->patch($url, ['name' => 'invoice desk'])->assertValid()->assertRedirect();
+
+    expect($this->application->refresh()->name)->toBe('invoice desk');
+});
+
+test('the duplicate name message is translated', function () {
+    $this->admin->forceFill(['locale' => 'it'])->save();
+
+    $this->actingAs($this->admin)
+        ->patch(route('applications.update', ['current_team' => $this->team->slug, 'application' => Application::factory()->for($this->team)->create(['name' => 'Billing'])->slug]), [
+            'name' => 'Invoice Desk',
+        ])
+        ->assertInvalid(['name' => 'Un altro applicativo di questa organizzazione ha già questo nome.']);
+});
+
 test('deleting an application requires typing its exact name, and cascades to its environments', function () {
     $environment = Environment::factory()->for($this->application)->create();
 
@@ -340,7 +393,7 @@ test('the wizard stores each row\'s type', function () {
     $this->actingAs($this->admin)->post(route('applications.store', ['current_team' => $this->team->slug]), [
         'application' => ['name' => 'Types'],
         'environments' => [
-            ($this->environmentPayload)('prod'),
+            [...($this->environmentPayload)('prod'), 'type' => EnvironmentType::Production->value],
             [...($this->environmentPayload)('blue'), 'type' => EnvironmentType::Production->value],
             [...($this->environmentPayload)('production'), 'type' => EnvironmentType::Demo->value],
             ($this->environmentPayload)('staging'),

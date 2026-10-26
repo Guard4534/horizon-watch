@@ -46,6 +46,22 @@ final class ConfigurationExporter
     }
 
     /**
+     * The names two or more applications of the organization share, in any case: an install from
+     * before names were unique may have them, and the import refuses a file that repeats a name.
+     *
+     * @return array<int, string>
+     */
+    public function sharedApplicationNames(Team $team): array
+    {
+        return $team->applications()->orderByRaw('lower(name)')->orderBy('id')->pluck('name')
+            ->groupBy(fn (string $name) => Str::lower(trim($name)))
+            ->filter(fn ($names) => $names->count() > 1)
+            ->map(fn ($names) => (string) $names->first())
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     private function applications(Team $team): array

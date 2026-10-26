@@ -71,10 +71,6 @@ class Environment extends Model
 
             $environment->team_id = $application->team_id;
 
-            if (! array_key_exists('type', $environment->getAttributes())) {
-                $environment->type = EnvironmentType::suggestFor($environment->name) ?? EnvironmentType::Staging;
-            }
-
             if (empty($environment->slug)) {
                 $environment->slug = static::generateUniqueSlug($application, $environment->name);
             }

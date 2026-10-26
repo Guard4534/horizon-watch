@@ -2,6 +2,7 @@
 
 namespace App\Queries;
 
+use App\Configuration\ConfigurationExporter;
 use App\Data\Monitoring\ApplicationData;
 use App\Data\Monitoring\EnvironmentData;
 use App\Data\Pages\ApplicationGroupData;
@@ -14,7 +15,10 @@ use Illuminate\Support\Facades\Gate;
 
 class ApplicationListQuery
 {
-    public function __construct(private MonitoringRepository $monitoring) {}
+    public function __construct(
+        private MonitoringRepository $monitoring,
+        private ConfigurationExporter $exporter,
+    ) {}
 
     public function handle(Team $team, User $viewer): ApplicationListPageData
     {
@@ -32,10 +36,13 @@ class ApplicationListQuery
             );
         }, $this->monitoring->configurableApplications($team));
 
+        $canTransferConfiguration = Gate::forUser($viewer)->allows('transferConfiguration', $team);
+
         return new ApplicationListPageData(
             groups: $groups,
             environmentCount: count($environments),
-            canTransferConfiguration: Gate::forUser($viewer)->allows('transferConfiguration', $team),
+            canTransferConfiguration: $canTransferConfiguration,
+            sharedApplicationNames: $canTransferConfiguration ? $this->exporter->sharedApplicationNames($team) : [],
         );
     }
 }

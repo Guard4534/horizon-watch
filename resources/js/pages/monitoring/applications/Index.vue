@@ -9,6 +9,7 @@ import {
 import { computed, ref } from 'vue';
 import ApplicationList from '@/components/mobile/applications/ApplicationList.vue';
 import VisibilityEmptyState from '@/components/monitoring/VisibilityEmptyState.vue';
+import WarningNotice from '@/components/monitoring/WarningNotice.vue';
 import ApplicationSection from '@/components/monitoring/applications/ApplicationSection.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useTeamSlug } from '@/composables/useTeamSlug';
@@ -110,6 +111,17 @@ const groups = computed(() => {
                 <PhPlus :size="14" />{{ $t('Add application') }}
             </Link>
         </div>
+        <WarningNotice
+            v-if="page.sharedApplicationNames.length > 0"
+            :title="$t('More than one application has the same name')"
+        >
+            {{
+                $t(
+                    'Rename them apart, or a file exported from here cannot be imported: :names.',
+                    { names: page.sharedApplicationNames.join(', ') },
+                )
+            }}
+        </WarningNotice>
         <VisibilityEmptyState
             v-if="nothingVisible"
             :icon="PhStackSimple"

@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\EnvironmentType;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
@@ -117,18 +116,4 @@ test('the environment carries its application organization, which is what the co
 
     expect($environment->team_id)->toBe($team->id)
         ->and($environment->fresh()->team_id)->toBe($team->id);
-});
-
-test('a new environment takes the type its name suggests, unless one is given', function () {
-    $application = Application::factory()->create();
-    $make = fn (array $attributes): Environment => $application->environments()->create([
-        'horizon_url' => 'https://shop.example.com/horizon',
-        'poll_interval_seconds' => 15,
-        ...$attributes,
-    ]);
-
-    expect($make(['name' => 'prod-eu'])->type)->toBe(EnvironmentType::Production)
-        ->and($make(['name' => 'qa'])->type)->toBe(EnvironmentType::Testing)
-        ->and($make(['name' => 'blue'])->type)->toBe(EnvironmentType::Staging)
-        ->and($make(['name' => 'production-b', 'type' => EnvironmentType::Demo])->type)->toBe(EnvironmentType::Demo);
 });

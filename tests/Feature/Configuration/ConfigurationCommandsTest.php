@@ -56,6 +56,15 @@ test('the export command writes the file where --output says', function () {
     expect(file_get_contents($path))->toBe($exporter->toJson($exporter->export($this->team)));
 });
 
+test('the export command warns about application names the import would refuse', function () {
+    Application::factory()->for($this->team)->create(['name' => 'acme shop']);
+
+    $this->artisan('applications:export', ['organization' => $this->team->slug])
+        ->expectsOutputToContain('More than one application is named Acme Shop: rename one of them, or importing this file is refused.')
+        ->expectsOutputToContain('"format": "horizon-watch.config"')
+        ->assertSuccessful();
+});
+
 test('both commands refuse an organization that does not exist', function (string $command, array $arguments) {
     $this->artisan($command, ['organization' => 'nowhere', ...$arguments])
         ->expectsOutput('No organization uses the slug nowhere.')

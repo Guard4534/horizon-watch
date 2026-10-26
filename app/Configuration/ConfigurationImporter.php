@@ -133,7 +133,7 @@ final class ConfigurationImporter
             $existing = $matches->first();
             $environments = $entry['environments'] ?? [];
 
-            $errors = Validator::make(['name' => $name], ['name' => ApplicationFormData::rules()['name']])->errors()->all();
+            $errors = Validator::make(['name' => $name], ['name' => ApplicationFormData::nameRules()])->errors()->all();
 
             if ($name !== null && in_array($key, $seenApplications, true)) {
                 $errors[] = __('This file lists the application :name twice.', ['name' => $name]);

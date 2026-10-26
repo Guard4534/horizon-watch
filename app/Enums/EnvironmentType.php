@@ -38,23 +38,4 @@ enum EnvironmentType: string
             self::cases(),
         );
     }
-
-    public static function suggestFor(string $name): ?self
-    {
-        $name = strtolower(trim($name));
-
-        if (preg_match('/^pre-production(?:[-._\s]|$)/', $name) === 1) {
-            return self::Preprod;
-        }
-
-        return match ((string) preg_replace('/[-._\s].*$/s', '', $name)) {
-            'production', 'prod', 'prd', 'live' => self::Production,
-            'preprod', 'uat' => self::Preprod,
-            'staging', 'stage' => self::Staging,
-            'develop', 'development', 'dev' => self::Development,
-            'test', 'testing', 'qa' => self::Testing,
-            'demo' => self::Demo,
-            default => null,
-        };
-    }
 }

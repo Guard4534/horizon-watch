@@ -178,8 +178,8 @@ test('the ids of a membership are null for everything, or the environments it se
 });
 
 test('non_production follows the type, not the environment name', function () {
-    $prodEu = Environment::factory()->for($this->appCharlie)->create(['name' => 'prod-eu']);
-    $live = Environment::factory()->for($this->appCharlie)->create(['name' => 'live']);
+    $prodEu = Environment::factory()->for($this->appCharlie)->create(['name' => 'prod-eu', 'type' => EnvironmentType::Production]);
+    $live = Environment::factory()->for($this->appCharlie)->create(['name' => 'live', 'type' => EnvironmentType::Production]);
     $typed = Environment::factory()->for($this->appCharlie)->create(['name' => 'blue', 'type' => EnvironmentType::Production]);
     $untyped = Environment::factory()->for($this->appCharlie)->create(['name' => 'production-archive', 'type' => EnvironmentType::Staging]);
     $membership = $this->userNonProduction->teamMemberships()->where('team_id', $this->team->id)->sole();

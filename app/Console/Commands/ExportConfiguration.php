@@ -25,6 +25,10 @@ class ExportConfiguration extends Command
             return self::FAILURE;
         }
 
+        foreach ($exporter->sharedApplicationNames($team) as $name) {
+            $this->output->getErrorStyle()->writeln("<comment>More than one application is named {$name}: rename one of them, or importing this file is refused.</comment>");
+        }
+
         $json = $exporter->toJson($exporter->export($team));
         $output = $this->option('output');
 

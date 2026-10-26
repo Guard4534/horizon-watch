@@ -273,6 +273,12 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   4 pages of failed jobs and the oldest pending jobs.
 - An address copied from a Horizon screen, such as `/horizon/dashboard`, failed as "not
   Horizon"; **Test connection** now suggests the dashboard URL.
+- A Horizon served at `/api` was read at `/api/stats`; it is now read at `/api/api/stats`, like
+  any other Horizon URL.
+- Two applications of an organization could share a name, also in different capitals, and an
+  export of that organization could not be imported. The forms now refuse a name another
+  application of the organization already has, and the Applications page and
+  `artisan applications:export` name the applications that still share one.
 - An extra alert address that also belonged to a member with limited visibility received only
   that member's alerts.
 - One organization with many held or undeliverable alerts could delay the alerts of the others.

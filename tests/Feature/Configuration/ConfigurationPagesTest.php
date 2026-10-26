@@ -70,6 +70,13 @@ test('the applications page offers export and import to those who may use them',
         ->assertInertia(fn (Assert $page) => $page->where('page.canTransferConfiguration', $offered));
 })->with([['owner', true], ['admin', true], ['member', false], ['viewer', false]]);
 
+test('the applications page names the application names an export would repeat, to those who may export', function (string $role, array $names) {
+    Application::factory()->for($this->team)->create(['name' => 'ACME SHOP']);
+
+    $this->actingAs($this->{$role})->get(($this->route)('applications.index'))
+        ->assertInertia(fn (Assert $page) => $page->where('page.sharedApplicationNames', $names));
+})->with([['admin', ['Acme Shop']], ['member', []]]);
+
 test('an uploaded file shows its preview to the admin who sent it, until it is discarded', function () {
     ($this->upload)(ConfigurationFiles::document([['name' => 'Billing', 'environments' => [
         ConfigurationFiles::environment(['horizon_url' => 'https://billing.example.com/horizon', 'basic_auth_user' => 'ops']),

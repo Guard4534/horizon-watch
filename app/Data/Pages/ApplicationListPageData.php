@@ -11,5 +11,7 @@ class ApplicationListPageData extends Data
         public array $groups,
         public int $environmentCount,
         public bool $canTransferConfiguration,
+        /** @var array<int, string> */
+        public array $sharedApplicationNames,
     ) {}
 }

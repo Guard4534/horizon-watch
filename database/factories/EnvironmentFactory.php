@@ -18,13 +18,11 @@ class EnvironmentFactory extends Factory
      */
     public function definition(): array
     {
-        return array_merge(
-            $this->typical('production', EnvironmentType::Production),
-            [
-                'application_id' => Application::factory(),
-                'type' => fn (array $attributes) => EnvironmentType::suggestFor((string) $attributes['name']) ?? EnvironmentType::Staging,
-            ],
-        );
+        return [
+            ...$this->typical('production', EnvironmentType::Production),
+            'application_id' => Application::factory(),
+            'type' => fn (array $attributes) => EnvironmentType::tryFrom((string) $attributes['name']) ?? EnvironmentType::Staging,
+        ];
     }
 
     /**
