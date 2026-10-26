@@ -26,10 +26,10 @@ class ResolvedNotification extends Notification
             ->subject(AlertMail::subject($this->tag(), $alert))
             ->markdown('mail.alerts.alert', [
                 'color' => AlertMail::RESOLVED_COLOR,
-                'headline' => $this->headline(),
+                'headline' => AlertMail::resolvedHeadline($alert),
                 'sub' => AlertMail::resolvedAt($alert),
                 'detail' => null,
-                'rows' => AlertMail::rows($alert),
+                'rows' => AlertMail::rows($alert, withValue: true),
                 'note' => null,
                 'url' => AlertMail::url($alert),
                 'action' => AlertMail::openPanel(),
@@ -39,10 +39,5 @@ class ResolvedNotification extends Notification
     private function tag(): string
     {
         return __('RESOLVED');
-    }
-
-    private function headline(): string
-    {
-        return __('Back within the threshold: :rule', ['rule' => AlertMail::ruleLabel($this->alert->metric)]);
     }
 }

@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Concerns\GeneratesUniqueSlugs;
-use App\Enums\EnvironmentColor;
+use App\Concerns\ReplacesUnreadableSecrets;
+use App\Enums\EnvironmentType;
+use App\Rules\StoredPasswordStaysWithItsAddress;
 use Carbon\CarbonImmutable;
 use Database\Factories\EnvironmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -23,7 +25,7 @@ use Illuminate\Support\Str;
  * @property int $team_id
  * @property string $name
  * @property string $slug
- * @property EnvironmentColor $color
+ * @property EnvironmentType $type
  * @property string $horizon_url
  * @property string|null $basic_auth_user
  * @property string|null $basic_auth_password
@@ -40,7 +42,7 @@ use Illuminate\Support\Str;
 #[Fillable([
     'name',
     'slug',
-    'color',
+    'type',
     'horizon_url',
     'basic_auth_user',
     'basic_auth_password',
@@ -51,7 +53,7 @@ use Illuminate\Support\Str;
 class Environment extends Model
 {
     /** @use HasFactory<EnvironmentFactory> */
-    use GeneratesUniqueSlugs, HasFactory;
+    use GeneratesUniqueSlugs, HasFactory, ReplacesUnreadableSecrets;
 
     /**
      * @var array<string, mixed>
@@ -71,13 +73,6 @@ class Environment extends Model
 
             if (empty($environment->slug)) {
                 $environment->slug = static::generateUniqueSlug($application, $environment->name);
-            }
-        });
-
-        static::updating(function (Environment $environment) {
-            if ($environment->isDirty('name')) {
-                $application = $environment->application ?? Application::findOrFail($environment->application_id);
-                $environment->slug = static::generateUniqueSlug($application, $environment->name, $environment->id);
             }
         });
     }
@@ -112,7 +107,7 @@ class Environment extends Model
     protected function casts(): array
     {
         return [
-            'color' => EnvironmentColor::class,
+            'type' => EnvironmentType::class,
             'basic_auth_password' => 'encrypted',
             'polling_enabled' => 'boolean',
             'last_polled_at' => 'immutable_datetime',
@@ -120,20 +115,30 @@ class Environment extends Model
         ];
     }
 
+    /**
+     * A basic-auth user without a stored password: the environment waits for someone to type it
+     * (an import never brings one), and its collection stays paused until then.
+     */
+    public function waitsForPassword(): bool
+    {
+        return $this->basic_auth_user !== null && ! StoredPasswordStaysWithItsAddress::hasStoredPassword($this);
+    }
+
     public function getRouteKeyName(): string
     {
         return 'slug';
     }
 
-    protected static function generateUniqueSlug(Application $application, string $name, ?int $excludeId = null): string
+    protected static function generateUniqueSlug(Application $application, string $name): string
     {
-        $base = $application->slug.'-'.Str::slug($name);
+        $environmentSlug = Str::slug($name);
+        $base = Str::substr($application->slug, 0, self::MAX_SLUG_BASE_LENGTH - strlen($environmentSlug) - 1).'-'.$environmentSlug;
 
         $scope = static::query()->whereHas(
             'application',
             fn ($query) => $query->where('team_id', $application->team_id),
         );
 
-        return static::generateUniqueSlugWithin($scope, $base, $excludeId);
+        return static::generateUniqueSlugWithin($scope, $base);
     }
 }

@@ -4,17 +4,17 @@ import AlertActions from '@/components/monitoring/alerts/AlertActions.vue';
 import AlertDetail from '@/components/monitoring/alerts/AlertDetail.vue';
 import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import AlertOpened from '@/components/monitoring/alerts/AlertOpened.vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { formatRule } from '@/lib/alertRules';
 import {
+    alertIcon,
+    alertTone,
     channelIcon,
     channelLabel,
-    severityColor,
-    severityIcon,
     severityLabel,
 } from '@/lib/alerts';
-import { formatElapsed } from '@/lib/monitoring';
+import { formatAgo } from '@/lib/monitoring';
 
 defineProps<{
     alerts: App.Data.Monitoring.AlertData[];
@@ -48,26 +48,18 @@ const environmentHref = useEnvironmentHref();
                     <td>
                         <span
                             class="nc-t-xs inline-flex items-center gap-[6px] whitespace-nowrap"
-                            :style="{ color: severityColor(alert.severity) }"
                         >
                             <component
-                                :is="severityIcon(alert.severity)"
+                                :is="alertIcon(alert)"
                                 :size="14"
+                                class="flex-none"
+                                :style="{ color: alertTone(alert) }"
                             />
                             {{ severityLabel(alert.severity) }}
                         </span>
                     </td>
-                    <td
-                        class="nc-t-xs whitespace-nowrap"
-                        style="letter-spacing: 0.01em"
-                    >
-                        {{
-                            formatRule(
-                                alert.metric,
-                                alert.threshold,
-                                alert.unit,
-                            )
-                        }}
+                    <td class="nc-t-xs whitespace-nowrap" :title="alert.metric">
+                        {{ formatRule(alert) }}
                     </td>
                     <td>
                         <Link
@@ -75,26 +67,24 @@ const environmentHref = useEnvironmentHref();
                             :href="environmentHref(alert.environmentId)"
                             class="nc-t-xs env-link inline-flex items-center gap-[7px]"
                         >
-                            <EnvSwatch
-                                :color="alert.color"
-                                shape="bar"
-                                :size="14"
-                            />
                             {{ alert.applicationName }} /
-                            {{ alert.environmentName }}
+                            <EnvPill
+                                :name="alert.environmentName"
+                                :type="alert.environmentType"
+                                :size="11"
+                            />
                         </Link>
                         <span
                             v-else
                             class="nc-t-xs nc-tone-soft inline-flex items-center gap-[7px]"
                             :title="$t('This environment has been deleted')"
                         >
-                            <EnvSwatch
-                                :color="alert.color"
-                                shape="bar"
-                                :size="14"
-                            />
                             {{ alert.applicationName }} /
-                            {{ alert.environmentName }}
+                            <EnvPill
+                                :name="alert.environmentName"
+                                :type="alert.environmentType"
+                                :size="11"
+                            />
                         </span>
                     </td>
                     <td class="nc-t-xs nc-tone-soft max-w-[260px]">
@@ -110,8 +100,8 @@ const environmentHref = useEnvironmentHref();
                         >
                             {{
                                 $t('resolved :elapsed', {
-                                    elapsed: formatElapsed(
-                                        alert.resolvedMinutesAgo,
+                                    elapsed: formatAgo(
+                                        alert.resolvedMinutesAgo * 60,
                                     ),
                                 })
                             }}

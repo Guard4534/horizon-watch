@@ -1,26 +1,27 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { formatRule } from '@/lib/alertRules';
-import { formatElapsed, statusColor, statusIcon } from '@/lib/monitoring';
+import {
+    readingErrorLabel,
+    readingProblemLabel,
+} from '@/components/monitoring/environment/readings';
+import { statusColor, statusIcon } from '@/lib/monitoring';
 
 const {
     status,
     readingError,
-    alert,
+    readingProblem = null,
     hasEarlierReading,
     compact = false,
 } = defineProps<{
     status: Exclude<App.Enums.EnvironmentStatus, 'active'>;
     readingError: App.Enums.ReadingError | null;
-    alert: App.Data.Monitoring.AlertData | null;
+    readingProblem?: App.Data.Monitoring.ReadingProblemData | null;
     hasEarlierReading: boolean;
     compact?: boolean;
 }>();
 
 const color = computed(() => statusColor(status));
 const icon = computed(() => statusIcon(status));
-
-const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
 </script>
 
 <template>
@@ -53,15 +54,15 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
                     $t('Endpoint unreachable')
                 }}</template>
                 <template v-else-if="status === 'inactive'">{{
-                    $t('No active master supervisor')
+                    $t('Horizon inactive')
                 }}</template>
                 <template v-else-if="status === 'paused'">{{
                     $t('Horizon paused')
                 }}</template>
+                <template v-else-if="status === 'stale'">{{
+                    $t('Readings are not updated')
+                }}</template>
                 <template v-else>{{ $t('Threshold exceeded') }}</template>
-                <span v-if="since" class="nc-num nc-t-2xs nc-tone-muted">
-                    · {{ $t('started :elapsed', { elapsed: since }) }}</span
-                >
             </div>
             <div
                 class="mt-[3px]"
@@ -74,30 +75,23 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
                 }"
             >
                 <template v-if="status === 'unreachable'">
-                    <template v-if="readingError === 'unauthorized'">{{
-                        $t('Horizon refused the credentials')
-                    }}</template>
-                    <template v-else-if="readingError === 'not_horizon'">{{
-                        $t('The address does not answer like Horizon')
-                    }}</template>
-                    <template v-else-if="readingError === 'blocked'">{{
-                        $t('This address is not allowed')
-                    }}</template>
-                    <template v-else>{{
-                        $t('Horizon does not answer')
-                    }}</template>
+                    {{ readingErrorLabel(readingError ?? 'unreachable') }}
+                    <span
+                        v-if="readingProblem"
+                        class="[overflow-wrap:anywhere]"
+                    >
+                        · {{ readingProblemLabel(readingProblem) }}
+                    </span>
                     <template v-if="hasEarlierReading">
                         ·
                         {{
-                            $t(
-                                'The counters read zero until it answers again; nodes and queues are the last known.',
-                            )
+                            $t('The counters read zero until it answers again.')
                         }}
                     </template>
                 </template>
                 <template v-else-if="status === 'inactive'">{{
                     $t(
-                        'No active workers: jobs stay pending until a master supervisor starts again.',
+                        'No active master supervisor: jobs stay pending until one starts again.',
                     )
                 }}</template>
                 <template v-else-if="status === 'paused'">{{
@@ -105,18 +99,16 @@ const since = computed(() => (alert ? formatElapsed(alert.minutesAgo) : null));
                         'Horizon is paused: jobs stay pending until it is continued.',
                     )
                 }}</template>
+                <template v-else-if="status === 'stale'">{{
+                    $t(
+                        'No reading has arrived for several intervals: the scheduler or the workers of Horizon Watch may be stopped, and no alert is evaluated meanwhile.',
+                    )
+                }}</template>
                 <template v-else>{{
                     $t(
                         'Jobs are being consumed, but at least one threshold is exceeded.',
                     )
                 }}</template>
-            </div>
-            <div
-                v-if="alert && !compact"
-                class="nc-t-2xs nc-tone-muted mt-[5px]"
-            >
-                {{ $t('Rule:') }}
-                {{ formatRule(alert.metric, alert.threshold, alert.unit) }}
             </div>
         </div>
     </div>

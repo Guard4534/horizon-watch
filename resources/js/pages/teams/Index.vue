@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     PhArrowsLeftRight,
     PhPencilSimple,
@@ -8,14 +8,11 @@ import {
     PhTrashSimple,
     PhUsersThree,
 } from '@phosphor-icons/vue';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import ConfirmByNameDialog from '@/components/ConfirmByNameDialog.vue';
-import Heading from '@/components/Heading.vue';
 import CreateOrganizationModal from '@/components/teams/CreateOrganizationModal.vue';
 import LeaveOrganizationModal from '@/components/teams/LeaveOrganizationModal.vue';
 import RenameOrganizationModal from '@/components/teams/RenameOrganizationModal.vue';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { index as membersIndex } from '@/routes/members';
 import { destroy, switchMethod } from '@/routes/teams';
 
@@ -25,9 +22,11 @@ defineOptions({
 
 type Organization = App.Data.Teams.UserTeamData;
 
-defineProps<{
-    teams: Organization[];
-}>();
+const page = usePage();
+const teams = computed<Organization[]>(() => page.props.teams);
+const canCreateOrganizations = computed(
+    () => page.props.canCreateOrganizations,
+);
 
 const renaming = ref<Organization | null>(null);
 const leaving = ref<Organization | null>(null);
@@ -44,24 +43,24 @@ function switchTo(team: Organization): void {
 <template>
     <Head :title="$t('Organizations')" />
 
-    <h1 class="sr-only">{{ $t('Organizations') }}</h1>
-
     <div class="flex flex-col space-y-6">
-        <div class="flex items-center justify-between">
-            <Heading
-                variant="small"
-                :title="$t('Organizations')"
-                :description="
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <p class="nc-t-sm nc-tone-muted">
+                {{
                     $t(
                         'Every application, environment, member and alert rule belongs to one organization.',
                     )
-                "
-            />
+                }}
+            </p>
 
-            <CreateOrganizationModal>
-                <Button data-test="teams-new-team-button">
-                    <PhPlus /> {{ $t('New organization') }}
-                </Button>
+            <CreateOrganizationModal v-if="canCreateOrganizations">
+                <button
+                    type="button"
+                    class="nc-btn nc-btn-primary"
+                    data-test="teams-new-team-button"
+                >
+                    <PhPlus :size="16" /> {{ $t('New organization') }}
+                </button>
             </CreateOrganizationModal>
         </div>
 
@@ -70,80 +69,98 @@ function switchTo(team: Organization): void {
                 v-for="team in teams"
                 :key="team.id"
                 data-test="team-row"
-                class="flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4"
+                class="nc-card flex flex-wrap items-center justify-between gap-4"
             >
                 <div class="min-w-0">
                     <div class="flex items-center gap-2">
-                        <span class="font-medium">{{ team.name }}</span>
-                        <Badge v-if="team.isCurrent" variant="secondary">
+                        <span>{{ team.name }}</span>
+                        <span
+                            v-if="team.isCurrent"
+                            class="nc-tag nc-tag-sm nc-tag-neutral"
+                        >
                             {{ $t('Current') }}
-                        </Badge>
+                        </span>
                     </div>
-                    <span class="text-muted-foreground text-sm">
+                    <span class="nc-t-sm nc-tone-muted">
                         {{ team.roleLabel }}
                     </span>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                    <Button
+                    <button
                         v-if="!team.isCurrent"
+                        type="button"
+                        class="nc-btn nc-btn-secondary"
                         data-test="team-switch-button"
-                        variant="secondary"
-                        size="sm"
                         @click="switchTo(team)"
                     >
-                        <PhArrowsLeftRight class="h-4 w-4" />
+                        <PhArrowsLeftRight :size="16" />
                         {{ $t('Switch') }}
-                    </Button>
+                    </button>
 
-                    <Button variant="ghost" size="sm" as-child>
-                        <Link :href="membersIndex(team.slug)">
-                            <PhUsersThree class="h-4 w-4" />
-                            {{ $t('Members') }}
-                        </Link>
-                    </Button>
+                    <Link
+                        :href="membersIndex(team.slug)"
+                        class="nc-btn nc-btn-ghost"
+                    >
+                        <PhUsersThree :size="16" />
+                        {{ $t('Members') }}
+                    </Link>
 
-                    <Button
+                    <button
                         v-if="canManage(team)"
+                        type="button"
+                        class="nc-btn nc-btn-ghost"
                         data-test="team-rename-button"
-                        variant="ghost"
-                        size="sm"
                         :aria-label="$t('Rename the organization')"
                         @click="renaming = team"
                     >
-                        <PhPencilSimple class="h-4 w-4" />
-                    </Button>
+                        <PhPencilSimple :size="16" />
+                    </button>
 
-                    <Button
+                    <button
                         v-if="team.role !== 'owner'"
+                        type="button"
+                        class="nc-btn nc-btn-ghost nc-tone-down"
                         data-test="team-leave-button"
-                        variant="ghost"
-                        size="sm"
+                        :title="$t('Leave the organization')"
                         :aria-label="$t('Leave the organization')"
                         @click="leaving = team"
                     >
-                        <PhSignOut class="h-4 w-4" />
-                    </Button>
+                        <PhSignOut :size="16" />
+                    </button>
 
-                    <Button
+                    <button
                         v-if="team.role === 'owner'"
+                        type="button"
+                        class="nc-btn nc-btn-ghost nc-tone-down"
                         data-test="team-delete-button"
-                        variant="ghost"
-                        size="sm"
+                        :title="$t('Delete the organization')"
                         :aria-label="$t('Delete the organization')"
                         @click="deleting = team"
                     >
-                        <PhTrashSimple class="h-4 w-4" />
-                    </Button>
+                        <PhTrashSimple :size="16" />
+                    </button>
                 </div>
             </div>
 
-            <p
+            <div
                 v-if="teams.length === 0"
-                class="text-muted-foreground py-8 text-center"
+                data-test="teams-empty"
+                class="nc-tone-muted space-y-2 py-8 text-center"
             >
-                {{ $t("You don't belong to any organization yet.") }}
-            </p>
+                <p>{{ $t("You don't belong to any organization yet.") }}</p>
+                <p class="nc-t-sm">
+                    {{
+                        canCreateOrganizations
+                            ? $t(
+                                  'Create one to start monitoring, or ask an admin of an existing organization to invite you.',
+                              )
+                            : $t(
+                                  'Ask an admin of an organization to invite you: the link in the invitation email brings you in.',
+                              )
+                    }}
+                </p>
+            </div>
         </div>
     </div>
 

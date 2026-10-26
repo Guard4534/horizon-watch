@@ -2,7 +2,7 @@
 
 use App\Alerts\Recipients;
 use App\Enums\AlertRuleMetric;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Enums\Locale;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
@@ -106,7 +106,7 @@ test('an alert of a deleted environment goes only to the extra addresses', funct
         'team_id' => $this->team->id,
         'application_name' => 'Shop',
         'environment_name' => 'gone',
-        'environment_color' => EnvironmentColor::Staging,
+        'environment_type' => EnvironmentType::Staging,
         'metric' => AlertRuleMetric::QueuePending,
     ]);
 
@@ -155,7 +155,7 @@ test('an address that is also an extra address reaches every environment, as a m
         'team_id' => $this->team->id,
         'application_name' => 'Shop',
         'environment_name' => 'gone',
-        'environment_color' => EnvironmentColor::Staging,
+        'environment_type' => EnvironmentType::Staging,
         'metric' => AlertRuleMetric::QueuePending,
     ]);
 

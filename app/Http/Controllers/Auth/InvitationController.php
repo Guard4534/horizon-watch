@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Auth;
 use App\Actions\Teams\AcceptInvitation;
 use App\Actions\Teams\DeclineInvitation;
 use App\Actions\Teams\RegisterInvitedUser;
+use App\Data\Auth\PasswordPolicyData;
+use App\Data\Pages\EnvironmentOptionData;
 use App\Data\Pages\InvitationPageData;
 use App\Data\Teams\AcceptInvitationData;
 use App\Enums\MemberVisibility;
 use App\Http\Controllers\Controller;
+use App\Models\Environment;
 use App\Models\TeamInvitation;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -28,16 +31,21 @@ class InvitationController extends Controller
 
         return Inertia::render('auth/Invitation', [
             'page' => new InvitationPageData(
-                code: $invitation->code,
+                code: $code,
                 organizationName: $canSeeDetails ? $invitation->team->name : null,
                 roleLabel: $canSeeDetails ? $invitation->role->label() : null,
                 visibilityLabel: $canSeeDetails ? $invitation->visibility->label() : null,
                 email: $canSeeDetails ? $invitation->email : null,
                 visibleEnvironmentNames: $canSeeDetails && $invitation->visibility === MemberVisibility::Manual
-                    ? $invitation->environments->pluck('name')->all()
+                    ? $invitation->environments->load('application')
+                        ->map(fn (Environment $environment) => EnvironmentOptionData::of($environment)->label())
+                        ->sort()
+                        ->values()
+                        ->all()
                     : [],
                 state: $state,
                 authenticated: $user !== null,
+                passwordPolicy: PasswordPolicyData::current(),
             ),
         ]);
     }
@@ -86,14 +94,14 @@ class InvitationController extends Controller
 
         $this->success(__('Invitation declined.'));
 
-        return to_route('wall');
+        return to_route('home');
     }
 
     private function findOrFail(string $code): TeamInvitation
     {
         return TeamInvitation::query()
             ->with(['team', 'environments'])
-            ->where('code', $code)
+            ->withCode($code)
             ->firstOr(fn () => abort(404));
     }
 

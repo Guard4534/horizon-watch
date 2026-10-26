@@ -2,6 +2,7 @@
 
 namespace App\Monitoring;
 
+use App\Actions\Monitoring\DispatchDuePolls;
 use App\Enums\SeriesRange;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
@@ -31,7 +32,7 @@ class StoredReadings
         }
 
         $snapshot = EnvironmentSnapshot::query()
-            ->select(['pending', 'max_wait_seconds', 'jobs_per_minute', 'failed_in_window', 'failed_window_minutes', 'failed_last_hour', 'workers', 'node_count'])
+            ->select(['pending', 'max_wait_seconds', 'jobs_per_minute', 'failed_in_window', 'failed_window_minutes', 'failed_last_hour', 'failed_last_hour_capped', 'workers', 'node_count'])
             ->whereColumn('environment_snapshots.environment_id', 'environment_states.environment_id')
             ->whereRaw("(environment_snapshots.environment_id, environment_snapshots.captured_at) <= (environment_states.environment_id, 'infinity'::timestamptz)")
             ->orderByDesc('environment_snapshots.environment_id')
@@ -47,6 +48,7 @@ class StoredReadings
             ->selectRaw('latest.failed_in_window as snapshot_failed_in_window')
             ->selectRaw('latest.failed_window_minutes as snapshot_failed_window_minutes')
             ->selectRaw('latest.failed_last_hour as snapshot_failed_last_hour')
+            ->selectRaw('latest.failed_last_hour_capped as snapshot_failed_last_hour_capped')
             ->selectRaw('latest.workers as snapshot_workers')
             ->selectRaw('latest.node_count as snapshot_node_count')
             ->leftJoinLateral($snapshot, 'latest')
@@ -97,7 +99,7 @@ class StoredReadings
     private function series(array $environmentIds, SeriesRange $range, SeriesAggregate $aggregate): array
     {
         $points = self::seriesPoints();
-        $tick = config()->integer('horizon-watch.readings.poll_tick_seconds');
+        $tick = DispatchDuePolls::TICK_SECONDS;
         $slack = config()->integer('horizon-watch.readings.poll_slack_seconds');
         $values = array_fill(0, $points, 0.0);
 

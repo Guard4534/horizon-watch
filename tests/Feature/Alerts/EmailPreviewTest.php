@@ -1,7 +1,7 @@
 <?php
 
 use App\Enums\AlertRuleMetric;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Enums\Locale;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
@@ -22,7 +22,6 @@ beforeEach(function () {
     $this->alert = Alert::factory()->for($this->production)->critical()->create([
         'metric' => AlertRuleMetric::QueuePending,
         'threshold' => 2000,
-        'unit' => 'job',
         'value' => 4312,
     ]);
 
@@ -102,7 +101,7 @@ test('the alert of a deleted environment still previews for a manager who sees e
         'team_id' => $this->team->id,
         'application_name' => 'Billing',
         'environment_name' => 'legacy',
-        'environment_color' => EnvironmentColor::Develop,
+        'environment_type' => EnvironmentType::Development,
     ]);
 
     $this->actingAs(($this->memberAs)(TeamRole::Owner))

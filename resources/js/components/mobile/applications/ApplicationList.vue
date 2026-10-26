@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { PhCaretRight } from '@phosphor-icons/vue';
+import AttentionBadge from '@/components/monitoring/AttentionBadge.vue';
 import {
-    needsAttention,
+    collectionPaused,
+    statusText,
     statusTone,
-    worstTone,
 } from '@/components/monitoring/environment/readings';
+import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { envColor } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
 defineProps<{
@@ -15,27 +16,6 @@ defineProps<{
 }>();
 
 const slug = useTeamSlug();
-
-const badgeStyle = (group: App.Data.Pages.ApplicationGroupData) => {
-    const tone = group.triageCount ? worstTone(group.environments) : null;
-
-    return tone
-        ? {
-              background: `color-mix(in srgb, ${tone} 18%, transparent)`,
-              color: tone,
-          }
-        : {
-              background: 'var(--nc-neutral-900)',
-              color: 'var(--nc-neutral-500)',
-          };
-};
-
-const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
-    background: envColor(environment.color),
-    boxShadow: needsAttention(environment)
-        ? `0 0 0 2px color-mix(in srgb, ${statusTone(environment)} 55%, transparent)`
-        : undefined,
-});
 </script>
 
 <template>
@@ -56,16 +36,17 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
                     group.application.name
                 }}</span>
                 <span class="mt-[5px] flex flex-wrap items-center gap-1">
-                    <span
+                    <StatusLamp
                         v-for="environment in group.environments"
                         :key="environment.id"
-                        class="size-[7px] flex-none rounded-full"
-                        :style="dotStyle(environment)"
-                        :title="environment.name"
+                        :status="environment.status"
+                        :tone="statusTone(environment)"
+                        :label="`${environment.name} · ${statusText(environment)}`"
+                        :size="7"
                     />
                     <span
                         class="nc-num nc-tone-faint"
-                        style="margin-left: 6px; font-size: 10px"
+                        style="margin-left: 6px; font-size: 11px"
                         >{{
                             $tChoice(
                                 ':count environment|:count environments',
@@ -75,23 +56,11 @@ const dotStyle = (environment: App.Data.Monitoring.EnvironmentData) => ({
                     >
                 </span>
             </span>
-            <span
-                class="nc-num flex-none"
-                style="
-                    font-size: 10px;
-                    padding: 1px 7px;
-                    border-radius: var(--nc-radius-sm);
-                "
-                :style="badgeStyle(group)"
-                :title="
-                    group.triageCount
-                        ? $t(':count to triage', {
-                              count: String(group.triageCount),
-                          })
-                        : $t('all good')
-                "
-                >{{ group.triageCount || '✓' }}</span
-            >
+            <AttentionBadge
+                :count="group.attentionCount"
+                :worst-status="group.worstStatus"
+                :paused="collectionPaused(group.environments)"
+            />
             <PhCaretRight :size="14" class="nc-tone-faint flex-none" />
         </Link>
     </div>

@@ -1,15 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { getInitials } from '@/lib/initials';
+import Avatar from '@/components/nocturne/Avatar.vue';
 
-const props = defineProps<{
+defineProps<{
     organizationName: string;
     roleLabel: string;
     visibilityLabel: string;
     visibleEnvironmentNames: string[];
 }>();
-
-const initials = computed(() => getInitials(props.organizationName));
 </script>
 
 <template>
@@ -25,22 +22,7 @@ const initials = computed(() => getInitials(props.organizationName));
             border: 1px solid var(--nc-divider);
         "
     >
-        <span
-            aria-hidden="true"
-            style="
-                width: 28px;
-                height: 28px;
-                flex: none;
-                border-radius: 50%;
-                background: var(--nc-neutral-800);
-                color: var(--nc-neutral-200);
-                display: grid;
-                place-items: center;
-                font-size: 10px;
-            "
-        >
-            {{ initials }}
-        </span>
+        <Avatar :name="organizationName" :size="28" />
         <div style="min-width: 0">
             <div class="nc-t-sm">{{ organizationName }}</div>
             <div class="nc-t-2xs nc-tone-muted">
@@ -55,7 +37,7 @@ const initials = computed(() => getInitials(props.organizationName));
                 v-if="visibleEnvironmentNames.length > 0"
                 style="
                     font-size: 11px;
-                    color: var(--nc-neutral-600);
+                    color: var(--nc-text-faint);
                     margin-top: 2px;
                     overflow-wrap: anywhere;
                 "

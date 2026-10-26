@@ -59,8 +59,7 @@ test('each page carries the count its empty state keys off', function () {
     $this->get(route('wall', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environments', [])
-            ->where('page.applicationCount', 0)
-            ->where('page.kpis.environmentsTotal', 0));
+            ->where('page.applicationCount', 0));
 
     $this->get(route('applications.index', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page

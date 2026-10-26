@@ -3,9 +3,8 @@ import { Form } from '@inertiajs/vue3';
 import { useClipboard } from '@vueuse/core';
 import { PhCheck, PhCopy, PhScan } from '@phosphor-icons/vue';
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
-import AlertError from '@/components/AlertError.vue';
+import FormErrors from '@/components/FormErrors.vue';
 import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
@@ -20,6 +19,7 @@ import {
 } from '@/components/ui/input-otp';
 import { Spinner } from '@/components/ui/spinner';
 import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
+import { invalidField } from '@/lib/fieldErrors';
 import { confirm } from '@/routes/two-factor';
 import type { TwoFactorConfigContent } from '@/types';
 
@@ -110,33 +110,15 @@ watch(
     <Dialog :open="isOpen" @update:open="isOpen = $event">
         <DialogContent class="sm:max-w-md">
             <DialogHeader class="flex items-center justify-center">
-                <div
-                    class="border-border bg-card mb-3 w-auto rounded-full border p-0.5 shadow-sm"
+                <span
+                    class="mb-3 grid size-11 place-items-center rounded-full"
+                    style="
+                        background: var(--nc-surface);
+                        box-shadow: var(--nc-shadow-sm);
+                    "
                 >
-                    <div
-                        class="border-border bg-muted relative overflow-hidden rounded-full border p-2.5"
-                    >
-                        <div
-                            class="absolute inset-0 grid grid-cols-5 opacity-50"
-                        >
-                            <div
-                                v-for="i in 5"
-                                :key="`col-${i}`"
-                                class="border-border border-r last:border-r-0"
-                            />
-                        </div>
-                        <div
-                            class="absolute inset-0 grid grid-rows-5 opacity-50"
-                        >
-                            <div
-                                v-for="i in 5"
-                                :key="`row-${i}`"
-                                class="border-border border-b last:border-b-0"
-                            />
-                        </div>
-                        <PhScan class="text-foreground relative z-20 size-6" />
-                    </div>
-                </div>
+                    <PhScan :size="22" />
+                </span>
                 <DialogTitle>{{ $t(modalConfig.title) }}</DialogTitle>
                 <DialogDescription class="text-center">
                     {{ $t(modalConfig.description) }}
@@ -147,83 +129,89 @@ watch(
                 class="relative flex w-auto flex-col items-center justify-center space-y-5"
             >
                 <template v-if="!showVerificationStep">
-                    <AlertError v-if="errors?.length" :errors="errors" />
+                    <FormErrors
+                        v-if="errors?.length"
+                        :errors="errors"
+                        :title="$t('Something went wrong.')"
+                    />
                     <template v-else>
                         <div
-                            class="relative mx-auto flex max-w-md items-center overflow-hidden"
+                            class="relative mx-auto aspect-square w-64 overflow-hidden"
+                            style="
+                                border: 1px solid var(--nc-divider);
+                                border-radius: var(--nc-radius-md);
+                            "
                         >
                             <div
-                                class="border-border relative mx-auto aspect-square w-64 overflow-hidden rounded-lg border"
+                                v-if="!qrCodeSvg"
+                                class="absolute inset-0 grid place-items-center"
                             >
-                                <div
-                                    v-if="!qrCodeSvg"
-                                    class="bg-background absolute inset-0 z-10 flex aspect-square h-auto w-full animate-pulse items-center justify-center"
-                                >
-                                    <Spinner class="size-6" />
-                                </div>
-                                <div
-                                    v-else
-                                    class="relative z-10 overflow-hidden border p-5"
-                                >
-                                    <div
-                                        v-html="qrCodeSvg"
-                                        class="flex aspect-square size-full items-center justify-center"
-                                        style="
-                                            filter: invert(1) brightness(1.5);
-                                        "
-                                    />
-                                </div>
+                                <Spinner class="size-6" />
                             </div>
-                        </div>
-
-                        <div class="flex w-full items-center space-x-5">
-                            <Button class="w-full" @click="handleModalNextStep">
-                                {{ $t(modalConfig.buttonText) }}
-                            </Button>
-                        </div>
-
-                        <div
-                            class="relative flex w-full items-center justify-center"
-                        >
                             <div
-                                class="bg-border absolute inset-0 top-1/2 h-px w-full"
+                                v-else
+                                v-html="qrCodeSvg"
+                                class="flex aspect-square size-full items-center justify-center p-5"
+                                style="filter: invert(1) brightness(1.5)"
                             />
-                            <span class="bg-card relative px-2 py-1">{{
-                                $t('or, enter the code manually')
-                            }}</span>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="nc-btn nc-btn-primary w-full"
+                            @click="handleModalNextStep"
+                        >
+                            {{ $t(modalConfig.buttonText) }}
+                        </button>
+
+                        <div
+                            class="nc-t-xs nc-tone-muted flex w-full items-center gap-3"
+                        >
+                            <span
+                                class="h-px flex-1"
+                                style="background: var(--nc-divider)"
+                            />
+                            {{ $t('or, enter the code manually') }}
+                            <span
+                                class="h-px flex-1"
+                                style="background: var(--nc-divider)"
+                            />
                         </div>
 
                         <div
-                            class="flex w-full items-center justify-center space-x-2"
+                            v-if="!manualSetupKey"
+                            class="grid w-full place-items-center"
                         >
-                            <div
-                                class="border-border flex w-full items-stretch overflow-hidden rounded-xl border"
+                            <Spinner />
+                        </div>
+                        <div v-else class="relative w-full">
+                            <input
+                                type="text"
+                                readonly
+                                class="nc-input nc-code"
+                                style="padding-right: 44px"
+                                :value="manualSetupKey"
+                                :aria-label="$t('Setup key')"
+                            />
+                            <button
+                                type="button"
+                                class="absolute inset-y-0 right-0 flex items-center px-3 text-[var(--nc-neutral-500)] hover:text-[var(--nc-text)]"
+                                style="
+                                    border-radius: 0 var(--nc-radius-md)
+                                        var(--nc-radius-md) 0;
+                                "
+                                :aria-label="
+                                    copied ? $t('Copied') : $t('Copy setup key')
+                                "
+                                @click="copy(manualSetupKey || '')"
                             >
-                                <div
-                                    v-if="!manualSetupKey"
-                                    class="bg-muted flex h-full w-full items-center justify-center p-3"
-                                >
-                                    <Spinner />
-                                </div>
-                                <template v-else>
-                                    <input
-                                        type="text"
-                                        readonly
-                                        :value="manualSetupKey"
-                                        class="bg-background text-foreground h-full w-full p-3"
-                                    />
-                                    <button
-                                        @click="copy(manualSetupKey || '')"
-                                        class="border-border hover:bg-muted relative block h-auto border-l px-3"
-                                    >
-                                        <PhCheck
-                                            v-if="copied"
-                                            class="w-4 text-green-500"
-                                        />
-                                        <PhCopy v-else class="w-4" />
-                                    </button>
-                                </template>
-                            </div>
+                                <PhCheck
+                                    v-if="copied"
+                                    :size="16"
+                                    style="color: var(--st-ok)"
+                                />
+                                <PhCopy v-else :size="16" />
+                            </button>
                         </div>
                     </template>
                 </template>
@@ -251,6 +239,9 @@ watch(
                                     :maxlength="6"
                                     :disabled="processing"
                                     autofocus
+                                    autocomplete="one-time-code"
+                                    :aria-label="$t('Authentication code')"
+                                    v-bind="invalidField('otp', errors?.code)"
                                 >
                                     <InputOTPGroup>
                                         <InputOTPSlot
@@ -260,26 +251,28 @@ watch(
                                         />
                                     </InputOTPGroup>
                                 </InputOTP>
-                                <InputError :message="errors?.code" />
+                                <InputError
+                                    field="otp"
+                                    :message="errors?.code"
+                                />
                             </div>
 
-                            <div class="flex w-full items-center space-x-5">
-                                <Button
+                            <div class="nc-actions w-full">
+                                <button
                                     type="button"
-                                    variant="outline"
-                                    class="w-auto flex-1"
-                                    @click="showVerificationStep = false"
+                                    class="nc-btn nc-btn-secondary"
                                     :disabled="processing"
+                                    @click="showVerificationStep = false"
                                 >
                                     {{ $t('Back') }}
-                                </Button>
-                                <Button
+                                </button>
+                                <button
                                     type="submit"
-                                    class="w-auto flex-1"
+                                    class="nc-btn nc-btn-primary"
                                     :disabled="processing || code.length < 6"
                                 >
                                     {{ $t('Confirm') }}
-                                </Button>
+                                </button>
                             </div>
                         </div>
                     </Form>

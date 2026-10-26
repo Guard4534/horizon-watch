@@ -31,8 +31,10 @@ body:
     id: version
     attributes:
       label: Version
-      description: The image tag you are running, or the commit if you built it yourself.
-      placeholder: ghcr.io/guard4534/horizon-watch:0.1.0
+      description: >-
+        Shown at the bottom of the sidebar, by `artisan about` and by `GET /health`; if it says
+        `dev`, the commit you built.
+      placeholder: 1.0.0
     validations:
       required: true
 

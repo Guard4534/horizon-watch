@@ -11,7 +11,7 @@ const props = defineProps<{
 <template>
   <PhSpinner
     role="status"
-    aria-label="Loading"
+    :aria-label="$t('Loading')"
     :class="cn('size-4 animate-spin', props.class)"
   />
 </template>

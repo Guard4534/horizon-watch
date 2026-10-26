@@ -4,9 +4,8 @@ import SectionCard from '@/components/nocturne/SectionCard.vue';
 
 defineProps<{
     rows: App.Data.Pages.PermissionMatrixRowData[];
+    roles: App.Data.Teams.RoleOptionData[];
 }>();
-
-const COLUMNS = ['owner', 'admin', 'member', 'viewer'] as const;
 </script>
 
 <template>
@@ -17,11 +16,11 @@ const COLUMNS = ['owner', 'admin', 'member', 'viewer'] as const;
                     <tr>
                         <th>{{ $t('Capability') }}</th>
                         <th
-                            v-for="column in COLUMNS"
-                            :key="column"
+                            v-for="role in roles"
+                            :key="role.value"
                             class="text-center"
                         >
-                            {{ column }}
+                            {{ role.label }}
                         </th>
                     </tr>
                 </thead>
@@ -29,22 +28,22 @@ const COLUMNS = ['owner', 'admin', 'member', 'viewer'] as const;
                     <tr v-for="row in rows" :key="row.permission">
                         <td class="nc-t-sm">{{ row.label }}</td>
                         <td
-                            v-for="column in COLUMNS"
-                            :key="column"
+                            v-for="role in roles"
+                            :key="role.value"
                             class="text-center"
                         >
                             <component
-                                :is="row[column] ? PhCheck : PhMinus"
+                                :is="row[role.value] ? PhCheck : PhMinus"
                                 :size="15"
                                 class="inline-block"
                                 :style="{
-                                    color: row[column]
+                                    color: row[role.value]
                                         ? 'var(--st-ok)'
                                         : 'var(--nc-neutral-700)',
                                 }"
                             />
                             <span class="sr-only">{{
-                                row[column] ? $t('yes') : $t('no')
+                                row[role.value] ? $t('yes') : $t('no')
                             }}</span>
                         </td>
                     </tr>
@@ -57,7 +56,7 @@ const COLUMNS = ['owner', 'admin', 'member', 'viewer'] as const;
         >
             {{
                 $t(
-                    'Reading is not a permission: every member sees the wall, the details and the alert history, within the environments their visibility allows.',
+                    'Admins manage applications, environments, credentials and thresholds; members act on alerts; viewers only look. Reading is not a permission: everyone sees the wall, the details and the alert history of the environments they can see. A person can belong to several organizations, with a separate role in each.',
                 )
             }}
         </div>

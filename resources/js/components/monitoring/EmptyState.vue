@@ -4,7 +4,6 @@ import type { Component } from 'vue';
 defineProps<{
     title: string;
     body: string;
-    kicker?: string;
     icon?: Component;
 }>();
 </script>
@@ -36,8 +35,6 @@ defineProps<{
         >
             <component :is="icon" :size="18" />
         </div>
-
-        <div v-if="kicker" class="nc-kicker">{{ kicker }}</div>
 
         <div style="font-size: 17px; line-height: 1.25">{{ title }}</div>
 

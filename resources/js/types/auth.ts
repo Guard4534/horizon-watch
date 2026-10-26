@@ -1,6 +1,4 @@
-export type User = App.Data.Auth.AuthUserData & {
-    avatar?: string;
-};
+export type User = App.Data.Auth.AuthUserData;
 
 export type Auth = {
     user: User;

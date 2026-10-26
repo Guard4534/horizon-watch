@@ -2,6 +2,7 @@
 
 namespace App\Data\Pages;
 
+use App\Data\Auth\PasswordPolicyData;
 use Spatie\LaravelData\Data;
 
 class InvitationPageData extends Data
@@ -18,5 +19,6 @@ class InvitationPageData extends Data
         public array $visibleEnvironmentNames,
         public string $state,
         public bool $authenticated,
+        public PasswordPolicyData $passwordPolicy,
     ) {}
 }

@@ -1,8 +1,9 @@
 import { trans } from 'laravel-vue-i18n';
 import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
-import { formatAge } from '@/components/monitoring/environment/readings';
+import { needsAttention } from '@/components/monitoring/environment/readings';
 import { thresholdOf } from '@/lib/alertRules';
+import { formatSeconds } from '@/lib/monitoring';
 
 export function useEnvironmentDetail(
     source: () => App.Data.Pages.EnvironmentDetailPageData,
@@ -24,11 +25,18 @@ export function useEnvironmentDetail(
     const incident = computed(() => {
         const status = environment.value.status;
 
-        return status !== null && status !== 'active' ? status : null;
+        return needsAttention(environment.value) &&
+            status !== null &&
+            status !== 'active'
+            ? status
+            : null;
     });
 
     const lastKnown = computed(() => {
-        if (environment.value.readingError === null) {
+        if (
+            environment.value.readingError === null &&
+            !environment.value.stale
+        ) {
             return null;
         }
 
@@ -36,7 +44,7 @@ export function useEnvironmentDetail(
 
         return ages.length
             ? trans('last known · :time ago', {
-                  time: formatAge(Math.min(...ages)),
+                  time: formatSeconds(Math.min(...ages), 1),
               })
             : trans('last known');
     });

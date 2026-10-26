@@ -14,9 +14,10 @@ import {
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { regenerateSecret } from '@/routes/alert-settings';
 
-const { secretSet, newSecret } = defineProps<{
+const { secretSet, newSecret, previousSecretHours } = defineProps<{
     secretSet: boolean;
     newSecret: string | null;
+    previousSecretHours: number;
 }>();
 
 const slug = useTeamSlug();
@@ -95,7 +96,7 @@ function regenerate(): void {
         {{ $t('Signing secret set') }}
         <button
             type="button"
-            class="nc-btn nc-btn-ghost nc-t-xs"
+            class="nc-btn nc-btn-ghost nc-t-xs nc-tone-down"
             :disabled="regenerating"
             @click="confirming = true"
         >
@@ -114,13 +115,14 @@ function regenerate(): void {
                 }}</DialogTitle>
                 <DialogDescription>
                     {{
-                        $t(
-                            'The current secret stops working at once: webhook deliveries are signed with the new one, which is shown only once.',
+                        $tChoice(
+                            'Webhook deliveries are signed with the new signing secret, shown only once. For the next hour they also carry a signature made with the current one, so the receiver can switch without missing any.|Webhook deliveries are signed with the new signing secret, shown only once. For the next :count hours they also carry a signature made with the current one, so the receiver can switch without missing any.',
+                            previousSecretHours,
                         )
                     }}
                 </DialogDescription>
             </DialogHeader>
-            <DialogFooter class="gap-2">
+            <DialogFooter>
                 <button
                     type="button"
                     class="nc-btn nc-btn-secondary"
@@ -130,7 +132,7 @@ function regenerate(): void {
                 </button>
                 <button
                     type="button"
-                    class="nc-btn nc-btn-primary"
+                    class="nc-btn nc-btn-danger"
                     :disabled="regenerating"
                     @click="regenerate"
                 >

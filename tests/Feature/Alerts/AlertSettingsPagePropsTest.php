@@ -77,25 +77,28 @@ test('an environment scope carries the organization values it inherits, the orga
     'viewer' => TeamRole::Viewer,
 ]);
 
-test('the repeat choices and the recipient limit come from the configuration', function () {
+test('the repeat choices, the recipient limit and the secret overlap come from the configuration', function () {
     config([
         'horizon-watch.notifications.repeat_minutes' => [5, 45],
         'horizon-watch.notifications.max_recipients' => 3,
+        'horizon-watch.notifications.previous_webhook_secret_hours' => 6,
     ]);
 
     $this->actingAs(($this->memberOf)(TeamRole::Admin));
 
     expect(($this->pageOf)('organization'))
         ->repeatChoices->toBe([5, 45])
-        ->maxRecipients->toBe(3);
+        ->maxRecipients->toBe(3)
+        ->previousSecretHours->toBe(6);
 });
 
-test('the default configuration offers 15, 30 and 60 minutes and twenty recipients', function () {
+test('the default configuration offers 15, 30 and 60 minutes, twenty recipients and a day of overlap', function () {
     $this->actingAs(($this->memberOf)(TeamRole::Member));
 
     expect(($this->pageOf)('organization'))
         ->repeatChoices->toBe([15, 30, 60])
-        ->maxRecipients->toBe(20);
+        ->maxRecipients->toBe(20)
+        ->previousSecretHours->toBe(24);
 });
 
 test('the me page shows the quiet hours of the organization', function () {
@@ -120,9 +123,9 @@ test('rule errors name the field, not its position in the payload', function () 
 
     $this->put(route('alert-rules.update', ['current_team' => $this->team->slug, 'scope' => 'organization']), ['rules' => [
         ['metric' => 'queue.pending', 'threshold' => 3000, 'severity' => 'warning', 'notifyByEmail' => true, 'enabled' => true],
-        ['metric' => 'jobs.failed_per_hour', 'threshold' => 60, 'severity' => 'loud', 'notifyByEmail' => true, 'enabled' => true],
+        ['metric' => 'jobs.failed_per_hour', 'threshold' => 250, 'severity' => 'loud', 'notifyByEmail' => true, 'enabled' => true],
     ]])->assertSessionHasErrors([
-        'rules.1.threshold' => 'The threshold field must not be greater than 49.',
+        'rules.1.threshold' => 'The threshold field must not be greater than 199.',
         'rules.1.severity' => 'The selected severity is invalid.',
     ]);
 });
@@ -143,4 +146,14 @@ test('notification setting errors name the field, and an address by what it is',
         'timezone' => 'The selected time zone is invalid.',
         'repeatMinutes' => 'The selected alert repeat is invalid.',
     ]);
+});
+
+test('each rule carries its comparator and whether it is a state rule', function () {
+    $this->actingAs(($this->memberOf)(TeamRole::Viewer));
+
+    $rules = collect(($this->pageOf)('organization')['rules'])->keyBy('metric');
+
+    expect($rules['queue.pending'])->toMatchArray(['comparator' => '>', 'isStateRule' => false])
+        ->and($rules['workers.missing'])->toMatchArray(['comparator' => '≥', 'isStateRule' => false])
+        ->and($rules['horizon.paused'])->toMatchArray(['comparator' => '≥', 'isStateRule' => true]);
 });

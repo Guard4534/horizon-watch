@@ -6,7 +6,6 @@ import { useVisibility } from '@/composables/useVisibility';
 defineProps<{
     title: string;
     body: string;
-    kicker?: string;
     icon?: Component;
 }>();
 
@@ -16,7 +15,6 @@ const { somethingIsHidden } = useVisibility();
 <template>
     <EmptyState
         :icon="icon"
-        :kicker="kicker"
         :title="title"
         :body="
             somethingIsHidden

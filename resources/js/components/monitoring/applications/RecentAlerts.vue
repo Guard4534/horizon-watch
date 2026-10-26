@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { PhCheckCircle } from '@phosphor-icons/vue';
+import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { ruleIcon, ruleLabel } from '@/lib/alertRules';
-import { severityColor } from '@/lib/alerts';
-import { formatElapsed, statusColor } from '@/lib/monitoring';
+import { ruleLabel } from '@/lib/alertRules';
+import { alertIcon, alertTone } from '@/lib/alerts';
+import { formatAgo } from '@/lib/monitoring';
 import { index as alertsIndex } from '@/routes/alerts';
 
 defineProps<{
+    applicationId: string;
     alerts: App.Data.Monitoring.AlertData[];
 }>();
 
@@ -18,16 +21,22 @@ const slug = useTeamSlug();
 <template>
     <SectionCard :title="$t('Recent alerts')">
         <template #actions>
-            <Link :href="alertsIndex(slug)" class="nc-t-2xs">{{
-                $t('Full log')
-            }}</Link>
+            <Link
+                :href="
+                    alertsIndex(slug, { query: { application: applicationId } })
+                "
+                class="nc-t-2xs"
+                >{{ $t('Full log') }}</Link
+            >
         </template>
         <div
             v-if="!alerts.length"
             class="nc-t-xs nc-tone-muted flex items-center gap-[9px]"
         >
             <PhCheckCircle :size="14" style="color: var(--st-ok)" />
-            {{ $t('No open anomaly on the environments you watch.') }}
+            {{
+                $t('No open or recent alerts on the environments you can see.')
+            }}
         </div>
         <div
             v-else
@@ -45,45 +54,41 @@ const slug = useTeamSlug();
                 "
             >
                 <component
-                    :is="
-                        alert.state === 'resolved'
-                            ? PhCheckCircle
-                            : ruleIcon(alert.metric)
-                    "
+                    :is="alertIcon(alert)"
                     :size="14"
                     class="mt-[2px] flex-none"
-                    :style="{
-                        color:
-                            alert.state === 'resolved'
-                                ? 'var(--st-ok)'
-                                : alert.environmentStatus
-                                  ? statusColor(alert.environmentStatus)
-                                  : severityColor(alert.severity),
-                    }"
+                    :style="{ color: alertTone(alert) }"
                 />
                 <div class="min-w-0">
-                    <div class="nc-t-xs">
-                        {{
+                    <div
+                        class="nc-t-xs flex flex-wrap items-center"
+                        style="gap: 6px"
+                    >
+                        <span>{{
                             alert.state === 'resolved'
-                                ? $t('Back within threshold · :environment', {
-                                      environment: alert.environmentName,
-                                  })
-                                : `${ruleLabel(alert.metric)} · ${alert.environmentName}`
-                        }}
+                                ? $t('Back within threshold')
+                                : ruleLabel(alert.metric)
+                        }}</span>
+                        <EnvPill
+                            :name="alert.environmentName"
+                            :type="alert.environmentType"
+                            :size="11"
+                        />
                     </div>
                     <div class="nc-num nc-t-2xs nc-tone-faint mt-[2px]">
                         {{
                             alert.resolvedMinutesAgo !== null
                                 ? $t('resolved :elapsed', {
-                                      elapsed: formatElapsed(
-                                          alert.resolvedMinutesAgo,
+                                      elapsed: formatAgo(
+                                          alert.resolvedMinutesAgo * 60,
                                       ),
                                   })
                                 : $t('opened :elapsed', {
-                                      elapsed: formatElapsed(alert.minutesAgo),
+                                      elapsed: formatAgo(alert.minutesAgo * 60),
                                   })
                         }}
                     </div>
+                    <AlertMarks :alert="alert" class="mt-[3px]" />
                 </div>
             </div>
         </div>

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
 use App\Enums\MemberVisibility;
 use App\Enums\SentNotificationKind;
@@ -9,7 +10,6 @@ use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
-use Database\Seeders\DatabaseSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\Grants;
 use Tests\Support\Readings;
@@ -17,8 +17,13 @@ use Tests\Support\Readings;
 beforeEach(function () {
     $this->user = User::factory()->create();
     $this->slug = $this->user->currentTeam->slug;
-    (new DatabaseSeeder)->seedMockupOrganization($this->user->currentTeam);
-    Readings::mockup($this->user->currentTeam);
+
+    $invoices = Application::factory()->for($this->user->currentTeam)->create(['name' => 'Invoice Desk']);
+    $shop = Application::factory()->for($this->user->currentTeam)->create(['name' => 'Acme Shop']);
+
+    Readings::record(Environment::factory()->for($invoices)->production()->create(), EnvironmentStatus::Inactive, [AlertRuleMetric::HorizonMasterInactive]);
+    Readings::record(Environment::factory()->for($invoices)->staging()->create());
+    Readings::record(Environment::factory()->for($shop)->production()->create(), EnvironmentStatus::Degraded, [AlertRuleMetric::QueuePending]);
 });
 
 dataset('pages', [
@@ -72,30 +77,30 @@ test('the wall carries every environment and the key numbers', function () {
     $this->actingAs($this->user)
         ->get(route('wall', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page
-            ->has('page.environments', 29)
-            ->where('page.kpis.environmentsTotal', 29)
-            ->where('page.environments.0.status', fn (string $status) => in_array($status, ['inactive', 'unreachable'], true))
-            ->where('page.kpis.openAnomalies', 6)
-            ->where('page.kpis.environmentsUp', 26)
-            ->has('page.anomalies', 5)
+            ->has('page.environments', 3)
+            ->where('page.environments.0.id', 'invoice-desk-production')
+            ->where('page.environments.0.status', 'inactive')
+            ->where('page.kpis.openAlerts', 2)
+            ->where('page.kpis.environmentsHealthy', 1)->where('page.kpis.environmentsNeedingAttention', 2)
+            ->has('page.alerts', 2)
             ->has('page.throughput', 48)
             ->has('page.notifications', 1)
             ->where('page.notifications.0.kind', 'warning_digest')
             ->where('page.notifications.0.subject', '2')
             ->where('page.notifications.0.minutesAgo', 3)
-            ->where('page.applicationCount', 9)
-            ->where('openAlertCount', 6));
+            ->where('page.applicationCount', 2)
+            ->where('openAlertCount', 2));
 });
 
 test('the environment page follows the requested range', function () {
     $this->actingAs($this->user)
-        ->get(route('environments.show', ['current_team' => $this->slug, 'environment' => 'acme-shop-production', 'range' => '7d']))
+        ->get(route('environments.show', ['current_team' => $this->slug, 'environment' => 'invoice-desk-staging', 'range' => '7d']))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.range', '7d')
-            ->where('page.environment.id', 'acme-shop-production')
+            ->where('series.range', '7d')
+            ->where('page.environment.id', 'invoice-desk-staging')
             ->has('page.nodes', 1)
             ->has('page.queues', 3)
-            ->has('page.maxWait', 48)
+            ->has('series.maxWait', 48)
             ->has('page.rules', 8));
 });
 
@@ -104,8 +109,8 @@ test('the alert log defaults to open alerts and can switch state', function () {
         ->get(route('alerts.index', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.state', 'open')
-            ->where('page.counts.open', 6)
-            ->has('page.alerts', 6)
+            ->where('page.counts.open', 2)
+            ->has('page.alerts', 2)
             ->where('page.counts.muted', 0)
             ->where('page.counts.resolved', 0));
 
@@ -125,7 +130,7 @@ test('alert rules default to the organization scope', function () {
         ->get(route('alert-rules.index', ['current_team' => $this->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.scope', 'organization')
-            ->has('page.scopes', 8)
+            ->where('page.scopes', fn ($scopes) => collect($scopes)->pluck('id')->all() === ['organization', 'production', 'staging'])
             ->has('page.rules', 8)
             ->where('page.notifications.repeatMinutes', 30));
 });
@@ -186,8 +191,7 @@ test('a restricted admin watches their own environments and configures every one
             ->has('page.environments', 1)
             ->where('page.environments.0.id', $watched->slug)
             ->where('page.environments.0.watched', true)
-            ->where('page.applicationCount', 1)
-            ->where('page.kpis.environmentsTotal', 1));
+            ->where('page.applicationCount', 1));
 
     $this->get(route('applications.index', ['current_team' => $team->slug]))
         ->assertOk()
@@ -202,7 +206,7 @@ test('a restricted admin watches their own environments and configures every one
             ->where('page.groups.1.environments.0.watched', false)
             ->where('page.groups.1.environments.0.status', null)
             ->where('page.groups.1.environments.0.readingError', null)
-            ->where('page.groups.1.triageCount', 0));
+            ->where('page.groups.1.attentionCount', 0));
 
     $this->get(route('applications.show', ['current_team' => $team->slug, 'application' => $theirs->slug]))
         ->assertOk()

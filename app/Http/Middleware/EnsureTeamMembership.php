@@ -7,6 +7,7 @@ use App\Models\Team;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
+use Inertia\Support\Header;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureTeamMembership
@@ -23,7 +24,9 @@ class EnsureTeamMembership
         $this->ensureTeamMemberHasRequiredRole($user, $team, $minimumRole);
 
         if ($request->route('current_team') && ! $user->isCurrentTeam($team)) {
-            $user->switchTeam($team);
+            $request->hasHeader(Header::PARTIAL_COMPONENT)
+                ? $user->switchTeamForRequest($team)
+                : $user->switchTeam($team);
         }
 
         return $next($request);

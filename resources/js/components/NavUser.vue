@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import Avatar from '@/components/nocturne/Avatar.vue';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import UserMenuContent from '@/components/UserMenuContent.vue';
-import { getInitials } from '@/lib/initials';
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
@@ -28,19 +28,10 @@ const user = computed(() => page.props.auth.user);
                     cursor: pointer;
                 "
             >
-                <span
-                    class="grid size-6 flex-none place-items-center rounded-full"
-                    style="
-                        background: var(--nc-neutral-800);
-                        color: var(--nc-neutral-200);
-                        font-size: 10px;
-                    "
-                >
-                    {{ getInitials(user.name) }}
-                </span>
+                <Avatar :name="user.name" :size="24" />
                 <span class="min-w-0">
                     <span class="nc-t-xs block truncate">{{ user.name }}</span>
-                    <span class="nc-tone-faint block" style="font-size: 10px">{{
+                    <span class="nc-tone-faint block" style="font-size: 11px">{{
                         page.props.currentTeam?.roleLabel
                     }}</span>
                 </span>

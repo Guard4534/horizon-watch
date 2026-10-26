@@ -34,7 +34,7 @@ class UpdateAlertRules
     {
         $model = new AlertRule;
         $timestamp = $model->freshTimestamp();
-        $values = ['threshold', 'severity', 'notify_email', 'enabled'];
+        $values = ['threshold', 'severity', 'notify_email', 'enabled', 'for_minutes'];
 
         $row = $model->forceFill([
             'team_id' => $team->id,
@@ -44,6 +44,7 @@ class UpdateAlertRules
             'severity' => $rule->severity,
             'notify_email' => $rule->notifyByEmail,
             'enabled' => $rule->enabled,
+            'for_minutes' => $rule->metric->isStateRule() ? null : $rule->forMinutes,
             'created_at' => $timestamp,
             'updated_at' => $timestamp,
         ])->getAttributes();

@@ -27,6 +27,7 @@ use Illuminate\Support\Collection;
  * @property int $failed_in_window
  * @property int $failed_window_minutes
  * @property int $failed_last_hour
+ * @property bool $failed_last_hour_capped
  * @property int $workers
  * @property int $node_count
  * @property int|null $latency_ms
@@ -44,6 +45,7 @@ use Illuminate\Support\Collection;
     'failed_in_window',
     'failed_window_minutes',
     'failed_last_hour',
+    'failed_last_hour_capped',
     'workers',
     'node_count',
     'latency_ms',
@@ -76,6 +78,7 @@ class EnvironmentSnapshot extends Model
             'status' => EnvironmentStatus::class,
             'error' => ReadingError::class,
             'breaches' => AsEnumCollection::of(AlertRuleMetric::class),
+            'failed_last_hour_capped' => 'boolean',
         ];
     }
 }

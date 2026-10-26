@@ -8,12 +8,12 @@ import PasswordInput from '@/components/PasswordInput.vue';
 import TeamInvitationAlert from '@/components/TeamInvitationAlert.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Spinner } from '@/components/ui/spinner';
+import { invalidField } from '@/lib/fieldErrors';
 import { login, logout } from '@/routes';
 import { accept, decline, register } from '@/routes/invitations';
 
 defineOptions({
     layout: {
-        kicker: 'Invitation',
         title: 'You have been invited',
     },
 });
@@ -56,7 +56,7 @@ const flushOnSignOut = () => router.flushAll();
             data-test="invitation-register-form"
         >
             <div class="nc-field">
-                <label for="email">{{ $t('Email address') }}</label>
+                <label for="email">{{ $t('Email') }}</label>
                 <input
                     id="email"
                     class="nc-input"
@@ -67,7 +67,7 @@ const flushOnSignOut = () => router.flushAll();
             </div>
 
             <div class="nc-field">
-                <label for="name">{{ $t('Full name') }}</label>
+                <label for="name">{{ $t('Name') }}</label>
                 <input
                     id="name"
                     class="nc-input"
@@ -75,21 +75,25 @@ const flushOnSignOut = () => router.flushAll();
                     required
                     autofocus
                     autocomplete="name"
+                    v-bind="invalidField('name', errors.name)"
                 />
-                <InputError :message="errors.name" />
+                <InputError field="name" :message="errors.name" />
             </div>
 
             <div class="nc-field">
                 <label for="password">{{ $t('Password') }}</label>
                 <PasswordInput
                     id="password"
-                    class="nc-input"
                     name="password"
                     required
                     autocomplete="new-password"
-                    :placeholder="$t('at least 10 characters')"
+                    :passwordrules="page.passwordPolicy.rules"
+                    v-bind="invalidField('password', errors.password)"
                 />
-                <InputError :message="errors.password" />
+                <div class="nc-t-2xs nc-tone-faint">
+                    {{ page.passwordPolicy.description }}
+                </div>
+                <InputError field="password" :message="errors.password" />
             </div>
 
             <div class="nc-field">
@@ -98,10 +102,10 @@ const flushOnSignOut = () => router.flushAll();
                 }}</label>
                 <PasswordInput
                     id="password_confirmation"
-                    class="nc-input"
                     name="password_confirmation"
                     required
                     autocomplete="new-password"
+                    :passwordrules="page.passwordPolicy.rules"
                 />
             </div>
 
@@ -126,27 +130,7 @@ const flushOnSignOut = () => router.flushAll();
                 }}
             </p>
 
-            <div
-                class="flex gap-[var(--nc-space-2)]"
-                style="margin-top: var(--nc-space-4)"
-            >
-                <Form
-                    v-bind="accept.form(page.code)"
-                    v-slot="{ processing }"
-                    class="flex-1"
-                    data-test="invitation-accept-form"
-                >
-                    <button
-                        type="submit"
-                        class="nc-btn nc-btn-primary nc-btn-block"
-                        :disabled="processing"
-                        data-test="invitation-accept-button"
-                    >
-                        <Spinner v-if="processing" />
-                        {{ $t('Accept invitation') }}
-                    </button>
-                </Form>
-
+            <div class="nc-actions" style="margin-top: var(--nc-space-4)">
                 <Form
                     v-bind="decline.form(page.code)"
                     v-slot="{ processing }"
@@ -159,6 +143,22 @@ const flushOnSignOut = () => router.flushAll();
                         data-test="invitation-decline-button"
                     >
                         {{ $t('Decline') }}
+                    </button>
+                </Form>
+
+                <Form
+                    v-bind="accept.form(page.code)"
+                    v-slot="{ processing }"
+                    data-test="invitation-accept-form"
+                >
+                    <button
+                        type="submit"
+                        class="nc-btn nc-btn-primary"
+                        :disabled="processing"
+                        data-test="invitation-accept-button"
+                    >
+                        <Spinner v-if="processing" />
+                        {{ $t('Accept invitation') }}
                     </button>
                 </Form>
             </div>
@@ -175,7 +175,7 @@ const flushOnSignOut = () => router.flushAll();
             style="margin-top: var(--nc-space-4)"
             data-test="invitation-sign-in-button"
         >
-            {{ $t('Sign in') }}
+            {{ $t('Log in') }}
         </Link>
 
         <Link
@@ -188,7 +188,7 @@ const flushOnSignOut = () => router.flushAll();
             data-test="invitation-sign-out-button"
         >
             <PhSignOut :size="14" />
-            {{ $t('Sign out and open the link again') }}
+            {{ $t('Log out and open the link again') }}
         </Link>
     </template>
 

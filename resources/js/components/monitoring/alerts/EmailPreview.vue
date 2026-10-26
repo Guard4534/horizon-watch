@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { ruleLabel } from '@/lib/alertRules';
@@ -36,10 +36,14 @@ const src = computed(() =>
             <div
                 class="nc-t-2xs nc-tone-muted mb-[var(--nc-space-2)] flex items-center gap-[7px]"
             >
-                <EnvSwatch :color="alert.color" shape="bar" :size="11" />
                 <span class="min-w-0 truncate"
-                    >{{ alert.applicationName }} / {{ alert.environmentName }} ·
-                    {{ ruleLabel(alert.metric) }}</span
+                    >{{ alert.applicationName }} /
+                    <EnvPill
+                        :name="alert.environmentName"
+                        :type="alert.environmentType"
+                        :size="11"
+                    />
+                    · {{ ruleLabel(alert.metric) }}</span
                 >
             </div>
             <iframe

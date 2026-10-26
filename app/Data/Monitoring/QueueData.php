@@ -2,7 +2,6 @@
 
 namespace App\Data\Monitoring;
 
-use App\Enums\EnvironmentStatus;
 use Spatie\LaravelData\Data;
 
 class QueueData extends Data
@@ -14,6 +13,7 @@ class QueueData extends Data
         public int $pending,
         public int $waitSeconds,
         public ?float $runtimeSeconds,
-        public EnvironmentStatus $status,
+        public bool $waitOverThreshold,
+        public bool $withoutWorkers,
     ) {}
 }

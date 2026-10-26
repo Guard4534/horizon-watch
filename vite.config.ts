@@ -36,6 +36,12 @@ export default defineConfig({
             ],
         },
     },
+    test: {
+        include: ['resources/js/**/*.test.ts'],
+        env: {
+            TZ: 'Europe/Rome',
+        },
+    },
     lint: {
         ignorePatterns: [
             'vendor/**',
@@ -67,7 +73,7 @@ export default defineConfig({
             'tests/Fixtures/Horizon/dashboard.html',
         ],
         sortTailwindcss: {
-            functions: ['clsx', 'cn', 'cva'],
+            functions: ['clsx', 'cn'],
             entryPoint: 'resources/css/app.css',
         },
     },

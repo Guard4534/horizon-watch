@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { router, useForm } from '@inertiajs/vue3';
+import { router, useForm, usePage } from '@inertiajs/vue3';
 import { PhEnvelopeSimple, PhWebhooksLogo } from '@phosphor-icons/vue';
 import { computed, ref, useId, watch } from 'vue';
+import FormErrors from '@/components/FormErrors.vue';
+import InputError from '@/components/InputError.vue';
+import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
+import WarningNotice from '@/components/monitoring/WarningNotice.vue';
 import WebhookSecret from '@/components/monitoring/rules/WebhookSecret.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { hostOf } from '@/lib/environments';
+import { invalidField } from '@/lib/fieldErrors';
+import { formatSeconds } from '@/lib/monitoring';
 import {
     test as testNotification,
     update as updateSettings,
@@ -16,18 +23,21 @@ const {
     newWebhookSecret,
     repeatChoices,
     maxRecipients,
+    previousSecretHours,
     timezones,
 } = defineProps<{
     summary: App.Data.Pages.NotificationSummaryData;
-    settings: App.Data.Monitoring.NotificationSettingsData | null;
+    settings: App.Data.Monitoring.NotificationSettingsData;
     newWebhookSecret: string | null;
     repeatChoices: number[];
     maxRecipients: number;
+    previousSecretHours: number;
     timezones: string[];
 }>();
 
 const slug = useTeamSlug();
 const id = useId();
+const shared = usePage();
 
 type SettingsForm = {
     recipients: string;
@@ -40,12 +50,12 @@ type SettingsForm = {
 
 function received(): SettingsForm {
     return {
-        recipients: settings?.recipients.join(', ') ?? '',
-        webhookUrl: settings?.webhookUrl ?? '',
-        quietFrom: settings?.quietFrom ?? '',
-        quietTo: settings?.quietTo ?? '',
-        timezone: settings?.timezone ?? summary.timezone,
-        repeatMinutes: settings?.repeatMinutes ?? null,
+        recipients: settings.recipients.join(', '),
+        webhookUrl: settings.webhookUrl ?? '',
+        quietFrom: settings.quietFrom ?? '',
+        quietTo: settings.quietTo ?? '',
+        timezone: settings.timezone,
+        repeatMinutes: settings.repeatMinutes,
     };
 }
 
@@ -132,18 +142,43 @@ function sendTest(channel: App.Enums.NotificationChannel): void {
     );
 }
 
-const webhookSaved = computed(
-    () => settings !== null && (settings.webhookUrl ?? '') !== '',
+const webhookSaved = computed(() => (settings.webhookUrl ?? '') !== '');
+
+const movesHost = computed(
+    () =>
+        webhookSaved.value &&
+        form.webhookUrl.trim() !== '' &&
+        hostOf(form.webhookUrl.trim()) !== hostOf(settings.webhookUrl ?? ''),
 );
 </script>
 
 <template>
     <SectionCard :title="$t('Notifications')">
-        <form v-if="settings" novalidate @submit.prevent="save">
+        <div
+            v-if="
+                summary.reachesNobody || shared.props.mailConfigured === false
+            "
+            class="flex flex-col"
+            style="gap: var(--nc-space-2); margin-bottom: var(--nc-space-4)"
+        >
+            <AudienceWarning v-if="summary.reachesNobody" />
+            <WarningNotice
+                v-if="shared.props.mailConfigured === false"
+                :title="$t('Email is not set up')"
+            >
+                {{
+                    $t(
+                        'No alert email, test email included, goes out until whoever runs this panel sets MAIL_HOST. The webhook does not depend on it.',
+                    )
+                }}
+            </WarningNotice>
+        </div>
+
+        <form novalidate @submit.prevent="save">
             <div class="settings-grid">
                 <div class="nc-field wide">
                     <label :for="`${id}-recipients`">{{
-                        $t('Email recipients')
+                        $t('Extra addresses')
                     }}</label>
                     <input
                         :id="`${id}-recipients`"
@@ -154,22 +189,32 @@ const webhookSaved = computed(
                         autocomplete="off"
                         spellcheck="false"
                         placeholder="ops@example.com, oncall@example.com"
-                        :aria-invalid="
-                            recipientErrors.length ? true : undefined
+                        v-bind="
+                            invalidField(
+                                `${id}-recipients`,
+                                recipientErrors.join(' '),
+                            )
                         "
                     />
-                    <div
-                        v-for="message in recipientErrors"
-                        :key="message"
-                        class="field-error"
-                    >
-                        {{ message }}
-                    </div>
+                    <InputError
+                        v-if="recipientErrors.length"
+                        size="sm"
+                        :field="`${id}-recipients`"
+                        :message="recipientErrors.join(' ')"
+                    />
                     <div class="field-hint">
                         {{
                             $t(
                                 'Comma-separated, up to :count addresses, in addition to the members who turned on alert emails',
                                 { count: String(maxRecipients) },
+                            )
+                        }}
+                    </div>
+                    <div class="field-hint">
+                        {{
+                            $tChoice(
+                                '{0} No member has turned on alert emails yet.|{1} One member has turned on alert emails.|[2,*] :count members have turned on alert emails.',
+                                summary.optedInMemberCount,
                             )
                         }}
                     </div>
@@ -185,13 +230,29 @@ const webhookSaved = computed(
                         autocomplete="off"
                         spellcheck="false"
                         placeholder="https://hooks.example.com/horizon"
-                        :aria-invalid="errors.webhookUrl ? true : undefined"
+                        v-bind="
+                            invalidField(`${id}-webhook`, errors.webhookUrl)
+                        "
                     />
-                    <div v-if="errors.webhookUrl" class="field-error">
-                        {{ errors.webhookUrl }}
-                    </div>
+                    <InputError
+                        v-if="errors.webhookUrl"
+                        size="sm"
+                        :field="`${id}-webhook`"
+                        :message="errors.webhookUrl"
+                    />
                     <div class="field-hint">
                         {{ $t('JSON POST with severity, rule and metrics') }}
+                    </div>
+                    <div
+                        v-if="movesHost"
+                        class="field-hint"
+                        style="color: var(--st-warn)"
+                    >
+                        {{
+                            $t(
+                                'Another host gets a new signing secret when you save.',
+                            )
+                        }}
                     </div>
                 </div>
 
@@ -211,7 +272,12 @@ const webhookSaved = computed(
                             autocomplete="off"
                             placeholder="23:00"
                             :aria-label="$t('Quiet hours start')"
-                            :aria-invalid="errors.quietFrom ? true : undefined"
+                            v-bind="
+                                invalidField(
+                                    `${id}-quiet-from`,
+                                    errors.quietFrom,
+                                )
+                            "
                         />
                         <span class="nc-t-xs nc-tone-muted">→</span>
                         <input
@@ -224,15 +290,23 @@ const webhookSaved = computed(
                             autocomplete="off"
                             placeholder="07:00"
                             :aria-label="$t('Quiet hours end')"
-                            :aria-invalid="errors.quietTo ? true : undefined"
+                            v-bind="
+                                invalidField(`${id}-quiet-to`, errors.quietTo)
+                            "
                         />
                     </div>
-                    <div v-if="errors.quietFrom" class="field-error">
-                        {{ errors.quietFrom }}
-                    </div>
-                    <div v-if="errors.quietTo" class="field-error">
-                        {{ errors.quietTo }}
-                    </div>
+                    <InputError
+                        v-if="errors.quietFrom"
+                        size="sm"
+                        :field="`${id}-quiet-from`"
+                        :message="errors.quietFrom"
+                    />
+                    <InputError
+                        v-if="errors.quietTo"
+                        size="sm"
+                        :field="`${id}-quiet-to`"
+                        :message="errors.quietTo"
+                    />
                     <div class="field-hint">
                         {{ $t('criticals still get through') }}
                     </div>
@@ -248,7 +322,7 @@ const webhookSaved = computed(
                         autocomplete="off"
                         spellcheck="false"
                         :list="`${id}-timezones`"
-                        :aria-invalid="errors.timezone ? true : undefined"
+                        v-bind="invalidField(`${id}-timezone`, errors.timezone)"
                     />
                     <datalist :id="`${id}-timezones`">
                         <option
@@ -257,11 +331,18 @@ const webhookSaved = computed(
                             :value="zone"
                         />
                     </datalist>
-                    <div v-if="errors.timezone" class="field-error">
-                        {{ errors.timezone }}
-                    </div>
+                    <InputError
+                        v-if="errors.timezone"
+                        size="sm"
+                        :field="`${id}-timezone`"
+                        :message="errors.timezone"
+                    />
                     <div class="field-hint">
-                        {{ $t('the quiet hours follow this time zone') }}
+                        {{
+                            $t(
+                                'Quiet hours and alert emails use this time zone',
+                            )
+                        }}
                     </div>
                 </div>
 
@@ -273,7 +354,9 @@ const webhookSaved = computed(
                         :id="`${id}-repeat`"
                         v-model="form.repeatMinutes"
                         class="nc-input"
-                        :aria-invalid="errors.repeatMinutes ? true : undefined"
+                        v-bind="
+                            invalidField(`${id}-repeat`, errors.repeatMinutes)
+                        "
                     >
                         <option
                             v-for="minutes in repeatChoices"
@@ -281,8 +364,8 @@ const webhookSaved = computed(
                             :value="minutes"
                         >
                             {{
-                                $t('every :minutes min while open', {
-                                    minutes: String(minutes),
+                                $t('every :interval while open', {
+                                    interval: formatSeconds(minutes * 60),
                                 })
                             }}
                         </option>
@@ -290,9 +373,12 @@ const webhookSaved = computed(
                             {{ $t('first detection only') }}
                         </option>
                     </select>
-                    <div v-if="errors.repeatMinutes" class="field-error">
-                        {{ errors.repeatMinutes }}
-                    </div>
+                    <InputError
+                        v-if="errors.repeatMinutes"
+                        size="sm"
+                        :field="`${id}-repeat`"
+                        :message="errors.repeatMinutes"
+                    />
                     <div class="field-hint">{{ $t('criticals only') }}</div>
                 </div>
             </div>
@@ -308,6 +394,7 @@ const webhookSaved = computed(
                 <WebhookSecret
                     :secret-set="settings.webhookSecretSet"
                     :new-secret="newWebhookSecret"
+                    :previous-secret-hours="previousSecretHours"
                 />
                 <div class="signature">
                     <div class="nc-tone-muted">
@@ -365,81 +452,33 @@ const webhookSaved = computed(
                     <PhWebhooksLogo :size="13" />
                     {{ $t('Send to webhook') }}
                 </button>
-                <div class="ml-auto flex" style="gap: var(--nc-space-2)">
-                    <button
-                        type="button"
-                        class="nc-btn nc-btn-secondary"
-                        :disabled="!form.isDirty || form.processing"
-                        @click="cancel"
-                    >
-                        {{ $t('Cancel') }}
-                    </button>
-                    <button
-                        type="submit"
-                        class="nc-btn nc-btn-primary"
-                        :disabled="!form.isDirty || form.processing"
-                    >
-                        {{ $t('Save') }}
-                    </button>
-                </div>
             </div>
-            <div v-if="testError" class="field-error" role="alert">
-                {{ testError }}
+            <div class="field-hint" style="margin-top: var(--nc-space-2)">
+                {{
+                    $t(
+                        'The test email also goes to you. A test opens no alert and shows up among the notifications sent on the status wall.',
+                    )
+                }}
+            </div>
+            <FormErrors class="mt-[var(--nc-space-2)]" :errors="[testError]" />
+            <div class="nc-actions" style="margin-top: var(--nc-space-4)">
+                <button
+                    type="button"
+                    class="nc-btn nc-btn-secondary"
+                    :disabled="!form.isDirty || form.processing"
+                    @click="cancel"
+                >
+                    {{ $t('Discard changes') }}
+                </button>
+                <button
+                    type="submit"
+                    class="nc-btn nc-btn-primary"
+                    :disabled="!form.isDirty || form.processing"
+                >
+                    {{ $t('Save') }}
+                </button>
             </div>
         </form>
-
-        <div
-            v-else
-            class="nc-t-sm grid"
-            style="
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: var(--nc-space-4);
-            "
-        >
-            <div>
-                <div class="nc-label">{{ $t('Email recipients') }}</div>
-                <div class="nc-num">
-                    {{
-                        $tChoice(
-                            ':count recipient|:count recipients',
-                            summary.recipientCount,
-                        )
-                    }}
-                </div>
-            </div>
-            <div>
-                <div class="nc-label">{{ $t('Webhook') }}</div>
-                <div>
-                    {{
-                        summary.webhookConfigured
-                            ? $t('Webhook configured')
-                            : $t('No webhook')
-                    }}
-                </div>
-            </div>
-            <div>
-                <div class="nc-label">{{ $t('Quiet hours') }}</div>
-                <div class="nc-num">
-                    {{
-                        summary.quietFrom && summary.quietTo
-                            ? `${summary.quietFrom} → ${summary.quietTo} · ${summary.timezone}`
-                            : $t('None')
-                    }}
-                </div>
-            </div>
-            <div>
-                <div class="nc-label">{{ $t('Alert repeat') }}</div>
-                <div>
-                    {{
-                        summary.repeatMinutes === null
-                            ? $t('first detection only')
-                            : $t('every :minutes min while open', {
-                                  minutes: String(summary.repeatMinutes),
-                              })
-                    }}
-                </div>
-            </div>
-        </div>
     </SectionCard>
 </template>
 
@@ -472,14 +511,7 @@ const webhookSaved = computed(
 .field-hint {
     margin-top: 4px;
     font-size: 11px;
-    color: var(--nc-neutral-600);
-}
-
-.field-error {
-    margin-top: 4px;
-    font-size: 11px;
-    line-height: 1.35;
-    color: var(--st-down);
+    color: var(--nc-text-faint);
 }
 
 .signature {

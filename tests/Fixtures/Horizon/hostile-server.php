@@ -25,7 +25,7 @@ if ($rest === 'horizon/api/workload' && $scenario === 'slow-metrics') {
 if (str_starts_with($rest, 'horizon/api/metrics/queues/') && $scenario === 'slow-metrics') {
     header('Content-Type: application/json');
 
-    for ($i = 0; $i < 15 && ! connection_aborted(); $i++) {
+    for ($i = 0; $i < 30 && ! connection_aborted(); $i++) {
         usleep(100_000);
         echo ' ';
         flush();
@@ -79,6 +79,7 @@ if ($rest !== 'horizon/api/stats') {
 switch ($scenario) {
     case 'slow-metrics':
     case 'valid':
+    case 'behind-a-proxy':
     case 'many-queues':
         $json($stats.'"}');
         break;
@@ -108,6 +109,25 @@ switch ($scenario) {
             echo str_repeat('x', 1024 * 1024);
             flush();
         }
+        break;
+
+    case 'gzip':
+        header('Content-Type: application/json');
+        header('Content-Encoding: gzip');
+        echo gzencode($stats.'"}');
+        break;
+
+    case 'gzip-bomb':
+        header('Content-Type: application/json');
+        header('Content-Encoding: gzip');
+        $deflate = deflate_init(ZLIB_ENCODING_GZIP, ['level' => 9]);
+        $chunk = str_repeat(' ', 1024 * 1024);
+
+        for ($i = 0; $i < 128 && ! connection_aborted(); $i++) {
+            echo deflate_add($deflate, $chunk, ZLIB_NO_FLUSH);
+        }
+
+        echo deflate_add($deflate, '', ZLIB_FINISH);
         break;
 
     case 'stalls-mid-body':

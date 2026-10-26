@@ -29,6 +29,7 @@ use Illuminate\Support\Carbon;
  * @property-read NotificationSetting|null $notificationSetting
  * @property-read Collection<int, Alert> $alerts
  * @property-read Collection<int, AlertNotification> $alertNotifications
+ * @property-read Collection<int, MaintenanceWindow> $maintenanceWindows
  */
 #[Fillable(['name', 'slug'])]
 class Team extends Model
@@ -45,12 +46,11 @@ class Team extends Model
                 $team->slug = static::generateUniqueSlugWithin(static::withTrashed(), $team->name);
             }
         });
+    }
 
-        static::updating(function (Team $team) {
-            if ($team->isDirty('name')) {
-                $team->slug = static::generateUniqueSlugWithin(static::withTrashed(), $team->name, $team->id);
-            }
-        });
+    protected static function slugFallback(): string
+    {
+        return 'organization';
     }
 
     /**
@@ -126,6 +126,14 @@ class Team extends Model
     public function alertNotifications(): HasMany
     {
         return $this->hasMany(AlertNotification::class);
+    }
+
+    /**
+     * @return HasMany<MaintenanceWindow, $this>
+     */
+    public function maintenanceWindows(): HasMany
+    {
+        return $this->hasMany(MaintenanceWindow::class);
     }
 
     public function getRouteKeyName(): string

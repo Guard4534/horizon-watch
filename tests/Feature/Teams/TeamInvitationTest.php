@@ -6,6 +6,8 @@ use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
 use App\Notifications\Teams\TeamInvitation as TeamInvitationNotification;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function () {
@@ -127,18 +129,27 @@ test('team invitations can be revoked by owners', function () {
     $this->assertDatabaseHas('team_invitations', ['id' => $invitation->id]);
 });
 
-test('invitation email links to the invitation page and mentions the organization and role', function () {
+test('invitation email links to the invitation page on the public url and mentions the organization and role', function () {
+    config(['app.url' => 'https://watch.example.com/']);
     $invitation = TeamInvitation::factory()->create([
         'team_id' => $this->team->id,
         'role' => TeamRole::Admin,
         'invited_by' => $this->owner->id,
     ]);
 
-    $mail = (new TeamInvitationNotification($invitation))->toMail((object) []);
+    $mail = (new TeamInvitationNotification($invitation, (string) $invitation->plainCode))->toMail((object) []);
 
-    expect($mail->actionUrl)->toBe(route('invitations.show', $invitation->code));
+    expect($mail->actionUrl)->toBe('https://watch.example.com/invitations/'.$invitation->plainCode);
 
     $body = strtolower(implode(' ', $mail->introLines));
     $this->assertStringContainsString(strtolower($this->team->name), $body);
     $this->assertStringContainsString('admin', $body);
+});
+
+test('the invitation email is encrypted on the queue, since it carries the code', function () {
+    $invitation = TeamInvitation::factory()->create(['team_id' => $this->team->id, 'invited_by' => $this->owner->id]);
+
+    expect(new TeamInvitationNotification($invitation, (string) $invitation->plainCode))
+        ->toBeInstanceOf(ShouldQueue::class)
+        ->toBeInstanceOf(ShouldBeEncrypted::class);
 });

@@ -29,6 +29,19 @@ test('the slug is unique within the organization even across applications with s
         ->and($second->slug)->toBe('invoice-desk-two-production');
 });
 
+test('an application with the longest name still gets environment slugs that fit, keeping the environment name', function () {
+    $team = Team::factory()->create();
+    $application = Application::factory()->create(['team_id' => $team->id, 'name' => str_repeat('a', 255)]);
+
+    $production = Environment::factory()->production()->create(['application_id' => $application->id]);
+    $staging = Environment::factory()->staging()->create(['application_id' => $application->id]);
+
+    expect(strlen($application->slug))->toBe(240)
+        ->and(strlen($production->slug))->toBeLessThanOrEqual(255)
+        ->and($production->slug)->toEndWith('-production')
+        ->and($staging->slug)->toEndWith('-staging');
+});
+
 test('the basic auth password is stored encrypted and hidden from arrays', function () {
     $environment = Environment::factory()->production()->create([
         'basic_auth_password' => 'super-secret',
@@ -77,7 +90,7 @@ test('the database refuses a duplicate slug inside one organization', function (
         'team_id' => $team->id,
         'name' => 'other',
         'slug' => $existing->slug,
-        'color' => 'prod',
+        'type' => 'production',
         'horizon_url' => 'https://other.example.com/horizon/api',
         'poll_interval_seconds' => 15,
     ]))->toThrow(UniqueConstraintViolationException::class);

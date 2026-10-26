@@ -28,6 +28,7 @@ compose.prod.yaml
 compose.build.yaml
 docker/8.5
 docker/pgsql
+docker/smoke
 phpunit.xml
 .phpunit.cache
 .phpunit.result.cache

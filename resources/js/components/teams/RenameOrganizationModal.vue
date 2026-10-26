@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Form } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogClose,
@@ -11,8 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { invalidField } from '@/lib/fieldErrors';
 import { update } from '@/routes/teams';
 
 const organization = defineModel<App.Data.Teams.UserTeamData | null>(
@@ -31,7 +29,7 @@ const organization = defineModel<App.Data.Teams.UserTeamData | null>(
                 :key="organization.slug"
                 v-bind="update.form(organization.slug)"
                 class="space-y-6"
-                v-slot="{ errors, processing }"
+                v-slot="{ errors, processing, isDirty }"
                 @success="organization = null"
             >
                 <DialogHeader>
@@ -47,32 +45,42 @@ const organization = defineModel<App.Data.Teams.UserTeamData | null>(
                     </DialogDescription>
                 </DialogHeader>
 
-                <div class="grid gap-2">
-                    <Label for="rename-organization">{{
+                <div class="nc-field">
+                    <label for="rename-organization">{{
                         $t('Organization name')
-                    }}</Label>
-                    <Input
+                    }}</label>
+                    <input
                         id="rename-organization"
+                        class="nc-input"
                         name="name"
                         data-test="rename-team-name"
-                        :default-value="organization.name"
+                        :value="organization.name"
                         required
+                        v-bind="
+                            invalidField('rename-organization', errors.name)
+                        "
                     />
-                    <InputError :message="errors.name" />
+                    <InputError
+                        field="rename-organization"
+                        :message="errors.name"
+                    />
                 </div>
 
-                <DialogFooter class="gap-2">
+                <DialogFooter>
                     <DialogClose as-child>
-                        <Button variant="secondary">{{ $t('Cancel') }}</Button>
+                        <button type="button" class="nc-btn nc-btn-secondary">
+                            {{ $t('Cancel') }}
+                        </button>
                     </DialogClose>
 
-                    <Button
+                    <button
                         type="submit"
+                        class="nc-btn nc-btn-primary"
                         data-test="rename-team-submit"
-                        :disabled="processing"
+                        :disabled="processing || !isDirty"
                     >
                         {{ $t('Save') }}
-                    </Button>
+                    </button>
                 </DialogFooter>
             </Form>
         </DialogContent>

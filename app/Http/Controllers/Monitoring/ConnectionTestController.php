@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Monitoring;
 
 use App\Actions\Monitoring\TestConnection;
 use App\Data\Applications\TestConnectionData;
+use App\Data\Monitoring\ConnectionResultData;
+use App\Enums\ReadingError;
 use App\Externals\Horizon\HorizonTarget;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
 use App\Monitoring\MonitoringRepository;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -23,11 +26,11 @@ class ConnectionTestController extends Controller
         MonitoringRepository $monitoring,
         TestConnection $testConnection,
     ): JsonResponse {
+        $data = null;
+
         if ($request->request->count() === 0) {
             abort_if($monitoring->environment($current_team, $environment->slug) === null, 404);
             Gate::authorize('testConnection', $environment);
-
-            $target = HorizonTarget::fromEnvironment($environment);
         } else {
             Gate::authorize('update', $environment);
 
@@ -36,8 +39,12 @@ class ConnectionTestController extends Controller
             if ($data->changesCredentialsOf($environment)) {
                 Gate::authorize('manageCredentials', $environment);
             }
+        }
 
-            $target = $data->target($environment);
+        try {
+            $target = $data === null ? HorizonTarget::fromEnvironment($environment) : $data->target($environment);
+        } catch (DecryptException) {
+            return response()->json(ConnectionResultData::failed(ReadingError::PasswordUnreadable)->toArray());
         }
 
         return response()->json($testConnection->handle($target)->toArray());

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { trans } from 'laravel-vue-i18n';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
-import { channelIcon } from '@/lib/alerts';
-import { formatElapsed } from '@/lib/monitoring';
+import { channelIcon, deliveryErrorLabel } from '@/lib/alerts';
+import { formatAgo } from '@/lib/monitoring';
 
 defineProps<{
     notifications: App.Data.Monitoring.SentNotificationData[];
@@ -16,23 +16,21 @@ const WEBHOOK_EVENTS: Record<App.Enums.SentNotificationKind, string> = {
     test: 'test',
 };
 
-function errorLabel(error: App.Enums.DeliveryError): string {
-    switch (error) {
-        case 'timeout':
-            return trans('timeout');
-        case 'blocked':
-            return trans('blocked');
-        case 'http_3xx':
-            return trans('http_3xx');
-        case 'http_4xx':
-            return trans('http_4xx');
-        case 'http_5xx':
-            return trans('http_5xx');
-        case 'unreachable':
-            return trans('unreachable');
-        case 'mail':
-            return trans('mail');
+function outcome(
+    notification: App.Data.Monitoring.SentNotificationData,
+): string | null {
+    if (notification.status === 'sent') {
+        return null;
     }
+
+    const status =
+        notification.status === 'failed'
+            ? trans('not delivered')
+            : trans('not sent');
+
+    return notification.error
+        ? `${status} · ${deliveryErrorLabel(notification.error, notification.httpStatus)}`
+        : status;
 }
 
 function prefix(
@@ -106,20 +104,17 @@ function text(
                         }}
                     </div>
                     <div
-                        v-if="
-                            notification.target ||
-                            notification.status === 'failed'
-                        "
+                        v-if="notification.target || outcome(notification)"
                         class="nc-t-2xs nc-tone-faint flex items-center gap-[6px]"
                     >
                         <span
-                            v-if="notification.status === 'failed'"
-                            class="nc-tone-down flex-none"
-                            >{{
-                                notification.error
-                                    ? `${$t('not delivered')} · ${errorLabel(notification.error)}`
-                                    : $t('not delivered')
-                            }}</span
+                            v-if="outcome(notification)"
+                            class="flex-none"
+                            :class="{
+                                'nc-tone-down':
+                                    notification.status === 'failed',
+                            }"
+                            >{{ outcome(notification) }}</span
                         >
                         <span
                             v-if="notification.target"
@@ -129,7 +124,7 @@ function text(
                     </div>
                 </div>
                 <span class="nc-num nc-t-2xs nc-tone-faint flex-none">{{
-                    formatElapsed(notification.minutesAgo)
+                    formatAgo(notification.minutesAgo * 60)
                 }}</span>
             </div>
         </div>

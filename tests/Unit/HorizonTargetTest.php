@@ -1,6 +1,7 @@
 <?php
 
 use App\Externals\Horizon\HorizonTarget;
+use App\Support\HorizonUrl;
 
 test('the api url is built from the dashboard url however it was pasted', function (string $dashboardUrl) {
     $target = new HorizonTarget(dashboardUrl: $dashboardUrl, username: null, password: null);
@@ -12,6 +13,18 @@ test('the api url is built from the dashboard url however it was pasted', functi
     'trailing slash' => 'https://shop.example.com/horizon/',
     'api pasted' => 'https://shop.example.com/horizon/api',
     'api pasted with a slash' => 'https://shop.example.com/horizon/api/',
+    'an api endpoint pasted' => 'https://shop.example.com/horizon/api/stats',
+]);
+
+test('a Horizon served at /api keeps it, as the stored URL does', function (string $dashboardUrl, string $stats) {
+    $target = new HorizonTarget(dashboardUrl: $dashboardUrl, username: null, password: null);
+
+    expect($target->apiUrl('stats'))->toBe($stats)
+        ->and($target->apiUrl('stats'))->toBe(HorizonUrl::normalize($dashboardUrl).'/api/stats');
+})->with([
+    'at the root of the host' => ['https://shop.example.com/api', 'https://shop.example.com/api/api/stats'],
+    'with its api pasted' => ['https://shop.example.com/api/api', 'https://shop.example.com/api/api/stats'],
+    'under an api segment' => ['https://shop.example.com/api/horizon', 'https://shop.example.com/api/horizon/api/stats'],
 ]);
 
 test('a dashboard path that only contains "api" is left alone', function () {

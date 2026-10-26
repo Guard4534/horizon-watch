@@ -18,7 +18,7 @@ test('admins have every permission except deleting the team', function () {
         TeamPermission::ManageCredentials,
         TeamPermission::ManageAlertRules,
         TeamPermission::MuteAlert,
-        TeamPermission::HandleAnomaly,
+        TeamPermission::HandleAlert,
         TeamPermission::TestConnection,
     ]);
 });
@@ -26,7 +26,7 @@ test('admins have every permission except deleting the team', function () {
 test('members can only act on alerts', function () {
     expect(TeamRole::Member->permissions())->toEqualCanonicalizing([
         TeamPermission::MuteAlert,
-        TeamPermission::HandleAnomaly,
+        TeamPermission::HandleAlert,
         TeamPermission::TestConnection,
     ]);
 });

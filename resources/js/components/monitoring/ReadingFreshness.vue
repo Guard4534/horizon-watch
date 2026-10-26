@@ -1,15 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
-    formatAge,
+    readingErrorLabel,
     secondsSince,
 } from '@/components/monitoring/environment/readings';
+import { formatSeconds } from '@/lib/monitoring';
 
-const { lastReadingAt, stale, pollingEnabled, readingError } = defineProps<{
+const {
+    lastReadingAt,
+    stale,
+    pollingEnabled,
+    readingError,
+    hideReason = false,
+} = defineProps<{
     lastReadingAt: string | null;
     stale: boolean;
     pollingEnabled: boolean;
     readingError: App.Enums.ReadingError | null;
+    hideReason?: boolean;
 }>();
 
 const now = ref(Date.now());
@@ -22,12 +30,18 @@ onMounted(() => {
 onUnmounted(() => clearInterval(timer));
 
 const age = computed(() =>
-    lastReadingAt ? formatAge(secondsSince(lastReadingAt, now.value)) : null,
+    lastReadingAt
+        ? formatSeconds(secondsSince(lastReadingAt, now.value), 1)
+        : null,
 );
 
 const tone = computed(() => {
     if (!pollingEnabled) {
         return 'var(--nc-neutral-400)';
+    }
+
+    if (hideReason) {
+        return 'var(--nc-neutral-500)';
     }
 
     if (readingError) {
@@ -43,25 +57,22 @@ const tone = computed(() => {
         <template v-if="!pollingEnabled">{{
             $t('Collection paused')
         }}</template>
-        <template v-else-if="readingError === 'unauthorized'">{{
-            $t('Horizon refused the credentials')
+        <template v-else-if="readingError !== null && !hideReason">{{
+            readingErrorLabel(readingError)
         }}</template>
-        <template v-else-if="readingError === 'not_horizon'">{{
-            $t('The address does not answer like Horizon')
+        <template v-else-if="stale && !hideReason">{{
+            $t('Not updated')
         }}</template>
-        <template v-else-if="readingError === 'blocked'">{{
-            $t('This address is not allowed')
-        }}</template>
-        <template v-else-if="readingError === 'unreachable'">{{
-            $t('Horizon does not answer')
-        }}</template>
-        <template v-else-if="stale">{{ $t('Not updated') }}</template>
         <template v-else-if="age">{{
             $t('Last reading :time ago', { time: age })
         }}</template>
         <template v-else>{{ $t('No reading yet') }}</template>
         <template
-            v-if="age && (!pollingEnabled || readingError !== null || stale)"
+            v-if="
+                age &&
+                (!pollingEnabled ||
+                    (!hideReason && (readingError !== null || stale)))
+            "
         >
             ·
             <span class="nc-tone-muted">{{

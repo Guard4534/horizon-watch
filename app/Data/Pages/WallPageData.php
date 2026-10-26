@@ -15,7 +15,7 @@ class WallPageData extends Data
         /** @var array<int, EnvironmentData> */
         public array $environments,
         /** @var array<int, AlertData> */
-        public array $anomalies,
+        public array $alerts,
         /** @var array<int, int> */
         public array $throughput,
         public SeriesGridData $grid,
@@ -23,5 +23,9 @@ class WallPageData extends Data
         /** @var array<int, SentNotificationData> */
         public array $notifications,
         public int $applicationCount,
+        public bool $alertsReachNobody,
+        public bool $canManageAlertRules,
+        /** @var array<int, array{value: string, label: string}> */
+        public array $types,
     ) {}
 }

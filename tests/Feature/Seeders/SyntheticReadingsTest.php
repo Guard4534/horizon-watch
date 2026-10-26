@@ -90,7 +90,7 @@ test('the scripted incidents are always there, keyed by slug', function (string 
     ['Billing Sync', 'preprod', 'billing-sync-preprod', EnvironmentStatus::Degraded, AlertRuleMetric::JobRuntime],
 ]);
 
-test('the paused incident opens the pause anomaly', function () {
+test('the paused incident opens the pause alert', function () {
     $environment = syntheticEnvironment(Team::factory()->create(), 'Acme Shop', 'staging');
 
     $this->readings->seed($environment, $this->until);

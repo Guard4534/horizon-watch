@@ -5,8 +5,10 @@ use App\Http\Controllers\Monitoring\AlertController;
 use App\Http\Controllers\Monitoring\AlertRuleController;
 use App\Http\Controllers\Monitoring\AlertSettingsController;
 use App\Http\Controllers\Monitoring\ApplicationController;
+use App\Http\Controllers\Monitoring\ConfigurationController;
 use App\Http\Controllers\Monitoring\ConnectionTestController;
 use App\Http\Controllers\Monitoring\EnvironmentController;
+use App\Http\Controllers\Monitoring\MaintenanceWindowController;
 use App\Http\Controllers\Monitoring\MeController;
 use App\Http\Controllers\Monitoring\MemberController;
 use App\Http\Controllers\Monitoring\WallController;
@@ -61,6 +63,11 @@ Route::post('environments/{environment}/test-connection', [ConnectionTestControl
     ->scopeBindings()
     ->name('environments.test-connection');
 
+Route::post('environments/{environment}/silence', [MaintenanceWindowController::class, 'silence'])
+    ->middleware('can:muteAlert,current_team')
+    ->scopeBindings()
+    ->name('environments.silence');
+
 Route::get('environments/{environment}/edit', [EnvironmentController::class, 'edit'])
     ->middleware(EnsureTeamMembership::class.':admin')
     ->scopeBindings()
@@ -81,6 +88,9 @@ Route::patch('members/{user}', [MemberController::class, 'update'])
 Route::delete('members/{user}', [MemberController::class, 'destroy'])
     ->middleware(EnsureTeamMembership::class.':admin')
     ->name('members.destroy');
+Route::post('members/{user}/ownership', [MemberController::class, 'transferOwnership'])
+    ->middleware(EnsureTeamMembership::class.':owner')
+    ->name('members.transfer-ownership');
 
 Route::get('alerts', [AlertController::class, 'index'])->name('alerts.index');
 Route::get('alert-rules/{scope?}', [AlertRuleController::class, 'index'])->name('alert-rules.index');
@@ -97,7 +107,20 @@ Route::middleware('can:manageAlertRules,current_team')->group(function () {
         ->name('alert-settings.test');
 });
 
+Route::middleware('can:transferConfiguration,current_team')->group(function () {
+    Route::get('configuration/export', [ConfigurationController::class, 'download'])->name('configuration.download');
+    Route::get('configuration/import', [ConfigurationController::class, 'show'])->name('configuration.show');
+    Route::post('configuration/import/file', [ConfigurationController::class, 'upload'])->name('configuration.upload');
+    Route::delete('configuration/import/file', [ConfigurationController::class, 'discard'])->name('configuration.discard');
+    Route::post('configuration/import', [ConfigurationController::class, 'apply'])->name('configuration.apply');
+});
+
 Route::post('alerts/{alert}/mute', [AlertActionController::class, 'mute'])->name('alerts.mute');
 Route::delete('alerts/{alert}/mute', [AlertActionController::class, 'unmute'])->name('alerts.unmute');
 Route::post('alerts/{alert}/handle', [AlertActionController::class, 'handle'])->name('alerts.handle');
 Route::get('alerts/{alert}/preview', [AlertActionController::class, 'preview'])->name('alerts.preview');
+
+Route::middleware('can:muteAlert,current_team')->group(function () {
+    Route::post('maintenance-windows', [MaintenanceWindowController::class, 'store'])->name('maintenance-windows.store');
+    Route::delete('maintenance-windows/{window}', [MaintenanceWindowController::class, 'destroy'])->name('maintenance-windows.destroy');
+});

@@ -40,8 +40,13 @@ const { startsWith } = useCurrentPath();
             <BrandMark />
         </div>
 
-        <nav class="flex flex-col gap-[2px]">
+        <nav
+            v-if="slug"
+            class="flex flex-col gap-[2px]"
+            aria-labelledby="sidebar-monitoring"
+        >
             <div
+                id="sidebar-monitoring"
                 class="nc-label"
                 style="padding: 0 var(--nc-space-2) var(--nc-space-2)"
             >
@@ -70,8 +75,13 @@ const { startsWith } = useCurrentPath();
             />
         </nav>
 
-        <nav class="flex flex-col gap-[2px]">
+        <nav
+            v-if="slug"
+            class="flex flex-col gap-[2px]"
+            aria-labelledby="sidebar-organization"
+        >
             <div
+                id="sidebar-organization"
                 class="nc-label"
                 style="padding: 0 var(--nc-space-2) var(--nc-space-2)"
             >
@@ -94,6 +104,13 @@ const { startsWith } = useCurrentPath();
         <div class="mt-auto flex flex-col" style="gap: var(--nc-space-3)">
             <TeamSwitcher />
             <NavUser />
+            <div
+                v-if="page.props.version"
+                class="nc-t-2xs nc-tone-faint nc-num truncate"
+                style="padding: 0 var(--nc-space-2)"
+            >
+                Horizon Watch {{ page.props.version }}
+            </div>
         </div>
     </aside>
 </template>

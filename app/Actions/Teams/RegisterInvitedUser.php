@@ -18,12 +18,12 @@ class RegisterInvitedUser
                 ->firstOrFail();
 
             abort_if(User::where('email', $locked->email)->exists(), 409);
+            abort_unless($locked->isPending(), 410);
 
             $user = User::create([
                 'name' => $data->name,
                 'email' => $locked->email,
                 'password' => $data->password,
-                'email_verified_at' => now(),
             ]);
 
             $acceptInvitation->handle($locked, $user);

@@ -20,6 +20,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Monitoring\ConfiguredMonitoringRepository;
 use App\Monitoring\MonitoringRepository;
+use App\Queries\ApplicationListQuery;
 use App\Queries\WallQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -115,7 +116,7 @@ test('an application with no visible environment does not appear, even though it
     expect($applications)->toHaveCount(1)
         ->and($applications[0]->id)->toBe($alpha->slug);
 
-    expect(app(WallQuery::class)->handle($this->team)->applicationCount)->toBe(1);
+    expect(app(WallQuery::class)->handle($this->team, $this->user)->applicationCount)->toBe(1);
 });
 
 test('an admin sees an application with zero environments, so they can still reach it', function () {
@@ -242,7 +243,7 @@ test('an environment reads its latest stored reading', function () {
         ->and($data->readingError)->toBeNull();
 });
 
-test('an environment never read has nothing to say, then does not answer once three intervals pass', function () {
+test('an environment never read has nothing to say, then turns stale once three intervals pass', function () {
     $application = Application::factory()->for($this->team)->create();
     $environment = Environment::factory()->for($application)->production()->create(['poll_interval_seconds' => 15]);
 
@@ -256,7 +257,7 @@ test('an environment never read has nothing to say, then does not answer once th
     $this->repository = freshMonitoringRepository();
     $data = $this->repository->environment($this->team, $environment->slug);
 
-    expect($data->status)->toBe(EnvironmentStatus::Unreachable)
+    expect($data->status)->toBe(EnvironmentStatus::Stale)
         ->and([$data->pending, $data->maxWaitSeconds, $data->failedInWindow, $data->workers, $data->jobsPerMinute, $data->nodeCount])
         ->toBe([0, 0, 0, 0, 0, 0])
         ->and($data->failedWindowMinutes)->toBe(10080)
@@ -281,9 +282,47 @@ test('an environment goes stale after three silent intervals and keeps its last 
     $data = $this->repository->environment($this->team, $environment->slug);
 
     expect($data->stale)->toBeTrue()
-        ->and($data->status)->toBe(EnvironmentStatus::Active)
-        ->and($data->workers)->toBe(4);
+        ->and($data->status)->toBe(EnvironmentStatus::Stale)
+        ->and($data->workers)->toBe(4)
+        ->and($this->repository->nodes($this->team, $environment->slug)[0]->status ?? null)->toBe(EnvironmentStatus::Active);
 });
+
+test('a stale environment is a problem everywhere, not up', function () {
+    $application = Application::factory()->for($this->team)->create(['name' => 'Alpha']);
+    $stale = Environment::factory()->for($application)->production()->create(['poll_interval_seconds' => 15]);
+    $fresh = Environment::factory()->for($application)->staging()->create(['poll_interval_seconds' => 15]);
+    Readings::record($stale, EnvironmentStatus::Degraded, snapshot: ['captured_at' => now()->subMinutes(5)]);
+    Readings::record($fresh);
+    $this->actingAs($this->user);
+
+    $wall = app(WallQuery::class)->handle($this->team, $this->user);
+    $applications = app(ApplicationListQuery::class)->handle($this->team, $this->user);
+
+    expect(array_map(fn ($environment) => [$environment->id, $environment->status], $wall->environments))->toBe([
+        [$stale->slug, EnvironmentStatus::Stale],
+        [$fresh->slug, EnvironmentStatus::Active],
+    ])
+        ->and($wall->kpis->environmentsHealthy)->toBe(1)
+        ->and($wall->kpis->environmentsNeedingAttention)->toBe(1)
+        ->and($applications->groups[0]->attentionCount)->toBe(1);
+});
+
+test('a stale environment last known down stays down and is not counted as up', function (EnvironmentStatus $status) {
+    $application = Application::factory()->for($this->team)->create();
+    $environment = Environment::factory()->for($application)->production()->create(['poll_interval_seconds' => 15]);
+    Readings::record($environment, $status, snapshot: ['captured_at' => now()->subMinutes(5)]);
+    $this->actingAs($this->user);
+
+    $data = $this->repository->environment($this->team, $environment->slug);
+    $wall = app(WallQuery::class)->handle($this->team, $this->user);
+
+    expect($data->stale)->toBeTrue()
+        ->and($data->status)->toBe($status)
+        ->and($wall->kpis->environmentsHealthy)->toBe(0)->and($wall->kpis->environmentsNeedingAttention)->toBe(1);
+})->with([
+    'unreachable' => [EnvironmentStatus::Unreachable],
+    'inactive' => [EnvironmentStatus::Inactive],
+]);
 
 test('a paused collection shows the last reading and is never stale', function () {
     $application = Application::factory()->for($this->team)->create();
@@ -318,8 +357,30 @@ test('a failed reading reports its reason and keeps the previous detail under th
         ->and($nodes)->toHaveCount(1)
         ->and($nodes[0]->status)->toBe(EnvironmentStatus::Unreachable)
         ->and($queues)->toHaveCount(3)
-        ->and(collect($queues)->every(fn ($queue) => $queue->status === EnvironmentStatus::Unreachable))->toBeTrue();
+        ->and(collect($queues)->every(fn ($queue) => ! $queue->waitOverThreshold && ! $queue->withoutWorkers))->toBeTrue();
 });
+
+test('queues are flagged only while the collection is on and the last reading is not down', function (EnvironmentStatus $status, bool $pollingEnabled, bool $flagged) {
+    $application = Application::factory()->for($this->team)->create();
+    $environment = Environment::factory()->for($application)->production()->create(['polling_enabled' => $pollingEnabled]);
+    Readings::record($environment, $status, state: [
+        'queues' => [
+            ['name' => 'default', 'supervisor' => null, 'workers' => 0, 'pending' => 5, 'waitSeconds' => 500, 'runtimeSeconds' => null],
+        ],
+    ]);
+
+    $queues = $this->repository->queues($this->team, $environment->slug);
+
+    expect($queues)->toHaveCount(1)
+        ->and($queues[0]->waitOverThreshold)->toBe($flagged)
+        ->and($queues[0]->withoutWorkers)->toBe($flagged);
+})->with([
+    'active' => [EnvironmentStatus::Active, true, true],
+    'degraded' => [EnvironmentStatus::Degraded, true, true],
+    'unreachable' => [EnvironmentStatus::Unreachable, true, false],
+    'inactive' => [EnvironmentStatus::Inactive, true, false],
+    'collection paused' => [EnvironmentStatus::Degraded, false, false],
+]);
 
 test('nodes and queues come from the stored detail', function () {
     $application = Application::factory()->for($this->team)->create();
@@ -345,11 +406,11 @@ test('nodes and queues come from the stored detail', function () {
         ['hostname' => 'queue-2.example.com', 'status' => 'paused', 'workers' => 0, 'supervisorCount' => 1, 'queueCount' => 1, 'seenSecondsAgo' => 0],
     ]);
 
-    expect(array_map(fn ($queue) => [$queue->name, $queue->supervisor, $queue->runtimeSeconds, $queue->status], $queues))->toBe([
-        ['default', 'supervisor-1', 0.25, EnvironmentStatus::Active],
-        ['emails', null, null, EnvironmentStatus::Degraded],
-        ['reports', 'supervisor-2', 2.0, EnvironmentStatus::Degraded],
-        ['imports', 'supervisor-2', 1.5, EnvironmentStatus::Degraded],
+    expect(array_map(fn ($queue) => [$queue->name, $queue->supervisor, $queue->runtimeSeconds, $queue->waitOverThreshold, $queue->withoutWorkers], $queues))->toBe([
+        ['default', 'supervisor-1', 0.25, false, false],
+        ['emails', null, null, false, true],
+        ['reports', 'supervisor-2', 2.0, true, false],
+        ['imports', 'supervisor-2', 1.5, false, false],
     ]);
 });
 
@@ -411,7 +472,7 @@ test('the trend is read once for every environment on the page, whatever their n
         DB::flushQueryLog();
         freshMonitoringRepository();
         DB::enableQueryLog();
-        $page = app(WallQuery::class)->handle($this->team);
+        $page = app(WallQuery::class)->handle($this->team, $this->user);
         DB::disableQueryLog();
 
         return [$page, collect(DB::getQueryLog())->pluck('query')];
@@ -443,7 +504,7 @@ test('the trend query only ever asks for what the viewer watches', function () {
     freshMonitoringRepository();
 
     DB::enableQueryLog();
-    app(WallQuery::class)->handle($this->team);
+    app(WallQuery::class)->handle($this->team, $this->user);
 
     $trend = collect(DB::getQueryLog())->filter(fn (array $query) => str_contains($query['query'], 'avg(pending)'))->sole();
 
@@ -463,7 +524,7 @@ test('failed jobs and long-running jobs are dated from the stored timestamps', f
         'pending_jobs' => [
             ['job' => 'App\\Jobs\\ShortOne', 'queue' => 'default', 'reservedAt' => '2026-09-17T09:58:00+00:00'],
             ['job' => 'App\\Jobs\\ExportLedger', 'queue' => 'reports', 'reservedAt' => '2026-09-17T09:57:59+00:00'],
-            ['job' => 'App\\Jobs\\RebuildIndex', 'queue' => 'default', 'reservedAt' => '2026-09-17T09:40:00+00:00'],
+            ['job' => 'App\\Jobs\\RebuildIndex', 'queue' => 'default', 'reservedAt' => '2026-09-17T11:40:00+02:00'],
         ],
     ]);
 
@@ -480,8 +541,8 @@ test('failed jobs and long-running jobs are dated from the stored timestamps', f
         ]);
 
     expect(array_map(fn ($job) => $job->toArray(), $running))->toBe([
-        ['job' => 'App\\Jobs\\RebuildIndex', 'queue' => 'default', 'elapsedSeconds' => 1200, 'startedAt' => '09:40'],
-        ['job' => 'App\\Jobs\\ExportLedger', 'queue' => 'reports', 'elapsedSeconds' => 121, 'startedAt' => '09:57'],
+        ['job' => 'App\\Jobs\\RebuildIndex', 'queue' => 'default', 'elapsedSeconds' => 1200, 'startedAt' => '2026-09-17T09:40:00+00:00'],
+        ['job' => 'App\\Jobs\\ExportLedger', 'queue' => 'reports', 'elapsedSeconds' => 121, 'startedAt' => '2026-09-17T09:57:59+00:00'],
     ]);
 });
 
@@ -562,20 +623,28 @@ test('the stored states are read once per view, however many panels ask', functi
     DB::enableQueryLog();
 
     $this->repository->environment($this->team, $slug);
-    $this->repository->environments($this->team);
     $this->repository->nodes($this->team, $slug);
     $this->repository->queues($this->team, $slug);
     $this->repository->failedJobs($this->team, $slug);
     $this->repository->longRunningJobs($this->team, $slug);
+    $this->repository->liveAlertsIn($this->team, $slug);
+    $this->repository->alertRules($this->team, 'production');
+
+    $states = fn () => collect(DB::getQueryLog())->pluck('query')->filter(fn (string $query) => str_contains($query, 'from "environment_states"'));
+    $trends = fn () => collect(DB::getQueryLog())->pluck('query')->filter(fn (string $query) => str_contains($query, 'avg(pending)'));
+
+    expect($states())->toHaveCount(1)
+        ->and($trends())->toHaveCount(1);
+
+    $this->repository->environments($this->team);
     $this->repository->openAlerts($this->team);
     $this->repository->openAlerts($this->team);
     $this->repository->configurableEnvironments($this->team);
+    $this->repository->ruleScopes($this->team);
 
-    $queries = collect(DB::getQueryLog())->pluck('query');
-
-    expect($queries->filter(fn (string $query) => str_contains($query, 'from "environment_states"')))->toHaveCount(1)
-        ->and($queries->filter(fn (string $query) => str_contains($query, 'avg(pending)')))->toHaveCount(1)
-        ->and($queries->filter(fn (string $query) => str_contains($query, 'from "alerts"')))->toHaveCount(1);
+    expect($states())->toHaveCount(2)
+        ->and($trends())->toHaveCount(2)
+        ->and(collect(DB::getQueryLog())->pluck('query')->filter(fn (string $query) => str_contains($query, 'from "alerts" where "alerts"."team_id"') && ! str_contains($query, '"alerts"."environment_id" = ?')))->toHaveCount(1);
 });
 
 test('with zero applications every method returns an empty result without error', function () {
@@ -757,7 +826,7 @@ test('the wall reads its open alerts once, and the sidebar badge counts them in 
 
     $this->get(route('wall', ['current_team' => $this->team->slug]))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('openAlertCount', 1)->has('page.anomalies', 1));
+        ->assertInertia(fn ($page) => $page->where('openAlertCount', 1)->has('page.alerts', 1));
 
     $reads = collect(DB::getQueryLog())->filter(fn (array $query) => str_contains($query['query'], 'from "alerts"'))->pluck('query');
 
@@ -808,4 +877,40 @@ test('the configuration view reads states and trends only for watched rows', fun
         ->and($queries)->toHaveCount(2)
         ->and($queries->every(fn (array $query) => in_array($watched->id, $query['bindings'], true)
             && ! in_array($hidden->id, $query['bindings'], true)))->toBeTrue();
+});
+
+test('the rule scopes need the environment names, not their readings', function () {
+    $application = Application::factory()->for($this->team)->create();
+    $environments = Environment::factory()->for($application)->count(2)->sequence(['name' => 'production'], ['name' => 'staging'])->create();
+    Environment::factory()->for(Application::factory()->for($this->team))->create(['name' => 'Production']);
+    $environments->each(fn (Environment $environment) => Readings::record($environment));
+
+    DB::enableQueryLog();
+
+    $scopes = $this->repository->ruleScopes($this->team);
+    $this->repository->hasRuleScope($this->team, 'staging');
+    $this->repository->alertRules($this->team, 'production');
+    $this->repository->ruleScopes($this->team);
+
+    $queries = collect(DB::getQueryLog())->pluck('query');
+
+    expect(array_map(fn ($scope) => [$scope->id, $scope->environmentCount], $scopes))
+        ->toBe([['organization', 3], ['production', 2], ['staging', 1]])
+        ->and($queries->filter(fn (string $query) => str_contains($query, 'environment_states') || str_contains($query, 'environment_snapshots')))->toBeEmpty()
+        ->and($queries->filter(fn (string $query) => str_contains($query, 'from "environments"')))->toHaveCount(1);
+});
+
+test('the live alerts of an environment put its most severe open one first and its muted ones last, whatever the other environments hold', function () {
+    $application = Application::factory()->for($this->team)->create();
+    [$production, $staging] = Environment::factory()->for($application)->count(2)->sequence(['name' => 'production'], ['name' => 'staging'])->create()->all();
+    $warning = Alert::factory()->for($production)->warning()->create(['metric' => AlertRuleMetric::QueuePending, 'opened_at' => now()->subMinute()]);
+    $critical = Alert::factory()->for($production)->critical()->create(['metric' => AlertRuleMetric::QueueMaxWait, 'opened_at' => now()->subMinutes(5)]);
+    $muted = Alert::factory()->for($production)->critical()->create(['metric' => AlertRuleMetric::EndpointUnreachable, 'muted_indefinitely' => true]);
+    Alert::factory()->for($staging)->critical()->create(['metric' => AlertRuleMetric::QueueMaxWait]);
+
+    $alerts = $this->repository->liveAlertsIn($this->team, $production->slug);
+
+    expect(array_map(fn ($alert) => $alert->id, $alerts))->toBe([$critical->id, $warning->id, $muted->id])
+        ->and(array_unique(array_map(fn ($alert) => $alert->environmentId, $alerts)))->toBe([$production->slug])
+        ->and($this->repository->liveAlertsIn($this->team, 'nowhere'))->toBe([]);
 });

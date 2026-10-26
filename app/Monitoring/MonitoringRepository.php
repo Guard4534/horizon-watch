@@ -9,6 +9,8 @@ use App\Data\Monitoring\ApplicationData;
 use App\Data\Monitoring\EnvironmentData;
 use App\Data\Monitoring\FailedJobData;
 use App\Data\Monitoring\LongRunningJobData;
+use App\Data\Monitoring\MaintenanceTargetData;
+use App\Data\Monitoring\MaintenanceWindowData;
 use App\Data\Monitoring\NodeData;
 use App\Data\Monitoring\NotificationSettingsData;
 use App\Data\Monitoring\QueueData;
@@ -16,6 +18,7 @@ use App\Data\Monitoring\RuleScopeData;
 use App\Data\Monitoring\SentNotificationData;
 use App\Data\Monitoring\SeriesGridData;
 use App\Data\Pages\AlertCountsData;
+use App\Data\Pages\NotificationSummaryData;
 use App\Enums\AlertState;
 use App\Enums\SeriesRange;
 use App\Models\Team;
@@ -76,6 +79,12 @@ interface MonitoringRepository
     public function openAlerts(Team $team): array;
 
     /** @return array<int, AlertData> */
+    public function liveAlertsIn(Team $team, string $environmentId): array;
+
+    /** @return array<int, AlertData> */
+    public function liveAlertsOf(Team $team, string $application): array;
+
+    /** @return array<int, AlertData> */
     public function latestResolvedAlerts(Team $team, string $application, int $limit): array;
 
     public function alertCounts(Team $team): AlertCountsData;
@@ -92,4 +101,12 @@ interface MonitoringRepository
     public function alertRules(Team $team, string $scope): array;
 
     public function notificationSettings(Team $team): NotificationSettingsData;
+
+    public function notificationSummary(Team $team): NotificationSummaryData;
+
+    /** @return array<int, MaintenanceWindowData> */
+    public function maintenanceWindows(Team $team): array;
+
+    /** @return array<int, MaintenanceTargetData> */
+    public function maintenanceTargets(Team $team): array;
 }

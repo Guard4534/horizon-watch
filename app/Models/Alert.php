@@ -5,11 +5,12 @@ namespace App\Models;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use Carbon\CarbonImmutable;
 use Database\Factories\AlertFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -24,9 +25,9 @@ use Illuminate\Support\Carbon;
  * @property AlertSeverity $severity
  * @property string $application_name
  * @property string $environment_name
- * @property EnvironmentColor $environment_color
+ * @property EnvironmentType $environment_type
  * @property float $threshold
- * @property string $unit
+ * @property-read string $unit
  * @property float|null $value
  * @property array<string, mixed> $detail
  * @property CarbonImmutable $opened_at
@@ -35,10 +36,10 @@ use Illuminate\Support\Carbon;
  * @property CarbonImmutable|null $muted_until
  * @property bool $muted_indefinitely
  * @property int|null $muted_by
+ * @property int|null $maintenance_window_id
  * @property CarbonImmutable|null $handled_at
  * @property int|null $handled_by
  * @property CarbonImmutable|null $last_notified_at
- * @property bool $notified
  * @property CarbonImmutable|null $digested_at
  * @property CarbonImmutable|null $resolution_notified_at
  * @property Carbon|null $created_at
@@ -55,9 +56,8 @@ use Illuminate\Support\Carbon;
     'severity',
     'application_name',
     'environment_name',
-    'environment_color',
+    'environment_type',
     'threshold',
-    'unit',
     'value',
     'detail',
     'opened_at',
@@ -66,10 +66,10 @@ use Illuminate\Support\Carbon;
     'muted_until',
     'muted_indefinitely',
     'muted_by',
+    'maintenance_window_id',
     'handled_at',
     'handled_by',
     'last_notified_at',
-    'notified',
     'digested_at',
     'resolution_notified_at',
 ])]
@@ -84,7 +84,6 @@ class Alert extends Model
     protected $attributes = [
         'detail' => '{}',
         'muted_indefinitely' => false,
-        'notified' => false,
     ];
 
     public function state(CarbonImmutable $now): AlertState
@@ -94,6 +93,19 @@ class Alert extends Model
             $this->muted_indefinitely, $this->muted_until?->gt($now) === true => AlertState::Muted,
             default => AlertState::Open,
         };
+    }
+
+    public function wasNotified(): bool
+    {
+        return $this->last_notified_at !== null;
+    }
+
+    /**
+     * @return Attribute<string, never>
+     */
+    protected function unit(): Attribute
+    {
+        return Attribute::get(fn (): string => $this->metric->unit());
     }
 
     /**
@@ -169,7 +181,7 @@ class Alert extends Model
         return [
             'metric' => AlertRuleMetric::class,
             'severity' => AlertSeverity::class,
-            'environment_color' => EnvironmentColor::class,
+            'environment_type' => EnvironmentType::class,
             'threshold' => 'float',
             'value' => 'float',
             'detail' => 'array',
@@ -180,7 +192,6 @@ class Alert extends Model
             'muted_indefinitely' => 'boolean',
             'handled_at' => 'immutable_datetime',
             'last_notified_at' => 'immutable_datetime',
-            'notified' => 'boolean',
             'digested_at' => 'immutable_datetime',
             'resolution_notified_at' => 'immutable_datetime',
         ];

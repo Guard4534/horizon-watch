@@ -18,16 +18,17 @@ use App\Queries\ApplicationDetailQuery;
 use App\Queries\ApplicationEditQuery;
 use App\Queries\ApplicationListQuery;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ApplicationController extends Controller
 {
-    public function index(Team $current_team, ApplicationListQuery $query): Response
+    public function index(Request $request, Team $current_team, ApplicationListQuery $query): Response
     {
         return Inertia::render('monitoring/applications/Index', [
-            'page' => $query->handle($current_team),
+            'page' => $query->handle($current_team, $request->user()),
         ]);
     }
 
@@ -56,7 +57,7 @@ class ApplicationController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Application created.')]);
 
-        return to_route('applications.edit', ['current_team' => $current_team->slug, 'application' => $application->slug]);
+        return to_route('applications.show', ['current_team' => $current_team->slug, 'application' => $application->slug]);
     }
 
     public function edit(Team $current_team, Application $application, ApplicationEditQuery $query): Response

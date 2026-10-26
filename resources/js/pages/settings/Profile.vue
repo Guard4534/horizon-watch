@@ -1,34 +1,35 @@
 <script setup lang="ts">
 import { Form, Head, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/DeleteUser.vue';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import LocaleSwitch from '@/components/LocaleSwitch.vue';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import PasswordInput from '@/components/PasswordInput.vue';
 import AlertEmailsToggle from '@/components/settings/AlertEmailsToggle.vue';
+import { invalidField } from '@/lib/fieldErrors';
 
 defineOptions({
     layout: { title: 'Profile settings' },
 });
 
 defineProps<{
-    mustVerifyEmail: boolean;
-    status?: string | null;
     alertEmails: boolean;
+    accountDeletion: App.Data.Settings.AccountDeletionData;
 }>();
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
+const email = ref(user.value.email);
+const changesEmail = computed(
+    () => email.value.trim().toLowerCase() !== user.value.email,
+);
+const currentPassword = ref('');
 </script>
 
 <template>
     <Head :title="$t('Profile settings')" />
-
-    <h1 class="sr-only">{{ $t('Profile settings') }}</h1>
 
     <div class="flex flex-col space-y-6">
         <Heading
@@ -39,44 +40,90 @@ const user = computed(() => page.props.auth.user);
 
         <Form
             v-bind="ProfileController.update.form()"
+            :transform="
+                (data) =>
+                    changesEmail
+                        ? { ...data, current_password: currentPassword }
+                        : data
+            "
+            set-defaults-on-success
             class="space-y-6"
-            v-slot="{ errors, processing }"
+            v-slot="{ errors, processing, isDirty }"
+            @finish="currentPassword = ''"
         >
-            <div class="grid gap-2">
-                <Label for="name">{{ $t('Name') }}</Label>
-                <Input
+            <div class="nc-field">
+                <label for="name">{{ $t('Name') }}</label>
+                <input
                     id="name"
-                    class="mt-1 block w-full"
+                    class="nc-input"
                     name="name"
-                    :default-value="user.name"
+                    :value="user.name"
                     required
                     autocomplete="name"
-                    :placeholder="$t('Full name')"
+                    v-bind="invalidField('name', errors.name)"
                 />
-                <InputError class="mt-2" :message="errors.name" />
+                <InputError field="name" :message="errors.name" />
             </div>
 
-            <div class="grid gap-2">
-                <Label for="email">{{ $t('Email address') }}</Label>
-                <Input
+            <div class="nc-field">
+                <label for="email">{{ $t('Email') }}</label>
+                <input
                     id="email"
+                    v-model="email"
+                    class="nc-input"
                     type="email"
-                    class="mt-1 block w-full"
                     name="email"
-                    :default-value="user.email"
                     required
                     autocomplete="username"
-                    :placeholder="$t('Email address')"
+                    placeholder="email@example.com"
+                    v-bind="invalidField('email', errors.email)"
                 />
-                <InputError class="mt-2" :message="errors.email" />
+                <InputError field="email" :message="errors.email" />
             </div>
 
-            <div class="flex items-center gap-4">
-                <Button
-                    :disabled="processing"
+            <div v-if="changesEmail" class="nc-field">
+                <label for="current_password">{{
+                    $t('Current password')
+                }}</label>
+                <PasswordInput
+                    id="current_password"
+                    :value="currentPassword"
+                    required
+                    autocomplete="current-password"
+                    :placeholder="$t('Current password')"
+                    @input="
+                        currentPassword = ($event.target as HTMLInputElement)
+                            .value
+                    "
+                    v-bind="
+                        invalidField(
+                            'current_password',
+                            errors.current_password,
+                        )
+                    "
+                />
+                <p class="nc-t-xs nc-tone-muted mt-1">
+                    {{
+                        $t(
+                            'Changing the email address needs your current password. The old address gets a notice of the change.',
+                        )
+                    }}
+                </p>
+                <InputError
+                    field="current_password"
+                    :message="errors.current_password"
+                />
+            </div>
+
+            <div class="nc-actions">
+                <button
+                    type="submit"
+                    class="nc-btn nc-btn-primary"
+                    :disabled="processing || !isDirty"
                     data-test="update-profile-button"
-                    >{{ $t('Save') }}</Button
                 >
+                    {{ $t('Save') }}
+                </button>
             </div>
         </Form>
     </div>
@@ -115,5 +162,5 @@ const user = computed(() => page.props.auth.user);
         </AlertEmailsToggle>
     </div>
 
-    <DeleteUser />
+    <DeleteUser :deletion="accountDeletion" />
 </template>

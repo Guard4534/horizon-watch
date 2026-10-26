@@ -27,7 +27,7 @@ class AlertNotification extends Notification
             ->markdown('mail.alerts.alert', [
                 'color' => AlertMail::severityColor($alert->severity),
                 'headline' => AlertMail::headline($alert),
-                'sub' => AlertMail::detectedAt($alert),
+                'sub' => AlertMail::openedAt($alert),
                 'detail' => AlertMail::detail($alert),
                 'rows' => AlertMail::rows($alert),
                 'note' => $this->repeated ? $this->repeatNote() : null,
@@ -38,6 +38,6 @@ class AlertNotification extends Notification
 
     private function repeatNote(): string
     {
-        return __('Still open: this email repeats until the alert clears, is muted or is handled.');
+        return __('Still open: this email repeats until the alert is resolved, muted or marked as handled.');
     }
 }

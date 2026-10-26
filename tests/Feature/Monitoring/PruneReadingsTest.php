@@ -7,6 +7,7 @@ use App\Models\AlertNotification;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
+use App\Models\NotificationSetting;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
@@ -43,6 +44,40 @@ test('readings older than the retention are deleted and newer ones kept', functi
     expect(EnvironmentSnapshot::query()->pluck('id')->sort()->values()->all())
         ->toBe(collect($kept)->pluck('id')->sort()->values()->all())
         ->and(EnvironmentState::query()->count())->toBe(1);
+});
+
+test('the newest reading of each environment stays however old it is', function () {
+    $paused = Environment::factory()->create();
+
+    ($this->snapshotAt)('2026-01-01 00:00:00', $paused);
+    $last = ($this->snapshotAt)('2026-01-02 00:00:00', $paused);
+    $tie = ($this->snapshotAt)('2026-01-02 00:00:00', $paused);
+    ($this->snapshotAt)('2026-08-01 00:00:00');
+    $recent = ($this->snapshotAt)('2026-09-17 09:59:45');
+
+    $this->artisan('monitoring:prune')->expectsOutput('Deleted 3 readings.')->assertSuccessful();
+
+    expect(EnvironmentSnapshot::query()->orderBy('id')->pluck('id')->all())->toBe([$tie->id, $recent->id])
+        ->and($last->id)->toBeLessThan($tie->id);
+});
+
+test('the retention periods cannot be set below a week of readings and a day of alerts', function () {
+    putenv('HORIZON_WATCH_RETENTION_DAYS=0');
+    putenv('HORIZON_WATCH_ALERT_RETENTION_DAYS=-5');
+    $_ENV['HORIZON_WATCH_RETENTION_DAYS'] = '0';
+    $_ENV['HORIZON_WATCH_ALERT_RETENTION_DAYS'] = '-5';
+
+    try {
+        $config = require base_path('config/horizon-watch.php');
+    } finally {
+        putenv('HORIZON_WATCH_RETENTION_DAYS');
+        putenv('HORIZON_WATCH_ALERT_RETENTION_DAYS');
+        unset($_ENV['HORIZON_WATCH_RETENTION_DAYS'], $_ENV['HORIZON_WATCH_ALERT_RETENTION_DAYS']);
+    }
+
+    expect($config['retention_days'])->toBe(7)
+        ->and($config['alert_retention_days'])->toBe(1)
+        ->and((require base_path('config/horizon-watch.php'))['retention_days'])->toBe(30);
 });
 
 test('the retention period comes from the configuration', function () {
@@ -158,4 +193,25 @@ test('an open alert left without its environment is resolved, and the others sta
     expect($orphan->fresh()->resolved_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
         ->and($open->fresh()->resolved_at)->toBeNull()
         ->and($resolved->fresh()->resolved_at->toDateTimeString())->toBe('2026-09-16 10:00:00');
+});
+
+test('a replaced webhook secret is forgotten once its overlap has ended', function () {
+    $expired = NotificationSetting::factory()->withWebhook()->create([
+        'previous_webhook_secret' => 'whsec-expired',
+        'previous_webhook_secret_expires_at' => now()->subMinute(),
+    ]);
+    $current = NotificationSetting::factory()->withWebhook()->create([
+        'previous_webhook_secret' => 'whsec-current',
+        'previous_webhook_secret_expires_at' => now()->addHour(),
+    ]);
+
+    $this->artisan('monitoring:prune')->expectsOutput('Forgot 1 replaced webhook secret.')->assertSuccessful();
+
+    expect($expired->fresh())
+        ->previous_webhook_secret->toBeNull()
+        ->previous_webhook_secret_expires_at->toBeNull()
+        ->webhook_secret->not->toBeNull()
+        ->and($current->fresh())
+        ->previous_webhook_secret->toBe('whsec-current')
+        ->previous_webhook_secret_expires_at->not->toBeNull();
 });

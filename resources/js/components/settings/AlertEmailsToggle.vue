@@ -34,7 +34,7 @@ function change(value: boolean): void {
 </script>
 
 <template>
-    <label class="alert-emails-switch" :for="id">
+    <label class="nc-switch flex-none" :for="id">
         <input
             :id="id"
             type="checkbox"
@@ -44,79 +44,8 @@ function change(value: boolean): void {
             :disabled="saving"
             @change="change(($event.target as HTMLInputElement).checked)"
         />
-        <span class="track" aria-hidden="true"><span class="knob" /></span>
-        <span v-if="$slots.default" class="text"><slot /></span>
+        <span class="nc-track" aria-hidden="true" />
+        <span v-if="$slots.default" class="nc-t-sm"><slot /></span>
         <span v-else class="sr-only">{{ $t('Alert emails') }}</span>
     </label>
 </template>
-
-<style scoped>
-.alert-emails-switch {
-    position: relative;
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    cursor: pointer;
-}
-
-.text {
-    margin-left: 10px;
-    font-size: 14px;
-}
-
-.alert-emails-switch input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.track {
-    display: inline-flex;
-    align-items: center;
-    width: 36px;
-    height: 20px;
-    padding: 2px;
-    border-radius: 999px;
-    background: var(--nc-neutral-800);
-    border: 1px solid var(--nc-divider);
-    transition: background 0.15s ease;
-}
-
-.knob {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--nc-neutral-400);
-    transition:
-        transform 0.15s ease,
-        background 0.15s ease;
-}
-
-input:checked + .track {
-    background: color-mix(in srgb, var(--nc-accent) 35%, transparent);
-    border-color: var(--nc-accent);
-}
-
-input:checked + .track .knob {
-    transform: translateX(16px);
-    background: var(--nc-accent);
-}
-
-input:focus-visible + .track {
-    outline: 2px solid var(--nc-accent);
-    outline-offset: 2px;
-}
-
-input:disabled + .track {
-    opacity: 0.6;
-    cursor: progress;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .track,
-    .knob {
-        transition: none;
-    }
-}
-</style>

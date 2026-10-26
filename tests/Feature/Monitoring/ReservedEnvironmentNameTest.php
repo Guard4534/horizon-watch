@@ -1,6 +1,6 @@
 <?php
 
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Environment;
@@ -16,7 +16,7 @@ beforeEach(function () {
 
     $this->environment = fn (string $name): array => [
         'name' => $name,
-        'color' => EnvironmentColor::Prod->value,
+        'type' => EnvironmentType::Production->value,
         'horizonUrl' => 'https://reserved.example.com/horizon',
         'pollIntervalSeconds' => 15,
     ];
@@ -49,7 +49,7 @@ test('an environment cannot be renamed to the name of the organization rules sco
 test('the wizard refuses the name too', function () {
     $this->actingAs($this->admin)
         ->post(route('applications.store', ['current_team' => $this->team->slug]), [
-            'application' => ['name' => 'Reserved', 'host' => 'reserved.example.com'],
+            'application' => ['name' => 'Reserved'],
             'environments' => [($this->environment)('production'), ($this->environment)('organization')],
         ])
         ->assertSessionHasErrors('environments.1.name');

@@ -8,6 +8,7 @@ use App\Models\Environment;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\Grants;
@@ -67,17 +68,19 @@ test('the invite form and the member menu only appear with the permission', func
     string $role,
     bool $canInvite,
     bool $canManageMembers,
+    bool $canTransferOwnership,
 ) {
     $this->actingAs($this->{$role})
         ->get(route('members.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.permissions.canInvite', $canInvite)
-            ->where('page.permissions.canManageMembers', $canManageMembers));
+            ->where('page.permissions.canManageMembers', $canManageMembers)
+            ->where('page.permissions.canTransferOwnership', $canTransferOwnership));
 })->with([
-    ['owner', true, true],
-    ['admin', true, true],
-    ['member', false, false],
-    ['viewer', false, false],
+    ['owner', true, true, true],
+    ['admin', true, true, false],
+    ['member', false, false, false],
+    ['viewer', false, false, false],
 ]);
 
 test('the permission matrix comes from the role definitions, one row per permission', function () {
@@ -115,6 +118,18 @@ test('pending invitations and the environment picker stay out of the props witho
         ->assertInertia(fn (Assert $page) => $page
             ->has('page.invitations', 0)
             ->has('page.environments', 0));
+});
+
+test('the environment picker marks the production environments', function () {
+    $this->actingAs($this->admin)
+        ->get(route('members.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.environments.0.applicationName', 'Billing')
+            ->where('page.environments.0.name', 'production')
+            ->where('page.environments.0.type', 'production')
+            ->where('page.environments.1.applicationName', 'Billing')
+            ->where('page.environments.1.name', 'staging')
+            ->where('page.environments.1.type', 'staging'));
 });
 
 test('a manual member lists the environments they can actually see', function () {
@@ -242,7 +257,42 @@ test('an environment of another organization cannot be granted', function () {
             'visibility' => MemberVisibility::Manual->value,
             'environmentIds' => [$other->id],
         ])
-        ->assertSessionHasErrors('environmentIds.0');
+        ->assertSessionHasErrors('environmentIds');
+});
+
+test('a manual selection is checked against the organization in a single query', function () {
+    $more = Environment::factory()->count(20)->sequence(fn ($sequence) => ['name' => 'review-'.$sequence->index])->create(['application_id' => $this->production->application_id]);
+    $ids = [$this->production->id, $this->staging->id, ...$more->modelKeys()];
+    $environmentQueries = 0;
+
+    DB::listen(function ($query) use (&$environmentQueries) {
+        if (str_contains($query->sql, 'from "environments"') && ! str_starts_with($query->sql, 'delete')) {
+            $environmentQueries++;
+        }
+    });
+
+    $this->actingAs($this->admin)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), [
+            'visibility' => MemberVisibility::Manual->value,
+            'environmentIds' => $ids,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect(DB::table('environment_user')->where('user_id', $this->member->id)->count())->toBe(22)
+        ->and($environmentQueries)->toBeLessThan(5);
+});
+
+test('a manual selection longer than the cap is refused', function () {
+    config(['horizon-watch.limits.environment_ids' => 1]);
+
+    $this->actingAs($this->admin)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), [
+            'visibility' => MemberVisibility::Manual->value,
+            'environmentIds' => [$this->production->id, $this->staging->id],
+        ])
+        ->assertSessionHasErrors('environmentIds');
+
+    $this->assertDatabaseMissing('environment_user', ['user_id' => $this->member->id]);
 });
 
 test('an update with neither a role nor a visibility is refused', function () {
@@ -354,8 +404,8 @@ test('the invite form still gets the environments without the member-management 
             ->has('page.environments', 2));
 });
 
-test('no invitation prop carries the join code', function () {
-    TeamInvitation::factory()->create([
+test('no invitation prop carries the join code or its hash', function () {
+    $invitation = TeamInvitation::factory()->create([
         'team_id' => $this->team->id,
         'invited_by' => $this->owner->id,
         'expires_at' => now()->addDays(7),
@@ -366,9 +416,8 @@ test('no invitation prop carries the join code', function () {
 
     $response->assertInertia(fn (Assert $page) => $page->has('page.invitations', 1));
 
-    $code = TeamInvitation::where('team_id', $this->team->id)->firstOrFail()->code;
-
-    $response->assertDontSee($code, escape: false);
+    $response->assertDontSee($invitation->plainCode, escape: false)
+        ->assertDontSee($invitation->code_hash, escape: false);
 });
 
 test('an admin removes themselves from the members view and lands on the home route', function () {
@@ -383,6 +432,102 @@ test('an admin removes themselves from the members view and lands on the home ro
         ->and($this->admin->fresh()->current_team_id)->toEqual($ownTeam->id);
 });
 
+test('an admin who removes themselves from their only organization ends on the organizations page', function () {
+    $admin = User::factory()->withoutOrganization()->create();
+    $this->team->members()->attach($admin, ['role' => TeamRole::Admin->value]);
+    $admin->update(['current_team_id' => $this->team->id]);
+
+    $this->actingAs($admin)
+        ->delete(route('members.destroy', ['current_team' => $this->team->slug, 'user' => $admin->id]))
+        ->assertRedirect(route('home'));
+
+    $this->actingAs($admin->fresh())
+        ->get(route('home'))
+        ->assertRedirect(route('teams.index'));
+
+    expect($admin->fresh()->current_team_id)->toBeNull();
+});
+
+test('promoting a member to admin lifts their visibility limit', function () {
+    grantManually($this->team, $this->member, $this->staging);
+
+    $this->actingAs($this->owner)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), [
+            'role' => TeamRole::Admin->value,
+        ])
+        ->assertRedirect();
+
+    expect($this->team->memberships()->where('user_id', $this->member->id)->first()->visibility)
+        ->toBe(MemberVisibility::All);
+
+    $this->assertDatabaseMissing('environment_user', ['user_id' => $this->member->id]);
+});
+
+test('the visibility of an admin cannot be limited, not even by the admin themselves', function (string $actor) {
+    $this->actingAs($this->{$actor})
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->admin->id]), [
+            'visibility' => MemberVisibility::NonProduction->value,
+        ])
+        ->assertSessionHasErrors('visibility');
+
+    expect($this->team->memberships()->where('user_id', $this->admin->id)->first()->visibility)
+        ->toBe(MemberVisibility::All);
+})->with(['owner', 'admin']);
+
+test('a promotion that also asks for a limited visibility changes nothing', function () {
+    $this->actingAs($this->owner)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), [
+            'role' => TeamRole::Admin->value,
+            'visibility' => MemberVisibility::Manual->value,
+            'environmentIds' => [$this->staging->id],
+        ])
+        ->assertSessionHasErrors('visibility');
+
+    expect($this->member->fresh()->teamRole($this->team))->toBe(TeamRole::Member);
+    $this->assertDatabaseMissing('environment_user', ['user_id' => $this->member->id]);
+});
+
+test('an admin demoted to member can be limited in the same update', function () {
+    $this->actingAs($this->owner)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->admin->id]), [
+            'role' => TeamRole::Member->value,
+            'visibility' => MemberVisibility::NonProduction->value,
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $membership = $this->team->memberships()->where('user_id', $this->admin->id)->first();
+
+    expect($membership->role)->toBe(TeamRole::Member)
+        ->and($membership->visibility)->toBe(MemberVisibility::NonProduction);
+});
+
+test('upgrading lifts the visibility limits already set on admins and admin invitations', function () {
+    grantManually($this->team, $this->admin, $this->staging);
+    grantManually($this->team, $this->member, $this->staging);
+    $elsewhere = otherOrganizationGrant($this->admin);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'role' => TeamRole::Admin,
+        'visibility' => MemberVisibility::Manual,
+        'invited_by' => $this->owner->id,
+    ]);
+    $invitation->environments()->sync([$this->staging->id]);
+
+    $migration = require database_path('migrations/2026_10_13_030001_give_admins_every_environment.php');
+    $migration->up();
+
+    expect($this->team->memberships()->where('user_id', $this->admin->id)->first()->visibility)->toBe(MemberVisibility::All)
+        ->and($this->team->memberships()->where('user_id', $this->member->id)->first()->visibility)->toBe(MemberVisibility::Manual)
+        ->and($invitation->fresh()->visibility)->toBe(MemberVisibility::All)
+        ->and($invitation->environments()->count())->toBe(0);
+
+    $this->assertDatabaseMissing('environment_user', ['user_id' => $this->admin->id, 'environment_id' => $this->staging->id]);
+    $this->assertDatabaseHas('environment_user', ['user_id' => $this->admin->id, 'environment_id' => $elsewhere->id]);
+    $this->assertDatabaseHas('environment_user', ['user_id' => $this->member->id, 'environment_id' => $this->staging->id]);
+});
+
 test('removing a stranger from the members view is a 404, not a false success', function () {
     $stranger = User::factory()->create();
 
@@ -395,7 +540,7 @@ test('every role tag comes from the one role label formula', function () {
     $this->actingAs($this->admin)
         ->get(route('members.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.members.0.roleLabel', 'Owner · admin')
+            ->where('page.members.0.roleLabel', 'Owner')
             ->where('page.members.1.roleLabel', 'Admin')
             ->where('page.members.2.roleLabel', 'Member')
             ->where('page.members.3.roleLabel', 'Viewer'));
@@ -424,4 +569,68 @@ test('the manual grants of the whole page are read in one query, not one per mem
     DB::disableQueryLog();
 
     expect($grantQueries)->toBe(1);
+});
+
+test('the role and visibility choices come labelled from the server', function () {
+    $this->actingAs($this->admin)
+        ->get(route('members.index', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.roles', [
+                ['value' => 'owner', 'label' => 'Owner'],
+                ['value' => 'admin', 'label' => 'Admin'],
+                ['value' => 'member', 'label' => 'Member'],
+                ['value' => 'viewer', 'label' => 'Viewer'],
+            ])
+            ->where('page.assignableRoles', [
+                ['value' => 'admin', 'label' => 'Admin'],
+                ['value' => 'member', 'label' => 'Member'],
+                ['value' => 'viewer', 'label' => 'Viewer'],
+            ])
+            ->where('page.visibilities', array_map(
+                fn (MemberVisibility $visibility) => ['value' => $visibility->value, 'label' => $visibility->label()],
+                MemberVisibility::cases(),
+            )));
+});
+
+test('the four roles have italian names', function () {
+    App::setLocale('it');
+
+    expect(array_map(fn (TeamRole $role) => $role->label(), TeamRole::cases()))
+        ->toBe(['Proprietario', 'Amministratore', 'Membro', 'Osservatore']);
+});
+
+test('only the owner role cannot be handed out', function () {
+    expect(TeamRole::assignable())->toBe([TeamRole::Admin, TeamRole::Member, TeamRole::Viewer]);
+});
+
+test('the role rules accept exactly the roles that can be handed out', function () {
+    $this->actingAs($this->admin)
+        ->patch(route('members.update', ['current_team' => $this->team->slug, 'user' => $this->member->id]), ['role' => TeamRole::Owner->value])
+        ->assertSessionHasErrors('role');
+
+    expect($this->member->fresh()->teamRole($this->team))->toBe(TeamRole::Member);
+});
+
+test('the last admin reads the leave warning from the shared organization, counted once per request', function () {
+    $this->team->memberships()->where('user_id', '!=', $this->owner->id)->where('user_id', '!=', $this->admin->id)->delete();
+    $this->admin->switchTeam($this->team);
+
+    $this->actingAs($this->admin);
+
+    DB::enableQueryLog();
+
+    $this->get(route('members.index', ['current_team' => $this->team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('currentTeam.id', $this->team->id)
+            ->where('currentTeam.isLastAdmin', true)
+            ->where('teams', fn ($teams) => collect($teams)->firstWhere('id', $this->team->id)['isLastAdmin'] === true));
+
+    $adminCounts = collect(DB::getQueryLog())
+        ->filter(fn (array $entry) => str_contains($entry['query'], 'as admins'))
+        ->count();
+
+    DB::disableQueryLog();
+
+    expect($adminCounts)->toBe(1);
 });

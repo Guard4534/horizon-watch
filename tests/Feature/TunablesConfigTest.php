@@ -1,10 +1,12 @@
 <?php
 
+use App\Actions\Monitoring\DispatchDuePolls;
 use App\Data\Applications\ApplicationWizardData;
 use App\Data\Applications\EnvironmentFormData;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertState;
 use App\Enums\MemberVisibility;
+use App\Enums\OrganizationCreation;
 use App\Enums\SentNotificationKind;
 use App\Enums\TeamRole;
 use App\Externals\Horizon\Data\HorizonFailedJob;
@@ -27,6 +29,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Fixtures\Horizon\FakeResolver;
 
 beforeEach(function () {
@@ -67,22 +70,34 @@ test('horizon: the masters kept from a reading follow the configured cap', funct
     'lowered' => [1, 1],
 ]);
 
-test('readings: the failed-rate window follows the configuration', function (int $minutes, int $expected) {
-    config(['horizon-watch.readings.failed_rate_minutes' => $minutes]);
+test('horizon: the failed-jobs threshold stops one below the failed jobs a reading can count', function (int $jobs, int $pages, float $expected) {
+    config(['horizon-watch.horizon.max_jobs' => $jobs, 'horizon-watch.horizon.max_job_pages' => $pages]);
 
-    $job = new HorizonFailedJob(name: 'App\\Jobs\\Sync', queue: 'default', exception: 'RuntimeException', attempts: 1, failedAt: CarbonImmutable::now()->subMinutes(30));
-
-    expect(app(StatusEvaluator::class)->failedLastHour([$job]))->toBe($expected);
+    expect(AlertRuleMetric::JobsFailedPerHour->maximumThreshold())->toBe($expected);
 })->with([
-    'default' => [60, 1],
-    'narrowed' => [20, 0],
+    'default' => [200, 4, 199.0],
+    'more jobs than the pages hold' => [500, 4, 199.0],
+    'more jobs and pages' => [500, 10, 499.0],
+    'one page' => [200, 1, 49.0],
+    'absurd' => [0, 4, 1.0],
 ]);
+
+test('readings: the failed-jobs window and the poll tick are fixed, since only one value of each is safe', function () {
+    expect(config('horizon-watch.readings'))->not->toHaveKeys(['failed_rate_minutes', 'poll_tick_seconds'])
+        ->and(HorizonReader::FAILED_RATE_MINUTES)->toBe(60)
+        ->and(DispatchDuePolls::TICK_SECONDS)->toBe(15);
+
+    $recent = new HorizonFailedJob(name: 'App\\Jobs\\Sync', queue: 'default', exception: 'RuntimeException', attempts: 1, failedAt: CarbonImmutable::now()->subMinutes(59));
+    $old = new HorizonFailedJob(name: 'App\\Jobs\\Sync', queue: 'default', exception: 'RuntimeException', attempts: 1, failedAt: CarbonImmutable::now()->subMinutes(61));
+
+    expect(app(StatusEvaluator::class)->failedLastHour([$recent, $old]))->toBe(1);
+});
 
 test('readings: a poll interval left out takes the configured default', function () {
     config(['horizon-watch.readings.poll_interval_seconds.default' => 45]);
 
-    $environment = ['name' => 'staging', 'color' => 'staging', 'horizonUrl' => 'https://shop.example.com/horizon'];
-    $wizard = ApplicationWizardData::from(['application' => ['name' => 'Shop', 'host' => 'shop.example.com'], 'environments' => [$environment]]);
+    $environment = ['name' => 'staging', 'type' => 'staging', 'horizonUrl' => 'https://shop.example.com/horizon'];
+    $wizard = ApplicationWizardData::from(['application' => ['name' => 'Shop'], 'environments' => [$environment]]);
 
     expect(EnvironmentFormData::from($environment)->pollIntervalSeconds)->toBe(45)
         ->and($wizard->environments[0]->pollIntervalSeconds)->toBe(45);
@@ -99,6 +114,21 @@ test('alerts: the queues listed in an alert email follow the configuration', fun
     config(['horizon-watch.alerts.listed_queues' => 2]);
 
     expect(AlertMail::detail($alert))->toContain('alpha, beta')->not->toContain('gamma');
+});
+
+test('alerts: the silence durations follow the configuration', function () {
+    config(['horizon-watch.alerts.silence_minutes' => [15]]);
+    $silence = fn (int $minutes) => $this->actingAs($this->admin)->post(route('environments.silence', [
+        'current_team' => $this->team->slug,
+        'environment' => $this->environment->slug,
+    ]), ['minutes' => $minutes]);
+
+    $silence(30)->assertSessionHasErrors('minutes');
+    $silence(15)->assertSessionHasNoErrors();
+
+    $this->actingAs($this->admin)
+        ->get(route('environments.show', ['current_team' => $this->team->slug, 'environment' => $this->environment->slug]))
+        ->assertInertia(fn (Assert $page) => $page->where('page.silenceChoices', [15]));
 });
 
 test('notifications: the recipients cap follows the configuration', function () {
@@ -142,7 +172,7 @@ test('notifications: defaults and delivery retries follow the configuration', fu
     ]);
 
     $setting = new NotificationSetting;
-    $job = new SendAlertWebhook($this->team->id, null, SentNotificationKind::Test, 'test', []);
+    $job = new SendAlertWebhook($this->team->id, null, SentNotificationKind::Test, []);
 
     expect($setting->timezone)->toBe('America/New_York')
         ->and($setting->repeat_minutes)->toBe(15)
@@ -201,4 +231,19 @@ test('rate limits: the test limits live with the other rate limits', function ()
 
     $send()->assertRedirect();
     $send()->assertTooManyRequests();
+});
+
+test('teams: organization creation comes from the environment and defaults to admins only', function () {
+    expect((require base_path('config/horizon-watch.php'))['organization_creation'])->toBe('admins')
+        ->and(OrganizationCreation::configured())->toBe(OrganizationCreation::Admins);
+
+    putenv('HORIZON_WATCH_ORG_CREATION=everyone');
+    $_ENV['HORIZON_WATCH_ORG_CREATION'] = 'everyone';
+
+    try {
+        expect((require base_path('config/horizon-watch.php'))['organization_creation'])->toBe('everyone');
+    } finally {
+        putenv('HORIZON_WATCH_ORG_CREATION');
+        unset($_ENV['HORIZON_WATCH_ORG_CREATION']);
+    }
 });

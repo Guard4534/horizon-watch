@@ -2,9 +2,11 @@
 
 use App\Actions\Alerts\UpdateNotificationSettings;
 use App\Data\Alerts\NotificationSettingsInputData;
+use App\Enums\AlertRuleMetric;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Externals\Http\Dns\Resolver;
+use App\Models\AlertRule;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\NotificationSetting;
@@ -13,6 +15,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\AnotherAppKey;
 
 beforeEach(function () {
     $this->team = Team::factory()->create();
@@ -67,7 +70,9 @@ test('without a saved row the page shows the defaults', function () {
         ->where('page.timezones', DateTimeZone::listIdentifiers())
         ->where('page.notificationSummary', [
             'recipientCount' => 0,
+            'optedInMemberCount' => 0,
             'webhookConfigured' => false,
+            'reachesNobody' => true,
             'quietFrom' => null,
             'quietTo' => null,
             'timezone' => NotificationSetting::defaultTimezone(),
@@ -167,17 +172,37 @@ test('the save response itself carries neither the secret nor the address', func
         ->and(json_encode(session()->all()))->not->toContain($secret);
 });
 
-test('saving again with an address keeps the secret and shows nothing new', function () {
+test('saving again with an address on the same host keeps the secret and shows nothing new', function () {
     $this->actingAs($this->admin);
 
     ($this->save)();
     ($this->page)();
     $secret = NotificationSetting::query()->sole()->webhook_secret;
 
-    ($this->save)(['webhookUrl' => 'https://hooks.example.net/other']);
+    ($this->save)(['webhookUrl' => 'https://HOOKS.example.com/other']);
 
     expect(NotificationSetting::query()->sole()->webhook_secret)->toBe($secret);
     ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', null));
+});
+
+test('moving the address to another host makes a new secret, shown once, and forgets the previous one', function () {
+    $this->actingAs($this->admin);
+
+    ($this->save)();
+    ($this->page)();
+    $this->post(route('alert-settings.regenerate-secret', ['current_team' => $this->team->slug]));
+    ($this->page)();
+    $old = NotificationSetting::query()->sole()->webhook_secret;
+
+    ($this->save)(['webhookUrl' => 'https://hooks.example.net/other'])->assertSessionHasNoErrors();
+
+    $settings = NotificationSetting::query()->sole();
+
+    expect($settings->webhook_secret)->not->toBe($old)->toHaveLength(40)
+        ->and($settings->previous_webhook_secret)->toBeNull()
+        ->and($settings->previous_webhook_secret_expires_at)->toBeNull();
+
+    ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', $settings->webhook_secret));
 });
 
 test('removing the address removes the secret', function (?string $removed) {
@@ -198,7 +223,8 @@ test('removing the address removes the secret', function (?string $removed) {
         ->where('page.newWebhookSecret', null));
 })->with([null, '', '   ']);
 
-test('regenerating makes a new secret, shown once', function () {
+test('regenerating makes a new secret, shown once, and keeps the replaced one for a day', function () {
+    $this->freezeSecond();
     $this->actingAs($this->admin);
 
     ($this->save)();
@@ -207,13 +233,49 @@ test('regenerating makes a new secret, shown once', function () {
 
     $this->post(route('alert-settings.regenerate-secret', ['current_team' => $this->team->slug]))
         ->assertRedirect()
-        ->assertInertiaFlash('toast.message', 'New webhook secret generated.');
+        ->assertInertiaFlash('toast.message', 'New signing secret generated.');
 
-    $new = NotificationSetting::query()->sole()->webhook_secret;
-    expect($new)->not->toBe($old)->toHaveLength(40);
+    $settings = NotificationSetting::query()->sole();
+    $new = $settings->webhook_secret;
+
+    expect($new)->not->toBe($old)->toHaveLength(40)
+        ->and($settings->previous_webhook_secret)->toBe($old)
+        ->and($settings->getRawOriginal('previous_webhook_secret'))->not->toContain($old)
+        ->and($settings->previous_webhook_secret_expires_at?->equalTo(now()->addHours(24)))->toBeTrue()
+        ->and($settings->toArray())->not->toHaveKey('previous_webhook_secret');
 
     ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', $new));
     ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', null));
+});
+
+test('a secret that no longer decrypts survives a save and is replaced by regenerating', function () {
+    $this->actingAs($this->admin);
+
+    ($this->save)();
+    ($this->page)();
+
+    $unreadable = AnotherAppKey::encrypt('old-secret');
+    DB::table('notification_settings')->where('team_id', $this->team->id)->update(['webhook_secret' => $unreadable]);
+
+    ($this->save)(['repeatMinutes' => 30])->assertSessionHasNoErrors()->assertRedirect();
+
+    expect(NotificationSetting::query()->sole()->getRawOriginal('webhook_secret'))->toBe($unreadable);
+
+    ($this->page)()->assertInertia(fn (Assert $page) => $page
+        ->where('page.notifications.webhookSecretSet', true)
+        ->where('page.newWebhookSecret', null));
+
+    $this->post(route('alert-settings.regenerate-secret', ['current_team' => $this->team->slug]))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    $settings = NotificationSetting::query()->sole();
+    $secret = $settings->webhook_secret;
+
+    expect($secret)->toHaveLength(40)
+        ->and($settings->previous_webhook_secret)->toBeNull()
+        ->and($settings->previous_webhook_secret_expires_at)->toBeNull();
+    ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', $secret));
 });
 
 test('regenerating without an address is refused', function (bool $withRow) {
@@ -223,7 +285,7 @@ test('regenerating without an address is refused', function (bool $withRow) {
 
     $this->actingAs($this->admin)
         ->post(route('alert-settings.regenerate-secret', ['current_team' => $this->team->slug]))
-        ->assertSessionHasErrors(['webhookUrl' => 'Save a webhook address first.']);
+        ->assertSessionHasErrors(['webhookUrl' => 'Save a webhook URL first.']);
 
     expect(NotificationSetting::query()->count())->toBe($withRow ? 1 : 0);
     ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', null));
@@ -236,7 +298,7 @@ test('a session value that is not a sealed secret is ignored', function () {
         ->assertInertia(fn (Assert $page) => $page->where('page.newWebhookSecret', null));
 });
 
-test('the settings are validated', function (array $overrides, string $error) {
+test('the settings are validated', function (array $overrides, string|array $error) {
     $this->actingAs($this->admin);
 
     ($this->save)($overrides)->assertSessionHasErrors($error);
@@ -247,9 +309,9 @@ test('the settings are validated', function (array $overrides, string $error) {
     'too many recipients' => [['recipients' => array_map(fn (int $i) => "ops{$i}@example.com", range(1, 21))], 'recipients'],
     'recipients as a string' => [['recipients' => 'ops@example.com'], 'recipients'],
     'recipients missing' => [['recipients' => null], 'recipients'],
-    'an address with credentials' => [['webhookUrl' => 'https://user:pass@hooks.example.com/horizon'], 'webhookUrl'],
-    'an address with a query' => [['webhookUrl' => 'https://hooks.example.com/horizon?token=abc'], 'webhookUrl'],
-    'an address with a fragment' => [['webhookUrl' => 'https://hooks.example.com/horizon#abc'], 'webhookUrl'],
+    'an address with credentials' => [['webhookUrl' => 'https://user:pass@hooks.example.com/horizon'], ['webhookUrl' => 'The webhook URL cannot hold credentials: put a token in its path.']],
+    'an address with a query' => [['webhookUrl' => 'https://hooks.example.com/horizon?token=abc'], ['webhookUrl' => 'The webhook URL cannot have a query string or a fragment: put a token in its path.']],
+    'an address with a fragment' => [['webhookUrl' => 'https://hooks.example.com/horizon#abc'], ['webhookUrl' => 'The webhook URL cannot have a query string or a fragment: put a token in its path.']],
     'a non-http address' => [['webhookUrl' => 'ftp://hooks.example.com/horizon'], 'webhookUrl'],
     'the metadata address' => [['webhookUrl' => 'http://169.254.169.254/latest'], 'webhookUrl'],
     'the metadata name' => [['webhookUrl' => 'http://metadata.google.internal/hook'], 'webhookUrl'],
@@ -259,10 +321,28 @@ test('the settings are validated', function (array $overrides, string $error) {
     'quiet to without quiet from' => [['quietFrom' => null], 'quietFrom'],
     'quiet hours with seconds' => [['quietFrom' => '23:00:00'], 'quietFrom'],
     'quiet hours out of range' => [['quietTo' => '24:30'], 'quietTo'],
+    'quiet hours over the whole day' => [['quietFrom' => '00:00', 'quietTo' => '23:59'], 'quietTo'],
+    'quiet hours that leave no quarter of an hour out' => [['quietFrom' => '08:00', 'quietTo' => '07:50'], 'quietTo'],
+    'quiet hours that end when they start' => [['quietFrom' => '08:00', 'quietTo' => '08:00'], 'quietTo'],
     'an unknown timezone' => [['timezone' => 'Mars/Olympus'], 'timezone'],
     'a timezone abbreviation' => [['timezone' => 'CEST'], 'timezone'],
     'a cadence outside the list' => [['repeatMinutes' => 45], 'repeatMinutes'],
     'a cadence of zero' => [['repeatMinutes' => 0], 'repeatMinutes'],
+]);
+
+test('quiet hours that leave a quarter of an hour of the day out are saved', function (string $from, string $to) {
+    $this->actingAs($this->admin);
+
+    ($this->save)(['quietFrom' => $from, 'quietTo' => $to])->assertSessionHasNoErrors();
+
+    $settings = NotificationSetting::query()->sole();
+
+    expect($settings->getRawOriginal('quiet_from'))->toBe($from.':00')
+        ->and($settings->getRawOriginal('quiet_to'))->toBe($to.':00');
+})->with([
+    'across midnight' => ['08:00', '07:45'],
+    'within the day' => ['00:00', '23:45'],
+    'a single minute' => ['12:00', '12:01'],
 ]);
 
 test('the whole payload must be sent', function (string $missing) {
@@ -439,7 +519,7 @@ test('a first save that loses the race for the row updates it instead of failing
         if (! $raced && str_starts_with($sql, 'insert into "notification_settings"')) {
             $raced = true;
             NotificationSetting::factory()->for($this->team)->create([
-                'webhook_url' => $competitorHasAddress ? 'https://hooks.example.org/first' : null,
+                'webhook_url' => $competitorHasAddress ? 'https://hooks.example.com/first' : null,
                 'webhook_secret' => $competitorHasAddress ? str_repeat('s', 40) : null,
             ]);
         }
@@ -454,3 +534,78 @@ test('a first save that loses the race for the row updates it instead of failing
         ->and($settings->webhook_secret)->toBe($competitorHasAddress ? str_repeat('s', 40) : $secret)
         ->and($secret)->toBe($competitorHasAddress ? null : $settings->webhook_secret);
 })->with(['the competitor has no address' => false, 'the competitor already has an address' => true]);
+
+test('the summary counts the members of the organization who turned on alert emails', function () {
+    $this->admin->forceFill(['alert_emails' => true])->save();
+    ($this->memberOf)(TeamRole::Member);
+    ($this->memberOf)(TeamRole::Viewer)->forceFill(['alert_emails' => true])->save();
+    User::factory()->create(['alert_emails' => true]);
+
+    $this->actingAs($this->admin);
+
+    ($this->page)()->assertInertia(fn (Assert $page) => $page
+        ->where('page.notificationSummary.optedInMemberCount', 2)
+        ->where('page.notificationSummary.reachesNobody', false));
+});
+
+test('the pages say when alerts reach nobody', function (Closure $setUp, bool $reachesNobody) {
+    $setUp->call($this);
+    $this->actingAs($this->admin);
+    $slug = ['current_team' => $this->team->slug];
+
+    ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.notificationSummary.reachesNobody', $reachesNobody));
+
+    $this->get(route('alerts.index', $slug))
+        ->assertInertia(fn (Assert $page) => $page->where('page.notificationSummary.reachesNobody', $reachesNobody));
+
+    $this->get(route('wall', $slug))
+        ->assertInertia(fn (Assert $page) => $page->where('page.alertsReachNobody', $reachesNobody));
+})->with([
+    'no member, address or webhook' => [function () {
+        User::factory()->create(['alert_emails' => true]);
+        NotificationSetting::factory()->for($this->team)->create();
+    }, true],
+    'a member with alert emails' => [function () {
+        ($this->memberOf)(TeamRole::Viewer)->forceFill(['alert_emails' => true])->save();
+    }, false],
+    'an extra address' => [function () {
+        NotificationSetting::factory()->for($this->team)->create(['recipients' => ['ops@example.com']]);
+    }, false],
+    'a webhook' => [function () {
+        NotificationSetting::factory()->for($this->team)->withWebhook()->create();
+    }, false],
+]);
+
+test('the warning counts who can be told, not which rules send email', function () {
+    ($this->memberOf)(TeamRole::Viewer)->forceFill(['alert_emails' => true])->save();
+
+    foreach (AlertRuleMetric::cases() as $metric) {
+        AlertRule::factory()->for($this->team)->create(['metric' => $metric, 'notify_email' => false]);
+    }
+
+    $this->actingAs($this->admin);
+
+    ($this->page)()->assertInertia(fn (Assert $page) => $page->where('page.notificationSummary.reachesNobody', false));
+});
+
+test('the wall points admins to the alert settings and everyone else to their own alert emails', function (TeamRole $role, bool $manages) {
+    NotificationSetting::factory()->for($this->team)->create();
+
+    $this->actingAs(($this->memberOf)($role))
+        ->get(route('wall', ['current_team' => $this->team->slug]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.alertsReachNobody', true)
+            ->where('page.canManageAlertRules', $manages));
+})->with([
+    'an admin' => [TeamRole::Admin, true],
+    'a member' => [TeamRole::Member, false],
+    'a viewer' => [TeamRole::Viewer, false],
+]);
+
+test('too many extra addresses are named as such in the error', function () {
+    config(['horizon-watch.notifications.max_recipients' => 1]);
+    $this->actingAs($this->admin);
+
+    ($this->save)(['recipients' => ['ops@example.com', 'oncall@example.com']])
+        ->assertSessionHasErrors(['recipients' => 'The extra addresses field must not have more than 1 items.']);
+});

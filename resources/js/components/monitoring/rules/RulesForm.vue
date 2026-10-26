@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import FormErrors from '@/components/FormErrors.vue';
 import RuleRow from '@/components/monitoring/rules/RuleRow.vue';
 import {
     Dialog,
@@ -73,7 +74,7 @@ const generalErrors = computed(() => {
                 .filter(
                     ([key, message]) =>
                         message !== undefined &&
-                        !/^rules\.\d+\.(threshold|severity|notifyByEmail|enabled)$/.test(
+                        !/^rules\.\d+\.(threshold|severity|notifyByEmail|enabled|forMinutes)$/.test(
                             key,
                         ),
                 )
@@ -149,7 +150,7 @@ function confirmReset(): void {
             <button
                 v-if="canManage"
                 type="button"
-                class="nc-btn nc-btn-ghost nc-t-xs ml-auto"
+                class="nc-btn nc-btn-ghost nc-t-xs nc-tone-down ml-auto"
                 :disabled="
                     form.processing ||
                     resetting ||
@@ -171,25 +172,12 @@ function confirmReset(): void {
         >
             {{
                 $t(
-                    'Dashed values come from the organization: use the pencil to override one, the arrow to inherit it again.',
+                    'Dashed values come from the organization. Turn on Customize to change a rule for these environments; turn it off to follow the organization again.',
                 )
             }}
         </div>
 
-        <div
-            v-if="generalErrors.length"
-            class="nc-t-xs nc-tone-down mb-[var(--nc-space-3)]"
-            role="alert"
-            style="
-                border-radius: var(--nc-radius-md);
-                border: 1px solid var(--st-down);
-                padding: 8px 10px;
-            "
-        >
-            <div v-for="message in generalErrors" :key="message">
-                {{ message }}
-            </div>
-        </div>
+        <FormErrors class="mb-[var(--nc-space-3)]" :errors="generalErrors" />
 
         <form
             class="flex flex-col"
@@ -212,11 +200,7 @@ function confirmReset(): void {
                 :errors="errorsOf(index)"
             />
 
-            <div
-                v-if="canManage"
-                class="flex flex-wrap items-center justify-end"
-                style="gap: var(--nc-space-2)"
-            >
+            <div v-if="canManage" class="nc-actions">
                 <span
                     v-if="!organization"
                     class="nc-num nc-t-2xs nc-tone-muted mr-auto"
@@ -233,7 +217,7 @@ function confirmReset(): void {
                     :disabled="!form.isDirty || form.processing"
                     @click="cancel"
                 >
-                    {{ $t('Cancel') }}
+                    {{ $t('Discard changes') }}
                 </button>
                 <button
                     type="submit"
@@ -261,7 +245,7 @@ function confirmReset(): void {
                     {{
                         organization
                             ? $t(
-                                  'Every organization rule goes back to the recommended threshold, severity and email. Environment overrides stay as they are.',
+                                  'Every organization rule goes back to the recommended threshold, duration, severity and email. Environment overrides stay as they are.',
                               )
                             : $t(
                                   'The :scope environments go back to the organization values for every rule.',
@@ -270,7 +254,7 @@ function confirmReset(): void {
                     }}
                 </DialogDescription>
             </DialogHeader>
-            <DialogFooter class="gap-2">
+            <DialogFooter>
                 <button
                     type="button"
                     class="nc-btn nc-btn-secondary"
@@ -280,7 +264,7 @@ function confirmReset(): void {
                 </button>
                 <button
                     type="button"
-                    class="nc-btn nc-btn-primary"
+                    class="nc-btn nc-btn-danger"
                     :disabled="resetting"
                     @click="confirmReset"
                 >

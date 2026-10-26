@@ -2,21 +2,21 @@
 import { Link } from '@inertiajs/vue3';
 import { PhPlus } from '@phosphor-icons/vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { envTypeColor } from '@/lib/monitoring';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 import { create as createApplication } from '@/routes/applications';
 import { index as membersIndex } from '@/routes/members';
 
 const slug = useTeamSlug();
 
-const PALETTE = [
-    'prod',
+const TYPES: App.Enums.EnvironmentType[] = [
+    'production',
     'preprod',
     'staging',
-    'develop',
-    'demo',
-    'worker',
+    'development',
     'testing',
-] as const;
+    'demo',
+];
 </script>
 
 <template>
@@ -31,19 +31,19 @@ const PALETTE = [
                     style="margin-bottom: var(--nc-space-4)"
                 >
                     <span
-                        v-for="color in PALETTE"
-                        :key="color"
+                        v-for="type in TYPES"
+                        :key="type"
                         class="swatch"
-                        :style="{ background: `var(--env-${color})` }"
+                        :style="{ background: envTypeColor(type) }"
                     />
                 </div>
-                <h3 style="margin: 0 0 var(--nc-space-2); font-size: 25px">
+                <h2 style="margin: 0 0 var(--nc-space-2); font-size: 25px">
                     {{ $t('You are not monitoring anything yet') }}
-                </h3>
+                </h2>
                 <p class="lead">
                     {{
                         $t(
-                            'Connect your first application and its environments: the panel starts polling Horizon and opening anomalies as soon as a metric crosses a threshold.',
+                            'Connect your first application and its environments: the panel starts polling Horizon and opening alerts as soon as a metric crosses a threshold.',
                         )
                     }}
                 </p>
@@ -59,7 +59,7 @@ const PALETTE = [
                         <div class="step-body">
                             {{
                                 $t(
-                                    'Name, domain and Horizon path. Then one environment per installation, each with its colour.',
+                                    'A name, then one environment per installation, each with its type and Horizon URL.',
                                 )
                             }}
                         </div>
@@ -80,7 +80,7 @@ const PALETTE = [
                         <div class="step-body">
                             {{
                                 $t(
-                                    'The organization defaults apply straight away: they decide when an anomaly opens.',
+                                    'The organization defaults apply straight away: they decide when an alert opens.',
                                 )
                             }}
                         </div>
@@ -95,12 +95,12 @@ const PALETTE = [
                     <span class="num">3</span>
                     <div class="min-w-0 flex-1">
                         <div class="step-title">
-                            {{ $t('Invite the team') }}
+                            {{ $t('Invite your colleagues') }}
                         </div>
                         <div class="step-body">
                             {{
                                 $t(
-                                    'Admin, member or viewer, with visibility limited to a subset of environments if you want.',
+                                    'Admin, member or viewer. Members and viewers can be limited to a subset of environments.',
                                 )
                             }}
                         </div>
@@ -180,6 +180,6 @@ ol {
     margin: 0;
     font-size: 12px;
     line-height: 1.55;
-    color: var(--nc-neutral-600);
+    color: var(--nc-text-faint);
 }
 </style>

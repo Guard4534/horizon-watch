@@ -5,7 +5,7 @@ use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
 use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Enums\Locale;
 use App\Enums\MuteDuration;
 use App\Enums\NotificationChannel;
@@ -123,7 +123,7 @@ test('an alert copies its environment and casts its columns', function () {
         ->and($alert->team_id)->toBe($environment->team_id)
         ->and($alert->metric)->toBe(AlertRuleMetric::QueueMaxWait)
         ->and($alert->severity)->toBeInstanceOf(AlertSeverity::class)
-        ->and($alert->environment_color)->toBe(EnvironmentColor::Prod)
+        ->and($alert->environment_type)->toBe(EnvironmentType::Production)
         ->and($alert->application_name)->toBe($environment->application->name)
         ->and($alert->environment_name)->toBe('production')
         ->and($alert->detail)->toBe(['waitSeconds' => 90])
@@ -132,10 +132,23 @@ test('an alert copies its environment and casts its columns', function () {
         ->and($alert->opened_at)->toBeInstanceOf(CarbonImmutable::class)
         ->and($alert->last_seen_at)->toBeInstanceOf(CarbonImmutable::class)
         ->and($alert->muted_indefinitely)->toBeFalse()
-        ->and($alert->notified)->toBeFalse()
+        ->and($alert->wasNotified())->toBeFalse()
         ->and($alert->environment->is($environment))->toBeTrue()
         ->and($alert->team->is($environment->application->team))->toBeTrue()
         ->and($environment->application->team->alerts()->sole()->is($alert))->toBeTrue();
+});
+
+test('an alert was notified once a notice time is written, and its unit follows its rule', function () {
+    $environment = Environment::factory()->create();
+    $alert = Alert::factory()->for($environment)->create(['metric' => AlertRuleMetric::QueueMaxWait]);
+
+    expect($alert->wasNotified())->toBeFalse()
+        ->and($alert->unit)->toBe('s');
+
+    $alert->forceFill(['last_notified_at' => now()])->save();
+
+    expect($alert->fresh()->wasNotified())->toBeTrue()
+        ->and($alert->fresh()->unit)->toBe('s');
 });
 
 test('an alert records who muted and who handled it', function () {
@@ -236,14 +249,14 @@ test('an alert of a deleted environment can be made without one', function () {
         'team_id' => $team->id,
         'application_name' => 'Billing',
         'environment_name' => 'production',
-        'environment_color' => EnvironmentColor::Prod,
+        'environment_type' => EnvironmentType::Production,
     ])->fresh();
 
     expect($alert->environment_id)->toBeNull()
         ->and($alert->team_id)->toBe($team->id)
         ->and($alert->application_name)->toBe('Billing')
         ->and($alert->environment_name)->toBe('production')
-        ->and($alert->environment_color)->toBe(EnvironmentColor::Prod)
+        ->and($alert->environment_type)->toBe(EnvironmentType::Production)
         ->and($alert->threshold)->toBe(AlertRuleMetric::QueuePending->defaultThreshold())
         ->and(Environment::query()->count())->toBe(0);
 });
@@ -332,7 +345,7 @@ test('mute durations know their length', function () {
         ->and(MuteDuration::OneDay->minutes())->toBe(1440)
         ->and(MuteDuration::UntilResolved->minutes())->toBeNull()
         ->and(array_map(fn (MuteDuration $duration) => $duration->value, MuteDuration::cases()))->toBe(['1h', '4h', '24h', 'resolved'])
-        ->and(array_map(fn (DeliveryStatus $status) => $status->value, DeliveryStatus::cases()))->toBe(['sent', 'failed'])
+        ->and(array_map(fn (DeliveryStatus $status) => $status->value, DeliveryStatus::cases()))->toBe(['sent', 'failed', 'skipped'])
         ->and(SentNotificationKind::Test->value)->toBe('test');
 });
 
@@ -349,6 +362,6 @@ test('every metric has validation bounds and knows whether it measures a state',
     [AlertRuleMetric::QueuePending, 2147483647.0, false],
     [AlertRuleMetric::QueueMaxWait, 86400.0, false],
     [AlertRuleMetric::JobRuntime, 86400.0, false],
-    [AlertRuleMetric::JobsFailedPerHour, 49.0, false],
+    [AlertRuleMetric::JobsFailedPerHour, 199.0, false],
     [AlertRuleMetric::WorkersMissing, 1000.0, false],
 ]);

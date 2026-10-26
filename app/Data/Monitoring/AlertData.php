@@ -5,8 +5,8 @@ namespace App\Data\Monitoring;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
 use App\Enums\AlertState;
-use App\Enums\EnvironmentColor;
 use App\Enums\EnvironmentStatus;
+use App\Enums\EnvironmentType;
 use App\Enums\NotificationChannel;
 use Spatie\LaravelData\Data;
 
@@ -19,7 +19,10 @@ class AlertData extends Data
         public AlertRuleMetric $metric,
         public float $threshold,
         public string $unit,
+        public string $comparator,
+        public bool $isStateRule,
         public ?float $value,
+        public bool $valueIsLowerBound,
         public ?string $longestJob,
         public ?string $longestJobQueue,
         /** @var array<int, string> */
@@ -27,7 +30,7 @@ class AlertData extends Data
         public ?string $environmentId,
         public string $applicationName,
         public string $environmentName,
-        public EnvironmentColor $color,
+        public EnvironmentType $environmentType,
         public ?EnvironmentStatus $environmentStatus,
         public bool $collectionPaused,
         public int $minutesAgo,
@@ -35,6 +38,7 @@ class AlertData extends Data
         public ?string $mutedUntil,
         public bool $mutedUntilResolved,
         public ?AlertActorData $mutedBy,
+        public bool $mutedForMaintenance,
         public ?AlertActorData $handledBy,
         public ?int $handledMinutesAgo,
         /** @var array<int, NotificationChannel> */

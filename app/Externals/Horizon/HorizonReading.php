@@ -25,5 +25,7 @@ final readonly class HorizonReading
         public ?array $pendingJobs,
         public array $queueRuntimes,
         public int $latencyMs,
+        public bool $failedJobsTruncated = false,
+        public bool $runtimesFetched = false,
     ) {}
 }

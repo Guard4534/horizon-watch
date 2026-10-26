@@ -1,49 +1,95 @@
 <script setup lang="ts">
-import FieldError from '@/components/FieldError.vue';
-import { PhLockSimple, PhLockSimpleOpen } from '@phosphor-icons/vue';
+import { PhLockSimple, PhLockSimpleOpen, PhWarning } from '@phosphor-icons/vue';
 import { createReusableTemplate } from '@vueuse/core';
-import ColorPicker from '@/components/monitoring/applications/ColorPicker.vue';
+import { computed, watch } from 'vue';
+import InputError from '@/components/InputError.vue';
+import TypePicker from '@/components/nocturne/TypePicker.vue';
+import {
+    followSuggestion,
+    switchBasicAuth,
+    typeForName,
+} from '@/lib/environments';
+import { invalidField } from '@/lib/fieldErrors';
 
 const model = defineModel<App.Data.Applications.EnvironmentFormData>({
     required: true,
 });
 
-const auth = defineModel<boolean>('auth', { default: true });
+const auth = defineModel<boolean>('auth', { default: false });
+
+const typeEdited = defineModel<boolean>('typeEdited', { default: false });
 
 const {
     errors,
+    pollInterval,
     prefix = '',
     hasPassword = false,
     compact = false,
+    typeFollowsName = false,
+    editing = false,
+    storedCredentials = false,
 } = defineProps<{
-    colors: App.Data.Pages.EnvironmentFormPageData['colors'];
+    types: App.Data.Pages.EnvironmentFormPageData['types'];
     errors: Record<string, string | undefined>;
+    pollInterval: App.Data.Applications.PollIntervalData;
     prefix?: string;
     hasPassword?: boolean;
     compact?: boolean;
+    typeFollowsName?: boolean;
+    editing?: boolean;
+    storedCredentials?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
     urlInput: [];
+    urlBlur: [];
 }>();
 
 const fieldId = (field: string) => `${prefix}${field}`.replace(/\./g, '-');
 
 const errorOf = (field: string) => errors[`${prefix}${field}`];
 
+const credentialsInClear = computed(
+    () =>
+        /^\s*http:\/\//i.test(model.value.horizonUrl ?? '') &&
+        !!model.value.basicAuthUser?.trim(),
+);
+
+const onUrlInput = (event: Event) => {
+    model.value.horizonUrl = (event.target as HTMLInputElement).value;
+    emit('urlInput');
+};
+
+let stashedUser: string | null = null;
+
 const toggleAuth = () => {
     auth.value = !auth.value;
 
-    if (!auth.value) {
-        model.value.basicAuthUser = null;
-        model.value.basicAuthPassword = null;
-    }
+    const switched = switchBasicAuth(auth.value, model.value, stashedUser);
+
+    stashedUser = switched.stashedUser;
+    model.value.basicAuthUser = switched.basicAuthUser;
+    model.value.basicAuthPassword = switched.basicAuthPassword;
 };
 
+watch(
+    () => model.value.name,
+    (name) => {
+        if (typeFollowsName) {
+            model.value.type = followSuggestion(
+                model.value.type,
+                typeForName(name),
+                typeEdited.value,
+            );
+        }
+    },
+);
+
 const [DefineName, NameField] = createReusableTemplate();
-const [DefineColor, ColorField] = createReusableTemplate();
+const [DefineType, TypeField] = createReusableTemplate();
 const [DefineUrl, UrlField] = createReusableTemplate();
 const [DefineCredentials, CredentialFields] = createReusableTemplate();
+const [DefineAuth, AuthField] = createReusableTemplate();
 const [DefineInterval, IntervalField] = createReusableTemplate();
 const [DefineCollect, CollectField] = createReusableTemplate();
 </script>
@@ -62,52 +108,96 @@ const [DefineCollect, CollectField] = createReusableTemplate();
                 autocomplete="off"
                 spellcheck="false"
                 placeholder="production"
+                v-bind="invalidField(fieldId('name'), errorOf('name'))"
             />
-            <FieldError :message="errorOf('name')" />
-            <div
-                v-if="!compact && !errorOf('name')"
-                class="nc-t-2xs nc-tone-faint mt-1"
-            >
+            <InputError
+                size="sm"
+                :field="fieldId('name')"
+                :message="errorOf('name')"
+            />
+            <div v-if="!errorOf('name')" class="nc-t-2xs nc-tone-faint mt-1">
                 {{
-                    $t(
-                        'Lowercase letters, digits and dashes: it becomes part of the URL.',
-                    )
+                    editing
+                        ? $t(
+                              'Links keep working; alert overrides follow the new name.',
+                          )
+                        : $t('Lowercase letters, digits and dashes.')
                 }}
             </div>
         </div>
     </DefineName>
 
-    <DefineColor>
+    <DefineType>
         <div class="nc-field">
-            <label>{{ $t('Color') }}</label>
-            <ColorPicker
-                v-model="model.color"
-                :colors="colors"
-                :name="fieldId('color')"
+            <label :id="fieldId('type')">{{ $t('Type') }}</label>
+            <TypePicker
+                v-model="model.type"
+                :types="types"
+                :name="fieldId('type')"
+                :aria-labelledby="fieldId('type')"
+                v-bind="invalidField(fieldId('type'), errorOf('type'))"
+                @update:model-value="typeEdited = true"
             />
-            <FieldError :message="errorOf('color')" />
+            <InputError
+                size="sm"
+                :field="fieldId('type')"
+                :message="errorOf('type')"
+            />
+            <div v-if="!errorOf('type')" class="nc-t-2xs nc-tone-faint mt-1">
+                {{
+                    $t(
+                        'Members who see everything except production do not see production environments.',
+                    )
+                }}
+            </div>
         </div>
-    </DefineColor>
+    </DefineType>
 
     <DefineUrl>
         <div class="nc-field">
             <label :for="fieldId('horizonUrl')">{{ $t('Horizon URL') }}</label>
             <input
                 :id="fieldId('horizonUrl')"
-                v-model="model.horizonUrl"
+                :value="model.horizonUrl"
                 class="nc-input"
                 :style="compact ? 'letter-spacing: 0.01em' : undefined"
                 type="url"
                 autocomplete="off"
                 spellcheck="false"
-                :placeholder="
-                    compact
-                        ? 'https://invoicer.example.com/horizon'
-                        : 'https://production.invoicer.example.com/horizon'
+                placeholder="https://shop.example.com/horizon"
+                @input="onUrlInput"
+                @blur="$emit('urlBlur')"
+                v-bind="
+                    invalidField(fieldId('horizonUrl'), errorOf('horizonUrl'))
                 "
-                @input="$emit('urlInput')"
             />
-            <FieldError :message="errorOf('horizonUrl')" />
+            <InputError
+                size="sm"
+                :field="fieldId('horizonUrl')"
+                :message="errorOf('horizonUrl')"
+            />
+            <div
+                v-if="credentialsInClear && !errorOf('horizonUrl')"
+                class="nc-t-2xs mt-1 flex items-start"
+                style="gap: 5px; color: var(--st-warn)"
+            >
+                <PhWarning :size="12" class="mt-[1px] flex-none" />
+                {{
+                    $t(
+                        'The basic-auth password travels unencrypted over http://. Use https:// unless the network in between is trusted.',
+                    )
+                }}
+            </div>
+            <div
+                v-else-if="!errorOf('horizonUrl')"
+                class="nc-t-2xs nc-tone-faint mt-1"
+            >
+                {{
+                    $t(
+                        'The address of the Horizon dashboard, as you open it in the browser.',
+                    )
+                }}
+            </div>
         </div>
     </DefineUrl>
 
@@ -136,9 +226,17 @@ const [DefineCollect, CollectField] = createReusableTemplate();
                     :aria-label="
                         compact ? $t('Basic-auth username') : undefined
                     "
+                    v-bind="
+                        invalidField(
+                            fieldId('basicAuthUser'),
+                            errorOf('basicAuthUser'),
+                        )
+                    "
                 />
-                <FieldError
+                <InputError
+                    size="sm"
                     v-if="!compact"
+                    :field="fieldId('basicAuthUser')"
                     :message="errorOf('basicAuthUser')"
                 />
             </div>
@@ -160,29 +258,60 @@ const [DefineCollect, CollectField] = createReusableTemplate();
                     :aria-label="
                         compact ? $t('Basic-auth password') : undefined
                     "
+                    v-bind="
+                        invalidField(
+                            fieldId('basicAuthPassword'),
+                            errorOf('basicAuthPassword'),
+                        )
+                    "
                 />
-                <template v-if="!compact">
-                    <FieldError :message="errorOf('basicAuthPassword')" />
-                    <div
-                        v-if="!errorOf('basicAuthPassword')"
-                        class="nc-t-2xs nc-tone-faint mt-1 inline-flex items-center gap-[5px]"
-                    >
-                        <component
-                            :is="hasPassword ? PhLockSimple : PhLockSimpleOpen"
-                            :size="12"
-                        />
-                        {{
-                            hasPassword
-                                ? $t('Set · leave blank to keep it')
-                                : $t(
-                                      'Not set · stored encrypted, never shown back',
-                                  )
-                        }}
-                    </div>
-                </template>
+                <InputError
+                    size="sm"
+                    v-if="!compact"
+                    :field="fieldId('basicAuthPassword')"
+                    :message="errorOf('basicAuthPassword')"
+                />
+                <div
+                    v-if="!errorOf('basicAuthPassword')"
+                    class="nc-t-2xs nc-tone-faint mt-1 inline-flex items-center gap-[5px]"
+                    :class="compact ? 'basis-full' : undefined"
+                >
+                    <component
+                        :is="hasPassword ? PhLockSimple : PhLockSimpleOpen"
+                        :size="12"
+                    />
+                    {{
+                        hasPassword
+                            ? $t('Set · leave blank to keep it')
+                            : $t('Not set · stored encrypted, never shown back')
+                    }}
+                </div>
             </div>
         </div>
     </DefineCredentials>
+
+    <DefineAuth>
+        <div :class="compact ? 'contents' : 'flex flex-col'">
+            <label class="nc-switch" :class="compact ? 'nc-t-xs' : 'nc-t-sm'">
+                <input
+                    :id="fieldId('basicAuth')"
+                    type="checkbox"
+                    role="switch"
+                    :checked="auth"
+                    :aria-checked="auth"
+                    @change="toggleAuth"
+                />
+                <span class="nc-track" />
+                {{ $t('Basic auth') }}
+            </label>
+            <div
+                v-if="storedCredentials && !auth"
+                class="nc-t-2xs nc-tone-soft mt-1"
+            >
+                {{ $t('Saving removes the stored username and password.') }}
+            </div>
+        </div>
+    </DefineAuth>
 
     <DefineInterval>
         <div
@@ -192,7 +321,7 @@ const [DefineCollect, CollectField] = createReusableTemplate();
             <label
                 :for="fieldId('pollIntervalSeconds')"
                 :class="compact ? 'nc-t-xs nc-tone-soft' : undefined"
-                >{{ $t('Poll interval') }}</label
+                >{{ $t('Collection interval') }}</label
             >
             <div class="flex items-center" style="gap: var(--nc-space-2)">
                 <input
@@ -205,9 +334,15 @@ const [DefineCollect, CollectField] = createReusableTemplate();
                             : 'max-width: 92px'
                     "
                     type="number"
-                    min="15"
-                    max="300"
-                    step="1"
+                    :min="pollInterval.min"
+                    :max="pollInterval.max"
+                    :step="pollInterval.step"
+                    v-bind="
+                        invalidField(
+                            fieldId('pollIntervalSeconds'),
+                            errorOf('pollIntervalSeconds'),
+                        )
+                    "
                 />
                 <span
                     :class="
@@ -218,39 +353,50 @@ const [DefineCollect, CollectField] = createReusableTemplate();
                     >{{ $t('seconds') }}
                 </span>
             </div>
-            <FieldError
+            <InputError
+                size="sm"
                 v-if="!compact"
+                :field="fieldId('pollIntervalSeconds')"
                 :message="errorOf('pollIntervalSeconds')"
             />
         </div>
     </DefineInterval>
 
     <DefineCollect>
-        <div :class="compact ? 'contents' : undefined">
-            <label :class="compact ? 'nc-radio nc-t-xs' : 'nc-radio nc-t-sm'">
+        <div class="flex flex-col">
+            <label class="nc-switch" :class="compact ? 'nc-t-xs' : 'nc-t-sm'">
                 <input
                     :id="fieldId('pollingEnabled')"
                     v-model="model.pollingEnabled"
                     type="checkbox"
                     role="switch"
                     :aria-checked="model.pollingEnabled"
+                    v-bind="
+                        invalidField(
+                            fieldId('pollingEnabled'),
+                            errorOf('pollingEnabled'),
+                        )
+                    "
                 />
-                <span class="nc-dot" />
+                <span class="nc-track" />
                 {{ $t('Collect readings') }}
             </label>
-            <template v-if="!compact">
-                <FieldError :message="errorOf('pollingEnabled')" />
-                <div
-                    v-if="!errorOf('pollingEnabled')"
-                    class="nc-t-2xs nc-tone-faint mt-1"
-                >
-                    {{
-                        $t(
-                            'Paused environments keep their last reading, and the scheduler does not contact them.',
-                        )
-                    }}
-                </div>
-            </template>
+            <InputError
+                size="sm"
+                v-if="!compact"
+                :field="fieldId('pollingEnabled')"
+                :message="errorOf('pollingEnabled')"
+            />
+            <div
+                v-if="!errorOf('pollingEnabled')"
+                class="nc-t-2xs nc-tone-faint mt-1"
+            >
+                {{
+                    $t(
+                        'Paused environments keep their last reading, and the scheduler does not contact them.',
+                    )
+                }}
+            </div>
         </div>
     </DefineCollect>
 
@@ -267,22 +413,26 @@ const [DefineCollect, CollectField] = createReusableTemplate();
         </div>
 
         <div class="mt-[var(--nc-space-3)]">
-            <ColorField />
+            <TypeField />
         </div>
 
         <div
             class="mt-[var(--nc-space-3)] flex flex-wrap items-center"
             style="gap: var(--nc-space-3)"
         >
-            <label class="nc-radio nc-t-xs">
-                <input type="checkbox" :checked="auth" @change="toggleAuth" />
-                <span class="nc-dot" />
-                {{ $t('Basic auth') }}
-            </label>
+            <AuthField />
             <CredentialFields v-if="auth" />
         </div>
-        <FieldError :message="errorOf('basicAuthUser')" />
-        <FieldError :message="errorOf('basicAuthPassword')" />
+        <InputError
+            size="sm"
+            :field="fieldId('basicAuthUser')"
+            :message="errorOf('basicAuthUser')"
+        />
+        <InputError
+            size="sm"
+            :field="fieldId('basicAuthPassword')"
+            :message="errorOf('basicAuthPassword')"
+        />
 
         <div
             class="mt-[var(--nc-space-3)] flex flex-wrap items-center"
@@ -291,8 +441,16 @@ const [DefineCollect, CollectField] = createReusableTemplate();
             <IntervalField />
             <CollectField />
         </div>
-        <FieldError :message="errorOf('pollIntervalSeconds')" />
-        <FieldError :message="errorOf('pollingEnabled')" />
+        <InputError
+            size="sm"
+            :field="fieldId('pollIntervalSeconds')"
+            :message="errorOf('pollIntervalSeconds')"
+        />
+        <InputError
+            size="sm"
+            :field="fieldId('pollingEnabled')"
+            :message="errorOf('pollingEnabled')"
+        />
     </div>
 
     <div v-else class="flex flex-col" style="gap: var(--nc-space-4)">
@@ -304,12 +462,15 @@ const [DefineCollect, CollectField] = createReusableTemplate();
             "
         >
             <NameField />
-            <ColorField />
+            <TypeField />
         </div>
 
         <UrlField />
 
+        <AuthField />
+
         <div
+            v-if="auth"
             class="grid"
             style="
                 grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -317,8 +478,9 @@ const [DefineCollect, CollectField] = createReusableTemplate();
             "
         >
             <CredentialFields />
-            <IntervalField />
         </div>
+
+        <IntervalField />
 
         <CollectField />
     </div>

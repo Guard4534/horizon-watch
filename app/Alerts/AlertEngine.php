@@ -11,6 +11,7 @@ use App\Models\Alert;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
+use App\Models\MaintenanceWindow;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,7 @@ final class AlertEngine
     {
         $rules = $this->rules->forEnvironment($environment);
         $at = $snapshot->captured_at;
+        $maintenance = Maintenance::windowFor($environment, $at);
         $open = Alert::query()
             ->open()
             ->where('environment_id', $environment->id)
@@ -31,30 +33,37 @@ final class AlertEngine
             ->lockForUpdate()
             ->get()
             ->keyBy(fn (Alert $alert) => $alert->metric->value);
+        $runs = $this->breachRuns($environment, $rules, $snapshot, $state, $at);
+
+        if ($maintenance !== null && $open->isNotEmpty()) {
+            Maintenance::silence(Alert::query()->whereKey($open->modelKeys()), $maintenance, $at);
+        }
 
         foreach (AlertRuleMetric::cases() as $metric) {
             $rule = $rules->for($metric);
             $violating = $metric->isStateRule()
-                ? $state->status === $this->stateOf($metric)
+                ? $this->holdsState($metric, $snapshot, $state)
                 : ($this->judgesThresholds($snapshot) ? $snapshot->breaches->contains($metric) : null);
-
-            if ($violating === null) {
-                continue;
-            }
 
             $alert = $open->get($metric->value);
 
-            if ($alert !== null && ! $rule->enabled) {
+            if ($alert !== null && ! $rule->enabled && ($violating !== null || $metric->isStateRule())) {
                 $this->resolveQuietly(Alert::query()->whereKey($alert->id), $at);
+            } elseif ($violating === null) {
+                continue;
             } elseif ($alert !== null && ! $violating) {
                 $this->resolve($alert, $at);
             } elseif ($alert !== null) {
                 [$value, $detail] = $this->measure($metric, $snapshot, $state, $at);
                 $this->touch($alert, $rule, $at, $value, $detail);
-            } elseif ($rule->enabled && $violating && (! $metric->isStateRule() || $this->runLasts($state, $at, $rule->threshold))) {
+            } elseif ($rule->enabled && $violating && $this->lastsLongEnough($rule, $state, $runs, $at)) {
                 [$value, $detail] = $this->measure($metric, $snapshot, $state, $at);
-                $this->open($environment, $rule, $at, $value, $detail);
+                $this->open($environment, $rule, $at, $value, $detail, $maintenance);
             }
+        }
+
+        if ($runs !== ($state->breach_runs ?? [])) {
+            $state->forceFill(['breach_runs' => $runs === [] ? null : $runs])->save();
         }
     }
 
@@ -105,6 +114,17 @@ final class AlertEngine
         return $snapshot->error === null && $snapshot->status !== EnvironmentStatus::Inactive;
     }
 
+    private function holdsState(AlertRuleMetric $metric, EnvironmentSnapshot $snapshot, EnvironmentState $state): ?bool
+    {
+        $status = $this->stateOf($metric);
+
+        if ($snapshot->error !== null && $status !== EnvironmentStatus::Unreachable) {
+            return null;
+        }
+
+        return $state->status === $status;
+    }
+
     private function stateOf(AlertRuleMetric $metric): EnvironmentStatus
     {
         return match ($metric) {
@@ -114,9 +134,52 @@ final class AlertEngine
         };
     }
 
-    private function runLasts(EnvironmentState $state, CarbonImmutable $at, float $minutes): bool
+    /**
+     * @param  array<string, array{since: string, seen: string}>  $runs
+     */
+    private function lastsLongEnough(EffectiveRule $rule, EnvironmentState $state, array $runs, CarbonImmutable $at): bool
     {
-        return ($state->status_since ?? $at)->diffInSeconds($at) >= $minutes * 60;
+        $run = $runs[$rule->metric->value] ?? null;
+
+        [$since, $minutes] = $rule->metric->isStateRule()
+            ? [$state->status_since, $rule->threshold]
+            : [$run === null ? null : CarbonImmutable::parse($run['since']), $rule->forMinutes];
+
+        return ($since ?? $at)->diffInSeconds($at) >= $minutes * 60;
+    }
+
+    /**
+     * @return array<string, array{since: string, seen: string}>
+     */
+    private function breachRuns(Environment $environment, RuleSet $rules, EnvironmentSnapshot $snapshot, EnvironmentState $state, CarbonImmutable $at): array
+    {
+        $runs = $state->breach_runs ?? [];
+
+        if (! $this->judgesThresholds($snapshot)) {
+            return $runs;
+        }
+
+        $bridge = $at->subSeconds(
+            config()->integer('horizon-watch.stale_after_intervals') * $environment->poll_interval_seconds
+            + config()->integer('horizon-watch.readings.poll_job_timeout_seconds'),
+        );
+        $seen = $at->toIso8601ZuluString('microsecond');
+        $judged = [];
+
+        foreach ($snapshot->breaches as $metric) {
+            if ($metric->isStateRule() || $rules->for($metric)->forMinutes === 0) {
+                continue;
+            }
+
+            $run = $runs[$metric->value] ?? null;
+
+            $judged[$metric->value] = [
+                'since' => $run !== null && CarbonImmutable::parse($run['seen'])->gte($bridge) ? $run['since'] : $seen,
+                'seen' => $seen,
+            ];
+        }
+
+        return $judged;
     }
 
     /**
@@ -127,7 +190,9 @@ final class AlertEngine
         return match ($metric) {
             AlertRuleMetric::QueuePending => [$snapshot->pending, ['pending' => $snapshot->pending]],
             AlertRuleMetric::QueueMaxWait => [$snapshot->max_wait_seconds, ['waitSeconds' => $snapshot->max_wait_seconds]],
-            AlertRuleMetric::JobsFailedPerHour => [$snapshot->failed_last_hour, ['failed' => $snapshot->failed_last_hour]],
+            AlertRuleMetric::JobsFailedPerHour => [$snapshot->failed_last_hour, $snapshot->failed_last_hour_capped
+                ? ['failed' => $snapshot->failed_last_hour, 'atLeast' => true]
+                : ['failed' => $snapshot->failed_last_hour]],
             AlertRuleMetric::JobRuntime => $this->longestJob($state, $at),
             AlertRuleMetric::WorkersMissing => $this->queuesWithoutWorkers($state),
             default => [(int) ($state->status_since ?? $at)->diffInMinutes($at), []],
@@ -176,7 +241,7 @@ final class AlertEngine
     /**
      * @param  array<string, mixed>  $detail
      */
-    private function open(Environment $environment, EffectiveRule $rule, CarbonImmutable $at, float $value, array $detail): void
+    private function open(Environment $environment, EffectiveRule $rule, CarbonImmutable $at, float $value, array $detail, ?MaintenanceWindow $maintenance): void
     {
         $model = new Alert;
         $id = $model->newUniqueId();
@@ -190,15 +255,15 @@ final class AlertEngine
             'severity' => $rule->severity,
             'application_name' => $environment->application->name,
             'environment_name' => $environment->name,
-            'environment_color' => $environment->color,
+            'environment_type' => $environment->type,
             'threshold' => $rule->threshold,
-            'unit' => $rule->metric->unit(),
             'value' => $value,
             'detail' => $detail,
             'opened_at' => $at,
             'last_seen_at' => $at,
+            'muted_until' => $maintenance?->ends_at,
             'muted_indefinitely' => false,
-            'notified' => false,
+            'maintenance_window_id' => $maintenance?->id,
             'created_at' => $timestamp,
             'updated_at' => $timestamp,
         ])->getAttributes();
@@ -217,7 +282,7 @@ final class AlertEngine
             'last_seen_at' => $at,
             'value' => $value,
             'detail' => $detail,
-            'severity' => $alert->notified && $alert->severity === AlertSeverity::Critical ? $alert->severity : $rule->severity,
+            'severity' => $alert->wasNotified() && $alert->severity === AlertSeverity::Critical ? $alert->severity : $rule->severity,
             'threshold' => $rule->threshold,
         ])->save();
     }

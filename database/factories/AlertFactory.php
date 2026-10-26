@@ -27,9 +27,8 @@ class AlertFactory extends Factory
             'severity' => fn (array $attributes) => AlertRuleMetric::from($this->value($attributes['metric']))->defaultSeverity(),
             'application_name' => fn (array $attributes) => $this->environment($attributes)->application->name,
             'environment_name' => fn (array $attributes) => $this->environment($attributes)->name,
-            'environment_color' => fn (array $attributes) => $this->environment($attributes)->color,
+            'environment_type' => fn (array $attributes) => $this->environment($attributes)->type,
             'threshold' => fn (array $attributes) => AlertRuleMetric::from($this->value($attributes['metric']))->defaultThreshold(),
-            'unit' => fn (array $attributes) => AlertRuleMetric::from($this->value($attributes['metric']))->unit(),
             'value' => 2500,
             'detail' => ['pending' => 2500],
             'opened_at' => now()->subMinutes(10),
@@ -41,7 +40,6 @@ class AlertFactory extends Factory
             'handled_at' => null,
             'handled_by' => null,
             'last_notified_at' => null,
-            'notified' => false,
             'digested_at' => null,
         ];
     }
@@ -58,7 +56,7 @@ class AlertFactory extends Factory
             'team_id' => null,
             'application_name' => null,
             'environment_name' => null,
-            'environment_color' => null,
+            'environment_type' => null,
         ]);
     }
 

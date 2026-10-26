@@ -14,5 +14,6 @@ class UserTeamData extends Data
         public ?TeamRole $role,
         public ?string $roleLabel,
         public bool $isCurrent,
+        public bool $isLastAdmin,
     ) {}
 }

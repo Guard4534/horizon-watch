@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
+import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import BrandMark from '@/components/nocturne/BrandMark.vue';
+import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useLastRefresh } from '@/composables/useLastRefresh';
+import { useLiveConnection } from '@/composables/useLiveConnection';
 import { useRefreshInterval } from '@/composables/useRefreshInterval';
+import { formatSeconds } from '@/lib/monitoring';
 
 const {
     title,
@@ -17,6 +21,12 @@ const {
 
 const page = usePage();
 const updatedAt = useLastRefresh();
+const { connected } = useLiveConnection();
+const connectionLabel = computed(() =>
+    connected.value
+        ? trans('Live updates are working')
+        : trans('Live updates are failing: the figures may be out of date'),
+);
 const secondLine = computed(
     () => subtitle ?? page.props.currentTeam?.name ?? '',
 );
@@ -24,7 +34,7 @@ const secondLine = computed(
 const { interval, options, set } = useRefreshInterval();
 
 function label(ms: number): string {
-    return ms < 60000 ? `${ms / 1000}s` : `${ms / 60000} min`;
+    return formatSeconds(ms / 1000);
 }
 
 function choose(event: Event): void {
@@ -34,11 +44,11 @@ function choose(event: Event): void {
 
 <template>
     <header class="bar">
-        <BrandMark class="phone-only" :size="14" :with-name="false" />
+        <BrandMark class="phone-only" :size="20" :with-name="false" />
         <div class="min-w-0">
-            <h4 class="title truncate">
+            <h1 class="title truncate">
                 {{ title ? $t(title) : '' }}
-            </h4>
+            </h1>
             <div class="subtitle truncate">
                 {{ subtitle ? $t(subtitle) : secondLine }}
             </div>
@@ -48,12 +58,12 @@ function choose(event: Event): void {
                 v-if="live"
                 class="nc-num nc-t-2xs nc-tone-soft inline-flex items-center gap-[7px]"
             >
-                <span
-                    class="size-[6px] flex-none rounded-full"
-                    style="
-                        background: var(--st-ok);
-                        animation: nc-pulse 2.4s ease-in-out infinite;
-                    "
+                <StatusLamp
+                    :status="null"
+                    :tone="connected ? 'var(--st-ok)' : 'var(--st-down)'"
+                    :label="connectionLabel"
+                    :size="6"
+                    :class="{ 'live-dot-on': connected }"
                 />
                 <label class="inline-flex items-center gap-[7px]">
                     <span class="phone-hidden-words">{{
@@ -73,9 +83,17 @@ function choose(event: Event): void {
                         </option>
                     </select>
                 </label>
-                <span class="desktop-only">{{
+                <span v-if="connected" class="desktop-only">{{
                     $t('· updated :time', { time: updatedAt })
                 }}</span>
+                <span
+                    v-else
+                    class="desktop-only"
+                    style="color: var(--st-down)"
+                    >{{
+                        $t('· not updating since :time', { time: updatedAt })
+                    }}</span
+                >
             </span>
         </div>
     </header>
@@ -100,6 +118,10 @@ function choose(event: Event): void {
 .subtitle {
     font-size: 12px;
     color: var(--nc-neutral-500);
+}
+
+.live-dot-on {
+    animation: nc-pulse 2.4s ease-in-out infinite;
 }
 
 .interval {

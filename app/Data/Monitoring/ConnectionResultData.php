@@ -14,9 +14,12 @@ class ConnectionResultData extends Data
         public ?int $masterCount,
         public ?int $latencyMs,
         public ?ReadingError $error,
+        public ?ReadingProblemData $problem = null,
+        public ?string $suggestedUrl = null,
+        public bool $credentialsInClear = false,
     ) {}
 
-    public static function failed(ReadingError $error): self
+    public static function failed(ReadingError $error, ?ReadingProblemData $problem = null, ?string $suggestedUrl = null, bool $credentialsInClear = false): self
     {
         return new self(
             reachable: false,
@@ -24,6 +27,9 @@ class ConnectionResultData extends Data
             masterCount: null,
             latencyMs: null,
             error: $error,
+            problem: $problem,
+            suggestedUrl: $suggestedUrl,
+            credentialsInClear: $credentialsInClear,
         );
     }
 }

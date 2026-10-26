@@ -24,7 +24,7 @@ class UpdateEnvironment
 
         $attributes = [
             'name' => $data->name,
-            'color' => $data->color,
+            'type' => $data->type,
             'horizon_url' => $data->horizonUrl,
             'basic_auth_user' => $data->basicAuthUser,
             'poll_interval_seconds' => $data->pollIntervalSeconds,
@@ -46,7 +46,7 @@ class UpdateEnvironment
             if ($moved) {
                 EnvironmentState::query()->where('environment_id', $environment->id)->delete();
             } elseif ($resumed) {
-                EnvironmentState::query()->where('environment_id', $environment->id)->update(['status_since' => null]);
+                EnvironmentState::query()->where('environment_id', $environment->id)->update(['status_since' => null, 'last_known_since' => null, 'breach_runs' => null]);
             }
 
             $now = CarbonImmutable::now()->startOfSecond();

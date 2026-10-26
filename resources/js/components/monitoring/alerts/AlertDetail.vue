@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatCount, formatWait } from '@/lib/monitoring';
+import { formatNumber, formatSeconds } from '@/lib/monitoring';
 
 defineProps<{
     alert: App.Data.Monitoring.AlertData;
@@ -19,8 +19,8 @@ defineProps<{
     <template
         v-else-if="alert.metric === 'queue.pending' && alert.value !== null"
         >{{
-            $t(':count jobs pending', {
-                count: formatCount(alert.value),
+            $tChoice(':jobs job pending|:jobs jobs pending', alert.value, {
+                jobs: formatNumber(alert.value),
             })
         }}</template
     >
@@ -28,7 +28,7 @@ defineProps<{
         v-else-if="alert.metric === 'queue.max_wait' && alert.value !== null"
         >{{
             $t('oldest job waiting :wait', {
-                wait: formatWait(alert.value),
+                wait: formatSeconds(alert.value),
             })
         }}</template
     >
@@ -40,7 +40,7 @@ defineProps<{
             })
         }}</span
         ><template v-if="alert.value !== null">
-            · {{ formatWait(alert.value) }}</template
+            · {{ formatSeconds(alert.value) }}</template
         ></template
     >
     <template v-else-if="alert.metric === 'job.runtime'">{{
@@ -51,9 +51,17 @@ defineProps<{
             alert.metric === 'jobs.failed_per_hour' && alert.value !== null
         "
         >{{
-            $t(':count jobs failed in the last hour', {
-                count: formatCount(alert.value),
-            })
+            $tChoice(
+                ':jobs job failed in the last hour|:jobs jobs failed in the last hour',
+                alert.value,
+                {
+                    jobs: alert.valueIsLowerBound
+                        ? $t('at least :count', {
+                              count: formatNumber(alert.value),
+                          })
+                        : formatNumber(alert.value),
+                },
+            )
         }}</template
     >
     <template v-else-if="alert.metric === 'jobs.failed_per_hour'">{{

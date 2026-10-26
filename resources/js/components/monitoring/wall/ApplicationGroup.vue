@@ -1,20 +1,18 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { PhCaretDown, PhCaretRight } from '@phosphor-icons/vue';
-import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
+import AttentionBadge from '@/components/monitoring/AttentionBadge.vue';
 import EnvironmentTile from '@/components/monitoring/wall/EnvironmentTile.vue';
 import {
+    collectionPaused,
     needsAttention,
-    worstTone,
+    statusText,
+    statusTone,
 } from '@/components/monitoring/environment/readings';
+import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import {
-    envColor,
-    formatCount,
-    statusColor,
-    statusLabel,
-} from '@/lib/monitoring';
+import { formatCount } from '@/lib/monitoring';
 import { show as showApplication } from '@/routes/applications';
 
 const { applicationId, applicationName, environments } = defineProps<{
@@ -28,8 +26,14 @@ const forced = defineModel<boolean | undefined>('expanded');
 const slug = useTeamSlug();
 
 const troubled = computed(() => environments.filter(needsAttention));
-const worstColor = computed(
-    () => worstTone(troubled.value) ?? 'var(--nc-neutral-500)',
+
+// WallQuery sends the environments worst first and Wall.vue keeps that order
+// in each group, so the first one that needs attention and has a status has
+// the worst status (an environment without a status sorts before `active`).
+const worstStatus = computed(
+    () =>
+        troubled.value.find((environment) => environment.status !== null)
+            ?.status ?? null,
 );
 
 const expanded = computed(() => forced.value ?? troubled.value.length > 0);
@@ -37,22 +41,6 @@ const expanded = computed(() => forced.value ?? troubled.value.length > 0);
 const pending = computed(() =>
     environments.reduce((total, environment) => total + environment.pending, 0),
 );
-
-function dotLabel(environment: App.Data.Monitoring.EnvironmentData): string {
-    return `${environment.name} · ${
-        environment.status === null
-            ? trans('No reading yet')
-            : statusLabel(environment.status)
-    }`;
-}
-
-function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
-    const halo = needsAttention(environment)
-        ? `0 0 0 2px color-mix(in srgb, ${statusColor(environment.status!)} 55%, transparent)`
-        : undefined;
-
-    return { background: envColor(environment.color), boxShadow: halo };
-}
 </script>
 
 <template>
@@ -92,32 +80,22 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
                 class="name min-w-0 truncate"
                 >{{ applicationName }}</Link
             >
-            <span
-                v-if="troubled.length"
-                class="nc-tag nc-tag-sm flex-none"
-                :style="{
-                    background: `color-mix(in srgb, ${worstColor} 18%, transparent)`,
-                    color: worstColor,
-                }"
-                >{{
-                    $t(':count to handle', { count: String(troubled.length) })
-                }}</span
-            >
-            <span v-else class="nc-tag nc-tag-sm nc-tag-neutral flex-none">{{
-                $t('all good')
-            }}</span>
+            <AttentionBadge
+                :count="troubled.length"
+                :worst-status="worstStatus"
+                :paused="collectionPaused(environments)"
+            />
             <span
                 v-if="!expanded"
                 class="flex min-w-0 flex-wrap items-center gap-[5px]"
             >
-                <span
+                <StatusLamp
                     v-for="environment in environments"
                     :key="environment.id"
-                    class="dot"
-                    role="img"
-                    :style="dotStyle(environment)"
-                    :title="dotLabel(environment)"
-                    :aria-label="dotLabel(environment)"
+                    :status="environment.status"
+                    :tone="statusTone(environment)"
+                    :label="`${environment.name} · ${statusText(environment)}`"
+                    :size="7"
                 />
             </span>
             <span class="nc-num nc-t-2xs nc-tone-faint ml-auto flex-none"
@@ -182,12 +160,5 @@ function dotStyle(environment: App.Data.Monitoring.EnvironmentData) {
 
 .name:hover {
     color: var(--nc-accent);
-}
-
-.dot {
-    width: 7px;
-    height: 7px;
-    flex: none;
-    border-radius: 50%;
 }
 </style>

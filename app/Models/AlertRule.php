@@ -22,17 +22,20 @@ use Illuminate\Support\Str;
  * @property AlertSeverity|null $severity
  * @property bool|null $notify_email
  * @property bool|null $enabled
+ * @property int|null $for_minutes
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Team $team
  */
-#[Fillable(['scope', 'metric', 'threshold', 'severity', 'notify_email', 'enabled'])]
+#[Fillable(['scope', 'metric', 'threshold', 'severity', 'notify_email', 'enabled', 'for_minutes'])]
 class AlertRule extends Model
 {
     /** @use HasFactory<AlertRuleFactory> */
     use HasFactory;
 
     public const string ORGANIZATION = 'organization';
+
+    public const int MAX_FOR_MINUTES = 60;
 
     /**
      * @return BelongsTo<Team, $this>
@@ -61,6 +64,7 @@ class AlertRule extends Model
             'threshold' => 'float',
             'notify_email' => 'boolean',
             'enabled' => 'boolean',
+            'for_minutes' => 'integer',
         ];
     }
 }

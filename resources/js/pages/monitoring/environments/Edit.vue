@@ -3,11 +3,17 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { PhTrashSimple } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
 import ConfirmByNameDialog from '@/components/ConfirmByNameDialog.vue';
+import DangerZoneCard from '@/components/DangerZoneCard.vue';
+import PageHeader from '@/components/PageHeader.vue';
+import PasswordNeededTag from '@/components/monitoring/PasswordNeededTag.vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EnvironmentForm from '@/components/monitoring/applications/EnvironmentForm.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { show as showApplication } from '@/routes/applications';
+import {
+    index as applicationsIndex,
+    show as showApplication,
+} from '@/routes/applications';
 import { destroy, show, testConnection, update } from '@/routes/environments';
 
 defineOptions({
@@ -23,17 +29,29 @@ const slug = useTeamSlug();
 const environment = computed(() => page.slug ?? '');
 const name = computed(() => page.environment?.name ?? '');
 
+const storedCredentials = computed(
+    () =>
+        (page.environment?.basicAuthUser ?? null) !== null || page.hasPassword,
+);
+
+const auth = ref(storedCredentials.value);
+
+const passwordNeeded = computed(
+    () =>
+        (page.environment?.basicAuthUser ?? null) !== null && !page.hasPassword,
+);
+
 const form = useForm<{
     environment: App.Data.Applications.EnvironmentFormData;
 }>({
     environment: {
         name: page.environment?.name ?? '',
-        color: (page.environment?.color ??
-            page.colors[0].value) as App.Enums.EnvironmentColor,
+        type: page.environment?.type ?? 'staging',
         horizonUrl: page.environment?.horizonUrl ?? '',
         basicAuthUser: page.environment?.basicAuthUser ?? null,
         basicAuthPassword: null,
-        pollIntervalSeconds: page.environment?.pollIntervalSeconds ?? 15,
+        pollIntervalSeconds:
+            page.environment?.pollIntervalSeconds ?? page.pollInterval.default,
         pollingEnabled: page.environment?.pollingEnabled ?? true,
     },
 });
@@ -54,7 +72,13 @@ const submit = () => {
     form.transform((data) => data.environment).patch(
         update({ current_team: slug.value, environment: environment.value })
             .url,
-        { preserveScroll: true },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.environment.basicAuthPassword = null;
+                form.defaults();
+            },
+        },
     );
 };
 </script>
@@ -63,78 +87,61 @@ const submit = () => {
     <Head :title="$t('Edit environment')" />
 
     <div
-        class="mx-auto flex w-full flex-col"
-        style="
-            padding: var(--nc-space-6);
-            gap: var(--nc-space-6);
-            max-width: 940px;
-        "
+        class="nc-page nc-page-narrow flex flex-col"
+        style="gap: var(--nc-space-6)"
     >
-        <div class="flex flex-wrap items-end" style="gap: var(--nc-space-4)">
-            <div class="min-w-0">
-                <div class="nc-t-2xs nc-tone-muted">
-                    <Link
-                        :href="
-                            showApplication({
-                                current_team: slug,
-                                application: page.applicationSlug,
-                            })
-                        "
-                        >{{ page.application.name }}</Link
-                    >
-                </div>
-                <div style="font-size: 26px; line-height: 1.15">
-                    {{ name }}
-                </div>
-                <div class="nc-t-xs nc-tone-muted">
-                    {{ $t('Edit environment') }}
-                </div>
-            </div>
-            <div
-                class="ml-auto flex flex-wrap items-center"
-                style="gap: var(--nc-space-2)"
-            >
-                <Link
-                    class="nc-btn nc-btn-ghost nc-t-xs"
-                    :href="
-                        show({ current_team: slug, environment: environment })
-                    "
-                    >{{ $t('Open') }}</Link
-                >
-            </div>
-        </div>
+        <PageHeader
+            :title="$t('Edit environment')"
+            :crumbs="[
+                { label: $t('Applications'), href: applicationsIndex(slug) },
+                {
+                    label: page.application.name,
+                    href: showApplication({
+                        current_team: slug,
+                        application: page.applicationSlug,
+                    }),
+                },
+                {
+                    label: name,
+                    href: show({
+                        current_team: slug,
+                        environment: environment,
+                    }),
+                },
+            ]"
+        />
 
-        <SectionCard :title="$t('Credentials & collection')">
-            <EnvironmentForm
-                v-model="form.environment"
-                :colors="page.colors"
-                :errors="errors"
-                :has-password="page.hasPassword"
-            />
-            <div
-                class="mt-[var(--nc-space-4)] flex flex-wrap items-center"
-                style="gap: var(--nc-space-3)"
+        <SectionCard :title="$t('Environment')">
+            <form
+                class="flex flex-col"
+                style="gap: var(--nc-space-4)"
+                novalidate
+                @submit.prevent="submit"
             >
-                <button
-                    type="button"
-                    class="nc-btn nc-btn-primary"
-                    :disabled="form.processing"
-                    @click="submit"
+                <p
+                    v-if="passwordNeeded"
+                    class="nc-t-xs nc-tone-soft flex flex-wrap items-center"
+                    style="gap: var(--nc-space-2)"
+                    role="status"
                 >
-                    {{ $t('Save') }}
-                </button>
-                <Link
-                    class="nc-btn nc-btn-secondary"
-                    :href="
-                        showApplication({
-                            current_team: slug,
-                            application: page.applicationSlug,
-                        })
-                    "
-                    >{{ $t('Cancel') }}</Link
-                >
+                    <PasswordNeededTag />
+                    {{
+                        $t(
+                            'This environment has a basic-auth username but no stored password: enter it so that collection signs in to Horizon.',
+                        )
+                    }}
+                </p>
+                <EnvironmentForm
+                    v-model="form.environment"
+                    v-model:auth="auth"
+                    :types="page.types"
+                    :errors="errors"
+                    :has-password="page.hasPassword"
+                    :poll-interval="page.pollInterval"
+                    :stored-credentials="storedCredentials"
+                    editing
+                />
                 <ConnectionTest
-                    class="ml-auto"
                     :url="
                         testConnection({
                             current_team: slug,
@@ -144,26 +151,44 @@ const submit = () => {
                     :payload="testPayload"
                     :disabled="form.environment.horizonUrl.trim() === ''"
                 />
-            </div>
+                <div class="nc-actions">
+                    <Link
+                        class="nc-btn nc-btn-secondary"
+                        :href="
+                            showApplication({
+                                current_team: slug,
+                                application: page.applicationSlug,
+                            })
+                        "
+                        >{{ $t('Cancel') }}</Link
+                    >
+                    <button
+                        type="submit"
+                        class="nc-btn nc-btn-primary"
+                        :disabled="!form.isDirty || form.processing"
+                    >
+                        {{ $t('Save') }}
+                    </button>
+                </div>
+            </form>
         </SectionCard>
 
-        <SectionCard :title="$t('Delete environment')">
-            <div class="nc-t-xs nc-tone-soft">
-                {{
-                    $t(
-                        'Deleting an environment removes it from the wall and from every list. There is no undo and no archive.',
-                    )
-                }}
-            </div>
+        <DangerZoneCard
+            :title="$t('Delete environment')"
+            :description="
+                $t(
+                    'Deleting an environment removes it from the wall and from every list. There is no undo and no archive.',
+                )
+            "
+        >
             <button
                 type="button"
-                class="nc-btn nc-t-xs nc-tone-down mt-[var(--nc-space-3)]"
-                style="border-color: var(--st-down)"
+                class="nc-btn nc-btn-danger nc-t-xs"
                 @click="confirming = true"
             >
                 <PhTrashSimple :size="13" />{{ $t('Delete environment') }}
             </button>
-        </SectionCard>
+        </DangerZoneCard>
 
         <ConfirmByNameDialog
             v-model:open="confirming"

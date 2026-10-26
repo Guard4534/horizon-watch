@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Laravel\Fortify\Contracts\TwoFactorAuthenticationProvider;
 
 /**
  * @extends Factory<User>
@@ -24,7 +25,6 @@ class UserFactory extends Factory
         return [
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
-            'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
             'two_factor_secret' => null,
@@ -48,17 +48,30 @@ class UserFactory extends Factory
         });
     }
 
-    public function unverified(): static
+    public function instanceAdmin(): static
     {
         return $this->state(fn (array $attributes) => [
-            'email_verified_at' => null,
+            'is_instance_admin' => true,
         ]);
+    }
+
+    public function withoutOrganization(): static
+    {
+        return $this->afterCreating(function (User $user) {
+            $team = $user->currentTeam;
+
+            $user->teamMemberships()->delete();
+            $user->update(['current_team_id' => null]);
+            $user->unsetRelation('currentTeam');
+
+            $team?->forceDelete();
+        });
     }
 
     public function withTwoFactor(): static
     {
         return $this->state(fn (array $attributes) => [
-            'two_factor_secret' => encrypt('secret'),
+            'two_factor_secret' => encrypt(app(TwoFactorAuthenticationProvider::class)->generateSecretKey()),
             'two_factor_recovery_codes' => encrypt(json_encode(['recovery-code-1'])),
             'two_factor_confirmed_at' => now(),
         ]);

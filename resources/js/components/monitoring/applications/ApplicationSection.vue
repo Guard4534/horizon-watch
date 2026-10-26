@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { PhGearSix, PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
+import { PhPencilSimple, PhPlus } from '@phosphor-icons/vue';
+import AttentionBadge from '@/components/monitoring/AttentionBadge.vue';
 import {
+    collectionPaused,
+    needsAttention,
     statusText,
     statusTone,
 } from '@/components/monitoring/environment/readings';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
+import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { useVisibility } from '@/composables/useVisibility';
@@ -46,27 +50,16 @@ const { canManageApplications } = useVisibility();
                 {{ group.application.name }}
             </Link>
             <span
+                v-if="group.application.domain"
                 class="nc-t-2xs nc-tone-muted"
                 style="letter-spacing: 0.01em"
-                >{{ group.application.host }}</span
+                >{{ group.application.domain }}</span
             >
-            <span
-                v-if="group.triageCount"
-                class="nc-tag nc-tag-sm nc-tone-down flex-none"
-                style="
-                    background: color-mix(
-                        in srgb,
-                        var(--st-down) 16%,
-                        transparent
-                    );
-                "
-                >{{
-                    $t(':count to triage', { count: String(group.triageCount) })
-                }}</span
-            >
-            <span v-else class="nc-tag nc-tag-sm nc-tag-neutral flex-none">
-                {{ $t('all good') }}
-            </span>
+            <AttentionBadge
+                :count="group.attentionCount"
+                :worst-status="group.worstStatus"
+                :paused="collectionPaused(group.environments)"
+            />
             <template v-if="canManageApplications">
                 <Link
                     class="nc-btn nc-btn-ghost nc-t-xs ml-auto"
@@ -89,7 +82,7 @@ const { canManageApplications } = useVisibility();
                     "
                     :title="$t('Edit application')"
                 >
-                    <PhGearSix :size="14" />
+                    <PhPencilSimple :size="14" />
                 </Link>
             </template>
         </div>
@@ -118,13 +111,13 @@ const { canManageApplications } = useVisibility();
                             >
                                 <EnvPill
                                     :name="environment.name"
-                                    :color="environment.color"
+                                    :type="environment.type"
                                 />
                             </Link>
                             <EnvPill
                                 v-else
                                 :name="environment.name"
-                                :color="environment.color"
+                                :type="environment.type"
                             />
                         </td>
                         <td
@@ -155,14 +148,18 @@ const { canManageApplications } = useVisibility();
                         <td>
                             <span
                                 class="nc-t-xs inline-flex items-center gap-[5px]"
-                                :style="{ color: statusTone(environment) }"
+                                :style="{
+                                    color: needsAttention(environment)
+                                        ? statusTone(environment)
+                                        : 'var(--nc-neutral-400)',
+                                }"
                             >
                                 <template v-if="environment.watched">
-                                    <span
-                                        class="size-[6px] rounded-full"
-                                        :style="{
-                                            background: statusTone(environment),
-                                        }"
+                                    <StatusLamp
+                                        :status="environment.status"
+                                        :tone="statusTone(environment)"
+                                        :size="6"
+                                        decorative
                                     />
                                     {{ statusText(environment) }}
                                 </template>
@@ -178,7 +175,7 @@ const { canManageApplications } = useVisibility();
                                         'Your visibility does not cover this environment: no detail page and no chart, but you can still configure it.',
                                     )
                                 "
-                                >{{ $t('Not on your wall') }}</span
+                                >{{ $t('Outside your visibility') }}</span
                             >
                             <Link
                                 v-if="canManageApplications"

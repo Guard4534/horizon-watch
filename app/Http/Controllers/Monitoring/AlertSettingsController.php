@@ -33,7 +33,7 @@ class AlertSettingsController extends Controller
     {
         AlertRulesQuery::flashNewWebhookSecret($current_team, $request->session(), $regenerateWebhookSecret->handle($current_team));
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('New webhook secret generated.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('New signing secret generated.')]);
 
         return back();
     }

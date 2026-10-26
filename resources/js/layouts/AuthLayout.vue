@@ -1,15 +1,11 @@
 <script setup lang="ts">
 import LocaleSwitch from '@/components/LocaleSwitch.vue';
 import BrandMark from '@/components/nocturne/BrandMark.vue';
+import { Toaster } from '@/components/ui/sonner';
 
-const {
-    title = '',
-    description = '',
-    kicker = '',
-} = defineProps<{
+const { title = '', description = '' } = defineProps<{
     title?: string;
     description?: string;
-    kicker?: string;
 }>();
 </script>
 
@@ -24,22 +20,16 @@ const {
             class="nc-card w-full max-w-[380px]"
             style="padding: var(--nc-space-6)"
         >
-            <div
-                v-if="kicker"
-                class="nc-kicker"
-                style="margin-bottom: var(--nc-space-2)"
-            >
-                {{ $t(kicker) }}
-            </div>
-            <h3
-                style="
-                    font-size: 25px;
-                    line-height: 1.12;
-                    margin: 0 0 var(--nc-space-2);
-                "
+            <h1
+                style="font-size: 25px; line-height: 1.12"
+                :style="{
+                    margin: description
+                        ? '0 0 var(--nc-space-2)'
+                        : '0 0 var(--nc-space-4)',
+                }"
             >
                 {{ $t(title) }}
-            </h3>
+            </h1>
             <p
                 v-if="description"
                 class="nc-t-sm nc-tone-soft"
@@ -51,5 +41,6 @@ const {
         </section>
 
         <LocaleSwitch name="auth-locale" />
+        <Toaster :container-aria-label="$t('Notifications')" />
     </div>
 </template>

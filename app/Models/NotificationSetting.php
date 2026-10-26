@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Concerns\ReplacesUnreadableSecrets;
+use Carbon\CarbonImmutable;
 use Database\Factories\NotificationSettingFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -15,6 +17,8 @@ use Illuminate\Support\Carbon;
  * @property list<string> $recipients
  * @property string|null $webhook_url
  * @property string|null $webhook_secret
+ * @property string|null $previous_webhook_secret
+ * @property CarbonImmutable|null $previous_webhook_secret_expires_at
  * @property string|null $quiet_from
  * @property string|null $quiet_to
  * @property string $timezone
@@ -23,12 +27,12 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read Team $team
  */
-#[Fillable(['recipients', 'webhook_url', 'webhook_secret', 'quiet_from', 'quiet_to', 'timezone', 'repeat_minutes'])]
-#[Hidden(['webhook_secret'])]
+#[Fillable(['recipients', 'webhook_url', 'webhook_secret', 'previous_webhook_secret', 'previous_webhook_secret_expires_at', 'quiet_from', 'quiet_to', 'timezone', 'repeat_minutes'])]
+#[Hidden(['webhook_secret', 'previous_webhook_secret'])]
 class NotificationSetting extends Model
 {
     /** @use HasFactory<NotificationSettingFactory> */
-    use HasFactory;
+    use HasFactory, ReplacesUnreadableSecrets;
 
     /**
      * @var string
@@ -70,6 +74,13 @@ class NotificationSetting extends Model
         return config()->integer('horizon-watch.notifications.default_repeat_minutes');
     }
 
+    public static function forgetExpiredPreviousSecrets(): int
+    {
+        return self::query()->toBase()
+            ->where('previous_webhook_secret_expires_at', '<=', now())
+            ->update(['previous_webhook_secret' => null, 'previous_webhook_secret_expires_at' => null]);
+    }
+
     /**
      * @return BelongsTo<Team, $this>
      */
@@ -86,6 +97,8 @@ class NotificationSetting extends Model
         return [
             'recipients' => 'array',
             'webhook_secret' => 'encrypted',
+            'previous_webhook_secret' => 'encrypted',
+            'previous_webhook_secret_expires_at' => 'immutable_datetime',
             'repeat_minutes' => 'integer',
         ];
     }

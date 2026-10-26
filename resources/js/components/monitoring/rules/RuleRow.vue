@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import InheritToggle from '@/components/monitoring/rules/InheritToggle.vue';
+import { computed, ref, useId, watch } from 'vue';
+import InputError from '@/components/InputError.vue';
 import type { RuleField, RuleValues } from '@/lib/alertRules';
 import {
+    RULE_FIELDS,
+    formatRuleFor,
     formatThreshold,
     overriddenFieldCount,
     ruleHint,
@@ -12,6 +14,7 @@ import {
     unitLabel,
 } from '@/lib/alertRules';
 import { severityColor, severityLabel } from '@/lib/alerts';
+import { invalidField } from '@/lib/fieldErrors';
 
 const {
     rule,
@@ -29,9 +32,26 @@ const fields = defineModel<App.Data.Alerts.AlertRuleInputData>({
     required: true,
 });
 
+const id = useId();
+
 const environmentScope = computed(() => inherited !== null);
 
 const fallback = computed<RuleValues>(() => ruleValues(inherited ?? rule));
+
+const opened = ref(false);
+
+watch(
+    () => rule,
+    () => (opened.value = false),
+);
+
+const customized = computed(
+    () =>
+        environmentScope.value &&
+        (opened.value || overriddenFieldCount(fields.value) > 0),
+);
+
+const locked = computed(() => environmentScope.value && !customized.value);
 
 const hasOverride = computed(() =>
     editable
@@ -50,27 +70,33 @@ const shown = computed<RuleValues>(() => {
         notifyByEmail:
             fields.value.notifyByEmail ?? fallback.value.notifyByEmail,
         enabled: fields.value.enabled ?? fallback.value.enabled,
+        forMinutes: fields.value.forMinutes ?? fallback.value.forMinutes,
     };
 });
-
-function isInherited(field: RuleField): boolean {
-    return environmentScope.value && fields.value[field] === null;
-}
 
 function update(patch: Partial<App.Data.Alerts.AlertRuleInputData>): void {
     fields.value = { ...fields.value, ...patch };
 }
 
-function toggleInheritance(field: RuleField): void {
-    update({
-        [field]: isInherited(field) ? fallback.value[field] : null,
-    });
+function toggleCustomized(): void {
+    if (!customized.value) {
+        opened.value = true;
+
+        return;
+    }
+
+    opened.value = false;
+    update(
+        Object.fromEntries(
+            RULE_FIELDS.map((field) => [field, null]),
+        ) as Partial<App.Data.Alerts.AlertRuleInputData>,
+    );
 }
 
-function readThreshold(event: Event): void {
+function readNumber(event: Event): number | null {
     const raw = (event.target as HTMLInputElement).value;
 
-    update({ threshold: raw === '' ? null : Number(raw) });
+    return raw === '' ? null : Number(raw);
 }
 </script>
 
@@ -116,45 +142,88 @@ function readThreshold(event: Event): void {
                         inputmode="numeric"
                         step="1"
                         class="nc-input nc-num nc-right"
-                        :class="{ 'is-inherited': isInherited('threshold') }"
+                        :class="{ 'is-inherited': locked }"
                         :min="rule.minimum"
                         :max="rule.maximum"
                         :value="shown.threshold"
-                        :disabled="isInherited('threshold')"
+                        :disabled="locked"
                         :aria-label="
                             $t(':rule threshold', {
                                 rule: ruleLabel(rule.metric),
                             })
                         "
-                        :aria-invalid="errors.threshold ? true : undefined"
-                        @input="readThreshold"
+                        v-bind="
+                            invalidField(`${id}-threshold`, errors.threshold)
+                        "
+                        @input="update({ threshold: readNumber($event) })"
                     />
                     <span class="nc-t-2xs nc-tone-muted flex-none">{{
                         unitLabel(rule.unit)
                     }}</span>
-                    <InheritToggle
-                        v-if="environmentScope"
-                        :inherited="isInherited('threshold')"
-                        @toggle="toggleInheritance('threshold')"
+                </div>
+                <InputError
+                    v-if="errors.threshold"
+                    size="sm"
+                    :field="`${id}-threshold`"
+                    :message="errors.threshold"
+                />
+                <div
+                    v-if="!rule.isStateRule"
+                    class="mt-[6px] flex items-center gap-[6px]"
+                    :title="
+                        $t(
+                            'How long the threshold must stay exceeded before the alert opens',
+                        )
+                    "
+                >
+                    <span class="nc-t-2xs nc-tone-muted flex-none">{{
+                        $t('for')
+                    }}</span>
+                    <input
+                        type="number"
+                        inputmode="numeric"
+                        step="1"
+                        min="0"
+                        class="nc-input nc-num nc-right"
+                        :class="{ 'is-inherited': locked }"
+                        :max="rule.maximumForMinutes"
+                        :value="shown.forMinutes"
+                        :disabled="locked"
+                        :aria-label="
+                            $t(':rule duration', {
+                                rule: ruleLabel(rule.metric),
+                            })
+                        "
+                        v-bind="
+                            invalidField(`${id}-forMinutes`, errors.forMinutes)
+                        "
+                        @input="update({ forMinutes: readNumber($event) })"
                     />
+                    <span class="nc-t-2xs nc-tone-muted flex-none">{{
+                        unitLabel('min')
+                    }}</span>
                 </div>
-                <div v-if="errors.threshold" class="field-error">
-                    {{ errors.threshold }}
-                </div>
+                <InputError
+                    v-if="errors.forMinutes"
+                    size="sm"
+                    :field="`${id}-forMinutes`"
+                    :message="errors.forMinutes"
+                />
             </div>
 
             <div class="cell">
                 <div class="flex items-center gap-[6px]">
                     <select
                         class="nc-input nc-t-xs"
-                        :class="{ 'is-inherited': isInherited('severity') }"
+                        :class="{ 'is-inherited': locked }"
                         :value="shown.severity"
-                        :disabled="isInherited('severity')"
+                        :disabled="locked"
                         :aria-label="
                             $t(':rule severity', {
                                 rule: ruleLabel(rule.metric),
                             })
                         "
+                        v-bind="invalidField(`${id}-severity`, errors.severity)"
                         @change="
                             update({
                                 severity: ($event.target as HTMLSelectElement)
@@ -165,29 +234,33 @@ function readThreshold(event: Event): void {
                         <option value="warning">{{ $t('Warning') }}</option>
                         <option value="critical">{{ $t('Critical') }}</option>
                     </select>
-                    <InheritToggle
-                        v-if="environmentScope"
-                        :inherited="isInherited('severity')"
-                        @toggle="toggleInheritance('severity')"
-                    />
                 </div>
-                <div v-if="errors.severity" class="field-error">
-                    {{ errors.severity }}
-                </div>
+                <InputError
+                    v-if="errors.severity"
+                    size="sm"
+                    :field="`${id}-severity`"
+                    :message="errors.severity"
+                />
             </div>
 
             <div class="cell">
                 <div class="flex items-center gap-[6px]">
                     <label
-                        class="nc-radio check nc-t-xs"
-                        :class="{
-                            'is-inherited': isInherited('notifyByEmail'),
-                        }"
+                        class="nc-switch check nc-t-xs"
+                        :class="{ 'is-inherited': locked }"
                     >
                         <input
                             type="checkbox"
+                            role="switch"
                             :checked="shown.notifyByEmail"
-                            :disabled="isInherited('notifyByEmail')"
+                            :aria-checked="shown.notifyByEmail"
+                            :disabled="locked"
+                            v-bind="
+                                invalidField(
+                                    `${id}-notifyByEmail`,
+                                    errors.notifyByEmail,
+                                )
+                            "
                             @change="
                                 update({
                                     notifyByEmail: (
@@ -196,32 +269,33 @@ function readThreshold(event: Event): void {
                                 })
                             "
                         />
-                        <span class="nc-dot" />
+                        <span class="nc-track" />
                         {{ $t('Email') }}
                     </label>
-                    <InheritToggle
-                        v-if="environmentScope"
-                        :inherited="isInherited('notifyByEmail')"
-                        @toggle="toggleInheritance('notifyByEmail')"
-                    />
                 </div>
-                <div v-if="errors.notifyByEmail" class="field-error">
-                    {{ errors.notifyByEmail }}
-                </div>
+                <InputError
+                    v-if="errors.notifyByEmail"
+                    size="sm"
+                    :field="`${id}-notifyByEmail`"
+                    :message="errors.notifyByEmail"
+                />
             </div>
 
             <div class="cell">
                 <div class="flex items-center gap-[6px]">
                     <label
-                        class="nc-radio check nc-t-xs"
-                        :class="{ 'is-inherited': isInherited('enabled') }"
+                        class="nc-switch check nc-t-xs"
+                        :class="{ 'is-inherited': locked }"
                     >
                         <input
                             type="checkbox"
                             role="switch"
                             :checked="shown.enabled"
                             :aria-checked="shown.enabled"
-                            :disabled="isInherited('enabled')"
+                            :disabled="locked"
+                            v-bind="
+                                invalidField(`${id}-enabled`, errors.enabled)
+                            "
                             @change="
                                 update({
                                     enabled: ($event.target as HTMLInputElement)
@@ -229,18 +303,35 @@ function readThreshold(event: Event): void {
                                 })
                             "
                         />
-                        <span class="nc-dot" />
+                        <span class="nc-track" />
                         {{ $t('Active') }}
                     </label>
-                    <InheritToggle
-                        v-if="environmentScope"
-                        :inherited="isInherited('enabled')"
-                        @toggle="toggleInheritance('enabled')"
+                </div>
+                <InputError
+                    v-if="errors.enabled"
+                    size="sm"
+                    :field="`${id}-enabled`"
+                    :message="errors.enabled"
+                />
+            </div>
+
+            <div v-if="environmentScope" class="cell">
+                <label class="nc-switch check nc-t-xs">
+                    <input
+                        type="checkbox"
+                        role="switch"
+                        :checked="customized"
+                        :aria-checked="customized"
+                        :aria-label="
+                            $t('Customize :rule for this scope', {
+                                rule: ruleLabel(rule.metric),
+                            })
+                        "
+                        @change="toggleCustomized"
                     />
-                </div>
-                <div v-if="errors.enabled" class="field-error">
-                    {{ errors.enabled }}
-                </div>
+                    <span class="nc-track" />
+                    {{ $t('Customize') }}
+                </label>
             </div>
         </template>
 
@@ -254,6 +345,9 @@ function readThreshold(event: Event): void {
                 }"
             >
                 {{ formatThreshold(shown.threshold, rule.unit) }}
+                <div v-if="shown.forMinutes" class="nc-t-2xs nc-tone-muted">
+                    {{ formatRuleFor(shown.forMinutes) }}
+                </div>
             </div>
             <div
                 class="read-value"
@@ -287,7 +381,7 @@ function readThreshold(event: Event): void {
 }
 
 .rule-row.is-editable.inherits {
-    grid-template-columns: minmax(0, 1fr) 162px 150px 114px 114px;
+    grid-template-columns: minmax(0, 1fr) 128px 122px 88px 88px 112px;
 }
 
 .rule-row.is-editable > :first-child {
@@ -319,20 +413,8 @@ function readThreshold(event: Event): void {
     cursor: default;
 }
 
-.check.is-inherited .nc-dot {
-    border-style: dashed;
-}
-
-.check.is-inherited input:checked + .nc-dot {
-    background: var(--nc-neutral-600);
-    border-color: var(--nc-neutral-600);
-}
-
-.field-error {
-    margin-top: 4px;
-    font-size: 11px;
-    line-height: 1.35;
-    color: var(--st-down);
+.check.is-inherited input:checked + .nc-track {
+    background: var(--nc-neutral-700);
 }
 
 .read-value {

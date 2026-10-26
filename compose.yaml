@@ -37,7 +37,7 @@ services:
         environment:
             WWWUSER: '${WWWUSER}'
             LARAVEL_SAIL: 1
-            SUPERVISOR_PHP_COMMAND: '/usr/bin/php -d variables_order=EGPCS /var/www/html/artisan queue:listen --tries=1'
+            SUPERVISOR_PHP_COMMAND: '/usr/bin/php -d variables_order=EGPCS /var/www/html/artisan queue:listen --queue=notifications,polls,default --tries=1'
         volumes:
             - '.:/var/www/html'
         networks:

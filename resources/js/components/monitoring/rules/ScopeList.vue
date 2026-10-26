@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
 import { useId } from 'vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { envColor } from '@/lib/monitoring';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 
 defineProps<{
@@ -58,15 +58,12 @@ function pick(scope: string): void {
                 preserve-scroll
             >
                 <span class="flex items-center gap-2">
-                    <span
-                        class="size-2 flex-none rounded-[2px]"
-                        :style="{
-                            background: scope.color
-                                ? envColor(scope.color)
-                                : 'var(--nc-accent)',
-                        }"
+                    <EnvPill
+                        v-if="scope.type"
+                        :name="scope.id"
+                        :type="scope.type"
                     />
-                    <span class="min-w-0 truncate">{{
+                    <span v-else class="min-w-0 truncate">{{
                         scope.id === 'organization'
                             ? $t('Organization default')
                             : scope.id

@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import { PhEnvelopeSimple, PhWebhooksLogo } from '@phosphor-icons/vue';
+import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
+import WarningNotice from '@/components/monitoring/WarningNotice.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import { formatSeconds } from '@/lib/monitoring';
 import { index as alertRulesIndex } from '@/routes/alert-rules';
 
 defineProps<{
@@ -11,6 +14,7 @@ defineProps<{
 }>();
 
 const slug = useTeamSlug();
+const shared = usePage();
 </script>
 
 <template>
@@ -22,12 +26,34 @@ const slug = useTeamSlug();
                 >{{ $t('Alert settings') }}</Link
             >
         </template>
+        <div
+            v-if="
+                summary.reachesNobody || shared.props.mailConfigured === false
+            "
+            class="flex flex-col"
+            style="gap: var(--nc-space-2); margin-bottom: var(--nc-space-3)"
+        >
+            <AudienceWarning
+                v-if="summary.reachesNobody"
+                :link="manages ? 'settings' : 'profile'"
+            />
+            <WarningNotice
+                v-if="shared.props.mailConfigured === false"
+                :title="$t('Email is not set up')"
+            >
+                {{
+                    $t(
+                        'No alert email, test email included, goes out until whoever runs this panel sets MAIL_HOST. The webhook does not depend on it.',
+                    )
+                }}
+            </WarningNotice>
+        </div>
         <ul class="policy">
             <li>
                 <template v-if="summary.repeatMinutes">{{
                     $t(
-                        'A critical alert is sent as soon as it opens, then again every :minutes minutes until it clears, gets muted or is handled.',
-                        { minutes: String(summary.repeatMinutes) },
+                        'A critical alert is sent as soon as it opens, then again every :interval until it is resolved, muted or marked as handled.',
+                        { interval: formatSeconds(summary.repeatMinutes * 60) },
                     )
                 }}</template>
                 <template v-else>{{
@@ -37,7 +63,11 @@ const slug = useTeamSlug();
                 }}</template>
             </li>
             <li>
-                {{ $t('Warnings are grouped into a digest every 15 minutes.') }}
+                {{
+                    $t('Warnings are grouped into a digest every :interval.', {
+                        interval: formatSeconds(15 * 60),
+                    })
+                }}
             </li>
             <li>
                 <template v-if="summary.quietFrom && summary.quietTo">{{
@@ -57,7 +87,7 @@ const slug = useTeamSlug();
             <li>
                 {{
                     $t(
-                        'When a notified alert clears, a resolution follows. A muted alert sends nothing at all.',
+                        'When a notified alert is resolved, a resolution notice follows. A muted alert sends nothing at all.',
                     )
                 }}
             </li>
@@ -70,6 +100,7 @@ const slug = useTeamSlug();
             </li>
         </ul>
         <div
+            v-if="!summary.reachesNobody"
             class="nc-t-xs nc-tone-soft flex flex-col"
             style="
                 gap: var(--nc-space-2);
@@ -83,7 +114,16 @@ const slug = useTeamSlug();
                 <PhEnvelopeSimple :size="14" class="mt-[2px] flex-none" />
                 <span>{{
                     $tChoice(
-                        '{0} By email to the members who turned on alert emails|{1} By email to the members who turned on alert emails, plus one extra address|[2,*] By email to the members who turned on alert emails, plus :count extra addresses',
+                        '{0} No member has turned on alert emails|{1} By email to the one member who turned on alert emails|[2,*] By email to the :count members who turned on alert emails',
+                        summary.optedInMemberCount,
+                    )
+                }}</span>
+            </div>
+            <div v-if="summary.recipientCount" class="flex items-start gap-2">
+                <PhEnvelopeSimple :size="14" class="mt-[2px] flex-none" />
+                <span>{{
+                    $tChoice(
+                        '{1} By email to one extra address|[2,*] By email to :count extra addresses',
                         summary.recipientCount,
                     )
                 }}</span>

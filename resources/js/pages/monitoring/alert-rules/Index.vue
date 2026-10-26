@@ -2,6 +2,8 @@
 import { Head } from '@inertiajs/vue3';
 import { PhInfo } from '@phosphor-icons/vue';
 import { computed } from 'vue';
+import DeliveryPolicy from '@/components/monitoring/alerts/DeliveryPolicy.vue';
+import MaintenanceWindows from '@/components/monitoring/rules/MaintenanceWindows.vue';
 import NotificationSettings from '@/components/monitoring/rules/NotificationSettings.vue';
 import RulesForm from '@/components/monitoring/rules/RulesForm.vue';
 import ScopeList from '@/components/monitoring/rules/ScopeList.vue';
@@ -31,7 +33,7 @@ const nothingVisible = computed(
 <template>
     <Head :title="$t('Alert settings')" />
 
-    <div class="rules-grid">
+    <div class="nc-page rules-grid">
         <ScopeList :scopes="page.scopes" :current="page.scope" />
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
@@ -61,12 +63,25 @@ const nothingVisible = computed(
             />
 
             <NotificationSettings
+                v-if="page.notifications"
                 :summary="page.notificationSummary"
                 :settings="page.notifications"
                 :new-webhook-secret="page.newWebhookSecret"
                 :repeat-choices="page.repeatChoices"
                 :max-recipients="page.maxRecipients"
+                :previous-secret-hours="page.previousSecretHours"
                 :timezones="page.timezones"
+            />
+            <DeliveryPolicy
+                v-else
+                :summary="page.notificationSummary"
+                :manages="false"
+            />
+
+            <MaintenanceWindows
+                :windows="page.maintenanceWindows"
+                :targets="page.maintenanceTargets"
+                :max-days="page.maintenanceMaxDays"
             />
         </div>
     </div>
@@ -76,7 +91,6 @@ const nothingVisible = computed(
 .rules-grid {
     display: grid;
     align-items: start;
-    padding: var(--nc-space-6);
     gap: var(--nc-space-6);
     grid-template-columns: 224px minmax(0, 1fr);
 }
@@ -90,7 +104,6 @@ const nothingVisible = computed(
 @media (max-width: 767px) {
     .rules-grid {
         grid-template-columns: minmax(0, 1fr);
-        padding: var(--nc-space-4);
         gap: var(--nc-space-4);
     }
 }

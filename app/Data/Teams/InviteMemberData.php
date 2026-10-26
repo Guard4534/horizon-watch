@@ -30,7 +30,7 @@ class InviteMemberData extends Data
 
         return [
             'email' => ['required', 'string', 'email', 'max:255', new UniqueTeamInvitation($team)],
-            'role' => ['required', Rule::enum(TeamRole::class)->except(TeamRole::Owner)],
+            'role' => ['required', Rule::enum(TeamRole::class)->only(TeamRole::assignable())],
             'visibility' => ['required', Rule::enum(MemberVisibility::class)],
             ...self::environmentIdRules($team),
         ];

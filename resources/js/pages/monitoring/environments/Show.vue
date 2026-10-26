@@ -1,50 +1,68 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { PhArrowSquareOut } from '@phosphor-icons/vue';
-import { trans } from 'laravel-vue-i18n';
+import { PhArrowSquareOut, PhPencilSimple } from '@phosphor-icons/vue';
+import { trans, transChoice } from 'laravel-vue-i18n';
 import { computed } from 'vue';
+import PageHeader from '@/components/PageHeader.vue';
 import EnvironmentMobile from '@/components/mobile/environment/EnvironmentMobile.vue';
+import MaintenanceBadge from '@/components/monitoring/MaintenanceBadge.vue';
+import PasswordNeededTag from '@/components/monitoring/PasswordNeededTag.vue';
 import ReadingFreshness from '@/components/monitoring/ReadingFreshness.vue';
 import ConnectionTest from '@/components/monitoring/applications/ConnectionTest.vue';
 import EffectiveRules from '@/components/monitoring/environment/EffectiveRules.vue';
+import EnvironmentAlerts from '@/components/monitoring/environment/EnvironmentAlerts.vue';
 import FailedJobTable from '@/components/monitoring/environment/FailedJobTable.vue';
 import IncidentBanner from '@/components/monitoring/environment/IncidentBanner.vue';
 import LongRunningJobs from '@/components/monitoring/environment/LongRunningJobs.vue';
 import NodeCard from '@/components/monitoring/environment/NodeCard.vue';
 import QueueTable from '@/components/monitoring/environment/QueueTable.vue';
+import SilenceMenu from '@/components/monitoring/environment/SilenceMenu.vue';
 import TrendChart from '@/components/monitoring/environment/TrendChart.vue';
 import {
-    failedTone,
+    failedLastHourText,
     horizonStatusLabel,
     horizonStatusTone,
-    pendingTone,
     statusText,
+    statusTone,
+    thresholdTone,
 } from '@/components/monitoring/environment/readings';
-import MetricTile from '@/components/nocturne/MetricTile.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
+import MetricCard from '@/components/nocturne/MetricCard.vue';
 import StatusPill from '@/components/nocturne/StatusPill.vue';
 import { useEnvironmentDetail } from '@/composables/useEnvironmentDetail';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
-import { envColor, formatCount, formatWait, waitColor } from '@/lib/monitoring';
+import { useVisibility } from '@/composables/useVisibility';
+import { formatThreshold } from '@/lib/alertRules';
+import { failedWindowNote } from '@/lib/failedWindow';
+import {
+    formatCount,
+    formatSeconds,
+    seriesRefreshInterval,
+} from '@/lib/monitoring';
 import {
     index as applicationsIndex,
     show as showApplication,
 } from '@/routes/applications';
-import { testConnection } from '@/routes/environments';
+import { edit as editEnvironment, testConnection } from '@/routes/environments';
 
 defineOptions({
     layout: { title: 'Environment detail', live: true },
 });
 
-const { page } = defineProps<{
+const { page, series } = defineProps<{
     page: App.Data.Pages.EnvironmentDetailPageData;
+    series: App.Data.Pages.EnvironmentSeriesData;
 }>();
 
 useLivePoll();
+useLivePoll(['series'], (ms) =>
+    seriesRefreshInterval(ms, series.grid.stepSeconds),
+);
 
 const slug = useTeamSlug();
+const { canManageApplications } = useVisibility();
 const isMobile = useIsMobile();
 const { environment, threshold, incident, lastKnown } = useEnvironmentDetail(
     () => page,
@@ -58,14 +76,14 @@ const longRunningUnknown = computed(
         environment.value.status === 'unreachable',
 );
 
-type Tile = { label: string; value: string; color?: string; note: string };
+type Tile = { label: string; value: string; color?: string; note?: string };
 
 const maxWaitNote = computed(() => {
     const seconds = threshold('queue.max_wait');
 
     return seconds === null
         ? trans('rule disabled')
-        : trans('threshold :value', { value: `${seconds}s` });
+        : trans('threshold :value', { value: formatThreshold(seconds, 's') });
 });
 
 const tiles = computed<Tile[]>(() => [
@@ -89,101 +107,92 @@ const tiles = computed<Tile[]>(() => [
     {
         label: trans('Pending'),
         value: formatCount(environment.value.pending),
-        color: pendingTone(
+        color: thresholdTone(
+            environment.value,
+            'queue.pending',
             environment.value.pending,
-            threshold('queue.pending'),
         ),
-        note: trans(':count queue', { count: String(page.queues.length) }),
+        note: transChoice(':count queue|:count queues', page.queues.length),
     },
     {
         label: trans('Max wait'),
-        value: formatWait(environment.value.maxWaitSeconds),
-        color: waitColor(
+        value: formatSeconds(environment.value.maxWaitSeconds),
+        color: thresholdTone(
+            environment.value,
+            'queue.max_wait',
             environment.value.maxWaitSeconds,
-            threshold('queue.max_wait'),
         ),
         note: maxWaitNote.value,
     },
     {
         label: trans('Workers'),
         value: String(environment.value.workers),
-        color:
-            environment.value.status !== null && !environment.value.workers
-                ? 'var(--st-down)'
-                : 'var(--nc-text)',
         note: trans('active processes'),
     },
     {
         label: trans('Throughput'),
-        value: String(environment.value.jobsPerMinute),
-        color: 'var(--nc-text)',
-        note: trans('jobs/min'),
+        value: `${environment.value.jobsPerMinute}/min`,
     },
     {
-        label: failedLabel(environment.value.failedWindowMinutes),
-        value: formatCount(environment.value.failedInWindow),
-        color: failedTone(
+        label: trans('Failed · last hour'),
+        value: failedLastHourText(environment.value),
+        color: thresholdTone(
+            environment.value,
+            'jobs.failed_per_hour',
             environment.value.failedLastHour,
-            threshold('jobs.failed_per_hour'),
         ),
-        note: failedWindowNote(environment.value.failedWindowMinutes),
+        note: trans('Horizon: :count, :window', {
+            count: formatCount(environment.value.failedInWindow),
+            window: failedWindowNote(environment.value.failedWindowMinutes),
+        }),
     },
 ]);
 </script>
 
 <template>
-    <Head :title="`${environment.applicationName} · ${environment.name}`" />
+    <Head :title="`${environment.applicationName} / ${environment.name}`" />
 
     <EnvironmentMobile v-if="isMobile" :page="page" />
 
-    <div
-        v-else
-        class="flex flex-col"
-        style="padding: var(--nc-space-6); gap: var(--nc-space-4)"
-    >
-        <div class="flex flex-wrap items-center" style="gap: var(--nc-space-3)">
-            <span
-                class="h-[38px] w-1 flex-none rounded-[2px]"
-                :style="{ background: envColor(environment.color) }"
-            />
-            <div class="min-w-0">
-                <div class="nc-t-2xs nc-tone-muted">
-                    <Link :href="applicationsIndex(slug)">{{
-                        $t('Applications')
-                    }}</Link>
-                    /
-                    <Link
-                        :href="
-                            showApplication({
-                                current_team: slug,
-                                application: environment.applicationId,
-                            })
-                        "
-                        >{{ environment.applicationName }}</Link
-                    >
-                </div>
-                <div style="font-size: 24px; line-height: 1.15">
-                    {{ environment.name }}
-                </div>
-            </div>
-            <StatusPill
-                v-if="environment.status"
-                :status="environment.status"
-            />
-            <span
-                v-else
-                class="nc-t-xs nc-tone-muted"
-                style="
-                    border-radius: var(--nc-radius-sm);
-                    padding: 3px 9px;
-                    border: 1px solid var(--nc-neutral-700);
-                "
-                >{{ statusText(environment) }}</span
-            >
-            <div
-                class="ml-auto flex flex-wrap items-center justify-end"
-                style="gap: var(--nc-space-2)"
-            >
+    <div v-else class="nc-page flex flex-col" style="gap: var(--nc-space-4)">
+        <PageHeader
+            :title="environment.name"
+            :crumbs="[
+                { label: $t('Applications'), href: applicationsIndex(slug) },
+                {
+                    label: environment.applicationName,
+                    href: showApplication({
+                        current_team: slug,
+                        application: environment.applicationId,
+                    }),
+                },
+            ]"
+        >
+            <template #title>
+                <EnvPill
+                    :name="environment.name"
+                    :type="environment.type"
+                    :size="20"
+                />
+            </template>
+            <template #status>
+                <StatusPill
+                    :status="environment.status"
+                    :label="statusText(environment)"
+                    :tone="statusTone(environment)"
+                />
+                <MaintenanceBadge
+                    v-if="environment.maintenanceUntil"
+                    :until="environment.maintenanceUntil"
+                    :reason="environment.maintenanceReason"
+                />
+            </template>
+            <template #actions>
+                <SilenceMenu
+                    v-if="page.canSilence"
+                    :environment-id="environment.id"
+                    :choices="page.silenceChoices"
+                />
                 <ConnectionTest
                     v-if="page.canTestConnection"
                     class="flex-row-reverse"
@@ -195,6 +204,18 @@ const tiles = computed<Tile[]>(() => [
                     "
                     :payload="null"
                 />
+                <Link
+                    v-if="canManageApplications"
+                    class="nc-btn nc-btn-ghost nc-t-xs"
+                    :href="
+                        editEnvironment({
+                            current_team: slug,
+                            environment: environment.id,
+                        })
+                    "
+                >
+                    <PhPencilSimple :size="14" />{{ $t('Edit environment') }}
+                </Link>
                 <a
                     :href="environment.horizonUrl"
                     target="_blank"
@@ -203,20 +224,21 @@ const tiles = computed<Tile[]>(() => [
                 >
                     <PhArrowSquareOut :size="14" />{{ $t('Open Horizon') }}
                 </a>
-            </div>
-        </div>
+            </template>
+        </PageHeader>
 
         <div
             class="nc-t-2xs nc-tone-muted flex flex-wrap items-center"
             style="gap: 0 6px; letter-spacing: 0.01em"
         >
             <span class="min-w-0 break-all">{{ environment.horizonUrl }}</span>
-            <template v-if="environment.basicAuthUser">
+            <template v-if="environment.usesBasicAuth">
                 <span>·</span>
-                <span
-                    >{{ $t('basic auth') }}:
-                    {{ environment.basicAuthUser }}</span
-                >
+                <span>{{ $t('basic auth') }}</span>
+            </template>
+            <template v-if="environment.passwordNeeded">
+                <span>·</span>
+                <PasswordNeededTag />
             </template>
             <span>·</span>
             <ReadingFreshness
@@ -224,6 +246,7 @@ const tiles = computed<Tile[]>(() => [
                 :stale="environment.stale"
                 :polling-enabled="environment.pollingEnabled"
                 :reading-error="environment.readingError"
+                :hide-reason="incident !== null"
             />
             <template v-if="environment.latencyMs !== null">
                 <span>·</span>
@@ -239,9 +262,11 @@ const tiles = computed<Tile[]>(() => [
             v-if="incident"
             :status="incident"
             :reading-error="environment.readingError"
-            :alert="page.openAlert"
+            :reading-problem="environment.readingProblem"
             :has-earlier-reading="page.nodes.length + page.queues.length > 0"
         />
+
+        <EnvironmentAlerts v-if="page.alerts.length" :alerts="page.alerts" />
 
         <div
             class="grid"
@@ -250,7 +275,7 @@ const tiles = computed<Tile[]>(() => [
                 gap: var(--nc-space-3);
             "
         >
-            <MetricTile
+            <MetricCard
                 v-for="tile in tiles"
                 :key="tile.label"
                 :label="tile.label"
@@ -267,10 +292,9 @@ const tiles = computed<Tile[]>(() => [
                 <span style="font-size: 14px">{{
                     $t('Nodes (master supervisors)')
                 }}</span>
-                <span class="nc-t-2xs nc-tone-muted"
-                    >{{ $t('one master per machine') }} ·
-                    /horizon/api/masters</span
-                >
+                <span class="nc-t-2xs nc-tone-muted">{{
+                    $t('one master per machine')
+                }}</span>
                 <span
                     v-if="lastKnown"
                     class="nc-t-2xs ml-auto"
@@ -301,23 +325,20 @@ const tiles = computed<Tile[]>(() => [
         </section>
 
         <div
-            class="mt-[var(--nc-space-2)] grid items-start"
-            style="
-                grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-                gap: var(--nc-space-6);
-            "
+            class="nc-two-col mt-[var(--nc-space-2)]"
+            style="--nc-two-col-columns: minmax(0, 1.6fr) minmax(0, 1fr)"
         >
             <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
                 <TrendChart
-                    :throughput="page.throughput"
-                    :max-wait="page.maxWait"
-                    :range="page.range"
-                    :grid="page.grid"
+                    :throughput="series.throughput"
+                    :max-wait="series.maxWait"
+                    :range="series.range"
+                    :grid="series.grid"
                 />
                 <QueueTable
                     :queues="page.queues"
                     :note="lastKnown"
-                    :wait-threshold="threshold('queue.max_wait')"
+                    :thresholds="environment.thresholds"
                 />
                 <FailedJobTable :jobs="page.failedJobs" :note="lastKnown" />
             </div>
@@ -325,6 +346,8 @@ const tiles = computed<Tile[]>(() => [
                 <LongRunningJobs
                     :jobs="page.longRunningJobs"
                     :threshold-seconds="threshold('job.runtime')"
+                    :thresholds="environment.thresholds"
+                    :polling-enabled="environment.pollingEnabled"
                     :unknown="longRunningUnknown"
                 />
                 <EffectiveRules

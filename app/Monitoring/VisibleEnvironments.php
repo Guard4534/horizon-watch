@@ -2,6 +2,7 @@
 
 namespace App\Monitoring;
 
+use App\Enums\EnvironmentType;
 use App\Enums\MemberVisibility;
 use App\Models\Environment;
 use App\Models\Membership;
@@ -17,7 +18,7 @@ class VisibleEnvironments
      */
     public function query(Team $team, User $user): Builder
     {
-        $membership = $this->membership($team, $user);
+        $membership = $user->membershipOf($team);
 
         if (! $membership) {
             return $this->ofTeam($team)->whereRaw('1 = 0');
@@ -28,7 +29,7 @@ class VisibleEnvironments
 
     public function seesEverything(Team $team, User $user): bool
     {
-        return $this->membership($team, $user)?->visibility === MemberVisibility::All;
+        return $user->membershipOf($team)?->visibility === MemberVisibility::All;
     }
 
     public function sees(Team $team, User $user, ?int $environmentId): bool
@@ -71,20 +72,20 @@ class VisibleEnvironments
             return [];
         }
 
-        $names = [];
+        $production = [];
 
-        foreach ($this->ofTeam($team)->toBase()->get(['environments.id', 'environments.name']) as $environment) {
-            $names[(int) $environment->id] = (string) $environment->name;
+        foreach ($this->ofTeam($team)->toBase()->get(['environments.id', 'environments.type']) as $environment) {
+            $production[(int) $environment->id] = $environment->type === EnvironmentType::Production->value;
         }
 
-        $granted = $this->grants(array_keys($names), array_values(array_unique($manual)));
+        $granted = $this->grants(array_keys($production), array_values(array_unique($manual)));
         $ids = [];
 
         foreach ($byKey as $key => $membership) {
             $ids[$key] = match ($membership->visibility) {
                 MemberVisibility::All => null,
-                MemberVisibility::NonProduction => array_keys(array_filter($names, fn (string $name) => $name !== 'production')),
-                MemberVisibility::Manual => array_values(array_filter(array_keys($names), fn (int $id) => isset($granted[$membership->user_id][$id]))),
+                MemberVisibility::NonProduction => array_keys(array_filter($production, fn (bool $isProduction) => ! $isProduction)),
+                MemberVisibility::Manual => array_values(array_filter(array_keys($production), fn (int $id) => isset($granted[$membership->user_id][$id]))),
             };
         }
 
@@ -128,11 +129,6 @@ class VisibleEnvironments
         return $granted;
     }
 
-    private function membership(Team $team, User $user): ?Membership
-    {
-        return $user->teamMemberships()->where('team_id', $team->id)->first();
-    }
-
     /**
      * @return Builder<Environment>
      */
@@ -142,7 +138,7 @@ class VisibleEnvironments
 
         return match ($membership->visibility) {
             MemberVisibility::All => $query,
-            MemberVisibility::NonProduction => $query->where('environments.name', '!=', 'production'),
+            MemberVisibility::NonProduction => $query->where('environments.type', '!=', EnvironmentType::Production->value),
             MemberVisibility::Manual => $query->whereIn('environments.id', function ($environments) use ($membership) {
                 $environments->select('environment_id')
                     ->from('environment_user')

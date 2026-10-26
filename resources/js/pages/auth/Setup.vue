@@ -3,16 +3,20 @@ import { Form, Head } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Spinner } from '@/components/ui/spinner';
+import { invalidField } from '@/lib/fieldErrors';
 import { store } from '@/routes/setup';
 
 defineOptions({
     layout: {
-        kicker: 'First run',
         title: 'Set up Horizon Watch',
         description:
-            'Create the administrator account and the first organization',
+            'Create the instance admin account and the first organization',
     },
 });
+
+defineProps<{
+    page: App.Data.Pages.SetupPageData;
+}>();
 </script>
 
 <template>
@@ -20,25 +24,49 @@ defineOptions({
 
     <Form
         v-bind="store.form()"
-        :reset-on-success="['password', 'password_confirmation']"
+        :reset-on-success="['password', 'password_confirmation', 'setupToken']"
         v-slot="{ errors, processing }"
         class="flex flex-col gap-[var(--nc-space-3)]"
     >
+        <div v-if="page.requiresToken" class="nc-field">
+            <label for="setupToken">{{ $t('Setup token') }}</label>
+            <input
+                id="setupToken"
+                class="nc-input"
+                type="password"
+                name="setupToken"
+                required
+                autofocus
+                autocomplete="off"
+                spellcheck="false"
+                v-bind="invalidField('setupToken', errors.setupToken)"
+            />
+            <div class="nc-t-2xs nc-tone-faint">
+                {{
+                    $t(
+                        'The value of HORIZON_WATCH_SETUP_TOKEN in the configuration of the panel.',
+                    )
+                }}
+            </div>
+            <InputError field="setupToken" :message="errors.setupToken" />
+        </div>
+
         <div class="nc-field">
-            <label for="name">{{ $t('Full name') }}</label>
+            <label for="name">{{ $t('Name') }}</label>
             <input
                 id="name"
                 class="nc-input"
                 name="name"
                 required
-                autofocus
+                :autofocus="!page.requiresToken"
                 autocomplete="name"
+                v-bind="invalidField('name', errors.name)"
             />
-            <InputError :message="errors.name" />
+            <InputError field="name" :message="errors.name" />
         </div>
 
         <div class="nc-field">
-            <label for="email">{{ $t('Email address') }}</label>
+            <label for="email">{{ $t('Email') }}</label>
             <input
                 id="email"
                 class="nc-input"
@@ -47,21 +75,25 @@ defineOptions({
                 required
                 autocomplete="email"
                 placeholder="email@example.com"
+                v-bind="invalidField('email', errors.email)"
             />
-            <InputError :message="errors.email" />
+            <InputError field="email" :message="errors.email" />
         </div>
 
         <div class="nc-field">
             <label for="password">{{ $t('Password') }}</label>
             <PasswordInput
                 id="password"
-                class="nc-input"
                 name="password"
                 required
                 autocomplete="new-password"
-                :placeholder="$t('at least 10 characters')"
+                :passwordrules="page.passwordPolicy.rules"
+                v-bind="invalidField('password', errors.password)"
             />
-            <InputError :message="errors.password" />
+            <div class="nc-t-2xs nc-tone-faint">
+                {{ page.passwordPolicy.description }}
+            </div>
+            <InputError field="password" :message="errors.password" />
         </div>
 
         <div class="nc-field">
@@ -70,10 +102,10 @@ defineOptions({
             }}</label>
             <PasswordInput
                 id="password_confirmation"
-                class="nc-input"
                 name="password_confirmation"
                 required
                 autocomplete="new-password"
+                :passwordrules="page.passwordPolicy.rules"
             />
         </div>
 
@@ -84,8 +116,9 @@ defineOptions({
                 class="nc-input"
                 name="organization"
                 required
+                v-bind="invalidField('organization', errors.organization)"
             />
-            <InputError :message="errors.organization" />
+            <InputError field="organization" :message="errors.organization" />
         </div>
 
         <button

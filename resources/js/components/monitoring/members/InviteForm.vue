@@ -3,15 +3,18 @@ import { Form } from '@inertiajs/vue3';
 import { PhPaperPlaneTilt } from '@phosphor-icons/vue';
 import { ref } from 'vue';
 import InputError from '@/components/InputError.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { Spinner } from '@/components/ui/spinner';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { ASSIGNABLE_ROLES, VISIBILITIES, visibilityLabel } from '@/lib/members';
+import { invalidField } from '@/lib/fieldErrors';
 import { store as storeInvitation } from '@/routes/members/invitations';
 
-const { environments, expiresDays } = defineProps<{
+const { environments, expiresDays, roles, visibilities } = defineProps<{
     environments: App.Data.Pages.EnvironmentOptionData[];
     expiresDays: number;
+    roles: App.Data.Teams.RoleOptionData[];
+    visibilities: App.Data.Teams.VisibilityOptionData[];
 }>();
 
 const slug = useTeamSlug();
@@ -47,35 +50,46 @@ function reset() {
                     type="email"
                     name="email"
                     required
-                    placeholder="name@example.com"
+                    placeholder="email@example.com"
+                    v-bind="invalidField('invite-email', errors.email)"
                 />
-                <InputError :message="errors.email" />
+                <InputError field="invite-email" :message="errors.email" />
             </div>
 
             <div class="nc-field">
-                <label>{{ $t('Role') }}</label>
+                <label id="invite-role">{{ $t('Role') }}</label>
                 <div
                     class="flex flex-col"
                     style="gap: var(--nc-space-2); margin-top: 5px"
+                    role="radiogroup"
+                    aria-labelledby="invite-role"
+                    v-bind="invalidField('invite-role', errors.role)"
                 >
                     <label
-                        v-for="option in ASSIGNABLE_ROLES"
-                        :key="option"
+                        v-for="option in roles"
+                        :key="option.value"
                         class="nc-radio"
                     >
                         <input
                             v-model="role"
                             type="radio"
                             name="role"
-                            :value="option"
+                            :value="option.value"
                         />
-                        <span class="nc-dot"></span>{{ option }}
+                        <span class="nc-dot"></span>{{ option.label }}
                     </label>
                 </div>
-                <InputError :message="errors.role" />
+                <InputError field="invite-role" :message="errors.role" />
             </div>
 
-            <div class="nc-field">
+            <div v-if="role === 'admin'" class="nc-field">
+                <input type="hidden" name="visibility" value="all" />
+                <span class="nc-t-2xs nc-tone-muted">{{
+                    $t('Admins and the owner always see every environment.')
+                }}</span>
+            </div>
+
+            <div v-else class="nc-field">
                 <label for="invite-visibility">{{
                     $t('Visible environments')
                 }}</label>
@@ -84,28 +98,51 @@ function reset() {
                     v-model="visibility"
                     class="nc-input"
                     name="visibility"
+                    v-bind="
+                        invalidField('invite-visibility', errors.visibility)
+                    "
                 >
                     <option
-                        v-for="option in VISIBILITIES"
-                        :key="option"
-                        :value="option"
+                        v-for="option in visibilities"
+                        :key="option.value"
+                        :value="option.value"
                     >
-                        {{ visibilityLabel(option) }}
+                        {{ option.label }}
                     </option>
                 </select>
-                <InputError :message="errors.visibility" />
+                <InputError
+                    field="invite-visibility"
+                    :message="errors.visibility"
+                />
+                <div
+                    v-if="visibility === 'non_production' && !errors.visibility"
+                    class="nc-t-2xs nc-tone-faint mt-1"
+                >
+                    {{ $t('Hides every environment of type Production.') }}
+                </div>
             </div>
 
-            <div v-if="visibility === 'manual'" class="nc-field">
-                <label>{{ $t('Environments') }}</label>
+            <div
+                v-if="role !== 'admin' && visibility === 'manual'"
+                class="nc-field"
+            >
+                <label id="invite-environments">{{ $t('Environments') }}</label>
                 <div
                     class="flex max-h-[220px] flex-col overflow-y-auto"
                     style="gap: 6px; margin-top: 5px"
+                    role="group"
+                    aria-labelledby="invite-environments"
+                    v-bind="
+                        invalidField(
+                            'invite-environments',
+                            errors.environmentIds,
+                        )
+                    "
                 >
                     <label
                         v-for="environment in environments"
                         :key="environment.id"
-                        class="nc-t-sm flex items-center gap-2"
+                        class="nc-checkbox nc-t-sm"
                     >
                         <input
                             v-model="environmentIds"
@@ -113,7 +150,13 @@ function reset() {
                             name="environmentIds[]"
                             :value="environment.id"
                         />
-                        {{ environment.name }}
+                        <span class="nc-box" />
+                        <span class="min-w-0"
+                            >{{ environment.applicationName }} /
+                            <EnvPill
+                                :name="environment.name"
+                                :type="environment.type"
+                        /></span>
                     </label>
                     <div
                         v-if="!environments.length"
@@ -126,7 +169,10 @@ function reset() {
                         }}
                     </div>
                 </div>
-                <InputError :message="errors.environmentIds" />
+                <InputError
+                    field="invite-environments"
+                    :message="errors.environmentIds"
+                />
             </div>
 
             <button

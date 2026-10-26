@@ -25,13 +25,13 @@ test('a threshold above its maximum is reported in italian', function () {
         ->put(route('alert-rules.update', ['current_team' => $this->team->slug, 'scope' => 'organization']), [
             'rules' => [[
                 'metric' => AlertRuleMetric::JobsFailedPerHour->value,
-                'threshold' => 50,
+                'threshold' => 200,
                 'severity' => AlertSeverity::Warning->value,
                 'notifyByEmail' => false,
                 'enabled' => true,
             ]],
         ])
-        ->assertSessionHasErrors(['rules.0.threshold' => 'Il campo soglia non può essere maggiore di 49.']);
+        ->assertSessionHasErrors(['rules.0.threshold' => 'Il campo soglia non può essere maggiore di 199.']);
 });
 
 test('quiet hours without an end are reported in italian', function () {
@@ -45,7 +45,22 @@ test('quiet hours without an end are reported in italian', function () {
             'repeatMinutes' => null,
         ])
         ->assertSessionHasErrors([
-            'quietTo' => 'Il campo fine della finestra di silenzio è obbligatorio quando è presente inizio della finestra di silenzio.',
+            'quietTo' => 'Il campo fine della fascia di quiete è obbligatorio quando è presente inizio della fascia di quiete.',
+        ]);
+});
+
+test('quiet hours over the whole day are reported in italian', function () {
+    $this->actingAs($this->admin)
+        ->put(route('alert-settings.update', ['current_team' => $this->team->slug]), [
+            'recipients' => [],
+            'webhookUrl' => null,
+            'quietFrom' => '08:00',
+            'quietTo' => '07:50',
+            'timezone' => 'Europe/Rome',
+            'repeatMinutes' => null,
+        ])
+        ->assertSessionHasErrors([
+            'quietTo' => 'La fascia di quiete non può coprire l’intera giornata: lascia fuori almeno un quarto d’ora.',
         ]);
 });
 

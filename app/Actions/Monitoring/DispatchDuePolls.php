@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 
 class DispatchDuePolls
 {
+    public const int TICK_SECONDS = 15;
+
     public function handle(): int
     {
         $now = CarbonImmutable::now()->startOfSecond();

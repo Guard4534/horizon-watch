@@ -1,53 +1,39 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
-import { envColor } from '@/lib/monitoring';
+import { envTypeColor } from '@/lib/monitoring';
 
-const { environments, problemCount } = defineProps<{
+const { environments, attentionCount, types } = defineProps<{
     environments: App.Data.Monitoring.EnvironmentData[];
-    problemCount: number;
+    attentionCount: number;
+    types: App.Data.Pages.WallPageData['types'];
 }>();
 
 const filter = defineModel<'all' | 'problems'>('filter', { required: true });
-const environmentName = defineModel<string>('environmentName', {
-    required: true,
-});
+const environmentType = defineModel<App.Enums.EnvironmentType | ''>(
+    'environmentType',
+    { required: true },
+);
 const search = defineModel<string>('search', { required: true });
 
-const ORDER = [
-    'production',
-    'preprod',
-    'staging',
-    'develop',
-    'demo',
-    'worker-batch',
-    'testing',
-];
+const id = useId();
 
-const chips = computed(() => {
-    const names = [
-        ...new Set(environments.map((environment) => environment.name)),
-    ].sort((a, b) => {
-        const rank = (name: string) =>
-            ORDER.includes(name) ? ORDER.indexOf(name) : ORDER.length;
+const chips = computed(() =>
+    types
+        .map((option) => {
+            const type = option.value as App.Enums.EnvironmentType;
 
-        return rank(a) - rank(b) || a.localeCompare(b);
-    });
-
-    return names.map((name) => {
-        const sample = environments.find(
-            (environment) => environment.name === name,
-        )!;
-
-        return {
-            name,
-            color: envColor(sample.color),
-            count: environments.filter(
-                (environment) => environment.name === name,
-            ).length,
-        };
-    });
-});
+            return {
+                type,
+                label: option.label,
+                color: envTypeColor(type),
+                count: environments.filter(
+                    (environment) => environment.type === type,
+                ).length,
+            };
+        })
+        .filter((chip) => chip.count > 0),
+);
 </script>
 
 <template>
@@ -63,26 +49,37 @@ const chips = computed(() => {
                     },
                     {
                         value: 'problems',
-                        label: `${$t('Problems')} ${problemCount}`,
+                        label: `${$t('Needs attention')} ${attentionCount}`,
                     },
                 ]"
             />
             <input
                 v-model="search"
+                type="search"
                 class="nc-input"
                 style="max-width: 250px"
                 :placeholder="$t('Filter by application or environment')"
+                :aria-label="$t('Filter by application or environment')"
             />
         </div>
-        <div class="flex flex-wrap items-center" style="gap: var(--nc-space-2)">
-            <span class="nc-label" style="margin-right: var(--nc-space-1)">{{
-                $t('Environment')
-            }}</span>
+        <div
+            class="flex flex-wrap items-center"
+            style="gap: var(--nc-space-2)"
+            role="group"
+            :aria-labelledby="`${id}-type`"
+        >
+            <span
+                :id="`${id}-type`"
+                class="nc-label"
+                style="margin-right: var(--nc-space-1)"
+                >{{ $t('Type') }}</span
+            >
             <button
                 type="button"
                 class="chip"
-                :class="{ 'is-active': environmentName === '' }"
-                @click="environmentName = ''"
+                :class="{ 'is-active': environmentType === '' }"
+                :aria-pressed="environmentType === ''"
+                @click="environmentType = ''"
             >
                 <span
                     class="size-2 flex-none rounded-[2px]"
@@ -95,17 +92,18 @@ const chips = computed(() => {
             </button>
             <button
                 v-for="chip in chips"
-                :key="chip.name"
+                :key="chip.type"
                 type="button"
                 class="chip"
-                :class="{ 'is-active': environmentName === chip.name }"
-                @click="environmentName = chip.name"
+                :class="{ 'is-active': environmentType === chip.type }"
+                :aria-pressed="environmentType === chip.type"
+                @click="environmentType = chip.type"
             >
                 <span
                     class="size-2 flex-none rounded-[2px]"
                     :style="{ background: chip.color }"
                 />
-                {{ chip.name }}
+                {{ chip.label }}
                 <span class="nc-num nc-tone-faint">{{ chip.count }}</span>
             </button>
         </div>

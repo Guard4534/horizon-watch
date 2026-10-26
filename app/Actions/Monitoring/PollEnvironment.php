@@ -4,7 +4,11 @@ namespace App\Actions\Monitoring;
 
 use App\Alerts\AlertEngine;
 use App\Alerts\EffectiveRules;
+use App\Alerts\RuleSet;
+use App\Data\Monitoring\ReadingProblemData;
+use App\Enums\AlertRuleMetric;
 use App\Enums\HorizonStatus;
+use App\Enums\ReadingCause;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
@@ -22,6 +26,7 @@ use App\Monitoring\EvaluatedStatus;
 use App\Monitoring\StatusEvaluator;
 use App\Support\SafeReport;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -42,22 +47,61 @@ class PollEnvironment
     {
         $capturedAt = CarbonImmutable::now();
 
-        $target = HorizonTarget::fromEnvironment($environment);
+        try {
+            $target = HorizonTarget::fromEnvironment($environment);
+        } catch (DecryptException) {
+            return $this->storeFailure($environment, $capturedAt, ReadingError::PasswordUnreadable, null);
+        }
+
+        $rules = $this->rules->forEnvironment($environment);
 
         try {
-            $reading = $this->reader->read($target);
+            $reading = $this->reader->read(
+                $target,
+                oldestPendingJobs: $rules->for(AlertRuleMetric::JobRuntime)->enabled,
+                knownRuntimes: $this->knownRuntimes($environment, $capturedAt),
+            );
         } catch (HorizonReadFailed $exception) {
-            return $this->storeFailure($environment, $capturedAt, $exception->reason);
+            return $this->storeFailure($environment, $capturedAt, $exception->reason, ReadingProblemData::fromFailure($exception));
         } catch (Throwable $exception) {
             SafeReport::of('The Horizon reader', $exception, class_basename(HorizonReadFailed::class));
 
-            return $this->storeFailure($environment, $capturedAt, ReadingError::Unreachable);
+            return $this->storeFailure($environment, $capturedAt, ReadingError::Unreachable, null);
         }
 
-        return $this->storeReading($environment, $capturedAt, $reading);
+        return $this->storeReading($environment, $capturedAt, $reading, $rules);
     }
 
-    private function storeReading(Environment $environment, CarbonImmutable $capturedAt, HorizonReading $reading): ?EnvironmentSnapshot
+    public function recordFailure(Environment $environment, ReadingCause $cause): ?EnvironmentSnapshot
+    {
+        return $this->storeFailure($environment, CarbonImmutable::now(), ReadingError::Unreachable, new ReadingProblemData($cause, null, null));
+    }
+
+    /**
+     * @return array<string, float|null>|null
+     */
+    private function knownRuntimes(Environment $environment, CarbonImmutable $capturedAt): ?array
+    {
+        $state = EnvironmentState::query()
+            ->where('environment_id', $environment->id)
+            ->first(['queues', 'runtimes_fetched_at']);
+
+        $fetchedAt = $state?->runtimes_fetched_at;
+
+        if ($state === null || $fetchedAt === null || $fetchedAt->lte($capturedAt->subSeconds(config()->integer('horizon-watch.horizon.runtime_refresh_seconds')))) {
+            return null;
+        }
+
+        $runtimes = [];
+
+        foreach ($state->queues as $queue) {
+            $runtimes[$queue['name']] = $queue['runtimeSeconds'];
+        }
+
+        return $runtimes;
+    }
+
+    private function storeReading(Environment $environment, CarbonImmutable $capturedAt, HorizonReading $reading, RuleSet $rules): ?EnvironmentSnapshot
     {
         $evaluated = $this->evaluator->evaluate($reading->failedJobs === null
             ? new HorizonReading(
@@ -69,19 +113,28 @@ class PollEnvironment
                 queueRuntimes: $reading->queueRuntimes,
                 latencyMs: $reading->latencyMs,
             )
-            : $reading, $this->rules->forEnvironment($environment), $capturedAt);
+            : $reading, $rules, $capturedAt);
+
+        $supervisors = $this->supervisorsByQueue($reading);
 
         $state = [
             'status' => $evaluated->status,
             'error' => null,
+            'error_detail' => null,
             'horizon_status' => HorizonStatus::tryFrom($reading->stats->status),
             'latency_ms' => $reading->latencyMs,
             'nodes' => array_map(fn (HorizonMaster $master) => $this->node($master, $capturedAt), $reading->masters),
-            'queues' => array_map(fn (HorizonQueueLoad $queue) => $this->queue($queue, $reading), $reading->workload),
+            'queues' => array_map(fn (HorizonQueueLoad $queue) => $this->queue($queue, $supervisors, $reading), $reading->workload),
             'pending_jobs' => $reading->pendingJobs === null ? [] : $this->reservedJobs($reading->pendingJobs),
+            'last_known_status' => $evaluated->status,
+            'last_known_at' => $capturedAt,
         ];
 
-        $sectionsOnInsert = ['status_since' => $capturedAt];
+        if ($reading->runtimesFetched) {
+            $state['runtimes_fetched_at'] = $capturedAt;
+        }
+
+        $sectionsOnInsert = ['status_since' => $capturedAt, 'last_known_since' => $capturedAt];
 
         if ($reading->failedJobs === null) {
             $sectionsOnInsert['failed_jobs'] = [];
@@ -96,13 +149,14 @@ class PollEnvironment
             'failed_in_window' => $reading->stats->failedJobs,
             'failed_window_minutes' => $reading->stats->failedJobsPeriodMinutes,
             'failed_last_hour' => $evaluated->failedLastHour,
+            'failed_last_hour_capped' => $evaluated->failedLastHourCapped,
             'workers' => $reading->stats->processes,
             'node_count' => count($reading->masters),
             'latency_ms' => $reading->latencyMs,
         ], $state, $sectionsOnInsert);
     }
 
-    private function storeFailure(Environment $environment, CarbonImmutable $capturedAt, ReadingError $error): ?EnvironmentSnapshot
+    private function storeFailure(Environment $environment, CarbonImmutable $capturedAt, ReadingError $error, ?ReadingProblemData $problem): ?EnvironmentSnapshot
     {
         $evaluated = $this->evaluator->failed();
 
@@ -114,12 +168,14 @@ class PollEnvironment
             'failed_in_window' => 0,
             'failed_window_minutes' => $this->previousFailedWindow($environment),
             'failed_last_hour' => 0,
+            'failed_last_hour_capped' => false,
             'workers' => 0,
             'node_count' => 0,
             'latency_ms' => null,
         ], [
             'status' => $evaluated->status,
             'error' => $error,
+            'error_detail' => $problem?->toArray(),
             'latency_ms' => null,
             'pending_jobs' => [],
         ], [
@@ -145,9 +201,9 @@ class PollEnvironment
         array $insertOnly,
     ): ?EnvironmentSnapshot {
         return DB::transaction(function () use ($environment, $capturedAt, $evaluated, $snapshot, $state, $insertOnly) {
-            $address = DB::table('environments')->where('id', $environment->id)->lock('for share')->value('horizon_url');
+            $row = DB::table('environments')->where('id', $environment->id)->lock('for share')->first(['horizon_url', 'polling_enabled']);
 
-            if ($address !== $environment->horizon_url) {
+            if ($row === null || ! $row->polling_enabled || $row->horizon_url !== $environment->horizon_url) {
                 return null;
             }
 
@@ -239,17 +295,24 @@ class PollEnvironment
         $query = DB::table($model->getTable());
         $grammar = $query->getGrammar();
 
-        $statusSince = new Expression(
-            'case when "environment_states"."status" = excluded."status" and "environment_states"."captured_at" >= excluded."captured_at" - make_interval(secs => ?) then coalesce("environment_states"."status_since", excluded."status_since") else excluded."status_since" end',
+        $runStart = new Expression(
+            'case when "environment_states"."status" = excluded."status" and "environment_states"."captured_at" >= excluded."captured_at" - make_interval(secs => ?) then coalesce("environment_states"."status_since", excluded."status_since")'
+            .' when "environment_states"."last_known_status" = excluded."status" and "environment_states"."last_known_at" >= excluded."captured_at" - make_interval(secs => ?) then coalesce("environment_states"."last_known_since", excluded."status_since")'
+            .' else excluded."status_since" end',
         );
 
-        $sql = $grammar->compileUpsert($query, [$row], ['environment_id'], [...array_keys($state), 'status_since' => $statusSince, 'updated_at'])
+        $runs = array_fill_keys(array_intersect(['status_since', 'last_known_since'], array_keys($insertOnly)), $runStart);
+
+        $sql = $grammar->compileUpsert($query, [$row], ['environment_id'], [...array_keys($state), ...$runs, 'updated_at'])
             .' where '.$grammar->wrap($model->getTable().'.captured_at').' <= '.$grammar->wrap('excluded.captured_at')
             .' returning *';
 
+        $stale = config()->integer('horizon-watch.stale_after_intervals') * $environment->poll_interval_seconds;
+        $bridge = $stale + config()->integer('horizon-watch.readings.poll_job_timeout_seconds');
+
         $written = DB::selectOne($sql, [
             ...array_values($row),
-            config()->integer('horizon-watch.stale_after_intervals') * $environment->poll_interval_seconds,
+            ...array_merge(...array_fill(0, count($runs), [$stale, $bridge])),
         ]);
 
         return $written === null ? null : $model->newFromBuilder((array) $written);
@@ -281,13 +344,14 @@ class PollEnvironment
     }
 
     /**
+     * @param  array<string, string>  $supervisors
      * @return array{name: string, supervisor: string|null, workers: int, pending: int, waitSeconds: int, runtimeSeconds: float|null}
      */
-    private function queue(HorizonQueueLoad $queue, HorizonReading $reading): array
+    private function queue(HorizonQueueLoad $queue, array $supervisors, HorizonReading $reading): array
     {
         return [
             'name' => $queue->name,
-            'supervisor' => $this->supervisorOf($queue->name, $reading),
+            'supervisor' => $supervisors[$queue->name] ?? null,
             'workers' => $queue->processes,
             'pending' => $queue->length,
             'waitSeconds' => $queue->wait,
@@ -295,19 +359,24 @@ class PollEnvironment
         ];
     }
 
-    private function supervisorOf(string $queue, HorizonReading $reading): ?string
+    /**
+     * @return array<string, string>
+     */
+    private function supervisorsByQueue(HorizonReading $reading): array
     {
+        $supervisors = [];
+
         foreach ($reading->masters as $master) {
             foreach ($master->supervisors as $supervisor) {
                 foreach ($supervisor->processes as $key => $count) {
-                    if ($count > 0 && $this->queueName($key) === $queue) {
-                        return $supervisor->name;
+                    if ($count > 0) {
+                        $supervisors[$this->queueName($key)] ??= $supervisor->name;
                     }
                 }
             }
         }
 
-        return null;
+        return $supervisors;
     }
 
     private function queueName(string $key): string

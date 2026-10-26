@@ -43,7 +43,7 @@ export function axisTicks(max: number): number[] {
 }
 
 export function formatAxisCount(value: number): string {
-    return formatCount(value).replace(/\.0k$/, 'k');
+    return formatCount(value).replace(/[.,]0([kM])$/, '$1');
 }
 
 export function spansDays(spanSeconds: number): boolean {
@@ -61,7 +61,7 @@ function formatDay(at: Date, locale: string): string {
     return `${part('weekday')} ${part('day')}`;
 }
 
-function formatClock(at: Date, locale: string): string {
+export function formatClock(at: Date, locale: string): string {
     return new Intl.DateTimeFormat(locale, {
         hour: '2-digit',
         minute: '2-digit',
@@ -127,7 +127,7 @@ function localTicks(from: number, until: number, minutes: number): number[] {
             return ticks;
         }
 
-        if (at >= from) {
+        if (at >= from && at > (ticks[ticks.length - 1] ?? -Infinity)) {
             ticks.push(at);
         }
     }

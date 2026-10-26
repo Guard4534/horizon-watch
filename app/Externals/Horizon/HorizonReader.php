@@ -8,10 +8,16 @@ use Illuminate\Container\Attributes\Bind;
 #[Bind(HorizonClient::class)]
 interface HorizonReader
 {
+    public const int JOBS_PER_PAGE = 50;
+
+    public const int FAILED_RATE_MINUTES = 60;
+
     /**
+     * @param  array<string, float|null>|null  $knownRuntimes
+     *
      * @throws HorizonReadFailed
      */
-    public function read(HorizonTarget $target): HorizonReading;
+    public function read(HorizonTarget $target, bool $oldestPendingJobs = false, ?array $knownRuntimes = null): HorizonReading;
 
     /**
      * @throws HorizonReadFailed

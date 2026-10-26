@@ -1,24 +1,28 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { PhPlus, PhStackSimple } from '@phosphor-icons/vue';
+import { PhArrowRight, PhPlus, PhStackSimple } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed, ref, watch } from 'vue';
 import MobileWall from '@/components/mobile/wall/MobileWall.vue';
+import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
 import VisibilityEmptyState from '@/components/monitoring/VisibilityEmptyState.vue';
-import AnomalyList from '@/components/monitoring/wall/AnomalyList.vue';
+import OpenAlertList from '@/components/monitoring/wall/OpenAlertList.vue';
 import ApplicationGroup from '@/components/monitoring/wall/ApplicationGroup.vue';
 import FirstRun from '@/components/monitoring/wall/FirstRun.vue';
 import SentNotifications from '@/components/monitoring/wall/SentNotifications.vue';
 import WallFilters from '@/components/monitoring/wall/WallFilters.vue';
-import KpiCard from '@/components/nocturne/KpiCard.vue';
+import MetricCard from '@/components/nocturne/MetricCard.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import TimeSeriesChart from '@/components/nocturne/TimeSeriesChart.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { useVisibility } from '@/composables/useVisibility';
-import { failedLabel, failedWindowNote } from '@/lib/failedWindow';
-import { needsAttention } from '@/components/monitoring/environment/readings';
+import { useWallKpis } from '@/composables/useWallKpis';
+import {
+    displayState,
+    needsAttention,
+} from '@/components/monitoring/environment/readings';
 import { formatCount } from '@/lib/monitoring';
 import { rangeLabel } from '@/lib/timeSeries';
 import {
@@ -41,14 +45,13 @@ const { page } = defineProps<{
 useLivePoll();
 
 const throughputLabel = computed(() =>
-    trans(':range, peak :count jobs/min', {
+    trans(':range, peak :value', {
         range: rangeLabel('3h'),
-        count: formatCount(Math.max(0, ...page.throughput)),
+        value: `${formatCount(Math.max(0, ...page.throughput))}/min`,
     }),
 );
 
-const describeThroughput = (value: number) =>
-    trans(':count jobs/min', { count: String(value) });
+const describeThroughput = (value: number) => `${value}/min`;
 
 const isMobile = useIsMobile();
 
@@ -75,21 +78,32 @@ const filter = computed<'all' | 'problems'>({
         chosenFilter.value = value;
     },
 });
-const environmentName = ref(query.get('environment') ?? '');
+const typeFromQuery = (value: string | null): App.Enums.EnvironmentType | '' =>
+    page.types.some((option) => option.value === value)
+        ? (value as App.Enums.EnvironmentType)
+        : '';
+const environmentType = ref<App.Enums.EnvironmentType | ''>(
+    typeFromQuery(query.get('type')),
+);
+const typeLabel = computed(
+    () =>
+        page.types.find((option) => option.value === environmentType.value)
+            ?.label ?? '',
+);
 const needle = ref(query.get('q') ?? '');
 
-watch([chosenFilter, environmentName, needle], () => {
+watch([chosenFilter, environmentType, needle], () => {
     const params = new URLSearchParams();
 
     if (chosenFilter.value) params.set('filter', chosenFilter.value);
-    if (environmentName.value) params.set('environment', environmentName.value);
+    if (environmentType.value) params.set('type', environmentType.value);
     if (needle.value) params.set('q', needle.value);
 
     const url = `${path}${params.size ? `?${params}` : ''}`;
     router.replace({ url, preserveState: true, preserveScroll: true });
 });
 
-const problems = computed(() => page.environments.filter(needsAttention));
+const attention = computed(() => page.environments.filter(needsAttention));
 
 const firstRun = computed(
     () =>
@@ -101,23 +115,24 @@ const firstRun = computed(
 
 const waitingCount = computed(
     () =>
-        page.environments.filter((environment) => environment.status === null)
-            .length,
+        page.environments.filter(
+            (environment) => displayState(environment) === 'waiting',
+        ).length,
 );
 
 function clearNarrowing(): void {
-    environmentName.value = '';
+    environmentType.value = '';
     needle.value = '';
 }
 
 const shown = computed(() => {
     const wanted = needle.value.trim().toLowerCase();
 
-    return (filter.value === 'problems' ? problems.value : page.environments)
+    return (filter.value === 'problems' ? attention.value : page.environments)
         .filter(
             (environment) =>
-                !environmentName.value ||
-                environment.name === environmentName.value,
+                !environmentType.value ||
+                environment.type === environmentType.value,
         )
         .filter(
             (environment) =>
@@ -154,38 +169,7 @@ const groups = computed(() => {
 
 const openGroups = ref<Record<string, boolean | undefined>>({});
 
-const kpis = computed(() => [
-    {
-        label: trans('Environments up'),
-        value: `${page.kpis.environmentsUp} / ${page.kpis.environmentsTotal}`,
-        color:
-            page.kpis.environmentsUp + waitingCount.value ===
-            page.kpis.environmentsTotal
-                ? 'var(--st-ok)'
-                : 'var(--st-warn)',
-        note: trans('across all applications'),
-    },
-    {
-        label: trans('Anomalies'),
-        value: String(page.kpis.openAnomalies),
-        color: page.kpis.openAnomalies ? 'var(--st-down)' : 'var(--st-ok)',
-        note: trans('to triage'),
-    },
-    {
-        label: trans('Queued jobs'),
-        value: formatCount(page.kpis.pendingTotal),
-        color: 'var(--nc-text)',
-        note: trans('sum of every queue'),
-    },
-    {
-        label: failedLabel(page.kpis.failedWindowMinutes),
-        value: formatCount(page.kpis.failedTotal),
-        color: page.kpis.environmentsOverFailedRate
-            ? 'var(--st-warn)'
-            : 'var(--nc-text)',
-        note: failedWindowNote(page.kpis.failedWindowMinutes),
-    },
-]);
+const kpis = useWallKpis(() => page.kpis);
 </script>
 
 <template>
@@ -198,7 +182,6 @@ const kpis = computed(() => [
     <div v-else-if="nothingVisible" class="nc-page">
         <VisibilityEmptyState
             :icon="PhStackSimple"
-            :kicker="$t('Nothing connected')"
             :title="$t('No environments yet')"
             :body="
                 needsEnvironment
@@ -206,7 +189,7 @@ const kpis = computed(() => [
                           'An application is configured but has no environment yet. Add one to it and it shows up here.',
                       )
                     : $t(
-                          'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                          'Nothing is configured yet. An admin of this organization has to add an application before anything shows up here.',
                       )
             "
         >
@@ -216,7 +199,7 @@ const kpis = computed(() => [
                 style="margin-top: var(--nc-space-2)"
                 :href="applicationsIndex(slug)"
             >
-                <PhPlus :size="14" />{{ $t('Add environment') }}
+                {{ $t('Go to applications') }}<PhArrowRight :size="14" />
             </Link>
             <Link
                 v-else-if="canManageApplications"
@@ -230,20 +213,25 @@ const kpis = computed(() => [
     </div>
 
     <div v-else-if="isMobile" class="nc-page">
+        <AudienceWarning
+            v-if="page.alertsReachNobody"
+            :link="page.canManageAlertRules ? 'settings' : 'profile'"
+            style="margin-bottom: var(--nc-space-3)"
+        />
         <MobileWall
             v-model:filter="filter"
             :rows="shown"
             :total-count="page.environments.length"
-            :problem-count="problems.length"
+            :attention-count="page.kpis.environmentsNeedingAttention"
             :waiting-count="waitingCount"
-            :environment-name="environmentName"
+            :type-label="typeLabel"
             :search="needle"
             :kpis="page.kpis"
             @clear="clearNarrowing"
         />
     </div>
 
-    <div v-else class="nc-page wall-grid">
+    <div v-else class="nc-page nc-two-col">
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
             <div
                 class="grid"
@@ -252,9 +240,10 @@ const kpis = computed(() => [
                     gap: var(--nc-space-3);
                 "
             >
-                <KpiCard
+                <MetricCard
                     v-for="kpi in kpis"
-                    :key="kpi.label"
+                    :key="kpi.key"
+                    size="hero"
                     :label="kpi.label"
                     :value="kpi.value"
                     :color="kpi.color"
@@ -264,10 +253,11 @@ const kpis = computed(() => [
 
             <WallFilters
                 v-model:filter="filter"
-                v-model:environment-name="environmentName"
+                v-model:environment-type="environmentType"
                 v-model:search="needle"
                 :environments="page.environments"
-                :problem-count="problems.length"
+                :types="page.types"
+                :attention-count="page.kpis.environmentsNeedingAttention"
             />
 
             <ApplicationGroup
@@ -279,12 +269,25 @@ const kpis = computed(() => [
                 :environments="group.environments"
             />
             <p v-if="groups.length === 0" class="nc-t-sm nc-tone-muted">
-                {{ $t('No environment matches these filters.') }}
+                {{
+                    filter !== 'problems' || environmentType || needle.trim()
+                        ? $t('No environment matches these filters.')
+                        : waitingCount > 0
+                          ? $t(
+                                'Nothing needs attention. Some environments have no reading yet.',
+                            )
+                          : $t('Nothing needs attention.')
+                }}
             </p>
         </div>
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
-            <AnomalyList :anomalies="page.anomalies" />
+            <AudienceWarning
+                v-if="page.alertsReachNobody"
+                :link="page.canManageAlertRules ? 'settings' : 'profile'"
+            />
+
+            <OpenAlertList :alerts="page.alerts" />
 
             <SectionCard :title="$t('Organization throughput')">
                 <TimeSeriesChart
@@ -300,8 +303,8 @@ const kpis = computed(() => [
                     style="gap: var(--nc-space-4)"
                 >
                     <span>{{
-                        $t(':count jobs/min now', {
-                            count: String(page.jobsPerMinute),
+                        $t(':value now', {
+                            value: `${page.jobsPerMinute}/min`,
                         })
                     }}</span>
                     <span class="ml-auto">{{ $t('last 3 hours') }}</span>
@@ -312,18 +315,3 @@ const kpis = computed(() => [
         </div>
     </div>
 </template>
-
-<style scoped>
-.wall-grid {
-    display: grid;
-    align-items: start;
-    gap: var(--nc-space-6);
-    grid-template-columns: minmax(0, 1fr) 322px;
-}
-
-@media (max-width: 1023px) {
-    .wall-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
-</style>

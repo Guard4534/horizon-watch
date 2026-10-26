@@ -12,7 +12,7 @@ class AddEnvironment
     {
         return $application->environments()->create([
             'name' => $data->name,
-            'color' => $data->color,
+            'type' => $data->type,
             'horizon_url' => $data->horizonUrl,
             'basic_auth_user' => $data->basicAuthUser,
             'basic_auth_password' => $data->hasNewPassword() ? $data->basicAuthPassword : null,

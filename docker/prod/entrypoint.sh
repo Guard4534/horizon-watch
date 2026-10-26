@@ -18,7 +18,7 @@ wait_for_database() {
     local attempts=60
 
     until php -r '
-        $dsn = sprintf("pgsql:host=%s;port=%s;dbname=%s", getenv("DB_HOST"), getenv("DB_PORT") ?: "5432", getenv("DB_DATABASE"));
+        $dsn = sprintf("pgsql:host=%s;port=%s;dbname=%s;sslmode=%s", getenv("DB_HOST"), getenv("DB_PORT") ?: "5432", getenv("DB_DATABASE"), getenv("DB_SSLMODE") ?: "prefer");
         new PDO($dsn, getenv("DB_USERNAME"), getenv("DB_PASSWORD"));
     ' >/dev/null 2>&1; do
         attempts=$((attempts - 1))
@@ -38,6 +38,9 @@ load_app_key() {
     chown www-data:www-data /data
     local key_file=/data/app-key
 
+    exec 9>/data/app-key.lock
+    flock 9
+
     if [ ! -s "$key_file" ]; then
         local tmp_key_file
         tmp_key_file="$(mktemp /data/app-key.XXXXXX)"
@@ -48,11 +51,13 @@ load_app_key() {
     fi
 
     export APP_KEY="$(cat "$key_file")"
+
+    exec 9>&-
 }
 
 migrate() {
     as_app php -r '
-        $dsn = sprintf("pgsql:host=%s;port=%s;dbname=%s", getenv("DB_HOST"), getenv("DB_PORT") ?: "5432", getenv("DB_DATABASE"));
+        $dsn = sprintf("pgsql:host=%s;port=%s;dbname=%s;sslmode=%s", getenv("DB_HOST"), getenv("DB_PORT") ?: "5432", getenv("DB_DATABASE"), getenv("DB_SSLMODE") ?: "prefer");
         $pdo = new PDO($dsn, getenv("DB_USERNAME"), getenv("DB_PASSWORD"), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
         $lock = $pdo->prepare("select pg_advisory_lock(?)");
         $lock->execute([(int) getenv("MIGRATION_LOCK_KEY")]);
@@ -81,7 +86,11 @@ case "$role" in
         wait_for_database
         load_app_key
         as_app php artisan optimize
-        exec setpriv --reuid=www-data --regid=www-data --init-groups php artisan queue:work --max-time=3600 --tries=3
+        exec setpriv --reuid=www-data --regid=www-data --init-groups php artisan queue:work --queue="${2:-notifications,polls,default}" --max-time=3600 --tries=3
+        ;;
+    health)
+        shift
+        exec setpriv --reuid=www-data --regid=www-data --init-groups php artisan horizon-watch:health "$@"
         ;;
     artisan)
         shift

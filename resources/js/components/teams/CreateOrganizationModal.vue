@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { Form } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, useId } from 'vue';
 import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogClose,
@@ -13,10 +12,10 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { invalidField } from '@/lib/fieldErrors';
 import { store } from '@/routes/teams';
 
+const id = useId();
 const open = ref(false);
 const formKey = ref(0);
 
@@ -53,32 +52,35 @@ function handleOpenChange(value: boolean) {
                     </DialogDescription>
                 </DialogHeader>
 
-                <div class="grid gap-2">
-                    <Label for="name">{{ $t('Organization name') }}</Label>
-                    <Input
-                        id="name"
+                <div class="nc-field">
+                    <label :for="id">{{ $t('Organization name') }}</label>
+                    <input
+                        :id="id"
+                        class="nc-input"
                         name="name"
                         data-test="create-team-name"
                         :placeholder="$t('My organization')"
                         required
+                        v-bind="invalidField(id, errors.name)"
                     />
-                    <InputError :message="errors.name" />
+                    <InputError :field="id" :message="errors.name" />
                 </div>
 
-                <DialogFooter class="gap-2">
+                <DialogFooter>
                     <DialogClose as-child>
-                        <Button variant="secondary">
+                        <button type="button" class="nc-btn nc-btn-secondary">
                             {{ $t('Cancel') }}
-                        </Button>
+                        </button>
                     </DialogClose>
 
-                    <Button
+                    <button
                         type="submit"
+                        class="nc-btn nc-btn-primary"
                         data-test="create-team-submit"
                         :disabled="processing"
                     >
                         {{ $t('Create the organization') }}
-                    </Button>
+                    </button>
                 </DialogFooter>
             </Form>
         </DialogContent>

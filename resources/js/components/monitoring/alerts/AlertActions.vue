@@ -19,10 +19,10 @@ const { busy, unmuteAlert, handleAlert } = useAlertActions();
 
 const pending = computed(() => busy.value.has(alert.id));
 const muted = computed(() => isMuted(alert));
-const canTakeInCharge = computed(
+const canMarkHandled = computed(
     () => alert.canHandle && alert.handledBy === null,
 );
-const hasActions = computed(() => alert.canMute || canTakeInCharge.value);
+const hasActions = computed(() => alert.canMute || canMarkHandled.value);
 </script>
 
 <template>
@@ -46,7 +46,7 @@ const hasActions = computed(() => alert.canMute || canTakeInCharge.value);
             <MuteMenu v-else :alert="alert" variant="icon" />
         </template>
         <button
-            v-if="canTakeInCharge"
+            v-if="canMarkHandled"
             type="button"
             class="nc-btn nc-btn-ghost icon-action"
             :title="$t('Mark as handled')"
@@ -77,14 +77,14 @@ const hasActions = computed(() => alert.canMute || canTakeInCharge.value);
             <MuteMenu v-else :alert="alert" :block="block" />
         </template>
         <button
-            v-if="canTakeInCharge"
+            v-if="canMarkHandled"
             type="button"
             class="nc-btn nc-btn-ghost text-action"
             :class="{ 'is-block': block }"
             :disabled="pending"
             @click="handleAlert(alert)"
         >
-            <PhCheck :size="12" />{{ $t('Handled') }}
+            <PhCheck :size="12" />{{ $t('Mark as handled') }}
         </button>
     </div>
 </template>

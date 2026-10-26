@@ -1,11 +1,15 @@
 import {
+    PhClockCountdown,
     PhPauseCircle,
     PhPlugs,
     PhWarning,
     PhWarningOctagon,
 } from '@phosphor-icons/vue';
-import { trans } from 'laravel-vue-i18n';
+import { getActiveLanguage, trans } from 'laravel-vue-i18n';
 import type { Component } from 'vue';
+
+const SERIES_REFRESH_PER_STEP = 4;
+const SERIES_REFRESH_MAX_MS = 300000;
 
 const STATUS_COLORS: Record<App.Enums.EnvironmentStatus, string> = {
     active: 'var(--st-ok)',
@@ -13,14 +17,15 @@ const STATUS_COLORS: Record<App.Enums.EnvironmentStatus, string> = {
     paused: 'var(--st-off)',
     inactive: 'var(--st-down)',
     unreachable: 'var(--st-down)',
+    stale: 'var(--st-warn)',
 };
 
 export function statusColor(status: App.Enums.EnvironmentStatus): string {
     return STATUS_COLORS[status];
 }
 
-export function envColor(color: App.Enums.EnvironmentColor): string {
-    return `var(--env-${color})`;
+export function envTypeColor(type: App.Enums.EnvironmentType): string {
+    return `var(--env-${type})`;
 }
 
 export function statusLabel(status: App.Enums.EnvironmentStatus): string {
@@ -30,11 +35,13 @@ export function statusLabel(status: App.Enums.EnvironmentStatus): string {
         case 'degraded':
             return trans('degraded');
         case 'paused':
-            return trans('paused');
+            return trans('Horizon paused');
         case 'inactive':
             return trans('inactive');
         case 'unreachable':
             return trans('unreachable');
+        case 'stale':
+            return trans('not updated');
     }
 }
 
@@ -44,6 +51,7 @@ const STATUS_ICONS: Record<App.Enums.EnvironmentStatus, Component> = {
     paused: PhPauseCircle,
     inactive: PhWarningOctagon,
     unreachable: PhPlugs,
+    stale: PhClockCountdown,
 };
 
 export function statusIcon(status: App.Enums.EnvironmentStatus): Component {
@@ -55,54 +63,91 @@ export function formatCount(value: number): string {
         return String(value);
     }
 
-    return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
+    const [divisor, suffix] = value >= 999500 ? [1000000, 'M'] : [1000, 'k'];
+    const scaled = value / divisor;
+    const digits = scaled >= 10 ? 0 : 1;
+
+    return `${new Intl.NumberFormat(getActiveLanguage(), {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+        useGrouping: false,
+    }).format(scaled)}${suffix}`;
 }
 
-export function formatWait(seconds: number): string {
-    return seconds >= 60 ? `${Math.round(seconds / 60)}m` : `${seconds}s`;
+const DURATION_UNITS: readonly {
+    size: number;
+    label: (value: string) => string;
+}[] = [
+    { size: 86400, label: (days) => trans(':days d', { days }) },
+    { size: 3600, label: (hours) => trans(':hours h', { hours }) },
+    { size: 60, label: (minutes) => trans(':minutes min', { minutes }) },
+    { size: 1, label: (seconds) => trans(':seconds s', { seconds }) },
+];
+
+/**
+ * A duration rounded down to at most two units, each spaced from its number:
+ * 45 s, 1 min 30 s, 1 h 5 min, 2 d 3 h. App\Support\Duration mirrors it.
+ */
+export function formatSeconds(seconds: number, parts: 1 | 2 = 2): string {
+    const total = Number.isFinite(seconds)
+        ? Math.max(0, Math.floor(seconds))
+        : 0;
+    const index = DURATION_UNITS.findIndex(({ size }) => total >= size);
+    const major =
+        DURATION_UNITS[index === -1 ? DURATION_UNITS.length - 1 : index];
+    const minor =
+        parts === 2 && index !== -1 ? DURATION_UNITS[index + 1] : undefined;
+    const text = major.label(String(Math.floor(total / major.size)));
+
+    if (minor === undefined) {
+        return text;
+    }
+
+    const count = Math.floor((total % major.size) / minor.size);
+
+    return count > 0 ? `${text} ${minor.label(String(count))}` : text;
 }
 
-export function exceeds(value: number, threshold: number | null): boolean {
-    return threshold !== null && value > threshold;
+/** Average job runtime: one decimal under a minute (0.4 s), since Horizon reports sub-second runtimes. */
+export function formatRuntime(seconds: number): string {
+    const rounded = Math.round(seconds * 10) / 10;
+
+    if (rounded >= 60) {
+        return formatSeconds(rounded);
+    }
+
+    return trans(':seconds s', {
+        seconds: new Intl.NumberFormat(getActiveLanguage(), {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+        }).format(rounded),
+    });
 }
 
-export function waitColor(seconds: number, threshold: number | null): string {
-    if (threshold === null) {
-        return 'var(--nc-neutral-400)';
-    }
-
-    if (seconds > Math.max(300, threshold)) {
-        return 'var(--st-down)';
-    }
-
-    return seconds > threshold ? 'var(--st-warn)' : 'var(--nc-neutral-400)';
+/** Chart axes only: one unit, no space (30s, 2min, 12h, 2d). */
+export function formatSecondsCompact(seconds: number): string {
+    return formatSeconds(seconds, 1).replace(' ', '');
 }
 
-export function formatElapsed(minutes: number): string {
-    if (minutes < 1) {
-        return trans('less than a minute ago');
-    }
-
-    if (minutes < 60) {
-        return trans(':minutes min ago', { minutes: String(minutes) });
-    }
-
-    if (minutes < 1440) {
-        return trans(':hours h ago', {
-            hours: String(Math.floor(minutes / 60)),
-        });
-    }
-
-    return trans(':days d ago', { days: String(Math.floor(minutes / 1440)) });
+export function formatAgo(seconds: number): string {
+    return seconds < 60
+        ? trans('less than a minute ago')
+        : trans(':time ago', { time: formatSeconds(seconds, 1) });
 }
 
-export function formatDuration(seconds: number): string {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
+/** Thresholds and alert values: exact and grouped, like AlertMail::number(). */
+export function formatNumber(value: number): string {
+    return new Intl.NumberFormat(getActiveLanguage(), {
+        maximumFractionDigits: 2,
+    }).format(value);
+}
 
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    }
-
-    return `${minutes}m ${seconds % 60}s`;
+export function seriesRefreshInterval(ms: number, stepSeconds: number): number {
+    return Math.max(
+        ms,
+        Math.min(
+            (stepSeconds * 1000) / SERIES_REFRESH_PER_STEP,
+            SERIES_REFRESH_MAX_MS,
+        ),
+    );
 }

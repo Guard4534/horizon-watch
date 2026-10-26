@@ -3,7 +3,7 @@
 use App\Alerts\EmailPreview;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Models\Alert;
 use App\Models\Application;
 use App\Models\Environment;
@@ -34,7 +34,6 @@ beforeEach(function () {
     $this->alert = Alert::factory()->for($this->environment)->critical()->create([
         'metric' => AlertRuleMetric::QueuePending,
         'threshold' => 2000,
-        'unit' => 'job',
         'value' => 4312,
         'opened_at' => CarbonImmutable::parse('2026-09-17 12:02:00', 'UTC'),
     ]);
@@ -68,10 +67,11 @@ test('a critical alert email carries the subject, the detail rows and the panel 
 
     expect(mailSubject($notification))->toBe('[CRITICAL] Shop <b>&</b> · production — Pending jobs')
         ->and($html)->toContain('4,312 jobs pending')
-        ->and($html)->toContain('Detected on 2026-09-17 14:02 (Europe/Rome)')
+        ->and($html)->toContain('Opened on 2026-09-17 14:02 (Europe/Rome)')
         ->and($html)->toContain('queue-01, queue-02')
-        ->and($html)->toContain('queue.pending &gt; 2,000 job')
-        ->and($html)->toContain('4,312 job')
+        ->and($html)->toContain('Pending jobs &gt; 2,000</td>')
+        ->and($html)->not->toContain('Value</td>')
+        ->and($html)->not->toContain('queue.pending')
         ->and($html)->toContain('Shop &lt;b&gt;&amp;&lt;/b&gt; · production')
         ->and($html)->not->toContain('<b>&</b>')
         ->and($html)->toContain('href="'.url('/acme/environments/'.$this->environment->slug).'"')
@@ -84,11 +84,24 @@ test('a repeated email says it keeps repeating', function () {
     expect(mailHtml(new AlertNotification($this->alert, repeated: true)))->toContain('Still open: this email repeats');
 });
 
+test('the opening and repeated emails print the value only in their headline', function () {
+    foreach ([new AlertNotification($this->alert), new AlertNotification($this->alert, repeated: true)] as $notification) {
+        $html = mailHtml($notification);
+
+        expect($html)->toContain('4,312 jobs pending')
+            ->and($html)->not->toContain('Value</td>')
+            ->and($html)->toContain('Pending jobs &gt; 2,000</td>');
+    }
+
+    expect(mailHtml(new AlertNotification($this->alert, repeated: true)))
+        ->toContain('Still open: this email repeats until the alert is resolved, muted or marked as handled.');
+});
+
 test('the email follows the organization time zone and the recipient language', function () {
     NotificationSetting::factory()->for($this->team)->create(['timezone' => 'America/New_York']);
     $notification = new AlertNotification($this->alert);
 
-    expect(mailHtml($notification))->toContain('Detected on 2026-09-17 08:02 (America/New_York)')
+    expect(mailHtml($notification))->toContain('Opened on 2026-09-17 08:02 (America/New_York)')
         ->and(mailSubject($notification, 'it'))->toStartWith('[CRITICO] Shop')
         ->and(mailHtml($notification, 'it'))->toContain('Ambiente')
         ->and(mailHtml($notification, 'it'))->toContain('4.312');
@@ -103,7 +116,7 @@ test('a warning email is tagged as a warning in its colour', function () {
 });
 
 test('every rule has its own headline and detail', function (AlertRuleMetric $metric, float $value, array $detail, string $headline, ?string $extra) {
-    $this->alert->update(['metric' => $metric, 'value' => $value, 'detail' => $detail, 'unit' => $metric->unit()]);
+    $this->alert->update(['metric' => $metric, 'value' => $value, 'detail' => $detail]);
 
     $html = mailHtml(new AlertNotification($this->alert));
 
@@ -116,14 +129,33 @@ test('every rule has its own headline and detail', function (AlertRuleMetric $me
     'inactive' => [AlertRuleMetric::HorizonMasterInactive, 14, [], 'Horizon inactive for 14 min', null],
     'unreachable' => [AlertRuleMetric::EndpointUnreachable, 3, [], 'Endpoint unreachable for 3 min', null],
     'paused' => [AlertRuleMetric::HorizonPaused, 20, [], 'Horizon paused for 20 min', null],
-    'max wait' => [AlertRuleMetric::QueueMaxWait, 95, ['waitSeconds' => 95], 'Oldest job waiting 95 s', null],
-    'runtime' => [AlertRuleMetric::JobRuntime, 300, ['job' => 'App\Jobs\BuildReport', 'queue' => 'reports', 'seconds' => 300], 'A job has been running for 300 s', 'App\Jobs\BuildReport on queue reports'],
+    'one pending job' => [AlertRuleMetric::QueuePending, 1, [], '1 job pending', null],
+    'max wait' => [AlertRuleMetric::QueueMaxWait, 95, ['waitSeconds' => 95], 'Oldest job waiting 1 min 35 s', null],
+    'runtime' => [AlertRuleMetric::JobRuntime, 300, ['job' => 'App\Jobs\BuildReport', 'queue' => 'reports', 'seconds' => 300], 'A job has been running for 5 min', 'App\Jobs\BuildReport on queue reports'],
     'failed' => [AlertRuleMetric::JobsFailedPerHour, 31, ['failed' => 31], '31 jobs failed in the last hour', null],
+    'one failed job' => [AlertRuleMetric::JobsFailedPerHour, 1, ['failed' => 1], '1 job failed in the last hour', null],
+    'failed past the jobs that were read' => [AlertRuleMetric::JobsFailedPerHour, 200, ['failed' => 200, 'atLeast' => true], 'at least 200 jobs failed in the last hour', null],
     'workers' => [AlertRuleMetric::WorkersMissing, 5, ['queues' => ['default', 'emails']], '5 queues with waiting jobs and no worker', 'Queues: default, emails'],
+    'one queue without workers' => [AlertRuleMetric::WorkersMissing, 1, ['queues' => ['default']], '1 queue with waiting jobs and no worker', 'Queues: default'],
+]);
+
+test('the rule row names the rule, compares the way the rule fires and translates the unit', function (AlertRuleMetric $metric, float $threshold, float $value, string $english, string $italian) {
+    $this->alert->update(['metric' => $metric, 'threshold' => $threshold, 'value' => $value, 'detail' => [], 'resolved_at' => now()]);
+    $notification = new ResolvedNotification($this->alert);
+
+    expect(mailHtml($notification))->toContain($english)
+        ->and(mailHtml($notification, 'it'))->toContain($italian);
+})->with([
+    'inactive' => [AlertRuleMetric::HorizonMasterInactive, 5, 14, 'Horizon inactive ≥ 5 min</td>', 'Horizon inattivo ≥ 5 min</td>'],
+    'workers' => [AlertRuleMetric::WorkersMissing, 4, 4, 'Missing workers ≥ 4</td>', 'Worker mancanti ≥ 4</td>'],
+    'max wait' => [AlertRuleMetric::QueueMaxWait, 60, 95, 'Max wait &gt; 60 s</td>', 'Max wait &gt; 60 s</td>'],
+    'pending' => [AlertRuleMetric::QueuePending, 2000, 2345, '2,345 jobs</td>', 'Job pending &gt; 2.000</td>'],
+    'one failed job' => [AlertRuleMetric::JobsFailedPerHour, 1, 1, '1 job</td>', '1 job</td>'],
+    'runtime' => [AlertRuleMetric::JobRuntime, 120, 300, '300 s</td>', '300 s</td>'],
 ]);
 
 test('a state rule headline reads its duration in minutes, hours and days', function (AlertRuleMetric $metric, float $minutes, string $english, string $italian) {
-    $this->alert->update(['metric' => $metric, 'value' => $minutes, 'detail' => [], 'unit' => $metric->unit()]);
+    $this->alert->update(['metric' => $metric, 'value' => $minutes, 'detail' => []]);
     $notification = new AlertNotification($this->alert);
 
     expect(mailHtml($notification))->toContain($english)
@@ -137,13 +169,32 @@ test('a state rule headline reads its duration in minutes, hours and days', func
     'days and hours' => [AlertRuleMetric::EndpointUnreachable, 3000, 'Endpoint unreachable for 2 d 2 h', 'Endpoint non raggiungibile da 2 g 2 h'],
 ]);
 
+test('a waiting or running job headline reads its duration in spaced units', function (AlertRuleMetric $metric, float $seconds, string $english, string $italian) {
+    $this->alert->update(['metric' => $metric, 'value' => $seconds, 'detail' => []]);
+    $notification = new AlertNotification($this->alert);
+
+    expect(mailHtml($notification))->toContain($english)
+        ->and(mailHtml($notification, 'it'))->toContain($italian);
+})->with([
+    'seconds, rounded down' => [AlertRuleMetric::QueueMaxWait, 42.7, 'Oldest job waiting 42 s', 'Job più vecchio in attesa da 42 s'],
+    'minutes and seconds' => [AlertRuleMetric::QueueMaxWait, 95, 'Oldest job waiting 1 min 35 s', 'Job più vecchio in attesa da 1 min 35 s'],
+    'hours and minutes' => [AlertRuleMetric::JobRuntime, 3725, 'A job has been running for 1 h 2 min', 'Un job è in esecuzione da 1 h 2 min'],
+    'a whole day' => [AlertRuleMetric::JobRuntime, 86400, 'A job has been running for 1 d<', 'Un job è in esecuzione da 1 g<'],
+]);
+
+test('an italian alert email ends with an italian footer', function () {
+    expect(mailHtml(new AlertNotification($this->alert), 'it'))
+        ->toContain('Tutti i diritti riservati.')
+        ->not->toContain('All rights reserved.');
+});
+
 test('an alert of a deleted environment has no panel link and no nodes', function () {
     $alert = Alert::factory()->critical()->create([
         'environment_id' => null,
         'team_id' => $this->team->id,
         'application_name' => 'Shop',
         'environment_name' => 'gone',
-        'environment_color' => EnvironmentColor::Staging,
+        'environment_type' => EnvironmentType::Staging,
     ]);
 
     $html = mailHtml(new AlertNotification($alert));
@@ -159,8 +210,14 @@ test('a resolution email says how long the alert lasted', function () {
 
     expect(mailSubject($notification))->toBe('[RESOLVED] Shop <b>&</b> · production — Pending jobs')
         ->and($html)->toContain('Back within the threshold: Pending jobs')
+        ->and($html)->toContain('Value</td>')
+        ->and($html)->toContain('4,312 jobs</td>')
         ->and($html)->toContain('Resolved on 2026-09-17 14:27 (Europe/Rome), open for 25 min')
         ->and($html)->toContain('#6fbf99');
+
+    $this->alert->update(['resolved_at' => CarbonImmutable::parse('2026-09-17 12:02:40', 'UTC')]);
+
+    expect(mailHtml(new ResolvedNotification($this->alert)))->toContain('open for 40 s');
 });
 
 test('a long resolution says its duration in days and hours, in the language of the mail', function () {
@@ -169,15 +226,15 @@ test('a long resolution says its duration in days and hours, in the language of 
 
     expect(mailHtml($notification))->toContain('Resolved on 2026-09-18 17:32 (Europe/Rome), open for 1 d 3 h')
         ->and(mailHtml($notification, 'it'))->toContain('Risolto il 2026-09-18 17:32 (Europe/Rome), aperto per 1 g 3 h')
-        ->and(mailHtml(new AlertNotification($this->alert), 'it'))->toContain('Rilevato il 2026-09-17 14:02 (Europe/Rome)');
+        ->and(mailHtml(new AlertNotification($this->alert), 'it'))->toContain('Aperto il 2026-09-17 14:02 (Europe/Rome)');
 });
 
 test('the digest lists open and resolved warnings and links the wall', function () {
     $staging = Environment::factory()->for($this->application)->staging()->create();
     $alerts = collect([
-        Alert::factory()->for($this->environment)->warning()->create(['metric' => AlertRuleMetric::QueueMaxWait, 'value' => 75, 'unit' => 's']),
-        Alert::factory()->for($staging)->warning()->resolved()->create(['metric' => AlertRuleMetric::QueuePending, 'value' => 2100, 'unit' => 'job']),
-        Alert::factory()->for($staging)->warning()->create(['metric' => AlertRuleMetric::JobsFailedPerHour, 'value' => 22, 'unit' => 'job']),
+        Alert::factory()->for($this->environment)->warning()->create(['metric' => AlertRuleMetric::QueueMaxWait, 'value' => 75]),
+        Alert::factory()->for($staging)->warning()->resolved()->create(['metric' => AlertRuleMetric::QueuePending, 'value' => 2100]),
+        Alert::factory()->for($staging)->warning()->create(['metric' => AlertRuleMetric::JobsFailedPerHour, 'value' => 22]),
     ]);
     $notification = new WarningDigestNotification($this->team, $alerts);
     $html = mailHtml($notification);
@@ -186,10 +243,25 @@ test('the digest lists open and resolved warnings and links the wall', function 
         ->and($notification->environmentCount())->toBe(2)
         ->and($html)->toContain('Warnings: 3 · Environments: 2')
         ->and($html)->toContain('Max wait · 75 s')
-        ->and($html)->toContain('Pending jobs · 2,100 job')
+        ->and($html)->toContain('Pending jobs · 2,100 jobs')
         ->and(substr_count($html, 'Still open'))->toBe(2)
         ->and($html)->toContain('Resolved')
         ->and($html)->toContain('href="'.url('/acme/wall').'"');
+});
+
+test('a failed-jobs count cut at the jobs read is a lower bound in the headline, the resolution value row and the digest', function () {
+    $this->alert->update(['metric' => AlertRuleMetric::JobsFailedPerHour, 'threshold' => 150, 'value' => 200, 'detail' => ['failed' => 200, 'atLeast' => true]]);
+    $digest = new WarningDigestNotification($this->team, collect([$this->alert]));
+
+    expect(mailHtml(new AlertNotification($this->alert)))->toContain('at least 200 jobs failed in the last hour')
+        ->and(mailHtml(new AlertNotification($this->alert), 'it'))->toContain('almeno 200')
+        ->and(mailHtml($digest))->toContain('Failed jobs / hour · at least 200 jobs')
+        ->and(mailHtml($digest, 'it'))->toContain('almeno 200 job');
+
+    $this->alert->update(['resolved_at' => now()]);
+
+    expect(mailHtml(new ResolvedNotification($this->alert)))->toContain('at least 200 jobs</td>')
+        ->and(mailHtml(new ResolvedNotification($this->alert), 'it'))->toContain('almeno 200 job</td>');
 });
 
 test('the test email names the organization', function () {
@@ -239,7 +311,6 @@ test('horizon names cannot inject markdown into an alert email or its preview', 
     ])]);
     $this->alert->update([
         'metric' => AlertRuleMetric::JobRuntime,
-        'unit' => 's',
         'value' => 300,
         'detail' => ['job' => 'App\Jobs\BuildReport'.HOSTILE_MARKDOWN, 'queue' => 'reports'.HOSTILE_MARKDOWN, 'seconds' => 300],
     ]);

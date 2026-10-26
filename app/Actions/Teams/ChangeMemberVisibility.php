@@ -7,6 +7,7 @@ use App\Models\Membership;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ChangeMemberVisibility
 {
@@ -15,10 +16,16 @@ class ChangeMemberVisibility
      */
     public function handle(Team $team, User $target, MemberVisibility $visibility, array $environmentIds = []): Membership
     {
-        /** @var Membership $membership */
-        $membership = $team->memberships()->where('user_id', $target->id)->firstOrFail();
+        return DB::transaction(function () use ($team, $target, $visibility, $environmentIds) {
+            /** @var Membership $membership */
+            $membership = $team->memberships()->where('user_id', $target->id)->lockForUpdate()->firstOrFail();
 
-        return DB::transaction(function () use ($team, $target, $membership, $visibility, $environmentIds) {
+            if ($membership->role->seesEveryEnvironment() && $visibility !== MemberVisibility::All) {
+                throw ValidationException::withMessages([
+                    'visibility' => __('Admins and the owner always see every environment.'),
+                ]);
+            }
+
             $membership->update(['visibility' => $visibility]);
 
             $membership->clearEnvironmentGrants();

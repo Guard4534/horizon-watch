@@ -8,12 +8,12 @@ import {
     InputOTPGroup,
     InputOTPSlot,
 } from '@/components/ui/input-otp';
+import { invalidField } from '@/lib/fieldErrors';
 import { store } from '@/routes/two-factor/login';
 import type { TwoFactorConfigContent } from '@/types';
 
 defineOptions({
     layout: {
-        kicker: 'Sign in',
         title: 'Two-factor authentication',
     },
 });
@@ -75,6 +75,9 @@ const toggleRecoveryMode = (clearErrors: () => void): void => {
                             :maxlength="6"
                             :disabled="processing"
                             autofocus
+                            autocomplete="one-time-code"
+                            :aria-label="$t('Authentication code')"
+                            v-bind="invalidField('otp', errors.code)"
                         >
                             <InputOTPGroup>
                                 <InputOTPSlot
@@ -85,7 +88,7 @@ const toggleRecoveryMode = (clearErrors: () => void): void => {
                             </InputOTPGroup>
                         </InputOTP>
                     </div>
-                    <InputError :message="errors.code" />
+                    <InputError field="otp" :message="errors.code" />
                 </div>
                 <button
                     type="submit"
@@ -126,9 +129,15 @@ const toggleRecoveryMode = (clearErrors: () => void): void => {
                         :placeholder="$t('Enter recovery code')"
                         :autofocus="showRecoveryInput"
                         required
+                        v-bind="
+                            invalidField('recovery_code', errors.recovery_code)
+                        "
                     />
                 </div>
-                <InputError :message="errors.recovery_code" />
+                <InputError
+                    field="recovery_code"
+                    :message="errors.recovery_code"
+                />
                 <button
                     type="submit"
                     class="nc-btn nc-btn-primary nc-btn-block"

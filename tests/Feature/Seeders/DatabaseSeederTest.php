@@ -3,8 +3,10 @@
 use App\Alerts\Events\AlertOpened;
 use App\Alerts\Events\AlertResolved;
 use App\Enums\AlertRuleMetric;
+use App\Enums\EnvironmentType;
 use App\Models\Alert;
 use App\Models\AlertNotification;
+use App\Models\Application;
 use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
@@ -26,6 +28,7 @@ test('the demo environments are not polled and carry a day of readings', functio
     $dayAgo = now()->subDay();
 
     expect($environments)->toHaveCount(29)
+        ->and(Application::query()->count())->toBe(9)
         ->and($environments->every(fn (Environment $environment) => $environment->polling_enabled === false))->toBeTrue()
         ->and($environments->every(fn (Environment $environment) => $environment->state?->captured_at->equalTo(now())))->toBeTrue()
         ->and($environments->every(fn (Environment $environment) => $environment->snapshots_count === 480))->toBeTrue()
@@ -73,7 +76,7 @@ test('a configured local horizon is added, polled, and left without readings', f
         ->and($local->horizon_url)->toBe('http://host.docker.internal:8080/horizon')
         ->and($local->poll_interval_seconds)->toBe(15)
         ->and($local->application->name)->toBe('Local Horizon')
-        ->and($local->application->host)->toBe('localhost')
+        ->and($local->type)->toBe(EnvironmentType::Development)
         ->and($local->application->team_id)->toBe(Environment::query()->where('slug', 'invoice-desk-production')->sole()->team_id)
         ->and($local->state()->exists())->toBeFalse()
         ->and($local->snapshots()->exists())->toBeFalse();
@@ -116,6 +119,6 @@ test('the demo organization carries alerts that match its readings, some muted, 
         ->and($resolved->every(fn (Alert $alert) => $alert->resolved_at->gte(now()->subHours(48))
             && $alert->resolved_at->lte(now())
             && $alert->opened_at->lt($alert->resolved_at)))->toBeTrue()
-        ->and($resolved->every(fn (Alert $alert) => $alert->notified === ($alert->resolution_notified_at !== null)))->toBeTrue()
+        ->and($resolved->every(fn (Alert $alert) => $alert->wasNotified() === ($alert->resolution_notified_at !== null)))->toBeTrue()
         ->and(AlertNotification::query()->where('target', 'like', '%://%')->exists())->toBeFalse();
 });

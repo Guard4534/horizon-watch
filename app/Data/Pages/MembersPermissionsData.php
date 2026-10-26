@@ -8,6 +8,8 @@ class MembersPermissionsData extends Data
 {
     public function __construct(
         public bool $canInvite,
+        public bool $canCopyInvitationLinks,
         public bool $canManageMembers,
+        public bool $canTransferOwnership,
     ) {}
 }

@@ -5,7 +5,7 @@ use App\Actions\Alerts\MuteAlert;
 use App\Actions\Alerts\UnmuteAlert;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertState;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Enums\MemberVisibility;
 use App\Enums\MuteDuration;
 use App\Enums\TeamRole;
@@ -233,7 +233,7 @@ test('an alert of a deleted environment of another organization does not exist h
         'team_id' => Team::factory()->create()->id,
         'application_name' => 'Billing',
         'environment_name' => 'legacy',
-        'environment_color' => EnvironmentColor::Develop,
+        'environment_type' => EnvironmentType::Development,
     ]);
 
     $this->actingAs(($this->memberAs)(TeamRole::Owner))
@@ -295,7 +295,7 @@ test('a resolved alert of a deleted environment exists only for those who see ev
         'team_id' => $this->team->id,
         'application_name' => 'Billing',
         'environment_name' => 'legacy',
-        'environment_color' => EnvironmentColor::Develop,
+        'environment_type' => EnvironmentType::Development,
     ]);
 
     $this->actingAs(($this->memberAs)(TeamRole::Member, MemberVisibility::NonProduction))

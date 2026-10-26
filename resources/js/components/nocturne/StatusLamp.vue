@@ -1,46 +1,43 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { trans } from 'laravel-vue-i18n';
-import { needsAttention } from '@/components/monitoring/environment/readings';
-import { statusColor, statusLabel } from '@/lib/monitoring';
+import { lampColor, lampLabel } from '@/components/nocturne/status';
 
 const {
     status,
-    size = 9,
-    glow = false,
+    label,
+    tone,
+    size = 8,
+    decorative = false,
 } = defineProps<{
     status: App.Enums.EnvironmentStatus | null;
+    label?: string;
+    tone?: string;
     size?: number;
-    glow?: boolean;
+    decorative?: boolean;
 }>();
 
-const troubled = computed(() => needsAttention({ status }));
+const text = computed(() => lampLabel(status, label));
 
-const label = computed(() =>
-    status === null ? trans('No reading yet') : statusLabel(status),
-);
-
-const style = computed(() => {
-    const color =
-        status === null ? 'var(--nc-neutral-600)' : statusColor(status);
-    const px = glow && troubled.value ? 11 : size;
-
-    return {
-        width: `${px}px`,
-        height: `${px}px`,
-        background: color,
-        boxShadow: glow && troubled.value ? `0 0 10px ${color}` : undefined,
-    };
-});
+const style = computed(() => ({
+    width: `${size}px`,
+    height: `${size}px`,
+    background: lampColor(status, tone),
+}));
 </script>
 
 <template>
     <span
+        v-if="decorative"
         class="inline-block flex-none rounded-full"
-        :class="{ 'nc-pulse': troubled }"
+        :style="style"
+        aria-hidden="true"
+    />
+    <span
+        v-else
+        class="inline-block flex-none rounded-full"
         :style="style"
         role="img"
-        :aria-label="label"
-        :title="label"
+        :aria-label="text"
+        :title="text"
     />
 </template>

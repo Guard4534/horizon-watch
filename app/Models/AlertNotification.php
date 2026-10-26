@@ -22,13 +22,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $target
  * @property DeliveryStatus $status
  * @property DeliveryError|null $error
+ * @property int|null $http_status
  * @property int|null $environment_count
  * @property CarbonImmutable $sent_at
  * @property string|null $delivery_id
  * @property-read Team $team
  * @property-read Alert|null $alert
  */
-#[Fillable(['team_id', 'alert_id', 'kind', 'channel', 'target', 'status', 'error', 'sent_at', 'environment_count', 'delivery_id'])]
+#[Fillable(['team_id', 'alert_id', 'kind', 'channel', 'target', 'status', 'error', 'http_status', 'sent_at', 'environment_count', 'delivery_id'])]
 class AlertNotification extends Model
 {
     /** @use HasFactory<AlertNotificationFactory> */
@@ -64,6 +65,7 @@ class AlertNotification extends Model
             'channel' => NotificationChannel::class,
             'status' => DeliveryStatus::class,
             'error' => DeliveryError::class,
+            'http_status' => 'integer',
             'sent_at' => 'immutable_datetime',
             'environment_count' => 'integer',
         ];

@@ -20,3 +20,15 @@ test('password confirmation requires authentication', function () {
 
     $response->assertRedirect(route('login'));
 });
+
+test('password confirmation attempts are rate limited', function () {
+    config(['horizon-watch.rate_limits.current_password_per_minute' => 2]);
+
+    $user = User::factory()->create();
+
+    $confirm = fn () => $this->actingAs($user)->post(route('password.confirm.store'), ['password' => 'wrong-password']);
+
+    $confirm()->assertSessionHasErrors('password');
+    $confirm()->assertSessionHasErrors('password');
+    $confirm()->assertTooManyRequests();
+});

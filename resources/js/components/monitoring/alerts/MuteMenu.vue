@@ -16,12 +16,10 @@ const {
     alert,
     variant = 'button',
     block = false,
-    large = false,
 } = defineProps<{
     alert: App.Data.Monitoring.AlertData;
     variant?: 'icon' | 'button';
     block?: boolean;
-    large?: boolean;
 }>();
 
 const { busy, muteAlert } = useAlertActions();
@@ -46,10 +44,10 @@ const pending = computed(() => busy.value.has(alert.id));
                 v-else
                 type="button"
                 class="nc-btn nc-btn-secondary mute-button"
-                :class="{ 'is-block': block, 'is-large': large }"
+                :class="{ 'is-block': block }"
                 :disabled="pending"
             >
-                <PhBellSlash :size="large ? 13 : 12" />{{ $t('Mute') }}
+                <PhBellSlash :size="12" />{{ $t('Mute') }}
                 <PhCaretDown :size="10" style="opacity: 0.7" />
             </button>
         </DropdownMenuTrigger>
@@ -83,9 +81,5 @@ const pending = computed(() => busy.value.has(alert.id));
     flex: 1;
     justify-content: center;
     padding: 3px 8px;
-}
-
-.mute-button.is-large {
-    font-size: 12px;
 }
 </style>

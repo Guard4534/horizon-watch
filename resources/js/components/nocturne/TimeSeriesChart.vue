@@ -2,7 +2,7 @@
 import { useElementSize } from '@vueuse/core';
 import { computed, ref, useTemplateRef } from 'vue';
 import { useLocale } from '@/composables/useLocale';
-import { formatWait } from '@/lib/monitoring';
+import { formatSecondsCompact } from '@/lib/monitoring';
 import {
     axisTicks,
     formatAxisCount,
@@ -15,22 +15,22 @@ import {
 
 const {
     values,
-    secondary = null,
     startsAt,
     stepSeconds,
     height,
     label,
     describe,
-    describeSecondary = null,
+    unit = 'count',
+    color = 'var(--nc-accent)',
 } = defineProps<{
     values: number[];
-    secondary?: number[] | null;
     startsAt: string;
     stepSeconds: number;
     height: number;
     label: string;
     describe: (value: number) => string;
-    describeSecondary?: ((value: number) => string) | null;
+    unit?: 'count' | 'seconds';
+    color?: string;
 }>();
 
 const TOP = 8;
@@ -44,30 +44,27 @@ const box = useTemplateRef<HTMLDivElement>('box');
 const { width: measured } = useElementSize(box);
 const width = computed(() => Math.round(measured.value) || FALLBACK_WIDTH);
 const hovered = ref<number | null>(null);
+const keyboard = ref(false);
 
 const from = computed(() => new Date(startsAt).getTime());
 const lastIndex = computed(() => Math.max(values.length - 1, 1));
 const until = computed(() => from.value + lastIndex.value * stepSeconds * 1000);
 const withDay = computed(() => spansDays(lastIndex.value * stepSeconds));
 
-const primaryMax = computed(() => niceCountMax(Math.max(0, ...values)));
-const secondaryMax = computed(() =>
-    secondary ? niceSecondsMax(Math.max(0, ...secondary)) : null,
+const primaryMax = computed(() =>
+    unit === 'seconds'
+        ? niceSecondsMax(Math.max(0, ...values))
+        : niceCountMax(Math.max(0, ...values)),
 );
 
 const leftTicks = computed(() =>
     axisTicks(primaryMax.value).map((value) => ({
         value,
-        text: formatAxisCount(value),
+        text:
+            unit === 'seconds'
+                ? formatSecondsCompact(value)
+                : formatAxisCount(value),
     })),
-);
-const rightTicks = computed(() =>
-    secondaryMax.value === null
-        ? []
-        : axisTicks(secondaryMax.value).map((value) => ({
-              value,
-              text: formatWait(value),
-          })),
 );
 
 let context: CanvasRenderingContext2D | null | undefined;
@@ -77,7 +74,7 @@ function textWidth(text: string): number {
         context = document.createElement('canvas').getContext('2d');
 
         if (context) {
-            context.font = `10px ${getComputedStyle(document.body).fontFamily}`;
+            context.font = `11px ${getComputedStyle(document.body).fontFamily}`;
         }
     }
 
@@ -90,12 +87,8 @@ const axisWidth = (texts: string[]) =>
         : Math.ceil(Math.max(...texts.map(textWidth))) + GAP + 2;
 
 const left = computed(() => axisWidth(leftTicks.value.map((t) => t.text)));
-const right = computed(() =>
-    Math.max(axisWidth(rightTicks.value.map((t) => t.text)), 4),
-);
-const plotWidth = computed(() =>
-    Math.max(width.value - left.value - right.value, 1),
-);
+const right = 4;
+const plotWidth = computed(() => Math.max(width.value - left.value - right, 1));
 const plotHeight = computed(() => Math.max(height - TOP - BOTTOM, 1));
 
 const xAt = (index: number) =>
@@ -117,11 +110,6 @@ const primaryArea = computed(() =>
     values.length === 0
         ? ''
         : `${primaryLine.value} L${xAt(values.length - 1).toFixed(1)} ${TOP + plotHeight.value} L${left.value} ${TOP + plotHeight.value} Z`,
-);
-const secondaryLine = computed(() =>
-    secondary && secondaryMax.value !== null
-        ? path(secondary, secondaryMax.value)
-        : '',
 );
 
 const xTicks = computed(() => {
@@ -170,21 +158,25 @@ const readout = computed(() => {
         time: bucketTime(index),
         primary: describe(values[index]),
         primaryY: yAt(values[index], primaryMax.value),
-        secondary:
-            secondary && describeSecondary && index < secondary.length
-                ? describeSecondary(secondary[index])
-                : null,
-        secondaryY:
-            secondary && secondaryMax.value !== null && index < secondary.length
-                ? yAt(secondary[index], secondaryMax.value)
-                : null,
         style: onLeft
             ? { left: `${x + 10}px` }
             : { right: `${width.value - x + 10}px` },
     };
 });
 
+const points = computed(() =>
+    values.map((value, index) => `${bucketTime(index)}, ${describe(value)}`),
+);
+
+const announcement = computed(() =>
+    keyboard.value && hovered.value !== null
+        ? (points.value[hovered.value] ?? '')
+        : '',
+);
+
 function track(event: PointerEvent): void {
+    keyboard.value = false;
+
     const bounds = (event.currentTarget as SVGElement).getBoundingClientRect();
     const offset = event.clientX - bounds.left - left.value;
     const index = Math.round((offset / plotWidth.value) * lastIndex.value);
@@ -200,6 +192,46 @@ function leave(event: PointerEvent): void {
         hovered.value = null;
     }
 }
+
+function focus(event: FocusEvent): void {
+    if (
+        values.length === 0 ||
+        !(event.currentTarget as SVGElement).matches(':focus-visible')
+    ) {
+        return;
+    }
+
+    keyboard.value = true;
+    hovered.value ??= values.length - 1;
+}
+
+function blur(): void {
+    keyboard.value = false;
+    hovered.value = null;
+}
+
+function step(event: KeyboardEvent): void {
+    if (values.length === 0) {
+        return;
+    }
+
+    const last = values.length - 1;
+    const current = hovered.value ?? last;
+    const next: Record<string, number> = {
+        ArrowLeft: current - 1,
+        ArrowRight: current + 1,
+        Home: 0,
+        End: last,
+    };
+
+    if (!(event.key in next)) {
+        return;
+    }
+
+    event.preventDefault();
+    keyboard.value = true;
+    hovered.value = Math.min(Math.max(next[event.key], 0), last);
+}
 </script>
 
 <template>
@@ -210,14 +242,19 @@ function leave(event: PointerEvent): void {
             :viewBox="`0 0 ${width} ${height}`"
             role="img"
             :aria-label="label"
+            aria-keyshortcuts="ArrowLeft ArrowRight Home End"
+            :tabindex="values.length ? 0 : undefined"
             class="block"
             style="touch-action: pan-y"
             @pointerdown="track"
             @pointermove="track"
             @pointerleave="leave"
             @pointercancel="hovered = null"
+            @focus="focus"
+            @blur="blur"
+            @keydown="step"
         >
-            <g class="nc-num" style="font-size: 10px">
+            <g class="nc-num" style="font-size: 11px">
                 <template v-for="tick in leftTicks" :key="`l${tick.value}`">
                     <line
                         :x1="left"
@@ -240,18 +277,6 @@ function leave(event: PointerEvent): void {
                     </text>
                 </template>
                 <text
-                    v-for="tick in rightTicks"
-                    :key="`r${tick.value}`"
-                    :x="left + plotWidth + GAP"
-                    :y="yAt(tick.value, secondaryMax ?? 1)"
-                    text-anchor="start"
-                    dominant-baseline="middle"
-                    fill="var(--st-warn)"
-                    fill-opacity="0.75"
-                >
-                    {{ tick.text }}
-                </text>
-                <text
                     v-for="tick in xTicks"
                     :key="`x${tick.at}`"
                     :x="tick.x"
@@ -262,24 +287,11 @@ function leave(event: PointerEvent): void {
                     {{ tick.label }}
                 </text>
             </g>
-            <path
-                :d="primaryArea"
-                fill="var(--nc-accent)"
-                opacity="0.12"
-                stroke="none"
-            />
+            <path :d="primaryArea" :fill="color" opacity="0.12" stroke="none" />
             <path
                 :d="primaryLine"
                 fill="none"
-                stroke="var(--nc-accent)"
-                stroke-width="1.5"
-                stroke-linejoin="round"
-            />
-            <path
-                v-if="secondaryLine"
-                :d="secondaryLine"
-                fill="none"
-                stroke="var(--st-warn)"
+                :stroke="color"
                 stroke-width="1.5"
                 stroke-linejoin="round"
             />
@@ -297,16 +309,7 @@ function leave(event: PointerEvent): void {
                     :cx="readout.x"
                     :cy="readout.primaryY"
                     r="3"
-                    fill="var(--nc-accent)"
-                    stroke="var(--nc-surface)"
-                    stroke-width="1.5"
-                />
-                <circle
-                    v-if="readout.secondaryY !== null"
-                    :cx="readout.x"
-                    :cy="readout.secondaryY"
-                    r="3"
-                    fill="var(--st-warn)"
+                    :fill="color"
                     stroke="var(--nc-surface)"
                     stroke-width="1.5"
                 />
@@ -328,21 +331,11 @@ function leave(event: PointerEvent): void {
             }"
         >
             <span class="nc-tone-soft">{{ readout.time }}</span>
-            <span class="inline-flex items-center gap-[5px]">
-                <span
-                    class="h-[2px] w-[10px]"
-                    style="background: var(--nc-accent)"
-                />{{ readout.primary }}
-            </span>
-            <span
-                v-if="readout.secondary !== null"
-                class="inline-flex items-center gap-[5px]"
-            >
-                <span
-                    class="h-[2px] w-[10px]"
-                    style="background: var(--st-warn)"
-                />{{ readout.secondary }}
-            </span>
+            <span>{{ readout.primary }}</span>
         </div>
+        <ol class="sr-only">
+            <li v-for="(point, index) in points" :key="index">{{ point }}</li>
+        </ol>
+        <div class="sr-only" aria-live="polite">{{ announcement }}</div>
     </div>
 </template>

@@ -12,7 +12,6 @@ class MemberData extends Data
         public int $id,
         public string $name,
         public string $email,
-        public string $initials,
         public TeamRole $role,
         public string $roleLabel,
         public MemberVisibility $visibility,

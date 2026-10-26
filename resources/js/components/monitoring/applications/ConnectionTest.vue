@@ -1,24 +1,14 @@
-<script lang="ts">
-export type ConnectionOutcome =
-    | { state: 'idle' }
-    | { state: 'testing' }
-    | { state: 'done'; result: App.Data.Monitoring.ConnectionResultData }
-    | { state: 'throttled' }
-    | { state: 'invalid'; message: string }
-    | { state: 'failed' };
-</script>
-
 <script setup lang="ts">
 import { http } from '@inertiajs/vue3';
-import {
-    PhCheckCircle,
-    PhCircleNotch,
-    PhHourglassMedium,
-    PhPlugsConnected,
-    PhWarning,
-} from '@phosphor-icons/vue';
+import { PhPlugsConnected, PhWarning } from '@phosphor-icons/vue';
 import { computed, onMounted, onUnmounted, watch } from 'vue';
-import { horizonStatusLabel } from '@/components/monitoring/environment/readings';
+import {
+    connectionIcon,
+    connectionMessage,
+    connectionTone,
+} from '@/components/monitoring/applications/connection';
+import type { ConnectionOutcome } from '@/components/monitoring/applications/connection';
+import { readingProblemLabel } from '@/components/monitoring/environment/readings';
 import type { RouteDefinition } from '@/wayfinder';
 
 const {
@@ -38,6 +28,10 @@ const {
 const outcome = defineModel<ConnectionOutcome>('outcome', {
     default: () => ({ state: 'idle' }),
 });
+
+const emit = defineEmits<{
+    run: [];
+}>();
 
 let attempt = 0;
 
@@ -69,6 +63,7 @@ const failureOf = (error: unknown): ConnectionOutcome => {
 const run = async (): Promise<void> => {
     const current = ++attempt;
     outcome.value = { state: 'testing' };
+    emit('run');
 
     try {
         const response = await http.getClient().request({
@@ -117,33 +112,9 @@ const result = computed(() =>
     outcome.value.state === 'done' ? outcome.value.result : null,
 );
 
-const tone = computed(() => {
-    switch (outcome.value.state) {
-        case 'done':
-            return outcome.value.result.reachable
-                ? 'var(--st-ok)'
-                : 'var(--st-down)';
-        case 'testing':
-            return 'var(--nc-neutral-400)';
-        case 'throttled':
-            return 'var(--st-warn)';
-        default:
-            return 'var(--st-down)';
-    }
-});
-
-const icon = computed(() => {
-    switch (outcome.value.state) {
-        case 'testing':
-            return PhCircleNotch;
-        case 'throttled':
-            return PhHourglassMedium;
-        case 'done':
-            return outcome.value.result.reachable ? PhCheckCircle : PhWarning;
-        default:
-            return PhWarning;
-    }
-});
+const tone = computed(() => connectionTone(outcome.value));
+const icon = computed(() => connectionIcon(outcome.value));
+const message = computed(() => connectionMessage(outcome.value));
 </script>
 
 <template>
@@ -164,50 +135,47 @@ const icon = computed(() => {
             class="inline-flex min-w-0 items-center"
             :style="{ gap: '6px', fontSize: '12px', color: tone }"
         >
-            <template v-if="outcome.state !== 'idle'">
+            <template v-if="message !== null">
                 <component
                     :is="icon"
                     :size="14"
                     class="flex-none"
                     :class="{ 'animate-spin': outcome.state === 'testing' }"
                 />
-                <span v-if="outcome.state === 'testing'">{{
-                    $t('Testing the connection…')
+                <span :class="{ 'nc-num': result?.reachable }">{{
+                    message
                 }}</span>
-                <span v-else-if="result?.reachable" class="nc-num">{{
-                    $t(
-                        'Connected · Horizon :status · :count masters · :ms ms',
-                        {
-                            status: result.horizonStatus
-                                ? horizonStatusLabel(result.horizonStatus)
-                                : '—',
-                            count: String(result.masterCount ?? 0),
-                            ms: String(result.latencyMs ?? 0),
-                        },
-                    )
-                }}</span>
-                <span v-else-if="result?.error === 'unauthorized'">{{
-                    $t('Horizon refused the credentials')
-                }}</span>
-                <span v-else-if="result?.error === 'not_horizon'">{{
-                    $t('The address does not answer like Horizon')
-                }}</span>
-                <span v-else-if="result?.error === 'blocked'">{{
-                    $t('This address is not allowed')
-                }}</span>
-                <span v-else-if="result?.error === 'unreachable'">{{
-                    $t('Horizon does not answer')
-                }}</span>
-                <span v-else-if="outcome.state === 'throttled'">{{
-                    $t('Too many attempts. Wait a minute and try again.')
-                }}</span>
-                <span v-else-if="outcome.state === 'invalid'">{{
-                    outcome.message
-                }}</span>
-                <span v-else>{{
-                    $t('The test could not run. Reload the page and try again.')
-                }}</span>
+                <span
+                    v-if="result?.problem"
+                    class="min-w-0 [overflow-wrap:anywhere]"
+                    >· {{ readingProblemLabel(result.problem) }}</span
+                >
             </template>
+        </div>
+
+        <div
+            v-if="result?.suggestedUrl"
+            class="nc-t-2xs w-full [overflow-wrap:anywhere]"
+            style="color: var(--nc-neutral-300)"
+        >
+            {{
+                $t('This looks like the address of a Horizon page; try :url', {
+                    url: result.suggestedUrl,
+                })
+            }}
+        </div>
+
+        <div
+            v-if="result?.credentialsInClear"
+            class="nc-t-2xs flex w-full items-start"
+            style="gap: 5px; color: var(--st-warn)"
+        >
+            <PhWarning :size="12" class="mt-[1px] flex-none" />
+            {{
+                $t(
+                    'The basic-auth password travels unencrypted over http://. Use https:// unless the network in between is trusted.',
+                )
+            }}
         </div>
     </div>
 </template>

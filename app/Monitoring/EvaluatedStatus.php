@@ -14,5 +14,6 @@ final readonly class EvaluatedStatus
         public EnvironmentStatus $status,
         public array $breaches,
         public int $failedLastHour = 0,
+        public bool $failedLastHourCapped = false,
     ) {}
 }

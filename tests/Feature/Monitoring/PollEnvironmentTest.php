@@ -1,9 +1,11 @@
 <?php
 
 use App\Actions\Monitoring\PollEnvironment;
+use App\Actions\Teams\DeleteTeam;
 use App\Enums\AlertRuleMetric;
 use App\Enums\EnvironmentStatus;
 use App\Enums\HorizonStatus;
+use App\Enums\ReadingCause;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Data\HorizonFailedJob;
 use App\Externals\Horizon\Data\HorizonMaster;
@@ -17,16 +19,22 @@ use App\Externals\Horizon\HorizonReader;
 use App\Externals\Horizon\HorizonReading;
 use App\Externals\Horizon\HorizonTarget;
 use App\Jobs\PollEnvironmentJob;
+use App\Models\Alert;
 use App\Models\AlertRule;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
+use App\Models\Team;
+use App\Models\User;
 use Carbon\CarbonImmutable;
-use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\AnotherAppKey;
 
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:00'));
@@ -39,9 +47,13 @@ beforeEach(function () {
         /** @var list<string|null> */
         public array $passwords = [];
 
-        public function read(HorizonTarget $target): HorizonReading
+        /** @var list<array{oldestPendingJobs: bool, knownRuntimes: array<string, float|null>|null}> */
+        public array $calls = [];
+
+        public function read(HorizonTarget $target, bool $oldestPendingJobs = false, ?array $knownRuntimes = null): HorizonReading
         {
             $this->passwords[] = $target->password();
+            $this->calls[] = ['oldestPendingJobs' => $oldestPendingJobs, 'knownRuntimes' => $knownRuntimes];
 
             $result = array_shift($this->results) ?? throw new LogicException('No reading queued.');
 
@@ -473,6 +485,24 @@ test('a reading of an address the environment left while it was read is dropped'
         ->and($this->environment->fresh()->last_polled_at)->toBeNull();
 });
 
+test('a reading of an environment paused or purged while it was read is dropped', function (Closure $leave) {
+    Queue::fake();
+
+    $this->reader->results = [function () use ($leave) {
+        $leave($this->environment);
+
+        return ($this->reading)();
+    }];
+
+    expect(($this->poll)())->toBeNull()
+        ->and(EnvironmentSnapshot::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->count())->toBe(0)
+        ->and(Alert::query()->count())->toBe(0);
+})->with([
+    'paused' => [fn (Environment $environment) => Environment::query()->whereKey($environment->id)->update(['polling_enabled' => false])],
+    'organization deleted' => [fn (Environment $environment) => app(DeleteTeam::class)->purge(Team::query()->findOrFail($environment->team_id), User::factory()->create())],
+]);
+
 test('a reading survives an edit that keeps the address', function () {
     $this->reader->results = [function () {
         Environment::query()->whereKey($this->environment->id)->update(['name' => 'renamed', 'poll_interval_seconds' => 60]);
@@ -500,18 +530,39 @@ test('an environment deleted while it is being read ends quietly', function () {
     Exceptions::assertNothingReported();
 });
 
-test('a password that no longer decrypts fails loudly and is not blamed on Horizon', function () {
+test('a password that no longer decrypts is stored as a failed reading of its own, without asking Horizon', function () {
     Exceptions::fake();
 
-    DB::table('environments')->where('id', $this->environment->id)->update(['basic_auth_password' => 'not-an-encrypted-value']);
+    DB::table('environments')->where('id', $this->environment->id)->update([
+        'basic_auth_password' => AnotherAppKey::encrypt('super-secret-value'),
+    ]);
 
-    expect(fn () => app(PollEnvironment::class)->handle($this->environment->fresh()))
-        ->toThrow(DecryptException::class);
+    $snapshot = app(PollEnvironment::class)->handle($this->environment->fresh());
+    $state = EnvironmentState::query()->sole();
 
     expect($this->reader->passwords)->toBe([])
-        ->and(EnvironmentSnapshot::query()->count())->toBe(0);
+        ->and($snapshot->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($snapshot->error)->toBe(ReadingError::PasswordUnreadable)
+        ->and($state->error)->toBe(ReadingError::PasswordUnreadable)
+        ->and($state->error_detail)->toBeNull()
+        ->and($this->environment->fresh()->last_polled_at->toDateTimeString())->toBe('2026-09-17 10:00:00');
 
     Exceptions::assertNothingReported();
+});
+
+test('a job whose password no longer decrypts does not fail, and opens the unreachable alert in time', function () {
+    DB::table('environments')->where('id', $this->environment->id)->update(['basic_auth_password' => AnotherAppKey::encrypt('super-secret-value')]);
+
+    foreach (range(1, 9) as $poll) {
+        app()->forgetScopedInstances();
+        PollEnvironmentJob::dispatchSync($this->environment->id);
+        $this->travel(15)->seconds();
+    }
+
+    expect(EnvironmentSnapshot::query()->count())->toBe(9)
+        ->and(EnvironmentSnapshot::query()->pluck('error')->unique()->all())->toBe([ReadingError::PasswordUnreadable])
+        ->and(Alert::query()->sole()->metric)->toBe(AlertRuleMetric::EndpointUnreachable)
+        ->and(DB::table('failed_jobs')->count())->toBe(0);
 });
 
 test('the breaches of the evaluation are stored with a degraded status', function () {
@@ -694,6 +745,127 @@ test('the job is unique per environment, never retried and bounded in time', fun
         ->and($job->uniqueFor)->toBe(60);
 });
 
+test('a job dropped for its age says so in the log', function () {
+    Log::spy();
+
+    PollEnvironmentJob::dispatchSync($this->environment->id, now()->getTimestamp() - 40);
+
+    Log::shouldHaveReceived('warning')->once()->with(
+        'A poll waited in the queue longer than its interval and was dropped.',
+        ['environment' => $this->environment->id, 'waited_seconds' => 40],
+    );
+});
+
+test('a job killed by its timeout stores an unreachable reading that says so', function () {
+    (new PollEnvironmentJob($this->environment->id))->failed(new TimeoutExceededException('Poll has timed out.'));
+
+    $snapshot = EnvironmentSnapshot::query()->sole();
+    $state = EnvironmentState::query()->sole();
+
+    expect($snapshot->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($snapshot->error)->toBe(ReadingError::Unreachable)
+        ->and($state->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($state->error_detail)->toBe(['cause' => ReadingCause::Timeout->value, 'status' => null, 'location' => null])
+        ->and($this->environment->fresh()->last_polled_at->toDateTimeString())->toBe('2026-09-17 10:00:00');
+});
+
+test('a job that throws stores an unreachable reading blaming the poll, and still fails', function () {
+    Exceptions::fake();
+
+    $this->reader->results = [($this->reading)()];
+
+    $thrown = false;
+    EnvironmentSnapshot::creating(function () use (&$thrown) {
+        if (! $thrown) {
+            $thrown = true;
+
+            throw new RuntimeException('The reading could not be stored.');
+        }
+    });
+
+    expect(fn () => PollEnvironmentJob::dispatchSync($this->environment->id))->toThrow(RuntimeException::class, 'The reading could not be stored.');
+
+    expect(EnvironmentSnapshot::query()->sole()->error)->toBe(ReadingError::Unreachable)
+        ->and(EnvironmentState::query()->sole()->error_detail['cause'] ?? null)->toBe(ReadingCause::PollFailed->value);
+});
+
+test('polls killed in a row open the unreachable alert like failed readings do', function () {
+    $kill = function () {
+        app()->forgetScopedInstances();
+        (new PollEnvironmentJob($this->environment->id))->failed(new TimeoutExceededException('Poll has timed out.'));
+    };
+
+    $kill();
+
+    foreach (range(1, 7) as $ignored) {
+        $this->travel(15)->seconds();
+        $kill();
+    }
+
+    expect(Alert::query()->count())->toBe(0);
+
+    $this->travel(15)->seconds();
+    $kill();
+
+    expect(Alert::query()->sole()->metric)->toBe(AlertRuleMetric::EndpointUnreachable);
+});
+
+test('a failed job of a paused or deleted environment stores nothing', function (Closure $leave) {
+    $leave($this->environment);
+
+    (new PollEnvironmentJob($this->environment->id))->failed(new RuntimeException('Boom.'));
+
+    expect(EnvironmentSnapshot::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->count())->toBe(0);
+})->with([
+    'paused' => [fn (Environment $environment) => $environment->update(['polling_enabled' => false])],
+    'deleted' => [fn (Environment $environment) => $environment->delete()],
+]);
+
+test('a failed job that a newer reading has replaced stores nothing', function () {
+    $job = new PollEnvironmentJob($this->environment->id);
+
+    $this->travel(20)->seconds();
+    $this->environment->forceFill(['last_polled_at' => now()])->save();
+
+    $this->travel(70)->seconds();
+    $job->failed(new MaxAttemptsExceededException('Poll has been attempted too many times.'));
+
+    expect(EnvironmentSnapshot::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->count())->toBe(0)
+        ->and($this->environment->fresh()->last_polled_at->toDateTimeString())->toBe('2026-09-17 10:00:20');
+});
+
+test('a failed job older than its interval and timeout stores nothing', function () {
+    $job = new PollEnvironmentJob($this->environment->id);
+
+    $this->travel($this->environment->poll_interval_seconds + 31)->seconds();
+    $job->failed(new MaxAttemptsExceededException('Poll has been attempted too many times.'));
+
+    expect(EnvironmentSnapshot::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->count())->toBe(0);
+});
+
+test('a job killed at the end of its wait and timeout still stores its reading', function () {
+    $job = new PollEnvironmentJob($this->environment->id);
+
+    $this->travel($this->environment->poll_interval_seconds + 30)->seconds();
+    $job->failed(new TimeoutExceededException('Poll has timed out.'));
+
+    expect(EnvironmentSnapshot::query()->sole()->error)->toBe(ReadingError::Unreachable);
+});
+
+test('a failed job that cannot store its reading reports it without throwing', function () {
+    Exceptions::fake();
+
+    $this->mock(PollEnvironment::class)->shouldReceive('recordFailure')->andThrow(new RuntimeException('Database is gone for https://monitor:super-secret-value@example.com'));
+
+    (new PollEnvironmentJob($this->environment->id))->failed(new RuntimeException('Boom.'));
+
+    Exceptions::assertReported(fn (RuntimeException $exception) => str_starts_with($exception->getMessage(), 'Recording a failed poll threw '.RuntimeException::class)
+        && ! str_contains($exception->getMessage(), 'super-secret-value'));
+});
+
 test('the state remembers since when its status holds, across readings of the same status', function () {
     $this->reader->results = [($this->reading)(), ($this->reading)(['latencyMs' => 60])];
 
@@ -772,6 +944,131 @@ test('failed readings in a row keep the start of the unreachable run', function 
         ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:01:00');
 });
 
+test('failed readings within the stale window do not break the run of the status that comes back', function () {
+    $this->reader->results = [
+        ($this->reading)(),
+        new HorizonReadFailed(ReadingError::Unreachable),
+        new HorizonReadFailed(ReadingError::Unreachable),
+        ($this->reading)(),
+    ];
+
+    ($this->poll)();
+    $status = EnvironmentState::query()->sole()->status;
+    $this->travel(15)->seconds();
+    ($this->poll)();
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->toBe(EnvironmentStatus::Unreachable)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:15')
+        ->and($state->last_known_status)->toBe($status)
+        ->and($state->last_known_since->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and($state->last_known_at->toDateTimeString())->toBe('2026-09-17 10:00:00');
+
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->toBe($status)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and($state->last_known_since->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and($state->last_known_at->toDateTimeString())->toBe('2026-09-17 10:00:45');
+});
+
+test('a status that comes back after an outage longer than the stale window starts a new run', function () {
+    $this->reader->results = [
+        ($this->reading)(),
+        ...array_fill(0, 5, new HorizonReadFailed(ReadingError::Unreachable)),
+        ($this->reading)(),
+    ];
+
+    ($this->poll)();
+
+    foreach (range(1, 6) as $ignored) {
+        $this->travel(16)->seconds();
+        ($this->poll)();
+    }
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->not->toBe(EnvironmentStatus::Unreachable)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:01:36')
+        ->and($state->last_known_since->toDateTimeString())->toBe('2026-09-17 10:01:36');
+});
+
+test('a slow failed reading that swallows the next tick does not break the run', function () {
+    $this->reader->results = [
+        ($this->reading)(),
+        new HorizonReadFailed(ReadingError::Unreachable),
+        ($this->reading)(),
+    ];
+
+    ($this->poll)();
+    $this->travel(15)->seconds();
+    ($this->poll)();
+    $this->travel(33)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->not->toBe(EnvironmentStatus::Unreachable)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and($state->last_known_at->toDateTimeString())->toBe('2026-09-17 10:00:48');
+});
+
+test('a poll killed by the job timeout does not break the run', function () {
+    $this->reader->results = [($this->reading)(), ($this->reading)()];
+
+    ($this->poll)();
+    $this->travel(47)->seconds();
+    app(PollEnvironment::class)->recordFailure($this->environment, ReadingCause::Timeout);
+
+    expect(EnvironmentState::query()->sole()->status)->toBe(EnvironmentStatus::Unreachable);
+
+    $this->travel(16)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->not->toBe(EnvironmentStatus::Unreachable)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:00');
+});
+
+test('a failed reading between two different statuses starts the run at the second one', function () {
+    $this->reader->results = [
+        ($this->reading)(),
+        new HorizonReadFailed(ReadingError::Unreachable),
+        ($this->reading)(['workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 1, processes: 7)]]),
+    ];
+
+    ($this->poll)();
+    $this->travel(15)->seconds();
+    ($this->poll)();
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->status)->toBe(EnvironmentStatus::Degraded)
+        ->and($state->status_since->toDateTimeString())->toBe('2026-09-17 10:00:30')
+        ->and($state->last_known_status)->toBe(EnvironmentStatus::Degraded);
+});
+
+test('a first reading that fails knows no status before it', function () {
+    $this->reader->results = [new HorizonReadFailed(ReadingError::Unreachable)];
+
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect($state->last_known_status)->toBeNull()
+        ->and($state->last_known_since)->toBeNull()
+        ->and($state->last_known_at)->toBeNull();
+});
+
 test('a late reading moves neither the status nor the start of the run', function () {
     $this->reader->results = [
         new HorizonReadFailed(ReadingError::Unreachable),
@@ -827,4 +1124,121 @@ test('a rule disabled for the name of the environment does not degrade it', func
 
     expect($snapshot->status)->toBe(EnvironmentStatus::Active)
         ->and($snapshot->breaches->all())->toBe([]);
+});
+
+test('the oldest pending jobs are asked for only while the job-runtime rule is enabled', function () {
+    $this->reader->results = [($this->reading)(), ($this->reading)()];
+
+    ($this->poll)();
+
+    AlertRule::factory()->for($this->environment->application->team)->create([
+        'scope' => 'organization',
+        'metric' => AlertRuleMetric::JobRuntime,
+        'threshold' => null,
+        'severity' => null,
+        'notify_email' => null,
+        'enabled' => false,
+    ]);
+
+    $this->app->forgetScopedInstances();
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    expect(array_column($this->reader->calls, 'oldestPendingJobs'))->toBe([true, false]);
+});
+
+test('runtimes fetched by a reading are reused until they are five minutes old', function () {
+    $this->reader->results = [
+        ($this->reading)(['runtimesFetched' => true]),
+        ($this->reading)(['queueRuntimes' => ['default' => 0.4, 'reports' => 2.5]]),
+        ($this->reading)(['runtimesFetched' => true, 'queueRuntimes' => ['default' => 0.9]]),
+    ];
+
+    ($this->poll)();
+    $this->travel(299)->seconds();
+    ($this->poll)();
+    $this->travel(1)->seconds();
+    ($this->poll)();
+
+    $state = EnvironmentState::query()->sole();
+
+    expect(array_column($this->reader->calls, 'knownRuntimes'))->toBe([
+        null,
+        ['default' => 0.4, 'emails' => null, 'reports' => 2.5, 'archive' => null],
+        null,
+    ])
+        ->and($state->runtimes_fetched_at?->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and(array_column($state->queues, 'runtimeSeconds', 'name'))->toBe(['default' => 0.9, 'emails' => null, 'reports' => null, 'archive' => null]);
+});
+
+test('a reading that reused the runtimes keeps the time they were fetched', function () {
+    $this->reader->results = [($this->reading)(['runtimesFetched' => true]), ($this->reading)()];
+
+    ($this->poll)();
+    $this->travel(60)->seconds();
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->runtimes_fetched_at?->toDateTimeString())->toBe('2026-09-17 10:00:00');
+});
+
+test('a failed reading stores what went wrong next to its reason, and the next reading clears it', function () {
+    $this->reader->results = [
+        new HorizonReadFailed(ReadingError::NotHorizon, ReadingCause::Redirect, 302, 'https://shop.example.com/login'),
+        ($this->reading)(),
+    ];
+
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->error_detail)->toBe(['cause' => 'redirect', 'status' => 302, 'location' => 'https://shop.example.com/login']);
+
+    $this->travel(15)->seconds();
+    ($this->poll)();
+
+    expect(EnvironmentState::query()->sole()->error_detail)->toBeNull();
+});
+
+test('a failed-jobs list cut while every job is inside the hour is stored as a lower bound', function (bool $truncated, array $minutesAgo, bool $capped) {
+    $jobs = array_map(fn (int $minutes) => new HorizonFailedJob(
+        name: 'App\\Jobs\\Import',
+        queue: 'default',
+        exception: 'RuntimeException',
+        attempts: 1,
+        failedAt: CarbonImmutable::now()->subMinutes($minutes),
+    ), $minutesAgo);
+
+    $this->reader->results = [($this->reading)(['failedJobs' => $jobs, 'failedJobsTruncated' => $truncated])];
+
+    $snapshot = ($this->poll)();
+
+    expect($snapshot->failed_last_hour)->toBe(count(array_filter($minutesAgo, fn (int $minutes) => $minutes <= 60)))
+        ->and($snapshot->failed_last_hour_capped)->toBe($capped);
+})->with([
+    'cut inside the hour' => [true, array_fill(0, 200, 5), true],
+    'cut past the hour' => [true, [...array_fill(0, 150, 5), ...array_fill(0, 50, 90)], false],
+    'complete' => [false, array_fill(0, 120, 5), false],
+]);
+
+test('a poll of a horizon with many queues maps each queue to its supervisor in one pass', function () {
+    $supervisors = array_map(fn (int $s) => new HorizonSupervisor(
+        name: "supervisor-{$s}",
+        status: 'running',
+        processes: array_fill_keys(array_map(fn (int $q) => "redis:q{$s}-{$q}", range(1, 500)), 1),
+    ), range(1, 200));
+
+    $workload = array_map(fn (int $q) => new HorizonQueueLoad(name: "missing-{$q}", length: 1, wait: 0, processes: 1), range(1, 499));
+    $workload[] = new HorizonQueueLoad(name: 'q200-500', length: 1, wait: 0, processes: 1);
+
+    $this->reader->results = [($this->reading)([
+        'masters' => [new HorizonMaster(name: 'worker-1', status: 'running', supervisors: $supervisors)],
+        'workload' => $workload,
+    ])];
+
+    $started = microtime(true);
+    ($this->poll)();
+
+    $queues = EnvironmentState::query()->sole()->queues;
+
+    expect(microtime(true) - $started)->toBeLessThan(2.0)
+        ->and($queues[0]['supervisor'])->toBeNull()
+        ->and($queues[499]['supervisor'])->toBe('supervisor-200');
 });

@@ -5,9 +5,11 @@ namespace App\Queries;
 use App\Data\Applications\ApplicationFormData;
 use App\Data\Applications\EnvironmentFormData;
 use App\Data\Applications\EnvironmentSummaryData;
+use App\Data\Applications\PollIntervalData;
 use App\Data\Pages\EnvironmentFormPageData;
-use App\Enums\EnvironmentColor;
+use App\Enums\EnvironmentType;
 use App\Models\Environment;
+use App\Rules\StoredPasswordStaysWithItsAddress;
 
 class EnvironmentEditQuery
 {
@@ -16,16 +18,17 @@ class EnvironmentEditQuery
         return new EnvironmentFormPageData(
             environment: new EnvironmentSummaryData(
                 name: $environment->name,
-                color: $environment->color,
+                type: $environment->type,
                 horizonUrl: EnvironmentFormData::withoutUserinfo($environment->horizon_url),
                 basicAuthUser: $environment->basic_auth_user,
                 pollIntervalSeconds: $environment->poll_interval_seconds,
                 pollingEnabled: $environment->polling_enabled,
             ),
             application: ApplicationFormData::from($environment->application),
-            colors: EnvironmentColor::options(),
-            hasPassword: $environment->basic_auth_password !== null,
+            types: EnvironmentType::options(),
+            hasPassword: StoredPasswordStaysWithItsAddress::hasStoredPassword($environment),
             applicationSlug: $environment->application->slug,
+            pollInterval: PollIntervalData::fromConfig(),
             slug: $environment->slug,
         );
     }

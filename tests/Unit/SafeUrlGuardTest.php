@@ -36,6 +36,8 @@ dataset('always blocked addresses', [
     'ipv6 link-local' => 'fe80::1',
     'ipv6 link-local upper' => 'febf:ffff::1',
     'aws ipv6 metadata' => 'fd00:ec2::254',
+    'gcp ipv6 metadata' => 'fd20:ce::254',
+    'azure wireserver' => '168.63.129.16',
     'alibaba metadata' => '100.100.100.200',
     'this network' => '0.0.0.0',
     'this network range' => '0.1.2.3',
@@ -58,13 +60,19 @@ dataset('private addresses', [
     'unique local' => 'fc00::1',
     'unique local fd' => 'fd12:3456::1',
     'mapped private' => '::ffff:10.0.0.5',
+    'carrier-grade nat start' => '100.64.0.1',
+    'tailscale, next to alibaba metadata' => '100.100.100.201',
+    'carrier-grade nat end' => '100.127.255.254',
+    'benchmarking' => '198.18.0.1',
+    'ipv6 site-local' => 'fec0::1',
 ]);
 
 dataset('public addresses', [
     'ipv4 documentation' => '203.0.113.10',
     'ipv6 documentation' => '2001:db8::10',
     'just outside one seven two' => '172.32.0.1',
-    'next to alibaba metadata' => '100.100.100.201',
+    'just outside carrier-grade nat' => '100.128.0.1',
+    'next to azure wireserver' => '168.63.129.17',
     'next to link-local' => '169.255.0.1',
 ]);
 

@@ -19,32 +19,14 @@ const isMobile = useIsMobile();
 
 const currentTeam = computed(() => page.props.currentTeam);
 const teams = computed(() => page.props.teams ?? []);
+const canCreateOrganizations = computed(
+    () => page.props.canCreateOrganizations,
+);
 
 const switchTeam = (team: App.Data.Teams.UserTeamData) => {
-    const previousTeamSlug = currentTeam.value?.slug;
-
-    router.visit(switchMethod(team.slug), {
-        onFinish: () => {
-            if (!previousTeamSlug) {
-                router.reload();
-
-                return;
-            }
-
-            const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-            const segment = `/${previousTeamSlug}`;
-
-            if (currentUrl.includes(segment)) {
-                router.visit(currentUrl.replace(segment, `/${team.slug}`), {
-                    replace: true,
-                });
-
-                return;
-            }
-
-            router.reload();
-        },
-    });
+    if (!team.isCurrent) {
+        router.visit(switchMethod(team.slug));
+    }
 };
 </script>
 
@@ -73,7 +55,7 @@ const switchTeam = (team: App.Data.Teams.UserTeamData) => {
             align="start"
             :side-offset="4"
         >
-            <DropdownMenuLabel class="text-muted-foreground text-xs">
+            <DropdownMenuLabel class="nc-t-xs nc-tone-muted">
                 {{ $t('Organizations') }}
             </DropdownMenuLabel>
             <DropdownMenuItem
@@ -86,15 +68,15 @@ const switchTeam = (team: App.Data.Teams.UserTeamData) => {
                 {{ team.name }}
                 <PhCheck v-if="team.isCurrent" class="ml-auto h-4 w-4" />
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <CreateOrganizationModal>
+            <DropdownMenuSeparator v-if="canCreateOrganizations" />
+            <CreateOrganizationModal v-if="canCreateOrganizations">
                 <DropdownMenuItem
                     data-test="team-switcher-new-team"
                     class="cursor-pointer gap-2 p-2"
                     @select.prevent
                 >
                     <PhPlus class="h-4 w-4" />
-                    <span class="text-muted-foreground">{{
+                    <span class="nc-tone-muted">{{
                         $t('New organization')
                     }}</span>
                 </DropdownMenuItem>

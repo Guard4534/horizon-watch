@@ -1,23 +1,32 @@
 <script setup lang="ts">
+import { thresholdTone } from '@/components/monitoring/environment/readings';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
-import { formatDuration } from '@/lib/monitoring';
+import { useLocale } from '@/composables/useLocale';
+import { formatThreshold } from '@/lib/alertRules';
+import { formatInstant } from '@/lib/datetime';
+import { formatSeconds } from '@/lib/monitoring';
 
 const {
     jobs,
     thresholdSeconds,
+    thresholds,
+    pollingEnabled,
     unknown = false,
 } = defineProps<{
     jobs: App.Data.Monitoring.LongRunningJobData[];
     thresholdSeconds: number | null;
+    thresholds: App.Data.Monitoring.EnvironmentData['thresholds'];
+    pollingEnabled: boolean;
     unknown?: boolean;
 }>();
 
+const { locale } = useLocale();
+
 function color(seconds: number): string {
-    if (thresholdSeconds === null) return 'var(--nc-neutral-400)';
-
-    if (seconds > 300) return 'var(--st-down)';
-
-    return seconds > thresholdSeconds ? 'var(--st-warn)' : 'var(--st-ok)';
+    return (
+        thresholdTone({ thresholds, pollingEnabled }, 'job.runtime', seconds) ??
+        'var(--nc-neutral-400)'
+    );
 }
 
 function width(seconds: number): string {
@@ -34,7 +43,7 @@ function width(seconds: number): string {
                 thresholdSeconds === null
                     ? $t('rule disabled')
                     : $t('threshold :value', {
-                          value: `${thresholdSeconds}s`,
+                          value: formatThreshold(thresholdSeconds, 's'),
                       })
             }}</span>
         </template>
@@ -60,7 +69,7 @@ function width(seconds: number): string {
                     <span
                         class="nc-num ml-auto flex-none"
                         :style="{ color: color(job.elapsedSeconds) }"
-                        >{{ formatDuration(job.elapsedSeconds) }}</span
+                        >{{ formatSeconds(job.elapsedSeconds) }}</span
                     >
                 </div>
                 <div
@@ -76,8 +85,12 @@ function width(seconds: number): string {
                     />
                 </div>
                 <div class="nc-tone-faint mt-1">
-                    queue {{ job.queue }} ·
-                    {{ $t('started at :time', { time: job.startedAt }) }}
+                    {{
+                        $t('queue :queue · started at :time', {
+                            queue: job.queue,
+                            time: formatInstant(job.startedAt, locale),
+                        })
+                    }}
                 </div>
             </div>
         </div>

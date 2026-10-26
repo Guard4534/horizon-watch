@@ -4,14 +4,14 @@ import SecurityController from '@/actions/App/Http/Controllers/Settings/Security
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import type { Props as ManageTwoFactorProps } from '@/components/ManageTwoFactor.vue';
 import ManageTwoFactor from '@/components/ManageTwoFactor.vue';
+import LogoutOtherSessions from '@/components/settings/LogoutOtherSessions.vue';
+import { invalidField } from '@/lib/fieldErrors';
 
 // oxfmt-ignore
 type Props = {
-    passwordRules: string;
+    passwordPolicy: App.Data.Auth.PasswordPolicyData;
 } &
     ManageTwoFactorProps;
 
@@ -24,8 +24,6 @@ defineOptions({
 
 <template>
     <Head :title="$t('Security settings')" />
-
-    <h1 class="sr-only">{{ $t('Security settings') }}</h1>
 
     <div class="space-y-6">
         <Heading
@@ -52,55 +50,76 @@ defineOptions({
             class="space-y-6"
             v-slot="{ errors, processing }"
         >
-            <div class="grid gap-2">
-                <Label for="current_password">{{
+            <div class="nc-field">
+                <label for="current_password">{{
                     $t('Current password')
-                }}</Label>
+                }}</label>
                 <PasswordInput
                     id="current_password"
                     name="current_password"
-                    class="mt-1 block w-full"
                     autocomplete="current-password"
                     :placeholder="$t('Current password')"
+                    v-bind="
+                        invalidField(
+                            'current_password',
+                            errors.current_password,
+                        )
+                    "
                 />
-                <InputError :message="errors.current_password" />
+                <InputError
+                    field="current_password"
+                    :message="errors.current_password"
+                />
             </div>
 
-            <div class="grid gap-2">
-                <Label for="password">{{ $t('New password') }}</Label>
+            <div class="nc-field">
+                <label for="password">{{ $t('New password') }}</label>
                 <PasswordInput
                     id="password"
                     name="password"
-                    class="mt-1 block w-full"
                     autocomplete="new-password"
                     :placeholder="$t('New password')"
-                    :passwordrules="props.passwordRules"
+                    :passwordrules="props.passwordPolicy.rules"
+                    v-bind="invalidField('password', errors.password)"
                 />
-                <InputError :message="errors.password" />
+                <div class="nc-t-2xs nc-tone-faint">
+                    {{ props.passwordPolicy.description }}
+                </div>
+                <InputError field="password" :message="errors.password" />
             </div>
 
-            <div class="grid gap-2">
-                <Label for="password_confirmation">{{
+            <div class="nc-field">
+                <label for="password_confirmation">{{
                     $t('Confirm password')
-                }}</Label>
+                }}</label>
                 <PasswordInput
                     id="password_confirmation"
                     name="password_confirmation"
-                    class="mt-1 block w-full"
                     autocomplete="new-password"
                     :placeholder="$t('Confirm password')"
-                    :passwordrules="props.passwordRules"
+                    :passwordrules="props.passwordPolicy.rules"
+                    v-bind="
+                        invalidField(
+                            'password_confirmation',
+                            errors.password_confirmation,
+                        )
+                    "
                 />
-                <InputError :message="errors.password_confirmation" />
+                <InputError
+                    field="password_confirmation"
+                    :message="errors.password_confirmation"
+                />
             </div>
 
-            <div class="flex items-center gap-4">
-                <Button
+            <div class="nc-actions">
+                <button
+                    type="submit"
+                    class="nc-btn nc-btn-primary"
                     :disabled="processing"
                     data-test="update-password-button"
                 >
                     {{ $t('Save') }}
-                </Button>
+                </button>
             </div>
         </Form>
     </div>
@@ -110,4 +129,6 @@ defineOptions({
         :requiresConfirmation="requiresConfirmation"
         :twoFactorEnabled="twoFactorEnabled"
     />
+
+    <LogoutOtherSessions />
 </template>

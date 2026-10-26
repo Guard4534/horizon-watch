@@ -26,11 +26,12 @@ class CompleteSetup
                 throw new SetupAlreadyCompleted;
             }
 
-            $user = User::create([
+            $user = User::forceCreate([
                 'name' => $data->name,
                 'email' => $data->email,
                 'password' => $data->password,
-                'email_verified_at' => now(),
+                'is_instance_admin' => true,
+                'alert_emails' => true,
             ]);
 
             $this->createTeam->handle($user, $data->organization);

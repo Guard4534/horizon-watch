@@ -4,12 +4,12 @@ import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Spinner } from '@/components/ui/spinner';
+import { invalidField } from '@/lib/fieldErrors';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
 
 defineOptions({
     layout: {
-        kicker: 'Sign in',
         title: 'Welcome back',
         description: '',
     },
@@ -47,51 +47,47 @@ defineProps<{
                 name="email"
                 required
                 autofocus
-                :tabindex="1"
                 autocomplete="email"
                 placeholder="email@example.com"
+                v-bind="invalidField('email', errors.email)"
             />
-            <InputError :message="errors.email" />
+            <InputError field="email" :message="errors.email" />
         </div>
 
         <div class="nc-field">
-            <div class="flex items-center justify-between">
-                <label for="password">{{ $t('Password') }}</label>
-                <TextLink
-                    v-if="canResetPassword"
-                    :href="request()"
-                    class="text-sm"
-                    :tabindex="5"
-                >
-                    {{ $t('Forgot your password?') }}
-                </TextLink>
-            </div>
+            <label for="password">{{ $t('Password') }}</label>
             <PasswordInput
                 id="password"
-                class="nc-input"
                 name="password"
                 required
-                :tabindex="2"
                 autocomplete="current-password"
+                v-bind="invalidField('password', errors.password)"
             />
-            <InputError :message="errors.password" />
+            <InputError field="password" :message="errors.password" />
         </div>
 
-        <label class="nc-radio nc-t-xs">
-            <input type="checkbox" name="remember" :tabindex="3" />
-            <span class="nc-dot" />
+        <label class="nc-checkbox nc-t-xs">
+            <input type="checkbox" name="remember" />
+            <span class="nc-box" />
             {{ $t('Remember me') }}
         </label>
 
         <button
             type="submit"
             class="nc-btn nc-btn-primary nc-btn-block"
-            :tabindex="4"
             :disabled="processing"
             data-test="login-button"
         >
             <Spinner v-if="processing" />
-            {{ $t('Sign in') }}
+            {{ $t('Log in') }}
         </button>
+
+        <TextLink
+            v-if="canResetPassword"
+            :href="request()"
+            class="self-center text-sm"
+        >
+            {{ $t('Forgot your password?') }}
+        </TextLink>
     </Form>
 </template>

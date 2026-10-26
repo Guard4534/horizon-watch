@@ -3,11 +3,16 @@
 namespace App\Jobs;
 
 use App\Actions\Monitoring\PollEnvironment;
+use App\Enums\ReadingCause;
 use App\Models\Environment;
+use App\Support\SafeReport;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class PollEnvironmentJob implements ShouldBeUnique, ShouldQueue
 {
@@ -44,17 +49,54 @@ class PollEnvironmentJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        if (now()->getTimestamp() - $this->dispatchedAt > $environment->poll_interval_seconds) {
+        $waited = now()->getTimestamp() - $this->dispatchedAt;
+
+        if ($waited > $environment->poll_interval_seconds) {
+            Log::warning('A poll waited in the queue longer than its interval and was dropped.', [
+                'environment' => $environment->id,
+                'waited_seconds' => $waited,
+            ]);
+
             $this->keepDue();
 
             return;
         }
 
-        if ($environment->last_polled_at !== null && $environment->last_polled_at->getTimestamp() >= $this->dispatchedAt) {
+        if ($this->polledSinceDispatch($environment)) {
             return;
         }
 
         $poll->handle($environment);
+    }
+
+    public function failed(?Throwable $exception): void
+    {
+        try {
+            $environment = Environment::query()
+                ->whereKey($this->environmentId)
+                ->where('polling_enabled', true)
+                ->first();
+
+            if ($environment !== null && $this->isCurrentPollOf($environment)) {
+                app(PollEnvironment::class)->recordFailure(
+                    $environment,
+                    $exception instanceof MaxAttemptsExceededException ? ReadingCause::Timeout : ReadingCause::PollFailed,
+                );
+            }
+        } catch (Throwable $failure) {
+            SafeReport::of('Recording a failed poll', $failure);
+        }
+    }
+
+    private function isCurrentPollOf(Environment $environment): bool
+    {
+        return ! $this->polledSinceDispatch($environment)
+            && now()->getTimestamp() - $this->dispatchedAt <= $environment->poll_interval_seconds + $this->timeout;
+    }
+
+    private function polledSinceDispatch(Environment $environment): bool
+    {
+        return $environment->last_polled_at !== null && $environment->last_polled_at->getTimestamp() >= $this->dispatchedAt;
     }
 
     private function keepDue(): void

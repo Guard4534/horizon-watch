@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Monitoring;
 use App\Actions\Teams\ChangeMemberRole;
 use App\Actions\Teams\ChangeMemberVisibility;
 use App\Actions\Teams\RemoveMember;
+use App\Actions\Teams\TransferOwnership;
 use App\Data\Teams\UpdateMemberData;
 use App\Http\Controllers\Controller;
 use App\Models\Team;
@@ -12,6 +13,7 @@ use App\Models\User;
 use App\Queries\MembersQuery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -35,13 +37,15 @@ class MemberController extends Controller
     ): RedirectResponse {
         Gate::authorize('updateMember', [$current_team, $user]);
 
-        if ($data->role !== null) {
-            $changeMemberRole->handle($current_team, $request->user(), $user, $data->role);
-        }
+        DB::transaction(function () use ($request, $current_team, $user, $data, $changeMemberRole, $changeMemberVisibility) {
+            if ($data->role !== null) {
+                $changeMemberRole->handle($current_team, $request->user(), $user, $data->role);
+            }
 
-        if ($data->visibility !== null) {
-            $changeMemberVisibility->handle($current_team, $user, $data->visibility, $data->environmentIds);
-        }
+            if ($data->visibility !== null) {
+                $changeMemberVisibility->handle($current_team, $user, $data->visibility, $data->environmentIds);
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Member updated.')]);
 
@@ -63,5 +67,20 @@ class MemberController extends Controller
         return $request->user()?->is($user)
             ? to_route('home')
             : back();
+    }
+
+    public function transferOwnership(
+        Request $request,
+        Team $current_team,
+        User $user,
+        TransferOwnership $transferOwnership,
+    ): RedirectResponse {
+        Gate::authorize('transferOwnership', [$current_team, $user]);
+
+        $transferOwnership->handle($current_team, $request->user(), $user);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __(':name is now the owner of the organization.', ['name' => $user->name])]);
+
+        return back();
     }
 }

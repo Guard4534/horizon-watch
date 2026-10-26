@@ -6,6 +6,7 @@ use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use Database\Factories\TeamInvitationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -17,12 +18,12 @@ use Illuminate\Support\Str;
 
 /**
  * @property int $id
- * @property string $code
+ * @property string $code_hash
  * @property int $team_id
  * @property string $email
  * @property TeamRole $role
  * @property MemberVisibility $visibility
- * @property int $invited_by
+ * @property int|null $invited_by
  * @property Carbon|null $expires_at
  * @property Carbon|null $accepted_at
  * @property int|null $accepted_by
@@ -30,24 +31,37 @@ use Illuminate\Support\Str;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Team $team
- * @property-read User $inviter
+ * @property-read User|null $inviter
  * @property-read User|null $acceptedBy
  */
 #[Fillable(['team_id', 'email', 'role', 'visibility', 'invited_by', 'expires_at', 'accepted_at', 'accepted_by', 'revoked_at'])]
+#[Hidden(['code_hash'])]
 class TeamInvitation extends Model
 {
     /** @use HasFactory<TeamInvitationFactory> */
     use HasFactory;
+
+    public ?string $plainCode = null;
 
     protected static function boot(): void
     {
         parent::boot();
 
         static::creating(function (TeamInvitation $invitation) {
-            if (empty($invitation->code)) {
-                $invitation->code = Str::random(64);
+            if (empty($invitation->code_hash)) {
+                $invitation->issueCode();
             }
         });
+    }
+
+    public static function hashCode(string $code): string
+    {
+        return hash('sha256', $code);
+    }
+
+    public static function urlFor(string $code): string
+    {
+        return rtrim(config()->string('app.url'), '/').route('invitations.show', $code, false);
     }
 
     public static function lifetimeDays(): int
@@ -99,6 +113,14 @@ class TeamInvitation extends Model
         return Attribute::set(fn (string $value): string => Str::lower($value));
     }
 
+    public function issueCode(): string
+    {
+        $this->plainCode = Str::random(64);
+        $this->code_hash = self::hashCode($this->plainCode);
+
+        return $this->plainCode;
+    }
+
     public function isAccepted(): bool
     {
         return $this->accepted_at !== null;
@@ -117,6 +139,15 @@ class TeamInvitation extends Model
     public function isExpired(): bool
     {
         return $this->expires_at !== null && $this->expires_at->isPast();
+    }
+
+    /**
+     * @param  Builder<TeamInvitation>  $query
+     * @return Builder<TeamInvitation>
+     */
+    public function scopeWithCode(Builder $query, string $code): Builder
+    {
+        return $query->where('code_hash', self::hashCode($code));
     }
 
     /**

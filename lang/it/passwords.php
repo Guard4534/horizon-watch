@@ -5,5 +5,5 @@ return [
     'sent' => 'Ti abbiamo inviato via email il link per reimpostare la password.',
     'throttled' => 'Attendi prima di riprovare.',
     'token' => 'Il link per reimpostare la password non è valido.',
-    'user' => 'Non esiste un utente con questo indirizzo email.',
+    'user' => 'Il link per reimpostare la password non è valido.',
 ];

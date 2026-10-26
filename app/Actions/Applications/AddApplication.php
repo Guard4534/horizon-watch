@@ -15,10 +15,7 @@ class AddApplication
     public function handle(Team $team, ApplicationWizardData $data): Application
     {
         return DB::transaction(function () use ($team, $data) {
-            $application = $team->applications()->create([
-                'name' => $data->application->name,
-                'host' => $data->application->host,
-            ]);
+            $application = $team->applications()->create(['name' => $data->application->name]);
 
             foreach ($data->environments as $environmentData) {
                 $this->addEnvironment->handle($application, $environmentData);

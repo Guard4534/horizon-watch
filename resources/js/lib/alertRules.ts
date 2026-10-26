@@ -10,12 +10,17 @@ import {
 } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import type { Component } from 'vue';
+import { formatNumber, formatSeconds } from '@/lib/monitoring';
 
 export function thresholdOf(
-    environment: App.Data.Monitoring.EnvironmentData,
+    environment: Pick<App.Data.Monitoring.EnvironmentData, 'thresholds'>,
     metric: App.Enums.AlertRuleMetric,
 ): number | null {
-    return environment.thresholds[metric] ?? null;
+    const threshold = environment.thresholds[metric] as
+        | App.Data.Monitoring.ThresholdData
+        | undefined;
+
+    return threshold?.value ?? null;
 }
 
 const ICONS: Record<App.Enums.AlertRuleMetric, Component> = {
@@ -67,12 +72,6 @@ const LABELS: Record<
     },
 };
 
-const STATE_METRICS: ReadonlySet<App.Enums.AlertRuleMetric> = new Set([
-    'horizon.master_inactive',
-    'endpoint.unreachable',
-    'horizon.paused',
-]);
-
 export function ruleIcon(metric: App.Enums.AlertRuleMetric): Component {
     return ICONS[metric];
 }
@@ -83,10 +82,6 @@ export function ruleLabel(metric: App.Enums.AlertRuleMetric): string {
 
 export function ruleHint(metric: App.Enums.AlertRuleMetric): string {
     return LABELS[metric].hint();
-}
-
-function isStateMetric(metric: App.Enums.AlertRuleMetric): boolean {
-    return STATE_METRICS.has(metric);
 }
 
 export function unitLabel(unit: string): string {
@@ -103,39 +98,47 @@ export function unitLabel(unit: string): string {
 }
 
 export function formatThreshold(threshold: number, unit: string): string {
-    const value = Number.isInteger(threshold)
-        ? String(threshold)
-        : threshold.toFixed(1);
+    const value = formatNumber(threshold);
 
-    switch (unit) {
-        case 's':
-            return `${value}${unitLabel(unit)}`;
-        case 'job':
-        case '':
-            return value;
-        default:
-            return `${value} ${unitLabel(unit)}`;
-    }
+    return unit === 'job' || unit === ''
+        ? value
+        : `${value} ${unitLabel(unit)}`;
+}
+
+export function formatRuleFor(minutes: number): string {
+    return trans('for :duration', { duration: formatSeconds(minutes * 60) });
 }
 
 export function formatRule(
+    rule: Pick<
+        App.Data.Monitoring.AlertData,
+        'metric' | 'threshold' | 'unit' | 'comparator'
+    >,
+): string {
+    return `${ruleLabel(rule.metric)} ${rule.comparator} ${formatThreshold(rule.threshold, rule.unit)}`;
+}
+
+export function formatCondition(
     metric: App.Enums.AlertRuleMetric,
     threshold: number,
     unit: string,
 ): string {
-    const comparison =
-        isStateMetric(metric) || metric === 'workers.missing' ? '≥' : '>';
-
-    return `${metric} ${comparison} ${formatThreshold(threshold, unit)}`;
+    return `${ruleHint(metric)} ${formatThreshold(threshold, unit)}`;
 }
 
-export type RuleField = 'threshold' | 'severity' | 'notifyByEmail' | 'enabled';
+export type RuleField =
+    | 'threshold'
+    | 'severity'
+    | 'notifyByEmail'
+    | 'enabled'
+    | 'forMinutes';
 
 export const RULE_FIELDS: readonly RuleField[] = [
     'threshold',
     'severity',
     'notifyByEmail',
     'enabled',
+    'forMinutes',
 ];
 
 export function ruleFields(
@@ -149,6 +152,7 @@ export function ruleFields(
             severity: rule.severity,
             notifyByEmail: rule.notifyByEmail,
             enabled: rule.enabled,
+            forMinutes: rule.forMinutes,
         };
     }
 
@@ -161,6 +165,7 @@ export function ruleFields(
         severity: rule.overrideSeverity,
         notifyByEmail: rule.overrideNotifyByEmail,
         enabled: rule.overrideEnabled,
+        forMinutes: rule.overrideForMinutes,
     };
 }
 
@@ -169,6 +174,7 @@ export type RuleValues = {
     severity: App.Enums.AlertSeverity;
     notifyByEmail: boolean;
     enabled: boolean;
+    forMinutes: number | null;
 };
 
 export function ruleValues(
@@ -179,6 +185,7 @@ export function ruleValues(
         severity: rule.severity,
         notifyByEmail: rule.notifyByEmail,
         enabled: rule.enabled,
+        forMinutes: rule.forMinutes,
     };
 }
 

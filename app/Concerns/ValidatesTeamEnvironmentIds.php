@@ -4,7 +4,7 @@ namespace App\Concerns;
 
 use App\Enums\MemberVisibility;
 use App\Models\Team;
-use Illuminate\Validation\Rule;
+use Closure;
 
 trait ValidatesTeamEnvironmentIds
 {
@@ -23,13 +23,20 @@ trait ValidatesTeamEnvironmentIds
     protected static function environmentIdRules(Team $team): array
     {
         return [
-            'environmentIds' => ['array', 'required_if:visibility,'.MemberVisibility::Manual->value],
-            'environmentIds.*' => [
-                'integer',
-                Rule::exists('environments', 'id')->where(
-                    fn ($query) => $query->whereIn('application_id', $team->applications()->select('id'))
-                ),
+            'environmentIds' => [
+                'bail',
+                'array',
+                'max:'.config()->integer('horizon-watch.limits.environment_ids'),
+                'required_if:visibility,'.MemberVisibility::Manual->value,
+                function (string $attribute, mixed $value, Closure $fail) use ($team) {
+                    $ids = array_values(array_unique(array_map(intval(...), array_filter((array) $value, is_numeric(...)))));
+
+                    if ($ids !== [] && $team->environments()->whereIn('environments.id', $ids)->count() < count($ids)) {
+                        $fail(__('One of the environments you picked is not part of this organization.'));
+                    }
+                },
             ],
+            'environmentIds.*' => ['integer'],
         ];
     }
 
@@ -40,7 +47,6 @@ trait ValidatesTeamEnvironmentIds
     {
         return [
             'environmentIds.required_if' => __('Pick at least one environment for a manual selection.'),
-            'environmentIds.*.exists' => __('One of the environments you picked is not part of this organization.'),
         ];
     }
 }

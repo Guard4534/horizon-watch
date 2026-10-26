@@ -2,13 +2,15 @@
 
 namespace App\Data\Applications;
 
-use App\Enums\EnvironmentColor;
+use App\Actions\Monitoring\DispatchDuePolls;
+use App\Enums\EnvironmentType;
 use App\Models\AlertRule;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Rules\OutboundUrl;
+use App\Rules\PasswordBeforeCollecting;
 use App\Rules\StoredPasswordStaysWithItsAddress;
-use App\Rules\UrlWithoutCredentials;
-use App\Rules\UrlWithoutQueryOrFragment;
+use App\Support\HorizonUrl;
 use Closure;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -20,7 +22,7 @@ class EnvironmentFormData extends Data
 {
     public function __construct(
         public string $name,
-        public EnvironmentColor $color,
+        public EnvironmentType $type,
         public string $horizonUrl,
         public int $pollIntervalSeconds,
         public ?string $basicAuthUser = null,
@@ -38,6 +40,10 @@ class EnvironmentFormData extends Data
             $properties['pollIntervalSeconds'] = config()->integer('horizon-watch.readings.poll_interval_seconds.default');
         }
 
+        if (is_string($properties['horizonUrl'] ?? null)) {
+            $properties['horizonUrl'] = HorizonUrl::normalize($properties['horizonUrl']);
+        }
+
         return $properties;
     }
 
@@ -47,13 +53,71 @@ class EnvironmentFormData extends Data
     public static function rules(ValidationContext $context): array
     {
         return [
-            'name' => ['required', 'string', 'max:60', 'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/', self::reservedNameRule(), ...self::uniqueNameRules()],
-            'color' => ['required', Rule::enum(EnvironmentColor::class)],
+            'name' => [...self::nameRules(), ...self::uniqueNameRules()],
+            'type' => self::typeRules(),
             'horizonUrl' => self::horizonUrlRules(),
             'basicAuthUser' => self::basicAuthUserRules(self::key($context, 'basicAuthPassword')),
             'basicAuthPassword' => ['nullable', 'string', ...self::passwordRequiredWithUsernameRules($context)],
-            'pollIntervalSeconds' => ['integer', 'between:'.config()->integer('horizon-watch.readings.poll_interval_seconds.min').','.config()->integer('horizon-watch.readings.poll_interval_seconds.max')],
+            'pollIntervalSeconds' => self::pollIntervalRules(),
             'pollingEnabled' => ['boolean'],
+        ];
+    }
+
+    /**
+     * The rules a configuration import applies to an environment: the rules of the form without
+     * the uniqueness check (the import matches environments by name) and without the password
+     * (a configuration file never carries one).
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    public static function importRules(): array
+    {
+        return [
+            'name' => self::nameRules(),
+            'type' => self::typeRules(),
+            'horizonUrl' => self::horizonUrlRules(),
+            'basicAuthUser' => self::basicAuthUserRules('basicAuthPassword'),
+            'pollIntervalSeconds' => self::pollIntervalRules(),
+            'pollingEnabled' => ['boolean'],
+        ];
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    public static function nameRules(): array
+    {
+        return ['required', 'string', 'max:60', 'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/', self::reservedNameRule()];
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    public static function typeRules(): array
+    {
+        return ['required', Rule::enum(EnvironmentType::class)];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function pollIntervalRules(): array
+    {
+        return [
+            'integer',
+            'between:'.config()->integer('horizon-watch.readings.poll_interval_seconds.min').','.config()->integer('horizon-watch.readings.poll_interval_seconds.max'),
+            'multiple_of:'.DispatchDuePolls::TICK_SECONDS,
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function attributes(): array
+    {
+        return [
+            'horizonUrl' => __('Horizon URL'),
+            'pollIntervalSeconds' => __('collection interval'),
         ];
     }
 
@@ -72,11 +136,11 @@ class EnvironmentFormData extends Data
     }
 
     /**
-     * @return array<int, string|UrlWithoutCredentials|UrlWithoutQueryOrFragment>
+     * @return array<int, string|OutboundUrl>
      */
     public static function horizonUrlRules(): array
     {
-        return ['required', 'url:http,https', 'max:255', new UrlWithoutCredentials, new UrlWithoutQueryOrFragment];
+        return ['required', 'url:http,https', 'max:255', new OutboundUrl];
     }
 
     /**
@@ -101,7 +165,7 @@ class EnvironmentFormData extends Data
     }
 
     /**
-     * @return array<int, string|StoredPasswordStaysWithItsAddress>
+     * @return array<int, string|StoredPasswordStaysWithItsAddress|PasswordBeforeCollecting>
      */
     private static function passwordRequiredWithUsernameRules(ValidationContext $context): array
     {
@@ -111,12 +175,19 @@ class EnvironmentFormData extends Data
             return ['required_with:'.self::key($context, 'basicAuthUser')];
         }
 
-        return [new StoredPasswordStaysWithItsAddress(
-            stored: $environment,
-            horizonUrl: $context->payload['horizonUrl'] ?? null,
-            username: $context->payload['basicAuthUser'] ?? null,
-            sameUsernameToo: false,
-        )];
+        return [
+            new StoredPasswordStaysWithItsAddress(
+                stored: $environment,
+                horizonUrl: $context->payload['horizonUrl'] ?? null,
+                username: $context->payload['basicAuthUser'] ?? null,
+                sameUsernameToo: false,
+            ),
+            new PasswordBeforeCollecting(
+                stored: $environment,
+                username: $context->payload['basicAuthUser'] ?? null,
+                pollingEnabled: $context->payload['pollingEnabled'] ?? true,
+            ),
+        ];
     }
 
     public static function sameAddress(string $first, string $second): bool

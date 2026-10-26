@@ -3,14 +3,14 @@ import { Form, Head } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Spinner } from '@/components/ui/spinner';
+import { invalidField } from '@/lib/fieldErrors';
 import { store } from '@/routes/password/confirm';
 
 defineOptions({
     layout: {
-        kicker: 'Security',
         title: 'Confirm your password',
         description:
-            'This is a secure area of the application. Please confirm your password before continuing.',
+            'This is a secure area of the panel. Please confirm your password before continuing.',
     },
 });
 </script>
@@ -28,13 +28,13 @@ defineOptions({
             <label for="password">{{ $t('Password') }}</label>
             <PasswordInput
                 id="password"
-                class="nc-input"
                 name="password"
                 required
                 autocomplete="current-password"
                 autofocus
+                v-bind="invalidField('password', errors.password)"
             />
-            <InputError :message="errors.password" />
+            <InputError field="password" :message="errors.password" />
         </div>
 
         <button

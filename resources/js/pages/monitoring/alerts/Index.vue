@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import { PhBellSimpleSlash } from '@phosphor-icons/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
@@ -7,8 +7,8 @@ import AlertCards from '@/components/mobile/alerts/AlertCards.vue';
 import VisibilityEmptyState from '@/components/monitoring/VisibilityEmptyState.vue';
 import AlertPagination from '@/components/monitoring/alerts/AlertPagination.vue';
 import AlertTable from '@/components/monitoring/alerts/AlertTable.vue';
+import AudienceWarning from '@/components/monitoring/alerts/AudienceWarning.vue';
 import DeliveryPolicy from '@/components/monitoring/alerts/DeliveryPolicy.vue';
-import DeliveryTest from '@/components/monitoring/alerts/DeliveryTest.vue';
 import EmailPreview from '@/components/monitoring/alerts/EmailPreview.vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import { useIsMobile } from '@/composables/useIsMobile';
@@ -16,6 +16,7 @@ import { useLivePoll } from '@/composables/useLivePoll';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import { useVisibility } from '@/composables/useVisibility';
 import { pageCount } from '@/lib/alerts';
+import { replaceVisit } from '@/lib/visits';
 import { index as alertsIndex } from '@/routes/alerts';
 
 defineOptions({
@@ -39,8 +40,6 @@ function visit(next: {
     application?: string | null;
     number?: number;
 }): void {
-    router.cancelAll({ sync: false, prefetch: false });
-
     const state = next.state ?? page.state;
     const application =
         next.application === undefined ? page.application : next.application;
@@ -51,16 +50,7 @@ function visit(next: {
     if (application) query.application = application;
     if (number > 1) query.page = number;
 
-    router.get(
-        alertsIndex(slug.value, { query }).url,
-        {},
-        {
-            only: ['page'],
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
-        },
-    );
+    replaceVisit(alertsIndex(slug.value, { query }).url, ['page']);
 }
 
 const state = computed({
@@ -102,7 +92,7 @@ const empty = computed(() => {
             return trans('No resolved alerts.');
         default:
             return trans(
-                'No open anomalies: every watched environment is within its thresholds.',
+                'No open alerts: every environment you can see is within its thresholds.',
             );
     }
 });
@@ -118,7 +108,6 @@ const previewed = computed(
     <div v-if="nothingVisible" class="nc-page">
         <VisibilityEmptyState
             :icon="PhBellSimpleSlash"
-            :kicker="$t('Nothing to watch')"
             :title="$t('No alerts yet')"
             :body="
                 canManageApplications
@@ -126,7 +115,7 @@ const previewed = computed(
                           'Configure an application with at least one environment first: alerts appear as soon as there is something to watch.',
                       )
                     : $t(
-                          'Nothing is configured yet. An administrator of this organization has to add an application before anything shows up here.',
+                          'Nothing is configured yet. An admin of this organization has to add an application before anything shows up here.',
                       )
             "
         />
@@ -140,6 +129,10 @@ const previewed = computed(
                 padding: var(--nc-space-3) var(--nc-space-4) 0;
             "
         >
+            <AudienceWarning
+                v-if="page.notificationSummary.reachesNobody"
+                :link="page.notifications !== null ? 'settings' : 'profile'"
+            />
             <SegmentedControl
                 v-model="state"
                 name="alert-state-mobile"
@@ -179,7 +172,7 @@ const previewed = computed(
         </div>
     </div>
 
-    <div v-else class="nc-page alerts-grid">
+    <div v-else class="nc-page nc-two-col">
         <section class="nc-card min-w-0">
             <div
                 class="mb-[var(--nc-space-3)] flex flex-wrap items-center"
@@ -219,10 +212,6 @@ const previewed = computed(
 
         <div class="flex min-w-0 flex-col" style="gap: var(--nc-space-4)">
             <EmailPreview v-if="page.notifications" :alert="previewed" />
-            <DeliveryTest
-                v-if="page.notifications"
-                :settings="page.notifications"
-            />
             <DeliveryPolicy
                 :summary="page.notificationSummary"
                 :manages="page.notifications !== null"
@@ -230,18 +219,3 @@ const previewed = computed(
         </div>
     </div>
 </template>
-
-<style scoped>
-.alerts-grid {
-    display: grid;
-    align-items: start;
-    gap: var(--nc-space-6);
-    grid-template-columns: minmax(0, 1fr) 300px;
-}
-
-@media (max-width: 1023px) {
-    .alerts-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
-</style>

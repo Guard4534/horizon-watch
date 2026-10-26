@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { PhPlus, PhTrashSimple } from '@phosphor-icons/vue';
+import { PhTrashSimple } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
-import ApplicationForm from '@/components/monitoring/applications/ApplicationForm.vue';
 import ConfirmByNameDialog from '@/components/ConfirmByNameDialog.vue';
+import DangerZoneCard from '@/components/DangerZoneCard.vue';
+import PageHeader from '@/components/PageHeader.vue';
+import ApplicationForm from '@/components/monitoring/applications/ApplicationForm.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
 import {
@@ -12,27 +14,25 @@ import {
     show,
     update,
 } from '@/routes/applications';
-import { create as createEnvironment } from '@/routes/environments';
 
 defineOptions({
     layout: { title: 'Edit application' },
 });
 
 const { page } = defineProps<{
-    page: App.Data.Pages.ApplicationFormPageData;
+    page: App.Data.Pages.ApplicationEditPageData;
 }>();
 
 const slug = useTeamSlug();
 
-const application = computed(() => page.slug ?? '');
-const name = computed(() => page.application?.name ?? '');
+const application = computed(() => page.slug);
+const name = computed(() => page.application.name);
 
 const form = useForm<{
     application: App.Data.Applications.ApplicationFormData;
 }>({
     application: {
-        name: page.application?.name ?? '',
-        host: page.application?.host ?? '',
+        name: page.application.name,
     },
 });
 
@@ -46,7 +46,7 @@ const submit = () => {
     form.transform((data) => data.application).patch(
         update({ current_team: slug.value, application: application.value })
             .url,
-        { preserveScroll: true },
+        { preserveScroll: true, onSuccess: () => form.defaults() },
     );
 };
 </script>
@@ -55,90 +55,69 @@ const submit = () => {
     <Head :title="$t('Edit application')" />
 
     <div
-        class="mx-auto flex w-full flex-col"
-        style="
-            padding: var(--nc-space-6);
-            gap: var(--nc-space-6);
-            max-width: 940px;
-        "
+        class="nc-page nc-page-narrow flex flex-col"
+        style="gap: var(--nc-space-6)"
     >
-        <div class="flex flex-wrap items-end" style="gap: var(--nc-space-4)">
-            <div class="min-w-0">
-                <div class="nc-t-2xs nc-tone-muted">
-                    <Link :href="applicationsIndex(slug)">{{
-                        $t('Applications')
-                    }}</Link>
-                </div>
-                <div style="font-size: 26px; line-height: 1.15">
-                    {{ name }}
-                </div>
-                <div class="nc-t-xs nc-tone-muted">
-                    {{ $t('Edit application') }}
-                </div>
-            </div>
-            <div
-                class="ml-auto flex flex-wrap items-center"
-                style="gap: var(--nc-space-2)"
-            >
-                <Link
-                    class="nc-btn nc-btn-secondary nc-t-xs"
-                    :href="
-                        createEnvironment({
-                            current_team: slug,
-                            application: application,
-                        })
-                    "
-                    ><PhPlus :size="13" />{{ $t('Add environment') }}</Link
-                >
-                <Link
-                    class="nc-btn nc-btn-ghost nc-t-xs"
-                    :href="
-                        show({ current_team: slug, application: application })
-                    "
-                    >{{ $t('Open') }}</Link
-                >
-            </div>
-        </div>
+        <PageHeader
+            :title="$t('Edit application')"
+            :crumbs="[
+                { label: $t('Applications'), href: applicationsIndex(slug) },
+                {
+                    label: name,
+                    href: show({
+                        current_team: slug,
+                        application: application,
+                    }),
+                },
+            ]"
+        />
 
         <SectionCard :title="$t('Application')">
-            <ApplicationForm v-model="form.application" :errors="errors" />
-            <div
-                class="mt-[var(--nc-space-4)] flex items-center"
-                style="gap: var(--nc-space-3)"
+            <form
+                class="flex flex-col"
+                style="gap: var(--nc-space-4)"
+                novalidate
+                @submit.prevent="submit"
             >
-                <button
-                    type="button"
-                    class="nc-btn nc-btn-primary"
-                    :disabled="form.processing"
-                    @click="submit"
-                >
-                    {{ $t('Save') }}
-                </button>
-                <Link
-                    class="nc-btn nc-btn-secondary"
-                    :href="applicationsIndex(slug)"
-                    >{{ $t('Cancel') }}</Link
-                >
-            </div>
+                <ApplicationForm v-model="form.application" :errors="errors" />
+                <div class="nc-actions">
+                    <Link
+                        class="nc-btn nc-btn-secondary"
+                        :href="
+                            show({
+                                current_team: slug,
+                                application: application,
+                            })
+                        "
+                        >{{ $t('Cancel') }}</Link
+                    >
+                    <button
+                        type="submit"
+                        class="nc-btn nc-btn-primary"
+                        :disabled="!form.isDirty || form.processing"
+                    >
+                        {{ $t('Save') }}
+                    </button>
+                </div>
+            </form>
         </SectionCard>
 
-        <SectionCard :title="$t('Delete application')">
-            <div class="nc-t-xs nc-tone-soft">
-                {{
-                    $t(
-                        'Deleting an application removes every environment configured under it. There is no undo and no archive.',
-                    )
-                }}
-            </div>
+        <DangerZoneCard
+            :title="$t('Delete application')"
+            :description="
+                $t(
+                    'Deleting an application removes every environment configured under it. There is no undo and no archive.',
+                )
+            "
+        >
             <button
                 type="button"
-                class="nc-btn nc-t-xs nc-tone-down mt-[var(--nc-space-3)]"
-                style="border-color: var(--st-down)"
+                class="nc-btn nc-btn-danger nc-t-xs"
                 @click="confirming = true"
             >
                 <PhTrashSimple :size="13" />{{ $t('Delete application') }}
             </button>
-        </SectionCard>
+        </DangerZoneCard>
 
         <ConfirmByNameDialog
             v-model:open="confirming"

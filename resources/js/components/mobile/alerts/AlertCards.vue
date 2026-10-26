@@ -4,11 +4,11 @@ import AlertActions from '@/components/monitoring/alerts/AlertActions.vue';
 import AlertDetail from '@/components/monitoring/alerts/AlertDetail.vue';
 import AlertMarks from '@/components/monitoring/alerts/AlertMarks.vue';
 import AlertOpened from '@/components/monitoring/alerts/AlertOpened.vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import { useEnvironmentHref } from '@/composables/useEnvironmentHref';
 import { ruleLabel } from '@/lib/alertRules';
-import { severityColor, severityIcon } from '@/lib/alerts';
-import { formatElapsed } from '@/lib/monitoring';
+import { alertIcon, alertTone } from '@/lib/alerts';
+import { formatAgo } from '@/lib/monitoring';
 
 defineProps<{
     alerts: App.Data.Monitoring.AlertData[];
@@ -34,10 +34,10 @@ const environmentHref = useEnvironmentHref();
         >
             <div class="flex items-start gap-[9px]">
                 <component
-                    :is="severityIcon(alert.severity)"
+                    :is="alertIcon(alert)"
                     :size="15"
                     class="mt-px flex-none"
-                    :style="{ color: severityColor(alert.severity) }"
+                    :style="{ color: alertTone(alert) }"
                 />
                 <div class="min-w-0 flex-1">
                     <Link
@@ -54,24 +54,22 @@ const environmentHref = useEnvironmentHref();
                     </div>
                     <div
                         class="nc-tone-muted mt-[4px] flex items-center gap-[6px]"
-                        style="font-size: 10px"
+                        style="font-size: 11px"
                     >
-                        <EnvSwatch
-                            :color="alert.color"
-                            shape="bar"
-                            :size="10"
-                        />
                         <span class="min-w-0 truncate"
                             >{{ alert.applicationName }} /
-                            {{ alert.environmentName }}</span
-                        >
+                            <EnvPill
+                                :name="alert.environmentName"
+                                :type="alert.environmentType"
+                                :size="11"
+                        /></span>
                         <span class="nc-num ml-auto flex-none"
                             ><template
                                 v-if="alert.resolvedMinutesAgo !== null"
                                 >{{
                                     $t('resolved :elapsed', {
-                                        elapsed: formatElapsed(
-                                            alert.resolvedMinutesAgo,
+                                        elapsed: formatAgo(
+                                            alert.resolvedMinutesAgo * 60,
                                         ),
                                     })
                                 }}</template

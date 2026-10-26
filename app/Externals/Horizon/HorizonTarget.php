@@ -3,6 +3,7 @@
 namespace App\Externals\Horizon;
 
 use App\Models\Environment;
+use App\Support\HorizonUrl;
 use JsonSerializable;
 use LogicException;
 use SensitiveParameter;
@@ -35,13 +36,25 @@ final readonly class HorizonTarget implements JsonSerializable
         return filled($this->username) && filled($this->password);
     }
 
-    public function apiUrl(string $path): string
+    public function sendsCredentialsInClear(): bool
+    {
+        return $this->hasBasicAuth() && str_starts_with(strtolower(trim($this->dashboardUrl)), 'http://');
+    }
+
+    public function suggestedDashboardUrl(): ?string
     {
         $base = rtrim((string) preg_replace('/[?#].*$/s', '', $this->dashboardUrl), '/');
 
-        if (str_ends_with($base, '/api')) {
-            $base = substr($base, 0, -strlen('/api'));
+        if (preg_match('#^([a-z][a-z0-9+.-]*://[^/]+/.*?[^/])/(?:api(?=/.)|dashboard|monitoring|metrics|jobs|failed|batches|recent-jobs)(?:/.*)?$#i', $base, $matches) !== 1) {
+            return null;
         }
+
+        return $matches[1];
+    }
+
+    public function apiUrl(string $path): string
+    {
+        $base = HorizonUrl::normalize((string) preg_replace('/[?#].*$/s', '', $this->dashboardUrl));
 
         return $base.'/api/'.ltrim($path, '/');
     }

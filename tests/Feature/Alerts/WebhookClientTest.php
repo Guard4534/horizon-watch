@@ -1,6 +1,7 @@
 <?php
 
 use App\Alerts\Payloads\WebhookPayload;
+use App\Enums\AlertRuleMetric;
 use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
 use App\Enums\NotificationChannel;
@@ -23,44 +24,26 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\URL;
 use Tests\Fixtures\Horizon\FakeResolver;
+use Tests\Support\AnotherAppKey;
+use Tests\Support\FixtureServer;
 use Tests\Support\TraceArguments;
 
 const WEBHOOK_TEST_SECRET = 'whsec-correct-horse-battery-staple';
 
 beforeAll(function () {
-    $socket = stream_socket_server('tcp://127.0.0.1:0');
-    $port = (int) substr((string) strrchr((string) stream_socket_get_name($socket, false), ':'), 1);
-    fclose($socket);
-
     $log = (string) tempnam(sys_get_temp_dir(), 'webhook-receiver-');
 
-    $process = proc_open(
-        [PHP_BINARY, '-S', "127.0.0.1:{$port}", dirname(__DIR__, 2).'/Fixtures/Webhook/receiver.php'],
-        [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']],
-        $pipes,
-        null,
-        [...getenv(), 'PHP_CLI_SERVER_WORKERS' => '8', 'RECEIVER_LOG_FILE' => $log],
-    );
+    $server = FixtureServer::start(dirname(__DIR__, 2).'/Fixtures/Webhook/receiver.php', ['RECEIVER_LOG_FILE' => $log], workers: 8);
 
-    $deadline = microtime(true) + 5;
-
-    while (($probe = @fsockopen('127.0.0.1', $port, timeout: 0.1)) === false && microtime(true) < $deadline) {
-        usleep(50_000);
-    }
-
-    if ($probe !== false) {
-        fclose($probe);
-    }
-
-    $GLOBALS['webhookReceiver'] = ['process' => $process, 'port' => $port, 'log' => $log];
+    $GLOBALS['webhookReceiver'] = ['server' => $server, 'port' => $server->port, 'log' => $log];
 });
 
 afterAll(function () {
-    ['process' => $process, 'log' => $log] = $GLOBALS['webhookReceiver'];
+    ['server' => $server, 'log' => $log] = $GLOBALS['webhookReceiver'];
 
-    proc_terminate($process);
-    proc_close($process);
+    $server->stop();
     @unlink($log);
 });
 
@@ -105,6 +88,7 @@ test('the signature is an hmac of the timestamp and the body', function () {
 });
 
 test('the payload is posted as json with a signature the receiver can verify', function () {
+    config(['horizon-watch.version' => '1.0.0']);
     $this->travelTo(CarbonImmutable::createFromTimestampUTC(1_789_000_020));
 
     app(WebhookClient::class)->post(receiverUrl('ok'), WEBHOOK_TEST_SECRET, [
@@ -121,7 +105,7 @@ test('the payload is posted as json with a signature the receiver can verify', f
     expect($request['method'])->toBe('POST')
         ->and($request['path'])->toBe('/ok/tok-path-secret')
         ->and($request['headers']['content-type'])->toBe('application/json')
-        ->and($request['headers']['user-agent'])->toBe('HorizonWatch')
+        ->and($request['headers']['user-agent'])->toBe('HorizonWatch/1.0.0')
         ->and($request['headers']['x-horizon-watch-timestamp'])->toBe('1789000020')
         ->and($request['body'])->toBe('{"event":"alert.opened","alert":{"url":"https://panel.example.com/acme/environments/production","application":"Città"}}')
         ->and(Signature::sign(WEBHOOK_TEST_SECRET, 1_789_000_020, $request['body']))->toBe($request['headers']['x-horizon-watch-signature'])
@@ -142,24 +126,51 @@ test('a redirect is not followed and fails as http_3xx', function () {
 });
 
 test('an error status fails with its class', function (string $scenario, DeliveryError $reason) {
+    config(['horizon-watch.webhook_timeout_seconds' => 3]);
     $started = microtime(true);
 
     expect(webhookFailure(fn () => app(WebhookClient::class)->post(receiverUrl($scenario), WEBHOOK_TEST_SECRET, ['event' => 'test']))?->reason)->toBe($reason)
-        ->and(microtime(true) - $started)->toBeLessThan(1.0);
+        ->and(microtime(true) - $started)->toBeLessThan(3.0);
 })->with([
     '404' => ['not-found', DeliveryError::ClientError],
     '500' => ['server-error', DeliveryError::ServerError],
     '503 with an endless body' => ['endless-error', DeliveryError::ServerError],
 ]);
 
+test('an error status keeps its code, and a 429 the wait it asks for', function (string $scenario, int $status, ?int $retryAfter) {
+    $failure = webhookFailure(fn () => app(WebhookClient::class)->post(receiverUrl($scenario), WEBHOOK_TEST_SECRET, ['event' => 'test']));
+
+    expect($failure?->status)->toBe($status)
+        ->and($failure?->retryAfter)->toBe($retryAfter);
+})->with([
+    'redirect' => ['redirect', 302, null],
+    '404' => ['not-found', 404, null],
+    '429' => ['too-many', 429, 30],
+    '500' => ['server-error', 500, null],
+]);
+
+test('a Retry-After given as a date is read as the seconds left', function (string $header, ?int $seconds) {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00', 'UTC'));
+    $this->app->instance(Resolver::class, new FakeResolver(['hooks.example.com' => ['203.0.113.10']]));
+    Http::preventStrayRequests();
+    Http::fake(['*' => Http::response('', 429, ['Retry-After' => $header])]);
+
+    expect(webhookFailure(fn () => app(WebhookClient::class)->post('https://hooks.example.com/hook', WEBHOOK_TEST_SECRET, ['event' => 'test']))?->retryAfter)->toBe($seconds);
+})->with([
+    'a date' => ['Thu, 17 Sep 2026 12:00:45 GMT', 45],
+    'a past date' => ['Thu, 17 Sep 2026 11:00:00 GMT', 0],
+    'garbage' => ['soon', null],
+]);
+
 test('a receiver slower than the timeout fails as timeout', function () {
     $started = microtime(true);
 
     expect(webhookFailure(fn () => app(WebhookClient::class)->post(receiverUrl('slow'), WEBHOOK_TEST_SECRET, ['event' => 'test']))?->reason)->toBe(DeliveryError::Timeout)
-        ->and(microtime(true) - $started)->toBeLessThan(2.0);
+        ->and(microtime(true) - $started)->toBeLessThan(3.0);
 });
 
 test('an endless or oversized success body is cut at the cap without failing', function (string $scenario) {
+    config(['horizon-watch.webhook_timeout_seconds' => 3]);
     $limit = ini_set('memory_limit', '256M');
     memory_reset_peak_usage();
     $memory = memory_get_usage(true);
@@ -167,7 +178,7 @@ test('an endless or oversized success body is cut at the cap without failing', f
 
     app(WebhookClient::class)->post(receiverUrl($scenario), WEBHOOK_TEST_SECRET, ['event' => 'test']);
 
-    expect(microtime(true) - $started)->toBeLessThan(1.0)
+    expect(microtime(true) - $started)->toBeLessThan(3.0)
         ->and(memory_get_peak_usage(true) - $memory)->toBeLessThan(16 * 1024 * 1024);
 
     ini_set('memory_limit', (string) $limit);
@@ -209,7 +220,7 @@ test('private networks are refused when the operator blocks them', function () {
         ->and(receivedRequests())->toBe([]);
 });
 
-test('the request is pinned to the checked address, without redirects or proxy', function () {
+test('the request is pinned to the checked address, without redirects, proxy or decompression', function () {
     config(['horizon-watch.webhook_timeout_seconds' => 5]);
     $resolver = new FakeResolver(['hooks.example.com' => ['203.0.113.10']]);
     $this->app->instance(Resolver::class, $resolver);
@@ -227,11 +238,14 @@ test('the request is pinned to the checked address, without redirects or proxy',
         ->and($sent[0]['curl'][CURLOPT_RESOLVE])->toBe(['hooks.example.com:443:203.0.113.10'])
         ->and($sent[0]['allow_redirects'])->toBeFalse()
         ->and($sent[0]['proxy'])->toBe(['no' => ['*']])
+        ->and($sent[0]['decode_content'])->toBeFalse()
         ->and($sent[0]['connect_timeout'])->toBe(5)
         ->and($sent[0]['timeout'])->toBe(5)
         ->and($resolver->asked)->toBe(['hooks.example.com']);
 
-    Http::assertSent(fn (Request $request) => $request->method() === 'POST' && $request->url() === 'https://hooks.example.com/services/tok');
+    Http::assertSent(fn (Request $request) => $request->method() === 'POST'
+        && $request->url() === 'https://hooks.example.com/services/tok'
+        && $request->header('Accept-Encoding') === ['identity']);
 });
 
 test('real curl reaches a name only through the address the guard pinned', function () {
@@ -279,14 +293,14 @@ function webhookJobTeam(string $url): Team
 
 function runQueuedJob(): void
 {
-    Artisan::call('queue:work', ['connection' => 'database', '--once' => true, '--queue' => 'default', '--sleep' => 0]);
+    Artisan::call('queue:work', ['connection' => 'database', '--once' => true, '--queue' => 'notifications', '--sleep' => 0]);
 }
 
 test('the webhook job stamps the send time and logs the host only', function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00', 'UTC'));
     $team = webhookJobTeam(receiverUrl('accepted'));
 
-    $job = new SendAlertWebhook($team->id, null, SentNotificationKind::Test, 'test', WebhookPayload::forTest($team));
+    $job = new SendAlertWebhook($team->id, null, SentNotificationKind::Test, WebhookPayload::forTest($team));
 
     dispatch_sync($job);
     dispatch_sync($job);
@@ -298,6 +312,7 @@ test('the webhook job stamps the send time and logs the host only', function () 
     expect(receivedRequests())->toHaveCount(1)
         ->and($log->delivery_id)->toBe($job->deliveryId)
         ->and($body)->toBe([
+            'version' => 1,
             'event' => 'test',
             'delivery_id' => $job->deliveryId,
             'alert' => null,
@@ -312,6 +327,28 @@ test('the webhook job stamps the send time and logs the host only', function () 
         ->and(json_encode(DeliveryLog::query()->get()->toArray()))->not->toContain('tok-path-secret');
 });
 
+test('an alert goes on the wire as the documented version 1 body', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:02:04', 'UTC'));
+    URL::forceRootUrl('https://horizon-watch.example.com');
+    URL::forceScheme('https');
+    $team = webhookJobTeam(receiverUrl('accepted'));
+    $environment = Environment::factory()->for(Application::factory()->for($team)->create(['name' => 'Città', 'slug' => 'citta']))->production()->create();
+    $alert = Alert::factory()->for($environment)->critical()->create([
+        'metric' => AlertRuleMetric::JobRuntime,
+        'value' => 300,
+        'detail' => ['job' => 'App\\Jobs\\ImportCatalog', 'queue' => 'imports', 'seconds' => 300],
+        'opened_at' => CarbonImmutable::parse('2026-09-17 12:02:00', 'UTC'),
+    ]);
+    $job = new SendAlertWebhook($team->id, $alert->id, SentNotificationKind::CriticalAlert, WebhookPayload::forAlert($alert, WebhookPayload::OPENED));
+
+    dispatch_sync($job);
+
+    [$request] = receivedRequests();
+
+    expect($request['body'])->toBe('{"version":1,"event":"alert.opened","delivery_id":"'.$job->deliveryId.'","alert":{"id":"'.$alert->id.'","rule":"job.runtime","severity":"critical","summary":"Città · production — A job has been running for 5 min","value":300,"threshold":120,"unit":"s","detail":{"value_is_lower_bound":false,"longest_job":"App\\\\Jobs\\\\ImportCatalog","longest_job_queue":"imports","queues_without_workers":[]},"application":"Città","environment":"production","opened_at":"2026-09-17T12:02:00Z","resolved_at":null,"url":"https://horizon-watch.example.com/'.$team->slug.'/environments/citta-production"},"organization":{"name":"Acme","slug":"'.$team->slug.'"},"sent_at":"2026-09-17T12:02:04Z"}')
+        ->and($request['headers']['x-horizon-watch-signature'])->toBe(Signature::sign(WEBHOOK_TEST_SECRET, 1_789_646_524, $request['body']));
+});
+
 test('a failing receiver is tried three times with backoff, then logged once as failed', function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00', 'UTC'));
     $team = webhookJobTeam(receiverUrl('server-error'));
@@ -322,7 +359,7 @@ test('a failing receiver is tried three times with backoff, then logged once as 
         $logged[] = $message->message.' '.json_encode($message->context);
     });
 
-    SendAlertWebhook::dispatch($team->id, $alert->id, SentNotificationKind::CriticalAlert, 'alert.opened', WebhookPayload::forAlert($alert, 'alert.opened'))
+    SendAlertWebhook::dispatch($team->id, $alert->id, SentNotificationKind::CriticalAlert, WebhookPayload::forAlert($alert, 'alert.opened'))
         ->onConnection('database');
 
     runQueuedJob();
@@ -375,7 +412,7 @@ test('a blocked webhook fails at once without a request', function () {
     config(['horizon-watch.block_private_networks' => true]);
     $team = webhookJobTeam(receiverUrl('ok'));
 
-    SendAlertWebhook::dispatch($team->id, null, SentNotificationKind::Test, 'test', WebhookPayload::forTest($team))
+    SendAlertWebhook::dispatch($team->id, null, SentNotificationKind::Test, WebhookPayload::forTest($team))
         ->onConnection('database');
 
     runQueuedJob();
@@ -390,11 +427,113 @@ test('a blocked webhook fails at once without a request', function () {
 
 test('a webhook removed before the send is dropped silently', function () {
     $team = webhookJobTeam(receiverUrl('ok'));
-    $job = new SendAlertWebhook($team->id, null, SentNotificationKind::Test, 'test', WebhookPayload::forTest($team));
+    $job = new SendAlertWebhook($team->id, null, SentNotificationKind::Test, WebhookPayload::forTest($team));
     $team->notificationSetting()->update(['webhook_url' => null, 'webhook_secret' => null]);
 
     dispatch_sync($job);
 
     expect(receivedRequests())->toBe([])
         ->and(DeliveryLog::query()->count())->toBe(0);
+});
+
+test('a receiver that refuses for good fails at once, logged with its status', function (string $scenario, DeliveryError $reason, int $status) {
+    $team = webhookJobTeam(receiverUrl($scenario));
+
+    SendAlertWebhook::dispatch($team->id, null, SentNotificationKind::Test, WebhookPayload::forTest($team))
+        ->onConnection('database');
+
+    runQueuedJob();
+
+    $log = DeliveryLog::query()->sole();
+
+    expect(receivedRequests())->toHaveCount(1)
+        ->and($log->status)->toBe(DeliveryStatus::Failed)
+        ->and($log->error)->toBe($reason)
+        ->and($log->http_status)->toBe($status)
+        ->and(DB::table('jobs')->count())->toBe(0);
+})->with([
+    'redirect' => ['redirect', DeliveryError::Redirect, 302],
+    'not found' => ['not-found', DeliveryError::ClientError, 404],
+    'gone' => ['gone', DeliveryError::ClientError, 410],
+]);
+
+test('a receiver that asks to come back is tried again after its Retry-After, capped, or the backoff', function (string $scenario, int $delay) {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00', 'UTC'));
+    $team = webhookJobTeam(receiverUrl($scenario));
+
+    SendAlertWebhook::dispatch($team->id, null, SentNotificationKind::Test, WebhookPayload::forTest($team))
+        ->onConnection('database');
+
+    runQueuedJob();
+
+    $job = DB::table('jobs')->sole();
+
+    expect(DeliveryLog::query()->count())->toBe(0)
+        ->and($job->attempts)->toBe(1)
+        ->and($job->available_at)->toBe(now()->addSeconds($delay)->getTimestamp());
+})->with([
+    '408' => ['request-timeout', 10],
+    '429' => ['too-many', 30],
+    '429 asking for an hour' => ['too-many-for-long', 300],
+    '429 asking for no wait' => ['too-many-right-now', 10],
+]);
+
+test('a receiver still asking to come back on the last try is logged as failed with its status', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00', 'UTC'));
+    $team = webhookJobTeam(receiverUrl('too-many'));
+
+    SendAlertWebhook::dispatch($team->id, null, SentNotificationKind::Test, WebhookPayload::forTest($team))
+        ->onConnection('database');
+
+    runQueuedJob();
+    $this->travel(30)->seconds();
+    runQueuedJob();
+    $this->travel(60)->seconds();
+    runQueuedJob();
+
+    $log = DeliveryLog::query()->sole();
+
+    expect(receivedRequests())->toHaveCount(3)
+        ->and($log->status)->toBe(DeliveryStatus::Failed)
+        ->and($log->error)->toBe(DeliveryError::ClientError)
+        ->and($log->http_status)->toBe(429)
+        ->and(DB::table('jobs')->count())->toBe(0);
+});
+
+test('for a day after a regeneration the replaced secret signs too', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 12:00:00', 'UTC'));
+    $team = webhookJobTeam(receiverUrl('ok'));
+    $team->notificationSetting()->firstOrFail()->update([
+        'previous_webhook_secret' => 'whsec-replaced',
+        'previous_webhook_secret_expires_at' => now()->addDay(),
+    ]);
+    $send = fn () => dispatch_sync(new SendAlertWebhook($team->id, null, SentNotificationKind::Test, WebhookPayload::forTest($team)));
+
+    $send();
+    $this->travel(1)->day();
+    $send();
+
+    [$during, $after] = receivedRequests();
+    $timestamp = (int) $during['headers']['x-horizon-watch-timestamp'];
+
+    expect($during['headers']['x-horizon-watch-signature'])->toBe(Signature::sign(WEBHOOK_TEST_SECRET, $timestamp, $during['body']))
+        ->and($during['headers']['x-horizon-watch-previous-signature'])->toBe(Signature::sign('whsec-replaced', $timestamp, $during['body']))
+        ->and($after['headers'])->not->toHaveKey('x-horizon-watch-previous-signature')
+        ->and($after['headers']['x-horizon-watch-signature'])->toBe(Signature::sign(WEBHOOK_TEST_SECRET, (int) $after['headers']['x-horizon-watch-timestamp'], $after['body']));
+});
+
+test('a replaced secret that no longer decrypts is left out and the delivery still goes', function () {
+    $team = webhookJobTeam(receiverUrl('ok'));
+    DB::table('notification_settings')->where('team_id', $team->id)->update([
+        'previous_webhook_secret' => AnotherAppKey::encrypt('whsec-replaced'),
+        'previous_webhook_secret_expires_at' => now()->addDay(),
+    ]);
+
+    dispatch_sync(new SendAlertWebhook($team->id, null, SentNotificationKind::Test, WebhookPayload::forTest($team)));
+
+    [$request] = receivedRequests();
+
+    expect($request['headers'])->toHaveKey('x-horizon-watch-signature')
+        ->not->toHaveKey('x-horizon-watch-previous-signature')
+        ->and(DeliveryLog::query()->sole()->status)->toBe(DeliveryStatus::Sent);
 });

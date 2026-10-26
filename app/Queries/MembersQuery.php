@@ -8,6 +8,8 @@ use App\Data\Pages\MembersPermissionsData;
 use App\Data\Pages\PermissionMatrixRowData;
 use App\Data\Teams\InvitationData;
 use App\Data\Teams\MemberData;
+use App\Data\Teams\RoleOptionData;
+use App\Data\Teams\VisibilityOptionData;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamPermission;
 use App\Enums\TeamRole;
@@ -38,9 +40,14 @@ class MembersQuery
             environments: $environments,
             permissions: new MembersPermissionsData(
                 canInvite: $canInvite,
+                canCopyInvitationLinks: $gate->allows('copyInvitationLink', $team),
                 canManageMembers: $canManageMembers,
+                canTransferOwnership: $gate->allows('transferOwnership', $team),
             ),
             matrix: $this->matrix(),
+            roles: array_map(RoleOptionData::of(...), TeamRole::cases()),
+            assignableRoles: array_map(RoleOptionData::of(...), TeamRole::assignable()),
+            visibilities: array_map(VisibilityOptionData::of(...), MemberVisibility::cases()),
             invitationExpiresDays: TeamInvitation::lifetimeDays(),
         );
     }
@@ -54,7 +61,7 @@ class MembersQuery
         $labels = [];
 
         foreach ($environments as $option) {
-            $labels[$option->id] = $option->name;
+            $labels[$option->id] = $option->label();
         }
 
         $memberships = $team->memberships()
@@ -78,7 +85,6 @@ class MembersQuery
                     id: $membership->user_id,
                     name: $membership->user->name,
                     email: $membership->user->email,
-                    initials: $this->initials($membership->user->name),
                     role: $membership->role,
                     roleLabel: $membership->role->label(),
                     visibility: $membership->visibility,
@@ -152,11 +158,8 @@ class MembersQuery
         return $team->environments()
             ->with('application')
             ->get()
-            ->sortBy(fn (Environment $environment) => $this->environmentLabel($environment))
-            ->map(fn (Environment $environment) => new EnvironmentOptionData(
-                id: $environment->id,
-                name: $this->environmentLabel($environment),
-            ))
+            ->map(fn (Environment $environment) => EnvironmentOptionData::of($environment))
+            ->sortBy(fn (EnvironmentOptionData $option) => $option->label())
             ->values()
             ->all();
     }
@@ -187,32 +190,10 @@ class MembersQuery
             TeamPermission::CancelInvitation => __('Revoke an invitation'),
             TeamPermission::ManageApplications => __('Create and edit applications and environments'),
             TeamPermission::ManageCredentials => __('Manage the credentials'),
-            TeamPermission::ManageAlertRules => __('Edit thresholds and recipients'),
-            TeamPermission::MuteAlert => __('Mute an alert'),
-            TeamPermission::HandleAnomaly => __('Mark an anomaly handled'),
+            TeamPermission::ManageAlertRules => __('Edit thresholds and notifications'),
+            TeamPermission::MuteAlert => __('Mute an alert or plan maintenance'),
+            TeamPermission::HandleAlert => __('Mark an alert as handled'),
             TeamPermission::TestConnection => __('Test the connection'),
         };
-    }
-
-    private function environmentLabel(Environment $environment): string
-    {
-        return $environment->application->name.' / '.$environment->name;
-    }
-
-    private function initials(string $name): string
-    {
-        $parts = preg_split('/\s+/u', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
-
-        if ($parts === []) {
-            return '';
-        }
-
-        $initials = mb_substr($parts[0], 0, 1);
-
-        if (count($parts) > 1) {
-            $initials .= mb_substr($parts[count($parts) - 1], 0, 1);
-        }
-
-        return mb_strtoupper($initials);
     }
 }

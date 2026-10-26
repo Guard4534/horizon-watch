@@ -2,20 +2,20 @@
 import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import {
+    failedLastHourText,
     hasMeasurement,
     needsAttention,
-    pendingTone,
     statusText,
     statusTone,
+    thresholdTone,
     troubledStyle,
 } from '@/components/monitoring/environment/readings';
+import PasswordNeededTag from '@/components/monitoring/PasswordNeededTag.vue';
 import EnvPill from '@/components/nocturne/EnvPill.vue';
-import EnvSwatch from '@/components/nocturne/EnvSwatch.vue';
 import StatusLamp from '@/components/nocturne/StatusLamp.vue';
 import TrendLine from '@/components/nocturne/TrendLine.vue';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import { thresholdOf } from '@/lib/alertRules';
-import { formatCount, formatWait, waitColor } from '@/lib/monitoring';
+import { formatCount, formatSeconds } from '@/lib/monitoring';
 import { show as showEnvironment } from '@/routes/environments';
 
 const { environment } = defineProps<{
@@ -47,25 +47,38 @@ const hasNumbers = computed(() => hasMeasurement(environment));
         :class="{ 'env-card-link': environment.watched }"
         :style="cardStyle"
     >
-        <EnvSwatch :color="environment.color" shape="edge" :size="4" />
-        <span class="flex items-center gap-2">
+        <span class="flex flex-wrap items-center gap-2">
             <span class="min-w-0">
                 <EnvPill
                     :name="environment.name"
-                    :color="environment.color"
+                    :type="environment.type"
                     :size="13"
                 />
             </span>
-            <StatusLamp :status="environment.status" />
-            <span class="nc-t-2xs ml-auto flex-none" :style="{ color: tone }">{{
-                statusText(environment)
-            }}</span>
+            <span
+                class="nc-t-2xs ml-auto inline-flex flex-none items-center gap-[5px]"
+                :style="{ color: tone }"
+            >
+                <StatusLamp
+                    :status="environment.status"
+                    :tone="tone"
+                    :size="6"
+                    decorative
+                />
+                {{ statusText(environment) }}
+            </span>
         </span>
         <span
             class="nc-t-2xs nc-tone-faint mt-[3px] block truncate"
             style="letter-spacing: 0.01em"
         >
             {{ environment.horizonUrl.replace(/^https?:\/\//, '') }}
+        </span>
+        <span
+            v-if="environment.passwordNeeded"
+            class="mt-[var(--nc-space-2)] block"
+        >
+            <PasswordNeededTag />
         </span>
         <span
             v-if="!environment.watched"
@@ -83,12 +96,7 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                 :values="environment.trend"
                 :width="190"
                 :height="26"
-                :color="
-                    environment.status === 'active' ||
-                    environment.status === null
-                        ? 'var(--nc-accent)'
-                        : tone
-                "
+                color="var(--nc-neutral-400)"
                 fill
             />
         </span>
@@ -102,9 +110,10 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                     style="font-size: 16px"
                     :style="{
                         color: hasNumbers
-                            ? pendingTone(
+                            ? thresholdTone(
+                                  environment,
+                                  'queue.pending',
                                   environment.pending,
-                                  thresholdOf(environment, 'queue.pending'),
                               )
                             : undefined,
                     }"
@@ -122,20 +131,58 @@ const hasNumbers = computed(() => hasMeasurement(environment));
                     style="font-size: 16px"
                     :style="{
                         color: hasNumbers
-                            ? waitColor(
+                            ? thresholdTone(
+                                  environment,
+                                  'queue.max_wait',
                                   environment.maxWaitSeconds,
-                                  thresholdOf(environment, 'queue.max_wait'),
                               )
                             : undefined,
                     }"
                     >{{
                         hasNumbers
-                            ? formatWait(environment.maxWaitSeconds)
+                            ? formatSeconds(environment.maxWaitSeconds)
                             : '—'
                     }}</span
                 >
                 <span class="nc-micro nc-tone-faint block">{{
                     $t('Max wait')
+                }}</span>
+            </span>
+            <span>
+                <span
+                    class="block"
+                    style="font-size: 16px"
+                    :style="{
+                        color: hasNumbers
+                            ? thresholdTone(
+                                  environment,
+                                  'jobs.failed_per_hour',
+                                  environment.failedLastHour,
+                              )
+                            : undefined,
+                    }"
+                    >{{
+                        hasNumbers ? failedLastHourText(environment) : '—'
+                    }}</span
+                >
+                <span class="nc-micro nc-tone-faint block leading-tight">{{
+                    $t('Failed · last hour')
+                }}</span>
+            </span>
+            <span>
+                <span class="block" style="font-size: 16px">{{
+                    hasNumbers ? environment.workers : '—'
+                }}</span>
+                <span class="nc-micro nc-tone-faint block">{{
+                    $t('Workers')
+                }}</span>
+            </span>
+            <span>
+                <span class="block" style="font-size: 16px">{{
+                    hasNumbers ? `${environment.jobsPerMinute}/min` : '—'
+                }}</span>
+                <span class="nc-micro nc-tone-faint block">{{
+                    $t('Throughput')
                 }}</span>
             </span>
             <span>

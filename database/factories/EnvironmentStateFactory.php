@@ -45,6 +45,9 @@ class EnvironmentStateFactory extends Factory
             ],
             'pending_jobs' => [],
             'latency_ms' => fake()->numberBetween(20, 250),
+            'last_known_status' => fn (array $attributes) => $attributes['error'] === null ? $attributes['status'] : null,
+            'last_known_since' => fn (array $attributes) => $attributes['error'] === null ? $attributes['status_since'] : null,
+            'last_known_at' => fn (array $attributes) => $attributes['error'] === null ? $attributes['captured_at'] : null,
         ];
     }
 

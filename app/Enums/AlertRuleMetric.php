@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Externals\Horizon\HorizonReader;
+
 enum AlertRuleMetric: string
 {
     case HorizonMasterInactive = 'horizon.master_inactive';
@@ -21,6 +23,11 @@ enum AlertRuleMetric: string
             self::QueueMaxWait, self::JobRuntime => 's',
             self::WorkersMissing => '',
         };
+    }
+
+    public function comparator(): string
+    {
+        return $this->isStateRule() || $this === self::WorkersMissing ? '≥' : '>';
     }
 
     public function defaultThreshold(): float
@@ -59,7 +66,10 @@ enum AlertRuleMetric: string
     {
         return match ($this) {
             self::HorizonMasterInactive, self::EndpointUnreachable, self::HorizonPaused => 1440,
-            self::JobsFailedPerHour => 49,
+            self::JobsFailedPerHour => (float) max(1, min(
+                config()->integer('horizon-watch.horizon.max_jobs'),
+                config()->integer('horizon-watch.horizon.max_job_pages') * HorizonReader::JOBS_PER_PAGE,
+            ) - 1),
             self::QueuePending => 2147483647,
             self::QueueMaxWait, self::JobRuntime => 86400,
             self::WorkersMissing => 1000,

@@ -4,11 +4,11 @@ import { ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Spinner } from '@/components/ui/spinner';
+import { invalidField } from '@/lib/fieldErrors';
 import { update } from '@/routes/password';
 
 defineOptions({
     layout: {
-        kicker: 'Sign in',
         title: 'Choose a new password',
         description: '',
     },
@@ -17,7 +17,7 @@ defineOptions({
 const props = defineProps<{
     token: string;
     email: string;
-    passwordRules: string;
+    passwordPolicy: App.Data.Auth.PasswordPolicyData;
 }>();
 
 const inputEmail = ref(props.email);
@@ -43,21 +43,25 @@ const inputEmail = ref(props.email);
                 autocomplete="email"
                 v-model="inputEmail"
                 readonly
+                v-bind="invalidField('email', errors.email)"
             />
-            <InputError :message="errors.email" />
+            <InputError field="email" :message="errors.email" />
         </div>
 
         <div class="nc-field">
             <label for="password">{{ $t('Password') }}</label>
             <PasswordInput
                 id="password"
-                class="nc-input"
                 name="password"
                 autocomplete="new-password"
                 autofocus
-                :passwordrules="passwordRules"
+                :passwordrules="passwordPolicy.rules"
+                v-bind="invalidField('password', errors.password)"
             />
-            <InputError :message="errors.password" />
+            <div class="nc-t-2xs nc-tone-faint">
+                {{ passwordPolicy.description }}
+            </div>
+            <InputError field="password" :message="errors.password" />
         </div>
 
         <div class="nc-field">
@@ -66,12 +70,20 @@ const inputEmail = ref(props.email);
             }}</label>
             <PasswordInput
                 id="password_confirmation"
-                class="nc-input"
                 name="password_confirmation"
                 autocomplete="new-password"
-                :passwordrules="passwordRules"
+                :passwordrules="passwordPolicy.rules"
+                v-bind="
+                    invalidField(
+                        'password_confirmation',
+                        errors.password_confirmation,
+                    )
+                "
             />
-            <InputError :message="errors.password_confirmation" />
+            <InputError
+                field="password_confirmation"
+                :message="errors.password_confirmation"
+            />
         </div>
 
         <button

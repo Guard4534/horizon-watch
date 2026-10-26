@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { useForm } from '@inertiajs/vue3';
+import { useForm, usePage } from '@inertiajs/vue3';
 import { PhDotsThree } from '@phosphor-icons/vue';
 import { computed, ref } from 'vue';
+import FormErrors from '@/components/FormErrors.vue';
+import Avatar from '@/components/nocturne/Avatar.vue';
+import EnvPill from '@/components/nocturne/EnvPill.vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
+import LeaveOrganizationModal from '@/components/teams/LeaveOrganizationModal.vue';
 import {
     Dialog,
     DialogContent,
@@ -20,26 +24,31 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useTeamSlug } from '@/composables/useTeamSlug';
-import {
-    ASSIGNABLE_ROLES,
-    losingTheLastAdmin as losesTheLastAdmin,
-    assignableRoleName,
-    roleTagClass,
-    VISIBILITIES,
-    visibilityLabel,
-} from '@/lib/members';
+import { roleTagClass } from '@/lib/members';
 import {
     destroy as destroyMember,
+    transferOwnership,
     update as updateMember,
 } from '@/routes/members';
 
-const { members, environments, canManage } = defineProps<{
+const {
+    members,
+    environments,
+    roles,
+    visibilities,
+    canManage,
+    canTransferOwnership,
+} = defineProps<{
     members: App.Data.Teams.MemberData[];
     environments: App.Data.Pages.EnvironmentOptionData[];
+    roles: App.Data.Teams.RoleOptionData[];
+    visibilities: App.Data.Teams.VisibilityOptionData[];
     canManage: boolean;
+    canTransferOwnership: boolean;
 }>();
 
 const slug = useTeamSlug();
+const shared = usePage();
 
 const form = useForm<App.Data.Teams.UpdateMemberData>({
     role: null,
@@ -59,13 +68,14 @@ const manualFor = ref<App.Data.Teams.MemberData | null>(null);
 const manualIds = ref<number[]>([]);
 
 const removing = ref<App.Data.Teams.MemberData | null>(null);
-
-const losingTheLastAdmin = computed(() =>
-    losesTheLastAdmin(removing.value, removing.value?.isSelf === true, members),
-);
+const transferring = ref<App.Data.Teams.MemberData | null>(null);
+const leaving = ref<App.Data.Teams.UserTeamData | null>(null);
 
 const isActionable = (member: App.Data.Teams.MemberData) =>
     canManage && !member.isOwner;
+
+const hasMenu = (member: App.Data.Teams.MemberData) =>
+    isActionable(member) || (member.isSelf && !member.isOwner);
 
 function patch(
     member: App.Data.Teams.MemberData,
@@ -119,6 +129,23 @@ function saveManual() {
     );
 }
 
+function confirmTransfer() {
+    const member = transferring.value;
+
+    if (!member) {
+        return;
+    }
+
+    form.transform(() => ({})).post(
+        transferOwnership([slug.value, member.id]).url,
+        {
+            preserveScroll: true,
+            onSuccess: () => (transferring.value = null),
+            onError: () => (transferring.value = null),
+        },
+    );
+}
+
 function confirmRemove() {
     const member = removing.value;
 
@@ -139,18 +166,11 @@ function confirmRemove() {
 
 <template>
     <SectionCard :title="`${$t('Members')} · ${members.length}`">
-        <div
-            v-if="errors.length && manualFor === null"
-            class="nc-t-xs nc-tone-down mb-[var(--nc-space-3)]"
-            style="
-                border-radius: var(--nc-radius-md);
-                border: 1px solid var(--st-down);
-                padding: 8px 10px;
-            "
-            role="alert"
-        >
-            <p v-for="message in errors" :key="message">{{ message }}</p>
-        </div>
+        <FormErrors
+            v-if="manualFor === null"
+            class="mb-[var(--nc-space-3)]"
+            :errors="errors"
+        />
 
         <div class="overflow-x-auto">
             <table class="nc-table">
@@ -166,19 +186,7 @@ function confirmRemove() {
                     <tr v-for="member in members" :key="member.id">
                         <td>
                             <div class="flex items-center gap-[9px]">
-                                <span
-                                    class="grid place-items-center"
-                                    style="
-                                        width: 26px;
-                                        height: 26px;
-                                        flex: none;
-                                        border-radius: 50%;
-                                        background: var(--nc-neutral-800);
-                                        color: var(--nc-neutral-200);
-                                        font-size: 10px;
-                                    "
-                                    >{{ member.initials }}</span
-                                >
+                                <Avatar :name="member.name" />
                                 <div>
                                     <div
                                         class="nc-t-sm flex items-center gap-2"
@@ -211,7 +219,7 @@ function confirmRemove() {
                             </div>
                         </td>
                         <td class="nc-right">
-                            <DropdownMenu v-if="isActionable(member)">
+                            <DropdownMenu v-if="hasMenu(member)">
                                 <DropdownMenuTrigger as-child>
                                     <button
                                         type="button"
@@ -227,39 +235,91 @@ function confirmRemove() {
                                     </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuLabel>{{
-                                        $t('Role')
-                                    }}</DropdownMenuLabel>
+                                    <template v-if="isActionable(member)">
+                                        <DropdownMenuLabel>{{
+                                            $t('Role')
+                                        }}</DropdownMenuLabel>
+                                        <DropdownMenuItem
+                                            v-for="option in roles"
+                                            :key="option.value"
+                                            :disabled="
+                                                member.role === option.value
+                                            "
+                                            @click="
+                                                changeRole(member, option.value)
+                                            "
+                                        >
+                                            {{ option.label }}
+                                        </DropdownMenuItem>
+                                        <template
+                                            v-if="member.role !== 'admin'"
+                                        >
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuLabel>{{
+                                                $t('Visible environments')
+                                            }}</DropdownMenuLabel>
+                                            <DropdownMenuItem
+                                                v-for="option in visibilities"
+                                                :key="option.value"
+                                                :disabled="
+                                                    member.visibility ===
+                                                        option.value &&
+                                                    option.value !== 'manual'
+                                                "
+                                                @click="
+                                                    changeVisibility(
+                                                        member,
+                                                        option.value,
+                                                    )
+                                                "
+                                            >
+                                                <div class="flex flex-col">
+                                                    <span
+                                                        >{{ option.label
+                                                        }}{{
+                                                            option.value ===
+                                                            'manual'
+                                                                ? '…'
+                                                                : ''
+                                                        }}</span
+                                                    >
+                                                    <span
+                                                        v-if="
+                                                            option.value ===
+                                                            'non_production'
+                                                        "
+                                                        class="nc-t-2xs nc-tone-faint max-w-[240px]"
+                                                        >{{
+                                                            $t(
+                                                                'Hides every environment of type Production.',
+                                                            )
+                                                        }}</span
+                                                    >
+                                                </div>
+                                            </DropdownMenuItem>
+                                        </template>
+                                        <template v-if="canTransferOwnership">
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                data-test="member-transfer-ownership"
+                                                @click="transferring = member"
+                                            >
+                                                {{ $t('Transfer ownership') }}…
+                                            </DropdownMenuItem>
+                                        </template>
+                                        <DropdownMenuSeparator />
+                                    </template>
                                     <DropdownMenuItem
-                                        v-for="role in ASSIGNABLE_ROLES"
-                                        :key="role"
-                                        :disabled="member.role === role"
-                                        @click="changeRole(member, role)"
-                                    >
-                                        {{ assignableRoleName(role) }}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuLabel>{{
-                                        $t('Visible environments')
-                                    }}</DropdownMenuLabel>
-                                    <DropdownMenuItem
-                                        v-for="visibility in VISIBILITIES"
-                                        :key="visibility"
-                                        :disabled="
-                                            member.visibility === visibility &&
-                                            visibility !== 'manual'
-                                        "
+                                        v-if="member.isSelf"
+                                        class="nc-tone-down"
                                         @click="
-                                            changeVisibility(member, visibility)
+                                            leaving = shared.props.currentTeam
                                         "
                                     >
-                                        {{ visibilityLabel(visibility)
-                                        }}{{
-                                            visibility === 'manual' ? '…' : ''
-                                        }}
+                                        {{ $t('Leave the organization') }}
                                     </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem
+                                        v-else
                                         class="nc-tone-down"
                                         @click="removing = member"
                                     >
@@ -292,21 +352,29 @@ function confirmRemove() {
                 </DialogDescription>
             </DialogHeader>
 
-            <div
+            <form
+                id="manual-visibility-form"
                 class="flex max-h-[45vh] flex-col overflow-y-auto"
                 style="gap: var(--nc-space-2)"
+                @submit.prevent="saveManual"
             >
                 <label
                     v-for="environment in environments"
                     :key="environment.id"
-                    class="nc-t-sm flex items-center gap-2"
+                    class="nc-checkbox nc-t-sm"
                 >
                     <input
                         v-model="manualIds"
                         type="checkbox"
                         :value="environment.id"
                     />
-                    {{ environment.name }}
+                    <span class="nc-box" />
+                    <span class="min-w-0"
+                        >{{ environment.applicationName }} /
+                        <EnvPill
+                            :name="environment.name"
+                            :type="environment.type"
+                    /></span>
                 </label>
                 <div v-if="!environments.length" class="nc-t-xs nc-tone-muted">
                     {{
@@ -315,18 +383,11 @@ function confirmRemove() {
                         )
                     }}
                 </div>
-            </div>
+            </form>
 
-            <p
-                v-for="message in errors"
-                :key="message"
-                class="nc-t-xs nc-tone-down"
-                role="alert"
-            >
-                {{ message }}
-            </p>
+            <FormErrors :errors="errors" />
 
-            <DialogFooter class="gap-2">
+            <DialogFooter>
                 <button
                     type="button"
                     class="nc-btn nc-btn-secondary"
@@ -335,10 +396,10 @@ function confirmRemove() {
                     {{ $t('Cancel') }}
                 </button>
                 <button
-                    type="button"
+                    type="submit"
+                    form="manual-visibility-form"
                     class="nc-btn nc-btn-primary"
                     :disabled="form.processing"
-                    @click="saveManual"
                 >
                     {{ $t('Save') }}
                 </button>
@@ -357,32 +418,16 @@ function confirmRemove() {
                 }}</DialogTitle>
                 <DialogDescription>
                     {{
-                        removing?.isSelf
-                            ? $t(
-                                  'You lose access to every environment of this organization. Your account and your other organizations are untouched, and you can be invited again.',
-                              )
-                            : $t(
-                                  'They lose access to every environment of this organization. Their account and their other organizations are untouched, and they can be invited again.',
-                              )
+                        $t(
+                            'They lose access to every environment of this organization. Their account and their other organizations are untouched, and they can be invited again.',
+                        )
                     }}
                 </DialogDescription>
             </DialogHeader>
 
             <p class="nc-t-sm">{{ removing?.name }}</p>
 
-            <p
-                v-if="losingTheLastAdmin"
-                class="nc-t-xs"
-                style="color: var(--st-warn)"
-            >
-                {{
-                    $t(
-                        'You are the only admin besides the owner: after this, nobody but the owner will be able to invite, remove or change members.',
-                    )
-                }}
-            </p>
-
-            <DialogFooter class="gap-2">
+            <DialogFooter>
                 <button
                     type="button"
                     class="nc-btn nc-btn-secondary"
@@ -392,8 +437,7 @@ function confirmRemove() {
                 </button>
                 <button
                     type="button"
-                    class="nc-btn nc-btn-primary"
-                    style="background: var(--st-down)"
+                    class="nc-btn nc-btn-danger"
                     :disabled="form.processing"
                     @click="confirmRemove"
                 >
@@ -402,4 +446,48 @@ function confirmRemove() {
             </DialogFooter>
         </DialogContent>
     </Dialog>
+
+    <Dialog
+        :open="transferring !== null"
+        @update:open="(open) => !open && (transferring = null)"
+    >
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>{{ $t('Transfer ownership') }}</DialogTitle>
+                <DialogDescription>
+                    {{
+                        $t(
+                            'The new owner gets every permission, deleting the organization included. You stay on as an admin, and only the new owner can hand ownership back.',
+                        )
+                    }}
+                </DialogDescription>
+            </DialogHeader>
+
+            <p class="nc-t-sm">
+                {{ transferring?.name }}
+                <span class="nc-tone-muted">· {{ transferring?.email }}</span>
+            </p>
+
+            <DialogFooter>
+                <button
+                    type="button"
+                    class="nc-btn nc-btn-secondary"
+                    @click="transferring = null"
+                >
+                    {{ $t('Cancel') }}
+                </button>
+                <button
+                    type="button"
+                    class="nc-btn nc-btn-primary"
+                    data-test="confirm-transfer-ownership"
+                    :disabled="form.processing"
+                    @click="confirmTransfer"
+                >
+                    {{ $t('Transfer ownership') }}
+                </button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
+    <LeaveOrganizationModal v-model:organization="leaving" />
 </template>

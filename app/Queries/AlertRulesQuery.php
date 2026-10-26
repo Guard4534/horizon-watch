@@ -3,7 +3,6 @@
 namespace App\Queries;
 
 use App\Data\Pages\AlertRulesPageData;
-use App\Data\Pages\NotificationSummaryData;
 use App\Models\AlertRule;
 use App\Models\Team;
 use App\Models\User;
@@ -38,13 +37,17 @@ class AlertRulesQuery
             scope: $scope,
             rules: $this->monitoring->alertRules($team, $scope),
             organizationRules: $scope === AlertRule::ORGANIZATION ? [] : $this->monitoring->alertRules($team, AlertRule::ORGANIZATION),
-            notificationSummary: NotificationSummaryData::of($settings),
+            notificationSummary: $this->monitoring->notificationSummary($team),
             notifications: $canManage ? $settings : null,
             canManage: $canManage,
             newWebhookSecret: $canManage ? $this->newWebhookSecret($team, $session) : null,
             repeatChoices: array_values(array_map(intval(...), config()->array('horizon-watch.notifications.repeat_minutes'))),
             maxRecipients: config()->integer('horizon-watch.notifications.max_recipients'),
+            previousSecretHours: config()->integer('horizon-watch.notifications.previous_webhook_secret_hours'),
             timezones: $canManage ? DateTimeZone::listIdentifiers() : [],
+            maintenanceWindows: $this->monitoring->maintenanceWindows($team),
+            maintenanceTargets: $this->monitoring->maintenanceTargets($team),
+            maintenanceMaxDays: config()->integer('horizon-watch.alerts.maintenance_max_days'),
         );
     }
 

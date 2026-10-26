@@ -3,12 +3,12 @@ import { Form, Head } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Spinner } from '@/components/ui/spinner';
+import { invalidField } from '@/lib/fieldErrors';
 import { login } from '@/routes';
 import { email } from '@/routes/password';
 
 defineOptions({
     layout: {
-        kicker: 'Sign in',
         title: 'Forgot your password?',
         description: 'Enter your email to receive a password reset link',
     },
@@ -42,11 +42,13 @@ defineProps<{
                 class="nc-input"
                 type="email"
                 name="email"
-                autocomplete="off"
+                required
+                autocomplete="email"
                 autofocus
                 placeholder="email@example.com"
+                v-bind="invalidField('email', errors.email)"
             />
-            <InputError :message="errors.email" />
+            <InputError field="email" :message="errors.email" />
         </div>
 
         <button

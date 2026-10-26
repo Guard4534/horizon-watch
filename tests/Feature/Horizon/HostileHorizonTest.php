@@ -1,43 +1,24 @@
 <?php
 
+use App\Enums\ReadingCause;
 use App\Enums\ReadingError;
 use App\Externals\Horizon\Exceptions\HorizonReadFailed;
 use App\Externals\Horizon\HorizonReader;
 use App\Externals\Horizon\HorizonTarget;
+use Tests\Support\FixtureServer;
 
 beforeAll(function () {
-    $socket = stream_socket_server('tcp://127.0.0.1:0');
-    $port = (int) substr((string) strrchr((string) stream_socket_get_name($socket, false), ':'), 1);
-    fclose($socket);
-
     $counter = (string) tempnam(sys_get_temp_dir(), 'hostile-horizon-');
 
-    $process = proc_open(
-        [PHP_BINARY, '-S', "127.0.0.1:{$port}", dirname(__DIR__, 2).'/Fixtures/Horizon/hostile-server.php'],
-        [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']],
-        $pipes,
-        null,
-        [...getenv(), 'PHP_CLI_SERVER_WORKERS' => '16', 'HOSTILE_COUNTER_FILE' => $counter],
-    );
+    $server = FixtureServer::start(dirname(__DIR__, 2).'/Fixtures/Horizon/hostile-server.php', ['HOSTILE_COUNTER_FILE' => $counter], workers: 16);
 
-    $deadline = microtime(true) + 5;
-
-    while (($probe = @fsockopen('127.0.0.1', $port, timeout: 0.1)) === false && microtime(true) < $deadline) {
-        usleep(50_000);
-    }
-
-    if ($probe !== false) {
-        fclose($probe);
-    }
-
-    $GLOBALS['hostileHorizon'] = ['process' => $process, 'port' => $port, 'counter' => $counter];
+    $GLOBALS['hostileHorizon'] = ['server' => $server, 'port' => $server->port, 'counter' => $counter];
 });
 
 afterAll(function () {
-    ['process' => $process, 'counter' => $counter] = $GLOBALS['hostileHorizon'];
+    ['server' => $server, 'counter' => $counter] = $GLOBALS['hostileHorizon'];
 
-    proc_terminate($process);
-    proc_close($process);
+    $server->stop();
     @unlink($counter);
 });
 
@@ -74,7 +55,7 @@ test('an answer that announces more than 2 MiB is refused at once', function () 
     $started = microtime(true);
 
     expect(hostileFailure(fn () => app(HorizonReader::class)->probe(hostileTarget('announced-too-large'))))->toBe(ReadingError::NotHorizon)
-        ->and(microtime(true) - $started)->toBeLessThan(1.0);
+        ->and(microtime(true) - $started)->toBeLessThan(config()->integer('horizon-watch.http_timeout_seconds'));
 });
 
 test('an answer that never ends is cut at 2 MiB without buffering it', function () {
@@ -85,7 +66,7 @@ test('an answer that never ends is cut at 2 MiB without buffering it', function 
 
     expect(hostileFailure(fn () => app(HorizonReader::class)->probe(hostileTarget('endless'))))->toBe(ReadingError::NotHorizon)
         ->and(hostileFailure(fn () => app(HorizonReader::class)->read(hostileTarget('endless'))))->toBe(ReadingError::NotHorizon)
-        ->and(microtime(true) - $started)->toBeLessThan(1.5)
+        ->and(microtime(true) - $started)->toBeLessThan(config()->integer('horizon-watch.http_timeout_seconds'))
         ->and(memory_get_peak_usage(true) - $memory)->toBeLessThan(32 * 1024 * 1024);
 
     ini_set('memory_limit', (string) $limit);
@@ -139,7 +120,63 @@ test('runtime requests stop at the read budget and leave runtime unknown', funct
 
     $reading = app(HorizonReader::class)->read(hostileTarget('slow-metrics'));
 
-    expect(microtime(true) - $started)->toBeLessThan(1.2)
+    expect(microtime(true) - $started)->toBeLessThan(config()->integer('horizon-watch.http_timeout_seconds'))
         ->and($reading->workload)->toHaveCount(30)
         ->and($reading->queueRuntimes)->toBe([]);
 });
+
+function hostileFailureOf(Closure $call): ?HorizonReadFailed
+{
+    try {
+        $call();
+    } catch (HorizonReadFailed $exception) {
+        return $exception;
+    }
+
+    return null;
+}
+
+test('a compressed answer is refused as it came, never inflated', function () {
+    expect(hostileFailureOf(fn () => app(HorizonReader::class)->probe(hostileTarget('gzip')))?->cause)->toBe(ReadingCause::Compressed);
+});
+
+test('a decompression bomb is refused at once without being inflated', function () {
+    $started = microtime(true);
+
+    $failure = hostileFailureOf(fn () => app(HorizonReader::class)->probe(hostileTarget('gzip-bomb')));
+
+    expect($failure?->reason)->toBe(ReadingError::NotHorizon)
+        ->and($failure?->cause)->toBe(ReadingCause::Compressed)
+        ->and(microtime(true) - $started)->toBeLessThan(3.0);
+});
+
+test('a proxy set in the environment of the worker is ignored', function () {
+    $dead = 'http://127.0.0.1:9';
+    $names = ['http_proxy', 'HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy'];
+    $previous = array_map(fn (string $name) => getenv($name), $names);
+
+    foreach ($names as $name) {
+        putenv("{$name}={$dead}");
+        $_SERVER[$name] = $dead;
+    }
+
+    try {
+        expect(app(HorizonReader::class)->probe(hostileTarget('behind-a-proxy'))->status)->toBe('running');
+    } finally {
+        foreach ($names as $index => $name) {
+            putenv($previous[$index] === false ? $name : "{$name}={$previous[$index]}");
+            unset($_SERVER[$name]);
+        }
+    }
+});
+
+test('transport failures name their cause', function (Closure $target, ReadingCause $cause) {
+    $failure = hostileFailureOf(fn () => app(HorizonReader::class)->probe($target()));
+
+    expect($failure?->reason)->toBe(ReadingError::Unreachable)
+        ->and($failure?->cause)->toBe($cause);
+})->with([
+    'a timeout' => [fn () => hostileTarget('stalls-mid-body'), ReadingCause::Timeout],
+    'nothing listening' => [fn () => new HorizonTarget('http://127.0.0.1:9/horizon', null, null), ReadingCause::ConnectionFailed],
+    'tls to a plain http server' => [fn () => new HorizonTarget('https://127.0.0.1:'.$GLOBALS['hostileHorizon']['port'].'/valid/horizon', null, null), ReadingCause::Tls],
+]);

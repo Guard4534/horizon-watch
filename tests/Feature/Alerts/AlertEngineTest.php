@@ -1,5 +1,7 @@
 <?php
 
+use App\Actions\Alerts\MuteAlert;
+use App\Actions\Alerts\UnmuteAlert;
 use App\Actions\Environments\UpdateEnvironment;
 use App\Actions\Monitoring\PollEnvironment;
 use App\Alerts\AlertEngine;
@@ -9,8 +11,10 @@ use App\Alerts\Events\AlertResolved;
 use App\Data\Applications\EnvironmentFormData;
 use App\Enums\AlertRuleMetric;
 use App\Enums\AlertSeverity;
-use App\Enums\EnvironmentColor;
+use App\Enums\AlertState;
+use App\Enums\EnvironmentType;
 use App\Enums\MemberVisibility;
+use App\Enums\MuteDuration;
 use App\Enums\ReadingError;
 use App\Enums\SentNotificationKind;
 use App\Enums\TeamRole;
@@ -33,6 +37,7 @@ use App\Models\Application;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
+use App\Models\MaintenanceWindow;
 use App\Models\NotificationSetting;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -52,7 +57,7 @@ beforeEach(function () {
         /** @var list<HorizonReading|Throwable|Closure(): HorizonReading> */
         public array $results = [];
 
-        public function read(HorizonTarget $target): HorizonReading
+        public function read(HorizonTarget $target, bool $oldestPendingJobs = false, ?array $knownRuntimes = null): HorizonReading
         {
             $result = array_shift($this->results) ?? throw new LogicException('No reading queued.');
 
@@ -143,7 +148,7 @@ test('a breached threshold opens one alert with the environment and rule copied 
         ->and($alert->severity)->toBe(AlertSeverity::Warning)
         ->and($alert->application_name)->toBe('Billing')
         ->and($alert->environment_name)->toBe('production')
-        ->and($alert->environment_color)->toBe(EnvironmentColor::Prod)
+        ->and($alert->environment_type)->toBe(EnvironmentType::Production)
         ->and($alert->threshold)->toBe(2000.0)
         ->and($alert->unit)->toBe('job')
         ->and($alert->value)->toBe(2500.0)
@@ -151,7 +156,7 @@ test('a breached threshold opens one alert with the environment and rule copied 
         ->and($alert->opened_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
         ->and($alert->last_seen_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
         ->and($alert->resolved_at)->toBeNull()
-        ->and($alert->notified)->toBeFalse();
+        ->and($alert->wasNotified())->toBeFalse();
 
     Event::assertDispatchedTimes(AlertOpened::class, 1);
     Event::assertDispatched(AlertOpened::class, fn (AlertOpened $event) => $event->alertId === $alert->id);
@@ -283,7 +288,7 @@ test('an unreachable alert resolves with the first reading that succeeds', funct
     Event::assertDispatchedTimes(AlertResolved::class, 1);
 });
 
-test('an inactive horizon opens after five minutes and resolves when the status changes', function () {
+test('an inactive horizon opens after five minutes and resolves when it runs again', function () {
     ($this->poll)(($this->inactive)());
     $this->travel(4)->minutes();
     ($this->poll)(($this->inactive)());
@@ -297,9 +302,165 @@ test('an inactive horizon opens after five minutes and resolves when the status 
         ->and(Alert::query()->sole()->severity)->toBe(AlertSeverity::Critical);
 
     $this->travel(15)->seconds();
-    ($this->poll)(($this->unreachable)());
+    ($this->poll)(($this->reading)());
 
     expect(Alert::query()->sole()->resolved_at->toDateTimeString())->toBe('2026-09-17 10:05:15');
+});
+
+test('a failed reading neither resolves nor touches an open inactive or paused alert', function (AlertRuleMetric $metric, Closure $reading) {
+    ($this->poll)($reading->call($this));
+    $this->travel(15)->minutes();
+    ($this->poll)($reading->call($this));
+
+    $alert = Alert::query()->where('metric', $metric)->sole();
+
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->unreachable)());
+
+    $kept = Alert::query()->where('metric', $metric)->sole();
+
+    expect($kept->resolved_at)->toBeNull()
+        ->and($kept->last_seen_at->toDateTimeString())->toBe('2026-09-17 10:15:00')
+        ->and($kept->value)->toBe($alert->value);
+    Event::assertNotDispatched(AlertResolved::class);
+
+    $this->travel(15)->seconds();
+    ($this->poll)($reading->call($this));
+
+    $kept = Alert::query()->where('metric', $metric)->sole();
+
+    expect($kept->id)->toBe($alert->id)
+        ->and($kept->resolved_at)->toBeNull()
+        ->and($kept->last_seen_at->toDateTimeString())->toBe('2026-09-17 10:15:30')
+        ->and($kept->value)->toBe(15.0);
+    Event::assertDispatchedTimes(AlertOpened::class, 1);
+    Event::assertNotDispatched(AlertResolved::class);
+
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->reading)());
+
+    expect(Alert::query()->where('metric', $metric)->sole()->resolved_at->toDateTimeString())->toBe('2026-09-17 10:15:45');
+    Event::assertDispatchedTimes(AlertResolved::class, 1);
+})->with([
+    'inactive' => [AlertRuleMetric::HorizonMasterInactive, fn () => ($this->inactive)()],
+    'paused' => [AlertRuleMetric::HorizonPaused, fn () => ($this->paused)()],
+]);
+
+test('an inactive alert stays open beside the unreachable one through a long outage', function () {
+    ($this->poll)(($this->inactive)());
+    $this->travel(5)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    foreach (range(1, 4) as $ignored) {
+        $this->travel(5)->minutes();
+        ($this->poll)(($this->unreachable)());
+    }
+
+    expect(Alert::query()->open()->pluck('metric')->all())
+        ->toEqualCanonicalizing([AlertRuleMetric::HorizonMasterInactive, AlertRuleMetric::EndpointUnreachable]);
+    Event::assertNotDispatched(AlertResolved::class);
+});
+
+test('a failed reading does not restart the run of a horizon that is still inactive', function () {
+    ($this->poll)(($this->inactive)());
+    $this->travel(3)->minutes();
+    ($this->poll)(($this->unreachable)());
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    expect(Alert::query()->count())->toBe(0);
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->metric)->toBe(AlertRuleMetric::HorizonMasterInactive)
+        ->and($alert->opened_at->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and($alert->value)->toBe(5.0);
+});
+
+test('a failed reading never opens an inactive or paused alert, however long the run before it', function (int $minutes, Closure $reading) {
+    ($this->poll)($reading->call($this));
+    $this->travel($minutes - 1)->minutes();
+    ($this->poll)($reading->call($this));
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->unreachable)());
+
+    expect(Alert::query()->count())->toBe(0);
+})->with([
+    'inactive' => [5, fn () => ($this->inactive)()],
+    'paused' => [15, fn () => ($this->paused)()],
+]);
+
+test('an inactive horizon that comes back after an outage longer than the stale window waits the minutes again', function () {
+    ($this->poll)(($this->inactive)());
+    $this->travel(4)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    foreach (range(1, 4) as $ignored) {
+        $this->travel(5)->minutes();
+        ($this->poll)(($this->unreachable)());
+    }
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    expect(Alert::query()->where('metric', AlertRuleMetric::HorizonMasterInactive)->count())->toBe(0)
+        ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:25:00');
+});
+
+test('an inactive alert kept open through an outage longer than the stale window keeps its opening and measures the run afresh', function () {
+    ($this->poll)(($this->inactive)());
+    $this->travel(5)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    foreach (range(1, 4) as $ignored) {
+        $this->travel(5)->minutes();
+        ($this->poll)(($this->unreachable)());
+    }
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    $alert = Alert::query()->where('metric', AlertRuleMetric::HorizonMasterInactive)->sole();
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:26:00')
+        ->and($alert->resolved_at)->toBeNull()
+        ->and($alert->opened_at->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and($alert->last_seen_at->toDateTimeString())->toBe('2026-09-17 10:26:00')
+        ->and($alert->value)->toBe(0.0);
+    Event::assertNotDispatched(AlertResolved::class, fn (AlertResolved $event) => $event->alertId === $alert->id);
+});
+
+test('disabling a state rule during an outage resolves its open alert quietly', function (AlertRuleMetric $metric, Closure $reading) {
+    ($this->poll)($reading->call($this));
+    $this->travel(15)->minutes();
+    ($this->poll)($reading->call($this));
+
+    ($this->rule)('production', $metric, ['enabled' => false]);
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->unreachable)());
+
+    $alert = Alert::query()->where('metric', $metric)->sole();
+
+    expect($alert->resolved_at->toDateTimeString())->toBe('2026-09-17 10:15:15')
+        ->and($alert->resolution_notified_at?->toDateTimeString())->toBe('2026-09-17 10:15:15');
+    Event::assertNotDispatched(AlertResolved::class);
+})->with([
+    'inactive' => [AlertRuleMetric::HorizonMasterInactive, fn () => ($this->inactive)()],
+    'paused' => [AlertRuleMetric::HorizonPaused, fn () => ($this->paused)()],
+]);
+
+test('a failed reading between two different states starts the run at the second one', function () {
+    ($this->poll)(($this->inactive)());
+    $this->travel(10)->minutes();
+    ($this->poll)(($this->unreachable)());
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->paused)());
+
+    expect(Alert::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:11:00');
 });
 
 test('a paused horizon opens after fifteen minutes and resolves when it runs again', function () {
@@ -387,7 +548,7 @@ test('a quiet resolution is never told, neither by the catch-up nor by the diges
 
     ($this->poll)(($this->reading)(['workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 95, processes: 7)]]));
 
-    Alert::query()->where('metric', AlertRuleMetric::QueuePending)->update(['notified' => true, 'last_notified_at' => now()]);
+    Alert::query()->where('metric', AlertRuleMetric::QueuePending)->update(['last_notified_at' => now()]);
     Alert::query()->where('metric', AlertRuleMetric::QueueMaxWait)->update(['digested_at' => now()]);
 
     if ($disabled) {
@@ -476,6 +637,18 @@ test('each threshold rule stores its own value and detail', function (array $ove
         AlertRuleMetric::JobsFailedPerHour,
         21.0,
         ['failed' => 21],
+    ],
+    'failed per hour, past the jobs that were read' => [
+        ['failedJobsTruncated' => true, 'failedJobs' => array_map(fn (int $minute) => new HorizonFailedJob(
+            name: 'App\\Jobs\\SendInvoiceEmail',
+            queue: 'emails',
+            exception: 'RuntimeException: The mail server did not answer',
+            attempts: 3,
+            failedAt: CarbonImmutable::parse('2026-09-17 10:00:00')->subMinutes($minute % 60),
+        ), range(1, 200))],
+        AlertRuleMetric::JobsFailedPerHour,
+        200.0,
+        ['failed' => 200, 'atLeast' => true],
     ],
     'job runtime' => [
         ['pendingJobs' => [
@@ -655,9 +828,11 @@ test('deleting an organization removes its alerts, rules, settings and log, and 
     AlertNotification::factory()->create(['alert_id' => null, 'team_id' => $this->team->id, 'kind' => SentNotificationKind::Test]);
     ($this->rule)('organization', AlertRuleMetric::QueuePending, ['threshold' => 10]);
     NotificationSetting::factory()->for($this->team)->create();
+    MaintenanceWindow::factory()->for($this->team)->create();
 
     $survivor = Alert::factory()->for(Environment::factory())->create();
     AlertNotification::factory()->for($survivor)->create();
+    MaintenanceWindow::factory()->for($survivor->team)->create();
     AlertRule::factory()->for($survivor->team)->create();
     NotificationSetting::factory()->for($survivor->team)->create();
 
@@ -668,6 +843,7 @@ test('deleting an organization removes its alerts, rules, settings and log, and 
     $this->assertSoftDeleted('teams', ['id' => $this->team->id]);
 
     expect(Alert::query()->pluck('id')->all())->toBe([$survivor->id])
+        ->and(MaintenanceWindow::query()->pluck('team_id')->all())->toBe([$survivor->team_id])
         ->and(AlertNotification::query()->pluck('team_id')->unique()->all())->toBe([$survivor->team_id])
         ->and(AlertRule::query()->pluck('team_id')->all())->toBe([$survivor->team_id])
         ->and(NotificationSetting::query()->pluck('team_id')->all())->toBe([$survivor->team_id]);
@@ -716,7 +892,7 @@ test('the first active reading after an inactive one judges the thresholds again
 test('a notified alert keeps its severity when the rule is lowered, so its resolution is still told', function () {
     ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
     ($this->poll)(($this->pending)(2500));
-    Alert::query()->update(['notified' => true]);
+    Alert::query()->update(['last_notified_at' => now()]);
 
     AlertRule::query()->update(['severity' => AlertSeverity::Warning]);
     $this->travel(15)->seconds();
@@ -742,7 +918,7 @@ test('an alert not notified yet follows a lowered severity', function () {
 
 test('a notified warning is still raised to critical', function () {
     ($this->poll)(($this->pending)(2500));
-    Alert::query()->update(['notified' => true]);
+    Alert::query()->update(['last_notified_at' => now()]);
 
     ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
     $this->travel(15)->seconds();
@@ -874,7 +1050,7 @@ test('a new address keeps an open state alert open while the environment stays i
 
     app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
         name: 'production',
-        color: EnvironmentColor::Prod,
+        type: EnvironmentType::Production,
         horizonUrl: 'https://horizon.example.net/horizon',
         pollIntervalSeconds: 300,
     ));
@@ -1009,7 +1185,7 @@ test('an alert open before a long pause survives it, with its opening kept and t
 test('resuming the collection starts a new run even within the stale window', function () {
     $edit = fn (bool $pollingEnabled) => app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
         name: 'production',
-        color: EnvironmentColor::Prod,
+        type: EnvironmentType::Production,
         horizonUrl: $this->environment->horizon_url,
         pollIntervalSeconds: 300,
         basicAuthUser: 'monitor',
@@ -1030,13 +1206,39 @@ test('resuming the collection starts a new run even within the stale window', fu
         ->and(Alert::query()->count())->toBe(0);
 });
 
+test('resuming the collection during an outage does not bring back the run from before it', function () {
+    $edit = fn (bool $pollingEnabled) => app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
+        name: 'production',
+        type: EnvironmentType::Production,
+        horizonUrl: $this->environment->horizon_url,
+        pollIntervalSeconds: 300,
+        basicAuthUser: 'monitor',
+        pollingEnabled: $pollingEnabled,
+    ));
+
+    ($this->poll)(($this->inactive)());
+    $this->travel(3)->minutes();
+    ($this->poll)(($this->unreachable)());
+    $edit(false);
+    $this->travel(1)->minutes();
+    $edit(true);
+
+    expect(EnvironmentState::query()->sole()->last_known_since)->toBeNull();
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->inactive)());
+
+    expect(EnvironmentState::query()->sole()->status_since->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and(Alert::query()->count())->toBe(0);
+});
+
 test('saving an environment that keeps collecting leaves its run alone', function () {
     ($this->poll)(($this->unreachable)());
     $this->travel(1)->minutes();
 
     app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
         name: 'production',
-        color: EnvironmentColor::Prod,
+        type: EnvironmentType::Production,
         horizonUrl: $this->environment->horizon_url,
         pollIntervalSeconds: 300,
         basicAuthUser: 'monitor',
@@ -1077,4 +1279,423 @@ test('a quiet resolution locks its alerts in the order the digest uses before it
 
     expect($lock)->toBeLessThan(PHP_INT_MAX)
         ->and($lock)->toBeLessThan(firstStatementIndex($statements, 'update "alerts"'));
+});
+
+test('a threshold rule with a duration opens only once the breach has lasted that long', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 5]);
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(4)->minutes();
+    ($this->poll)(($this->pending)(2600));
+
+    expect(Alert::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->sole()->breach_runs)->toBe([
+            'queue.pending' => ['since' => '2026-09-17T10:00:00.000000Z', 'seen' => '2026-09-17T10:04:00.000000Z'],
+        ]);
+    Event::assertNotDispatched(AlertOpened::class);
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2700));
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->opened_at->toDateTimeString())->toBe('2026-09-17 10:05:00')
+        ->and($alert->value)->toBe(2700.0);
+    Event::assertDispatchedTimes(AlertOpened::class, 1);
+});
+
+test('a rule without a duration opens at once and keeps no run', function () {
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    expect(Alert::query()->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:00:00')
+        ->and(EnvironmentState::query()->sole()->breach_runs)->toBeNull();
+});
+
+test('a reading back under the threshold restarts the wait, so a flapping queue opens nothing', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 2]);
+
+    foreach ([2500, 10, 2500, 10, 2500, 10, 2500] as $pending) {
+        ($this->poll)(($this->pending)($pending));
+        $this->travel(1)->minutes();
+    }
+
+    expect(Alert::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->sole()->breach_runs['queue.pending']['since'])->toBe('2026-09-17T10:06:00.000000Z');
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:08:00');
+});
+
+test('a healthy reading clears the run of every threshold it no longer breaks', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 2]);
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(10));
+
+    expect(EnvironmentState::query()->sole()->breach_runs)->toBeNull();
+});
+
+test('an alert resolved by a healthy reading waits the whole duration again before it reopens', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 1]);
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(10));
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->count())->toBe(1)
+        ->and(Alert::query()->sole()->resolved_at->toDateTimeString())->toBe('2026-09-17 10:01:15');
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->open()->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:02:30');
+    Event::assertDispatchedTimes(AlertOpened::class, 2);
+});
+
+test('a failed or inactive reading in the middle of a breach keeps its run going', function (Closure $reading) {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 2]);
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(1)->minutes();
+    ($this->poll)($reading->call($this));
+
+    expect(Alert::query()->where('metric', AlertRuleMetric::QueuePending)->count())->toBe(0);
+
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->where('metric', AlertRuleMetric::QueuePending)->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:02:00');
+})->with([
+    'unreachable' => [fn () => ($this->unreachable)()],
+    'inactive' => [fn () => ($this->inactive)()],
+]);
+
+test('a breach seen again after a gap longer than the stale window starts a new run', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 2]);
+
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(16)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->count())->toBe(0)
+        ->and(EnvironmentState::query()->sole()->breach_runs['queue.pending']['since'])->toBe('2026-09-17T10:16:00.000000Z');
+
+    $this->travel(2)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:18:00');
+});
+
+test('resuming the collection forgets the breaches seen before the pause', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 2]);
+    $edit = fn (bool $pollingEnabled) => app(UpdateEnvironment::class)->handle($this->environment, new EnvironmentFormData(
+        name: 'production',
+        type: EnvironmentType::Production,
+        horizonUrl: $this->environment->horizon_url,
+        pollIntervalSeconds: 300,
+        basicAuthUser: 'monitor',
+        pollingEnabled: $pollingEnabled,
+    ));
+
+    ($this->poll)(($this->pending)(2500));
+    $edit(false);
+    $this->travel(2)->minutes();
+    $edit(true);
+
+    expect(EnvironmentState::query()->sole()->breach_runs)->toBeNull();
+
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->count())->toBe(0);
+});
+
+test('the duration comes from the effective rule of the environment', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueueMaxWait, ['for_minutes' => 10]);
+    ($this->rule)('production', AlertRuleMetric::QueueMaxWait, ['for_minutes' => 0]);
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 10]);
+
+    ($this->poll)(($this->reading)([
+        'workload' => [new HorizonQueueLoad(name: 'default', length: 2500, wait: 90, processes: 7)],
+    ]));
+
+    expect(Alert::query()->sole()->metric)->toBe(AlertRuleMetric::QueueMaxWait);
+});
+
+test('a longer duration set while an alert is open keeps it open', function () {
+    ($this->poll)(($this->pending)(2500));
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['for_minutes' => 30]);
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->resolved_at)->toBeNull()
+        ->and($alert->value)->toBe(2600.0);
+});
+
+test('a disabled rule keeps no run, so enabling it starts the wait at the next reading', function () {
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['enabled' => false]);
+    ($this->poll)(($this->pending)(2500));
+
+    expect(EnvironmentState::query()->sole()->breach_runs)->toBeNull();
+
+    AlertRule::query()->update(['enabled' => null, 'for_minutes' => 3]);
+    $this->travel(1)->minutes();
+    ($this->poll)(($this->pending)(2500));
+    $this->travel(3)->minutes();
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->opened_at->toDateTimeString())->toBe('2026-09-17 10:04:00');
+});
+
+test('an alert that opens during a maintenance window opens muted until the window ends, while the readings go on', function () {
+    $window = MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 09:30:00', '2026-09-17 11:00:00')->create();
+
+    ($this->poll)(($this->pending)(2500));
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->muted_until->toDateTimeString())->toBe('2026-09-17 11:00:00')
+        ->and($alert->muted_indefinitely)->toBeFalse()
+        ->and($alert->muted_by)->toBeNull()
+        ->and($alert->maintenance_window_id)->toBe($window->id)
+        ->and($alert->state(CarbonImmutable::now()))->toBe(AlertState::Muted)
+        ->and(EnvironmentSnapshot::query()->sole()->pending)->toBe(2500);
+
+    Event::assertDispatchedTimes(AlertOpened::class, 1);
+});
+
+test('a window covers the environment through its application or its organization, and only while it lasts', function (string $case, bool $muted) {
+    $other = Environment::factory()->for($this->application)->staging()->create();
+    $factory = MaintenanceWindow::factory();
+
+    match ($case) {
+        'environment' => $factory->forEnvironment($this->environment)->create(),
+        'application' => $factory->forApplication($this->application)->create(),
+        'organization' => $factory->for($this->team)->create(),
+        'another environment' => $factory->forEnvironment($other)->create(),
+        'another application' => $factory->forApplication(Application::factory()->for($this->team)->create())->create(),
+        'another organization' => $factory->create(),
+        'planned' => $factory->for($this->team)->between('2026-09-17 10:30:00', '2026-09-17 11:00:00')->create(),
+        'ended' => $factory->for($this->team)->between('2026-09-17 09:00:00', '2026-09-17 10:00:00')->create(),
+    };
+
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->state(CarbonImmutable::now()))->toBe($muted ? AlertState::Muted : AlertState::Open);
+})->with([
+    'environment' => ['environment', true],
+    'application' => ['application', true],
+    'organization' => ['organization', true],
+    'another environment' => ['another environment', false],
+    'another application' => ['another application', false],
+    'another organization' => ['another organization', false],
+    'planned' => ['planned', false],
+    'ended' => ['ended', false],
+]);
+
+test('overlapping windows mute until the latest end', function () {
+    MaintenanceWindow::factory()->for($this->team)->between('2026-09-17 09:00:00', '2026-09-17 10:30:00')->create();
+    $longest = MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 09:30:00', '2026-09-17 12:00:00')->create();
+
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->muted_until->toDateTimeString())->toBe('2026-09-17 12:00:00')
+        ->and(Alert::query()->sole()->maintenance_window_id)->toBe($longest->id);
+});
+
+test('an alert already open when a window starts is muted until its end at the next reading', function () {
+    ($this->poll)(($this->pending)(2500));
+
+    expect(Alert::query()->sole()->state(CarbonImmutable::now()))->toBe(AlertState::Open);
+
+    $window = MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 10:00:10', '2026-09-17 11:00:00')->create();
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->unreachable)());
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->muted_until->toDateTimeString())->toBe('2026-09-17 11:00:00')
+        ->and($alert->maintenance_window_id)->toBe($window->id)
+        ->and($alert->value)->toBe(2500.0);
+});
+
+test('an alert unmuted by hand during the window stays unmuted until the next window', function () {
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 09:30:00', '2026-09-17 10:30:00')->create();
+    ($this->poll)(($this->pending)(2500));
+
+    app(UnmuteAlert::class)->handle(Alert::query()->sole());
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    expect(Alert::query()->sole()->state(CarbonImmutable::now()))->toBe(AlertState::Open);
+
+    $next = MaintenanceWindow::factory()->for($this->team)->between('2026-09-17 10:30:00', '2026-09-17 11:00:00')->create();
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:30:00'));
+    ($this->poll)(($this->pending)(2700));
+
+    expect(Alert::query()->sole()->maintenance_window_id)->toBe($next->id)
+        ->and(Alert::query()->sole()->muted_until->toDateTimeString())->toBe('2026-09-17 11:00:00');
+});
+
+test('a mute by hand that lasts longer than the window is kept', function (MuteDuration $duration) {
+    ($this->poll)(($this->pending)(2500));
+    $user = User::factory()->create();
+    app(MuteAlert::class)->handle(Alert::query()->sole(), $user, $duration);
+    $before = Alert::query()->sole();
+
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 10:00:00', '2026-09-17 11:00:00')->create();
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    $alert = Alert::query()->sole();
+
+    expect($alert->muted_until?->toDateTimeString())->toBe($before->muted_until?->toDateTimeString())
+        ->and($alert->muted_indefinitely)->toBe($before->muted_indefinitely)
+        ->and($alert->muted_by)->toBe($user->id)
+        ->and($alert->maintenance_window_id)->toBeNull();
+})->with([MuteDuration::OneDay, MuteDuration::UntilResolved]);
+
+test('nothing goes out during a window, and an alert still open when it ends follows the usual rules', function () {
+    Queue::fake();
+    AlertTeam::member($this->team, 'admin@example.com', TeamRole::Admin);
+    NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com']]);
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 09:30:00', '2026-09-17 10:30:00')->create();
+
+    ($this->poll)(($this->pending)(2500));
+
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->onOpened(Alert::query()->sole());
+    $this->travel(20)->minutes();
+    ($this->poll)(($this->pending)(2600));
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+
+    Queue::assertNothingPushed();
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:30:00'));
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+
+    Queue::assertPushed(SendAlertEmail::class, fn (SendAlertEmail $job) => $job->kind === SentNotificationKind::CriticalAlert);
+    Queue::assertPushedTimes(SendAlertWebhook::class, 1);
+});
+
+test('an alert that opens and resolves within a window, or a notified one that resolves in it, is never told', function (bool $notifiedBefore) {
+    Queue::fake();
+    AlertTeam::member($this->team, 'admin@example.com', TeamRole::Admin);
+    NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com']]);
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+
+    ($this->poll)(($this->pending)(2500));
+
+    if ($notifiedBefore) {
+        Alert::query()->update(['last_notified_at' => now()]);
+    }
+
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 10:00:00', '2026-09-17 10:30:00')->create();
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(10));
+
+    expect(Alert::query()->sole()->resolved_at)->not->toBeNull();
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 10:31:00'));
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->onResolved(Alert::query()->sole());
+    app(DeliveryPolicy::class)->resolutionsDue(CarbonImmutable::now());
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+    app(DeliveryPolicy::class)->digestDue(CarbonImmutable::now());
+
+    Queue::assertNothingPushed();
+})->with(['opened in the window' => [false], 'notified before it' => [true]]);
+
+test('a reading reads the maintenance windows before it locks the open alerts', function () {
+    $statements = [];
+    DB::listen(function (QueryExecuted $query) use (&$statements) {
+        $statements[] = $query->sql;
+    });
+
+    ($this->poll)(($this->pending)(2500));
+
+    expect(firstStatementIndex($statements, 'from "maintenance_windows"', 'for share'))
+        ->toBeLessThan(firstStatementIndex($statements, 'from "alerts"', 'for update'));
+});
+
+test('a window that starts between two readings holds back the repeats and the digest of the alerts already open', function () {
+    Queue::fake();
+    AlertTeam::member($this->team, 'admin@example.com', TeamRole::Admin);
+    NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com']]);
+    Alert::factory()->for($this->environment)->critical()->create([
+        'metric' => AlertRuleMetric::EndpointUnreachable,
+        'last_notified_at' => now()->subHours(2),
+    ]);
+    Alert::factory()->for($this->environment)->warning()->create();
+    MaintenanceWindow::factory()->forApplication($this->application)->between('2026-09-17 09:59:00', '2026-09-17 11:00:00')->create();
+
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+    app(DeliveryPolicy::class)->digestDue(CarbonImmutable::now());
+
+    Queue::assertNothingPushed();
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 11:00:00'));
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+    app(DeliveryPolicy::class)->digestDue(CarbonImmutable::now());
+
+    Queue::assertPushed(SendAlertEmail::class, fn (SendAlertEmail $job) => $job->kind === SentNotificationKind::CriticalRepeated);
+    Queue::assertPushed(SendAlertEmail::class, fn (SendAlertEmail $job) => $job->kind === SentNotificationKind::WarningDigest);
+});
+
+test('an alert unmuted by hand during its window is sent, unless another window covers it', function (bool $another) {
+    Queue::fake();
+    AlertTeam::member($this->team, 'admin@example.com', TeamRole::Admin);
+    NotificationSetting::factory()->for($this->team)->withWebhook()->create(['recipients' => ['ops@example.com']]);
+    ($this->rule)('organization', AlertRuleMetric::QueuePending, ['severity' => AlertSeverity::Critical]);
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 09:30:00', '2026-09-17 10:30:00')->create();
+
+    if ($another) {
+        MaintenanceWindow::factory()->for($this->team)->between('2026-09-17 09:30:00', '2026-09-17 10:20:00')->create();
+    }
+
+    ($this->poll)(($this->pending)(2500));
+    app(UnmuteAlert::class)->handle(Alert::query()->sole());
+
+    app()->forgetScopedInstances();
+    app(DeliveryPolicy::class)->repeatDue(CarbonImmutable::now());
+
+    $another
+        ? Queue::assertNothingPushed()
+        : Queue::assertPushed(SendAlertEmail::class, fn (SendAlertEmail $job) => $job->kind === SentNotificationKind::CriticalAlert);
+})->with(['alone' => [false], 'under another window' => [true]]);
+
+test('a mute by hand still running when a window starts is left as it is', function () {
+    ($this->poll)(($this->pending)(2500));
+    $user = User::factory()->create();
+    app(MuteAlert::class)->handle(Alert::query()->sole(), $user, MuteDuration::OneHour);
+
+    MaintenanceWindow::factory()->forEnvironment($this->environment)->between('2026-09-17 10:00:00', '2026-09-17 13:00:00')->create();
+    $this->travel(15)->seconds();
+    ($this->poll)(($this->pending)(2600));
+
+    expect(Alert::query()->sole()->muted_until->toDateTimeString())->toBe('2026-09-17 11:00:00')
+        ->and(Alert::query()->sole()->muted_by)->toBe($user->id)
+        ->and(Alert::query()->sole()->maintenance_window_id)->toBeNull();
+
+    $this->travelTo(CarbonImmutable::parse('2026-09-17 11:05:00'));
+    ($this->poll)(($this->pending)(2700));
+
+    expect(Alert::query()->sole()->muted_until->toDateTimeString())->toBe('2026-09-17 13:00:00')
+        ->and(Alert::query()->sole()->muted_by)->toBeNull();
 });

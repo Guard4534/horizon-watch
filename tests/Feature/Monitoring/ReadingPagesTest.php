@@ -69,7 +69,8 @@ test('a fresh reading reaches the environment page with its age, interval and no
             ->where('page.environment.failedInWindow', 12)
             ->where('page.environment.failedWindowMinutes', 1440)
             ->where('page.environment.horizonStatus', 'running')
-            ->where('page.environment.basicAuthUser', 'monitor')
+            ->where('page.environment.usesBasicAuth', true)
+            ->missing('page.environment.basicAuthUser')
             ->where('page.nodes.0.seenSecondsAgo', 40)
             ->where('page.nodes.0.supervisorCount', 2)
             ->where('page.nodes.0.queueCount', 3)
@@ -79,8 +80,8 @@ test('a fresh reading reaches the environment page with its age, interval and no
             ->missing('page.environment.redisMemoryGb')
             ->where('page.queues.2.runtimeSeconds', null)
             ->missing('page.thresholds')
-            ->where('page.environment.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
-                && (float) $thresholds['job.runtime'] === AlertRuleMetric::JobRuntime->defaultThreshold())
+            ->where('page.environment.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour']['value'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
+                && (float) $thresholds['job.runtime']['value'] === AlertRuleMetric::JobRuntime->defaultThreshold())
             ->where('page.canTestConnection', true));
 });
 
@@ -96,7 +97,7 @@ test('the environment page lists the rules its thresholds come from, and only th
                 fn ($rule) => $rule['origin'] === 'organization'
                     && (float) $rule['threshold'] === AlertRuleMetric::from($rule['metric'])->defaultThreshold(),
             ))
-            ->where('page.environment.thresholds', fn ($thresholds) => $thresholds->map(fn ($value) => (float) $value)->all()
+            ->where('page.environment.thresholds', fn ($thresholds) => $thresholds->map(fn ($threshold) => (float) $threshold['value'])->all()
                 === collect(AlertRuleMetric::cases())->mapWithKeys(fn ($metric) => [$metric->value => $metric->defaultThreshold()])->all()));
 });
 
@@ -106,7 +107,7 @@ test('the rules and thresholds of the environment page agree', function () {
     $this->get(readingEnvironmentUrl($this->environment))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page', fn ($page) => collect($page['rules'])->mapWithKeys(fn ($rule) => [$rule['metric'] => (float) $rule['threshold']])->all()
-                === collect($page['environment']['thresholds'])->map(fn ($value) => (float) $value)->all()));
+                === collect($page['environment']['thresholds'])->map(fn ($threshold) => (float) $threshold['value'])->all()));
 });
 
 test('an old reading is flagged as not updated', function () {
@@ -115,7 +116,7 @@ test('an old reading is flagged as not updated', function () {
     $this->get(readingEnvironmentUrl($this->environment))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environment.stale', true)
-            ->where('page.environment.status', 'active')
+            ->where('page.environment.status', 'stale')
             ->where('page.environment.lastReadingAt', now()->subMinutes(10)->toIso8601String()));
 });
 
@@ -137,6 +138,7 @@ test('a failed reading carries its reason, zero counters and the last known deta
         snapshot: ['error' => ReadingError::Unauthorized],
         state: [
             'error' => ReadingError::Unauthorized,
+            'error_detail' => ['cause' => 'http_status', 'status' => 403, 'location' => null],
             'horizon_status' => HorizonStatus::Paused,
             'nodes' => [
                 ['hostname' => 'worker-1.example.com', 'status' => 'running', 'workers' => 6, 'supervisors' => 2, 'queues' => 3, 'seenAt' => now()->subMinutes(7)->toIso8601String()],
@@ -148,6 +150,7 @@ test('a failed reading carries its reason, zero counters and the last known deta
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environment.status', 'unreachable')
             ->where('page.environment.readingError', 'unauthorized')
+            ->where('page.environment.readingProblem', ['cause' => 'http_status', 'status' => 403, 'location' => null])
             ->where('page.environment.horizonStatus', 'paused')
             ->where('page.environment.latencyMs', null)
             ->where('page.environment.pending', 0)
@@ -156,7 +159,21 @@ test('a failed reading carries its reason, zero counters and the last known deta
             ->where('page.nodes.0.status', 'unreachable')
             ->has('page.queues', 3)
             ->where('page.longRunningJobs', [])
-            ->where('page.openAlert.metric', 'endpoint.unreachable'));
+            ->where('page.alerts.0.metric', 'endpoint.unreachable'));
+});
+
+test('a stored problem of an unknown cause is left out', function () {
+    Readings::record(
+        $this->environment,
+        EnvironmentStatus::Unreachable,
+        snapshot: ['error' => ReadingError::Unreachable],
+        state: ['error' => ReadingError::Unreachable, 'error_detail' => ['cause' => 'solar_flare']],
+    );
+
+    $this->get(readingEnvironmentUrl($this->environment))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.environment.readingError', 'unreachable')
+            ->where('page.environment.readingProblem', null));
 });
 
 test('an environment without readings says nothing yet', function () {
@@ -165,12 +182,13 @@ test('an environment without readings says nothing yet', function () {
             ->where('page.environment.status', null)
             ->where('page.environment.lastReadingAt', null)
             ->where('page.environment.readingError', null)
+            ->where('page.environment.readingProblem', null)
             ->where('page.environment.stale', false)
             ->where('page.environment.latencyMs', null)
             ->where('page.environment.horizonStatus', null)
             ->where('page.nodes', [])
             ->where('page.queues', [])
-            ->where('page.openAlert', null));
+            ->where('page.alerts', []));
 
     $this->get(readingApplicationUrl($this->application))
         ->assertInertia(fn (Assert $page) => $page
@@ -191,8 +209,8 @@ test('a seven-day failed window is carried to every page that shows the count', 
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.environments.0.failedInWindow', 300)
             ->where('page.environments.0.failedWindowMinutes', 10080)
-            ->where('page.environments.0.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
-                && (float) $thresholds['queue.pending'] === AlertRuleMetric::QueuePending->defaultThreshold()));
+            ->where('page.environments.0.thresholds', fn ($thresholds) => (float) $thresholds['jobs.failed_per_hour']['value'] === AlertRuleMetric::JobsFailedPerHour->defaultThreshold()
+                && (float) $thresholds['queue.pending']['value'] === AlertRuleMetric::QueuePending->defaultThreshold()));
 
     $this->get(route('applications.index', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
@@ -244,17 +262,30 @@ test('only people who may test a connection get the button', function (TeamRole 
     'viewer' => [TeamRole::Viewer, false],
 ]);
 
-test('no reading page carries the stored password', function (string $page) {
+test('no reading page carries the stored credentials', function (string $page) {
+    $this->environment->update(['basic_auth_user' => 'hidden-user-5c1e']);
     Readings::record($this->environment);
 
     $url = match ($page) {
+        'wall' => route('wall', ['current_team' => $this->team->slug]),
         'environment' => readingEnvironmentUrl($this->environment),
         'application' => readingApplicationUrl($this->application),
         'applications' => route('applications.index', ['current_team' => $this->team->slug]),
     };
 
-    $this->get($url)
+    $this->actingAs(readingTeamMember($this->user, TeamRole::Viewer))
+        ->get($url)
         ->assertOk()
         ->assertDontSee('never-shown-7f3a', false)
+        ->assertDontSee('hidden-user-5c1e', false)
         ->assertInertia(fn (Assert $assert) => $assert->has('page'));
-})->with(['environment', 'application', 'applications']);
+})->with(['wall', 'environment', 'application', 'applications']);
+
+test('a capped last hour reaches the environment page as a lower bound', function () {
+    Readings::record($this->environment, snapshot: ['failed_last_hour' => 50, 'failed_last_hour_capped' => true]);
+
+    $this->get(readingEnvironmentUrl($this->environment))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('page.environment.failedLastHour', 50)
+            ->where('page.environment.failedLastHourCapped', true));
+});

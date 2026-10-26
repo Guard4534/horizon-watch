@@ -12,28 +12,12 @@ use App\Enums\HorizonStatus;
 use App\Models\Environment;
 use App\Models\EnvironmentSnapshot;
 use App\Models\EnvironmentState;
-use App\Models\Team;
 use Carbon\CarbonImmutable;
-use Database\Seeders\Support\SyntheticReadings;
 use Illuminate\Support\Facades\Event;
 
 final class Readings
 {
     public const int STATE_RUN_MINUTES = 30;
-
-    public static function mockup(Team $team): void
-    {
-        Environment::query()->where('team_id', $team->id)->each(function (Environment $environment) {
-            $status = SyntheticReadings::INCIDENTS[$environment->slug] ?? EnvironmentStatus::Active;
-
-            self::record($environment, $status, match ($status) {
-                EnvironmentStatus::Inactive => [AlertRuleMetric::HorizonMasterInactive],
-                EnvironmentStatus::Paused => [AlertRuleMetric::HorizonPaused],
-                EnvironmentStatus::Degraded => [AlertRuleMetric::QueuePending],
-                default => [],
-            });
-        });
-    }
 
     /**
      * @param  list<AlertRuleMetric>  $breaches

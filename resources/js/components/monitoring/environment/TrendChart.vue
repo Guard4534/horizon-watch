@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { router } from '@inertiajs/vue3';
 import { trans } from 'laravel-vue-i18n';
 import { computed } from 'vue';
 import SectionCard from '@/components/nocturne/SectionCard.vue';
 import SegmentedControl from '@/components/nocturne/SegmentedControl.vue';
 import TimeSeriesChart from '@/components/nocturne/TimeSeriesChart.vue';
 import { useCurrentPath } from '@/composables/useCurrentPath';
-import { formatCount, formatWait } from '@/lib/monitoring';
+import { formatCount, formatSeconds } from '@/lib/monitoring';
 import { rangeLabel } from '@/lib/timeSeries';
+import { replaceVisit } from '@/lib/visits';
 
 const { throughput, maxWait, range, grid } = defineProps<{
     throughput: number[];
@@ -18,73 +18,77 @@ const { throughput, maxWait, range, grid } = defineProps<{
 
 const { path } = useCurrentPath();
 
-const label = computed(() =>
-    trans(':range, peak :count jobs/min, peak max wait :wait', {
+const throughputLabel = computed(() =>
+    trans(':range, peak :value', {
         range: rangeLabel(range),
-        count: formatCount(Math.max(0, ...throughput)),
-        wait: formatWait(Math.max(0, ...maxWait)),
+        value: `${formatCount(Math.max(0, ...throughput))}/min`,
     }),
 );
 
-const describe = (value: number) =>
-    trans(':count jobs/min', { count: String(value) });
+const waitLabel = computed(() =>
+    trans(':range, peak max wait :wait', {
+        range: rangeLabel(range),
+        wait: formatSeconds(Math.max(0, ...maxWait)),
+    }),
+);
+
+const describe = (value: number) => `${value}/min`;
 const describeWait = (value: number) =>
-    trans('max wait :wait', { wait: formatWait(value) });
+    trans('max wait :wait', { wait: formatSeconds(value) });
 
 const selected = computed({
     get: () => range,
     set: (next: App.Enums.SeriesRange) =>
-        router.get(
-            path.value,
-            { range: next },
-            {
-                only: ['page'],
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-            },
-        ),
+        replaceVisit(path.value, ['series'], { range: next }),
 });
 </script>
 
 <template>
     <SectionCard :title="$t('Throughput & max wait')">
         <template #actions>
-            <span
-                class="nc-t-2xs nc-tone-muted inline-flex items-center gap-[5px]"
-            >
-                <span
-                    class="h-[2px] w-[14px]"
-                    style="background: var(--nc-accent)"
-                />{{ $t('jobs/min') }}
-            </span>
-            <span
-                class="nc-t-2xs nc-tone-muted inline-flex items-center gap-[5px]"
-            >
-                <span
-                    class="h-[2px] w-[14px]"
-                    style="background: var(--st-warn)"
-                />{{ $t('max wait') }}
-            </span>
             <SegmentedControl
                 v-model="selected"
                 name="range"
                 :options="[
-                    { value: '3h', label: '3h' },
-                    { value: '24h', label: '24h' },
-                    { value: '7d', label: $t(':days d', { days: '7' }) },
+                    { value: '3h', label: formatSeconds(3 * 3600) },
+                    { value: '24h', label: formatSeconds(86400) },
+                    { value: '7d', label: formatSeconds(7 * 86400) },
                 ]"
             />
         </template>
-        <TimeSeriesChart
-            :values="throughput"
-            :secondary="maxWait"
-            :starts-at="grid.startsAt"
-            :step-seconds="grid.stepSeconds"
-            :height="150"
-            :label="label"
-            :describe="describe"
-            :describe-secondary="describeWait"
-        />
+        <div class="flex flex-col" style="gap: var(--nc-space-4)">
+            <figure class="m-0">
+                <figcaption class="caption">{{ $t('Throughput') }}</figcaption>
+                <TimeSeriesChart
+                    :values="throughput"
+                    :starts-at="grid.startsAt"
+                    :step-seconds="grid.stepSeconds"
+                    :height="110"
+                    :label="throughputLabel"
+                    :describe="describe"
+                />
+            </figure>
+            <figure class="m-0">
+                <figcaption class="caption">{{ $t('Max wait') }}</figcaption>
+                <TimeSeriesChart
+                    :values="maxWait"
+                    :starts-at="grid.startsAt"
+                    :step-seconds="grid.stepSeconds"
+                    :height="90"
+                    :label="waitLabel"
+                    :describe="describeWait"
+                    unit="seconds"
+                    color="var(--nc-neutral-300)"
+                />
+            </figure>
+        </div>
     </SectionCard>
 </template>
+
+<style scoped>
+.caption {
+    margin-bottom: var(--nc-space-1);
+    font-size: 12px;
+    color: var(--nc-text-faint);
+}
+</style>

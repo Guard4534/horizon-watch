@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import FieldError from '@/components/FieldError.vue';
 import { useForm } from '@inertiajs/vue3';
 import { PhWarningOctagon } from '@phosphor-icons/vue';
 import { computed } from 'vue';
+import InputError from '@/components/InputError.vue';
 import {
     Dialog,
     DialogClose,
@@ -12,6 +12,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { invalidField } from '@/lib/fieldErrors';
 
 const open = defineModel<boolean>('open', { required: true });
 
@@ -38,6 +39,10 @@ const onOpenChange = (next: boolean) => {
 };
 
 const submit = () => {
+    if (!matches.value || form.processing) {
+        return;
+    }
+
     form.delete(url, {
         preserveScroll: true,
         onSuccess: () => onOpenChange(false),
@@ -89,7 +94,11 @@ const submit = () => {
                 </li>
             </ul>
 
-            <form class="nc-field" @submit.prevent="submit">
+            <form
+                id="confirm-by-name-form"
+                class="nc-field"
+                @submit.prevent="submit"
+            >
                 <label for="confirm-by-name">
                     {{ $t('Type :name to confirm', { name: resourceName }) }}
                 </label>
@@ -100,8 +109,13 @@ const submit = () => {
                     type="text"
                     autocomplete="off"
                     spellcheck="false"
+                    v-bind="invalidField('confirm-by-name', form.errors.name)"
                 />
-                <FieldError :message="form.errors.name" />
+                <InputError
+                    size="sm"
+                    field="confirm-by-name"
+                    :message="form.errors.name"
+                />
             </form>
 
             <DialogFooter>
@@ -111,11 +125,10 @@ const submit = () => {
                     </button>
                 </DialogClose>
                 <button
-                    type="button"
-                    class="nc-btn nc-tone-down"
-                    style="border-color: var(--st-down)"
+                    type="submit"
+                    form="confirm-by-name-form"
+                    class="nc-btn nc-btn-danger"
                     :disabled="!matches || form.processing"
-                    @click="submit"
                 >
                     {{ confirmLabel }}
                 </button>

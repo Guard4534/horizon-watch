@@ -2,14 +2,22 @@ import type { InertiaForm } from '@inertiajs/vue3';
 import { useForm } from '@inertiajs/vue3';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch, watchEffect } from 'vue';
-import type { ConnectionOutcome } from '@/components/monitoring/applications/ConnectionTest.vue';
+import type { ConnectionOutcome } from '@/components/monitoring/applications/connection';
 import { useTeamSlug } from '@/composables/useTeamSlug';
+import {
+    domainOf,
+    followSuggestion,
+    leavesSuggestion,
+    suggestHorizonUrl,
+    typeForName,
+} from '@/lib/environments';
 import { store } from '@/routes/applications';
 
 export type WizardRow = {
     key: number;
     auth: boolean;
     urlEdited: boolean;
+    typeEdited: boolean;
     outcome: ConnectionOutcome;
     testedSignature: string;
     autoTest: boolean;
@@ -24,13 +32,13 @@ type WizardForm = {
 
 export type ApplicationWizard = {
     step: Ref<number>;
-    horizonPath: Ref<string>;
     form: InertiaForm<WizardForm>;
     rows: Ref<WizardRow[]>;
     errors: ComputedRef<Record<string, string | undefined>>;
     unplacedErrors: ComputedRef<string[]>;
     applicationFilled: ComputedRef<boolean>;
     environmentsFilled: ComputedRef<boolean>;
+    domain: ComputedRef<string | null>;
     testing: ComputedRef<boolean>;
     addEnvironment: () => void;
     removeEnvironment: (index: number) => void;
@@ -41,46 +49,41 @@ export type ApplicationWizard = {
     rememberTest: (key: number, instance: unknown) => void;
     testAgain: () => Promise<void>;
     submit: () => void;
+    advance: () => void;
 };
 
-const SUGGESTED_NAMES: Array<[string, string]> = [
-    ['production', 'prod'],
-    ['staging', 'staging'],
-    ['preprod', 'preprod'],
-    ['develop', 'develop'],
-    ['demo', 'demo'],
-    ['testing', 'testing'],
+const SUGGESTED_NAMES = [
+    'production',
+    'staging',
+    'preprod',
+    'develop',
+    'demo',
+    'testing',
 ];
 
 export function useApplicationWizard(
-    colors: App.Data.Pages.ApplicationFormPageData['colors'],
+    pollInterval: App.Data.Applications.PollIntervalData,
 ): ApplicationWizard {
     const slug = useTeamSlug();
 
     const step = ref(1);
-    const horizonPath = ref('horizon');
 
     let nextKey = 0;
 
     const blankEnvironment = (
-        index: number,
         taken: string[],
     ): App.Data.Applications.EnvironmentFormData => {
-        const available = colors.map((color) => color.value);
-        const suggestion = SUGGESTED_NAMES.find(
-            ([name, color]) =>
-                !taken.includes(name) && available.includes(color),
-        );
+        const name =
+            SUGGESTED_NAMES.find((candidate) => !taken.includes(candidate)) ??
+            '';
 
         return {
-            name: suggestion?.[0] ?? '',
-            color: (suggestion?.[1] ??
-                colors[index % colors.length]
-                    .value) as App.Enums.EnvironmentColor,
+            name,
+            type: typeForName(name),
             horizonUrl: '',
             basicAuthUser: null,
             basicAuthPassword: null,
-            pollIntervalSeconds: 15,
+            pollIntervalSeconds: pollInterval.default,
             pollingEnabled: true,
         };
     };
@@ -89,14 +92,15 @@ export function useApplicationWizard(
         key: nextKey++,
         auth: false,
         urlEdited: false,
+        typeEdited: false,
         outcome: { state: 'idle' },
         testedSignature: '',
         autoTest: true,
     });
 
     const form = useForm<WizardForm>({
-        application: { name: '', host: '' },
-        environments: [blankEnvironment(0, [])],
+        application: { name: '' },
+        environments: [blankEnvironment([])],
     });
 
     const rows = ref<WizardRow[]>([blankRow()]);
@@ -105,43 +109,43 @@ export function useApplicationWizard(
         () => form.errors as Record<string, string | undefined>,
     );
 
-    const suggestedUrl = (name: string): string => {
-        const domain = form.application.host
-            .trim()
-            .replace(/^https?:\/\//i, '')
-            .replace(/\/+$/, '');
-        const path = horizonPath.value.trim().replace(/^\/+|\/+$/g, '');
-        const environment = name.trim();
+    const suggestedUrl = (index: number): string => {
+        const base = form.environments[0];
+        const environment = form.environments[index];
 
-        if (domain === '' || environment === '') {
-            return '';
-        }
-
-        const host =
-            environment === 'production' ? domain : `${environment}.${domain}`;
-
-        return `https://${host}${path === '' ? '' : `/${path}`}`;
+        return index === 0 || base === undefined || environment === undefined
+            ? ''
+            : suggestHorizonUrl(
+                  base.horizonUrl,
+                  base.name,
+                  environment.name,
+                  environment.type,
+              );
     };
 
     watchEffect(() => {
         form.environments.forEach((environment, index) => {
-            if (!rows.value[index]?.urlEdited) {
-                environment.horizonUrl = suggestedUrl(environment.name);
+            if (index > 0) {
+                environment.horizonUrl = followSuggestion(
+                    environment.horizonUrl,
+                    suggestedUrl(index),
+                    rows.value[index]?.urlEdited ?? false,
+                );
             }
         });
     });
 
     const onUrlInput = (index: number): void => {
-        const environment = form.environments[index];
-
-        rows.value[index].urlEdited =
-            environment.horizonUrl !== suggestedUrl(environment.name);
+        if (index > 0) {
+            rows.value[index].urlEdited = leavesSuggestion(
+                form.environments[index].horizonUrl,
+                suggestedUrl(index),
+            );
+        }
     };
 
     const applicationFilled = computed(
-        () =>
-            form.application.name.trim() !== '' &&
-            form.application.host.trim() !== '',
+        () => form.application.name.trim() !== '',
     );
 
     const environmentsFilled = computed(
@@ -154,10 +158,11 @@ export function useApplicationWizard(
             ),
     );
 
+    const domain = computed(() => domainOf(form.environments));
+
     const addEnvironment = (): void => {
         form.environments.push(
             blankEnvironment(
-                form.environments.length,
                 form.environments.map((environment) => environment.name.trim()),
             ),
         );
@@ -266,15 +271,25 @@ export function useApplicationWizard(
         });
     };
 
+    const advance = (): void => {
+        if (step.value === 1 && applicationFilled.value) {
+            step.value = 2;
+        } else if (step.value === 2 && environmentsFilled.value) {
+            step.value = 3;
+        } else if (step.value === 3 && !form.processing) {
+            submit();
+        }
+    };
+
     return {
         step,
-        horizonPath,
         form,
         rows,
         errors,
         unplacedErrors,
         applicationFilled,
         environmentsFilled,
+        domain,
         testing,
         addEnvironment,
         removeEnvironment,
@@ -283,5 +298,6 @@ export function useApplicationWizard(
         rememberTest,
         testAgain,
         submit,
+        advance,
     };
 }

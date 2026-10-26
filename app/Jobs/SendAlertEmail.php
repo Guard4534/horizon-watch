@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Alerts\DeliveryPolicy;
+use App\Alerts\MailFailed;
 use App\Alerts\Recipients;
 use App\Enums\DeliveryError;
 use App\Enums\DeliveryStatus;
@@ -16,15 +16,16 @@ use App\Notifications\Alerts\AlertNotification;
 use App\Notifications\Alerts\ResolvedNotification;
 use App\Notifications\Alerts\TestNotification;
 use App\Notifications\Alerts\WarningDigestNotification;
-use Carbon\CarbonImmutable;
+use App\Support\SafeReport;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification as Notifications;
-use RuntimeException;
 use Throwable;
 
 class SendAlertEmail extends DeliverAlert
 {
+    public bool $unrestricted = false;
+
     /**
      * @param  array{alertIds?: list<string>, environmentCount?: int}  $payload
      */
@@ -36,8 +37,11 @@ class SendAlertEmail extends DeliverAlert
         public readonly ?string $addressKey,
         public readonly string $locale,
         public readonly array $payload = [],
+        bool $unrestricted = false,
     ) {
         parent::__construct($teamId, $alertId, $kind);
+
+        $this->unrestricted = $unrestricted;
     }
 
     public function handle(Recipients $recipients, VisibleEnvironments $visible): void
@@ -48,9 +52,20 @@ class SendAlertEmail extends DeliverAlert
 
         $team = Team::query()->find($this->teamId);
         $email = $team === null ? null : $this->address($team, $recipients);
-        $notification = $team === null || $email === null ? null : $this->notification($team, $visible);
 
-        if ($email === null || $notification === null) {
+        if ($team === null || $email === null) {
+            return;
+        }
+
+        $member = $this->restrictedMember($team, $recipients, $email);
+
+        $notification = match ($this->kind) {
+            SentNotificationKind::Test => new TestNotification($team),
+            SentNotificationKind::WarningDigest => $this->digest($team, $visible, $member),
+            default => $this->aboutAlert($team, $visible, $member, $email),
+        };
+
+        if ($notification === null) {
             return;
         }
 
@@ -60,8 +75,20 @@ class SendAlertEmail extends DeliverAlert
 
                 Notifications::route('mail', $email)->notifyNow($notification->locale($this->locale));
             });
-        } catch (Throwable) {
-            throw new RuntimeException(DeliveryError::Mail->value);
+        } catch (Throwable $exception) {
+            $failure = MailFailed::from($exception);
+
+            if ($failure->permanent() || $this->attempts() >= $this->tries) {
+                SafeReport::of('Sending an alert email', $exception);
+            }
+
+            if ($failure->permanent()) {
+                $this->fail($failure);
+
+                return;
+            }
+
+            throw $failure;
         }
     }
 
@@ -79,7 +106,7 @@ class SendAlertEmail extends DeliverAlert
 
     protected function errorOf(?Throwable $exception): DeliveryError
     {
-        return DeliveryError::Mail;
+        return $exception instanceof MailFailed ? $exception->reason : DeliveryError::Mail;
     }
 
     protected function loggedEnvironmentCount(): ?int
@@ -105,46 +132,47 @@ class SendAlertEmail extends DeliverAlert
         return $this->addressKey === null ? null : $recipients->extraAddress($team, $this->addressKey);
     }
 
-    private function notification(Team $team, VisibleEnvironments $visible): ?Notification
+    private function restrictedMember(Team $team, Recipients $recipients, string $email): ?User
     {
-        if ($this->kind === SentNotificationKind::Test) {
-            return new TestNotification($team);
+        if ($this->userId === null || ($this->unrestricted && $recipients->extraAddress($team, Recipients::addressKey($email)) !== null)) {
+            return null;
         }
 
-        $member = $this->userId === null ? null : User::query()->find($this->userId);
+        return User::query()->find($this->userId);
+    }
 
-        if ($this->kind === SentNotificationKind::WarningDigest) {
-            $alerts = Alert::query()
-                ->where('team_id', $team->id)
-                ->whereIn('id', $this->payload['alertIds'] ?? [])
-                ->with(['team', 'environment'])
-                ->orderBy('opened_at')
-                ->get();
+    private function digest(Team $team, VisibleEnvironments $visible, ?User $member): ?WarningDigestNotification
+    {
+        $alerts = Alert::query()
+            ->where('team_id', $team->id)
+            ->whereIn('id', $this->payload['alertIds'] ?? [])
+            ->with(['team', 'environment'])
+            ->orderBy('opened_at')
+            ->get();
 
-            if ($member !== null) {
-                $membership = $member->teamMemberships()->where('team_id', $team->id)->first();
-                $ids = $membership === null ? [] : $visible->idsFor($team, $membership);
-                $alerts = $alerts->filter(fn (Alert $alert) => $ids === null || in_array($alert->environment_id, $ids, true));
-            }
-
-            return $alerts->isEmpty() ? null : new WarningDigestNotification($team, $alerts->values()->toBase());
+        if ($member !== null) {
+            $membership = $member->teamMemberships()->where('team_id', $team->id)->first();
+            $ids = $membership === null ? [] : $visible->idsFor($team, $membership);
+            $alerts = $alerts->filter(fn (Alert $alert) => $ids === null || in_array($alert->environment_id, $ids, true));
         }
 
+        return $alerts->isEmpty() ? null : new WarningDigestNotification($team, $alerts->values()->toBase());
+    }
+
+    private function aboutAlert(Team $team, VisibleEnvironments $visible, ?User $member, string $email): ?Notification
+    {
         $alert = $this->alertId === null
             ? null
             : Alert::query()->where('team_id', $team->id)->with(['team', 'environment.state'])->find($this->alertId);
 
-        return match (true) {
-            $alert === null,
-            ! DeliveryPolicy::stillDue($alert, $this->kind === SentNotificationKind::Resolved, $this->repeated(), CarbonImmutable::now()),
-            $member !== null && ! $visible->sees($team, $member, $alert->environment_id) => null,
-            $this->kind === SentNotificationKind::Resolved => new ResolvedNotification($alert),
-            default => new AlertNotification($alert, repeated: $this->repeated()),
-        };
-    }
+        if ($alert === null
+            || ($member !== null && ! $visible->sees($team, $member, $alert->environment_id))
+            || ! $this->stillDueTo($alert, $email)) {
+            return null;
+        }
 
-    private function repeated(): bool
-    {
-        return $this->kind === SentNotificationKind::CriticalRepeated;
+        return $this->kind === SentNotificationKind::Resolved
+            ? new ResolvedNotification($alert)
+            : new AlertNotification($alert, repeated: $this->kind === SentNotificationKind::CriticalRepeated);
     }
 }

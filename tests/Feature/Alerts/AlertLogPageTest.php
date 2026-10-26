@@ -2,8 +2,8 @@
 
 use App\Enums\AlertRuleMetric;
 use App\Enums\DeliveryStatus;
-use App\Enums\EnvironmentColor;
 use App\Enums\EnvironmentStatus;
+use App\Enums\EnvironmentType;
 use App\Enums\MemberVisibility;
 use App\Enums\NotificationChannel;
 use App\Enums\SentNotificationKind;
@@ -82,7 +82,7 @@ test('the open tab lists the open alerts with their details, and the counts of e
             'environmentId' => $this->production->slug,
             'applicationName' => 'Billing',
             'environmentName' => 'production',
-            'color' => 'prod',
+            'environmentType' => 'production',
             'environmentStatus' => 'degraded',
             'minutesAgo' => 0,
             'resolvedMinutesAgo' => null,
@@ -217,13 +217,13 @@ test('the resolved alerts of a deleted environment are kept for those who see ev
         'team_id' => $this->team->id,
         'application_name' => 'Legacy',
         'environment_name' => 'old-production',
-        'environment_color' => EnvironmentColor::Prod,
+        'environment_type' => EnvironmentType::Production,
     ]);
     Alert::factory()->withoutEnvironment()->resolved()->create([
         'team_id' => Team::factory()->create()->id,
         'application_name' => 'Elsewhere',
         'environment_name' => 'production',
-        'environment_color' => EnvironmentColor::Prod,
+        'environment_type' => EnvironmentType::Production,
     ]);
 
     $admin = ($this->page)(['state' => 'resolved']);
@@ -332,9 +332,27 @@ test('each tab reads its alerts with the same number of queries for one alert or
         ->and($one)->toBeLessThan(40);
 })->with(['open', 'muted', 'resolved']);
 
-test('the application page lists its open alerts and its five latest resolutions', function () {
+test('the alert log reads the latest states and trends once, for every environment', function () {
+    foreach ([$this->production, $this->staging, $this->shopProduction] as $environment) {
+        Readings::record($environment);
+    }
+    Alert::factory()->for($this->staging)->create();
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $page = ($this->page)();
+    DB::disableQueryLog();
+
+    $queries = array_column(DB::getQueryLog(), 'query');
+
+    expect($page['alerts'])->toHaveCount(1)
+        ->and(array_filter($queries, fn (string $sql) => str_contains($sql, 'from "environment_states"')))->toHaveCount(1)
+        ->and(array_filter($queries, fn (string $sql) => str_contains($sql, 'date_bin')))->toHaveCount(1);
+});
+
+test('the application page lists its open alerts, then the muted ones, then its five latest resolutions', function () {
     $open = Alert::factory()->for($this->production)->critical()->create(['metric' => AlertRuleMetric::EndpointUnreachable]);
-    Alert::factory()->for($this->production)->create(['muted_indefinitely' => true]);
+    $muted = Alert::factory()->for($this->production)->create(['muted_indefinitely' => true]);
     Alert::factory()->for($this->shopProduction)->create();
     $resolved = collect(range(1, 6))->map(fn (int $hours) => Alert::factory()->for($this->staging)->create([
         'resolved_at' => now()->subHours($hours),
@@ -343,25 +361,35 @@ test('the application page lists its open alerts and its five latest resolutions
 
     $this->actingAs($this->admin)
         ->get(route('applications.show', ['current_team' => $this->team->slug, 'application' => $this->billing->slug]))
-        ->assertInertia(fn (Assert $page) => $page->where(
-            'page.recentAlerts',
-            fn ($alerts) => collect($alerts)->pluck('id')->all() === [$open->id, ...$resolved->take(5)->pluck('id')->all()],
-        ));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where(
+                'page.recentAlerts',
+                fn ($alerts) => collect($alerts)->pluck('id')->all() === [$open->id, $muted->id, ...$resolved->take(5)->pluck('id')->all()],
+            )
+            ->where('page.recentAlerts.1.state', 'muted'));
 });
 
-test('the environment page carries its most urgent open alert', function () {
-    Alert::factory()->for($this->production)->create(['opened_at' => now()->subMinute()]);
+test('the environment page lists every live alert of the environment, the muted ones last', function () {
+    $recent = Alert::factory()->for($this->production)->create(['opened_at' => now()->subMinute()]);
     $critical = Alert::factory()->for($this->production)->critical()->create([
         'metric' => AlertRuleMetric::EndpointUnreachable,
         'opened_at' => now()->subHour(),
     ]);
+    $muted = Alert::factory()->for($this->production)->critical()->create([
+        'metric' => AlertRuleMetric::JobsFailedPerHour,
+        'muted_until' => now()->addHour(),
+        'muted_by' => $this->admin->id,
+    ]);
+    Alert::factory()->for($this->production)->create(['metric' => AlertRuleMetric::QueuePending, 'resolved_at' => now()->subMinute()]);
     Alert::factory()->for($this->staging)->critical()->create(['metric' => AlertRuleMetric::EndpointUnreachable]);
 
     $this->actingAs($this->admin)
         ->get(route('environments.show', ['current_team' => $this->team->slug, 'environment' => $this->production->slug]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('page.openAlert.id', $critical->id)
-            ->where('page.openAlert.canMute', true));
+            ->where('page.alerts', fn ($alerts) => collect($alerts)->pluck('id')->all() === [$critical->id, $recent->id, $muted->id])
+            ->where('page.alerts.0.canMute', true)
+            ->where('page.alerts.2.state', 'muted')
+            ->where('page.alerts.2.mutedBy.name', 'Ada Admin'));
 });
 
 test('the sidebar badge counts the open alerts the viewer sees, muted ones aside', function () {
@@ -374,8 +402,8 @@ test('the sidebar badge counts the open alerts the viewer sees, muted ones aside
         ->get(route('wall', ['current_team' => $this->team->slug]))
         ->assertInertia(fn (Assert $page) => $page
             ->where('openAlertCount', 2)
-            ->where('page.kpis.openAnomalies', 2)
-            ->has('page.anomalies', 2));
+            ->where('page.kpis.openAlerts', 2)
+            ->has('page.alerts', 2));
 
     $this->actingAs(($this->memberAs)(TeamRole::Viewer, MemberVisibility::NonProduction))
         ->get(route('wall', ['current_team' => $this->team->slug]))
@@ -445,13 +473,11 @@ test('the application filter offers only the applications with an environment th
 test('an alert carries the longest job and the queues without workers it was opened for', function () {
     Alert::factory()->for($this->production)->create([
         'metric' => AlertRuleMetric::JobRuntime,
-        'unit' => 's',
         'value' => 300,
         'detail' => ['job' => 'App\Jobs\BuildReport', 'queue' => 'reports', 'seconds' => 300],
     ]);
     Alert::factory()->for($this->staging)->create([
         'metric' => AlertRuleMetric::WorkersMissing,
-        'unit' => '',
         'value' => 2,
         'detail' => ['queues' => ['default', 'emails']],
     ]);
@@ -463,6 +489,20 @@ test('an alert carries the longest job and the queues without workers it was ope
         ->and($alerts['workers.missing'])->toMatchArray(['longestJob' => null, 'longestJobQueue' => null, 'queuesWithoutWorkers' => ['default', 'emails']])
         ->and($alerts['queue.pending'])->toMatchArray(['longestJob' => null, 'longestJobQueue' => null, 'queuesWithoutWorkers' => []]);
 });
+
+test('a failed-jobs count read past the jobs that were listed is marked as a lower bound', function (array $detail, bool $lowerBound) {
+    Alert::factory()->for($this->production)->create([
+        'metric' => AlertRuleMetric::JobsFailedPerHour,
+        'value' => 200,
+        'detail' => $detail,
+    ]);
+
+    expect(($this->page)()['alerts'][0])->toMatchArray(['value' => 200, 'valueIsLowerBound' => $lowerBound]);
+})->with([
+    'at least' => [['failed' => 200, 'atLeast' => true], true],
+    'exact' => [['failed' => 200], false],
+    'not a boolean' => [['failed' => 200, 'atLeast' => 'yes'], false],
+]);
 
 test('a detail of an unexpected shape is left out', function (array $detail, array $queues) {
     Alert::factory()->for($this->production)->create([
@@ -487,4 +527,14 @@ test('an alert still open on an environment whose collection is paused says so',
     expect($open['production']['collectionPaused'])->toBeTrue()
         ->and($open['staging']['collectionPaused'])->toBeFalse()
         ->and(($this->page)(['state' => 'resolved'])['alerts'][0]['collectionPaused'])->toBeFalse();
+});
+
+test('every alert carries the comparator of its rule and whether it is a state rule', function () {
+    Alert::factory()->for($this->production)->create(['metric' => AlertRuleMetric::QueuePending]);
+    Alert::factory()->for($this->staging)->critical()->create(['metric' => AlertRuleMetric::EndpointUnreachable]);
+
+    $alerts = collect(($this->page)()['alerts'])->keyBy('metric');
+
+    expect($alerts['queue.pending'])->toMatchArray(['comparator' => '>', 'isStateRule' => false])
+        ->and($alerts['endpoint.unreachable'])->toMatchArray(['comparator' => '≥', 'isStateRule' => true]);
 });

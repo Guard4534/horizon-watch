@@ -12,24 +12,28 @@ use App\Http\Requests\Teams\SaveTeamRequest;
 use App\Models\Team;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Route;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Exception\RequestExceptionInterface;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class TeamController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(): Response
     {
-        return Inertia::render('teams/Index', [
-            'teams' => $request->user()->toUserTeams(includeCurrent: true),
-        ]);
+        return Inertia::render('teams/Index');
     }
 
     public function store(SaveTeamRequest $request, CreateTeam $createTeam): RedirectResponse
     {
+        Gate::authorize('create', Team::class);
+
         $createTeam->handle($request->user(), $request->validated('name'));
 
-        $this->success(__('Team created.'));
+        $this->success(__('Organization created.'));
 
         return to_route('teams.index');
     }
@@ -40,18 +44,32 @@ class TeamController extends Controller
 
         $renameTeam->handle($team, $request->validated('name'));
 
-        $this->success(__('Team updated.'));
+        $this->success(__('Organization updated.'));
 
         return to_route('teams.index');
     }
 
-    public function switch(Request $request, Team $team): RedirectResponse
+    public function switch(Request $request, Team $team, Router $router): RedirectResponse
     {
         abort_unless($request->user()->belongsToTeam($team), 403);
 
         $request->user()->switchTeam($team);
 
-        return back();
+        $previous = $this->previousRoute($router);
+
+        if ($previous !== null && ! in_array('current_team', $previous->parameterNames(), true)) {
+            return back();
+        }
+
+        return to_route(match (true) {
+            $previous === null => 'wall',
+            $previous->named('applications.*', 'environments.*') => 'applications.index',
+            $previous->named('alerts.*') => 'alerts.index',
+            $previous->named('alert-rules.*', 'alert-settings.*') => 'alert-rules.index',
+            $previous->named('members.*') => 'members.index',
+            $previous->named('me') => 'me',
+            default => 'wall',
+        }, ['current_team' => $team->slug]);
     }
 
     public function leave(Request $request, Team $team, RemoveMember $removeMember): RedirectResponse
@@ -60,7 +78,7 @@ class TeamController extends Controller
 
         $removeMember->handle($team, $request->user());
 
-        $this->success(__('You left the team ":name"', ['name' => $team->name]));
+        $this->success(__('You left the organization ":name"', ['name' => $team->name]));
 
         return to_route('teams.index');
     }
@@ -71,8 +89,17 @@ class TeamController extends Controller
 
         $deleteTeam->handle($team, $request->user(), $data);
 
-        $this->success(__('Team deleted.'));
+        $this->success(__('Organization deleted.'));
 
         return to_route('teams.index');
+    }
+
+    private function previousRoute(Router $router): ?Route
+    {
+        try {
+            return $router->getRoutes()->match(Request::create(url()->previous()));
+        } catch (HttpExceptionInterface|RequestExceptionInterface) {
+            return null;
+        }
     }
 }

@@ -12,8 +12,42 @@ env:
   IMAGE: ghcr.io/guard4534/horizon-watch
 
 jobs:
+  checks:
+    name: Checks
+    uses: ./.github/workflows/ci.yml
+
+  notes:
+    name: Release notes
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Take the notes from CHANGELOG.md
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ contains(github.ref_name, '-') }}
+        run: |
+          if ! ./bin/release-notes.sh "$TAG" > release-notes.md; then
+            if [ "$PRERELEASE" != true ]; then
+              echo "::error file=CHANGELOG.md::CHANGELOG.md has no section headed [${TAG#v}]."
+              exit 1
+            fi
+            ./bin/release-notes.sh Unreleased > release-notes.md
+          fi
+
+      - name: Keep the notes for the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          retention-days: 1
+
   image:
     name: Build and publish the image
+    needs: [checks, notes]
     runs-on: ubuntu-latest
 
     permissions:
@@ -24,6 +58,21 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
+      - name: Fetch the release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes
+
+      - name: Pin compose.prod.yaml to this release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          sed -i "s#${IMAGE}:latest}#${IMAGE}:${TAG#v}}#" compose.prod.yaml
+          grep -qF "${IMAGE}:${TAG#v}}" compose.prod.yaml
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
@@ -40,12 +89,18 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE }}
+          flavor: latest=auto
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=sha,format=long
+
+      - name: Work out the version
+        id: version
+        env:
+          REF: ${{ github.ref_name }}
+        run: echo "value=${REF#v}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -58,7 +113,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ steps.version.outputs.value }}
             REVISION=${{ github.sha }}
           provenance: mode=max
           sbom: true
@@ -70,4 +125,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: compose.prod.yaml
-          generate_release_notes: true
+          body_path: ${{ runner.temp }}/release-notes/release-notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}

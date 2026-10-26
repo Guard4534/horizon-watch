@@ -1,8 +1,11 @@
 <?php
 
 use App\Actions\Teams\AcceptInvitation;
+use App\Actions\Teams\DeclineInvitation;
 use App\Actions\Teams\RegisterInvitedUser;
+use App\Actions\Teams\RevokeInvitation;
 use App\Data\Teams\AcceptInvitationData;
+use App\Enums\Locale;
 use App\Enums\MemberVisibility;
 use App\Enums\TeamRole;
 use App\Models\Application;
@@ -11,6 +14,7 @@ use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
 use App\Notifications\Teams\TeamInvitation as TeamInvitationNotification;
+use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -22,6 +26,23 @@ beforeEach(function () {
     $this->owner = User::factory()->create();
     $this->team->members()->attach($this->owner, ['role' => TeamRole::Owner->value]);
 });
+
+function codeEmailedTo(string $email): string
+{
+    $code = null;
+
+    Notification::assertSentOnDemand(TeamInvitationNotification::class, function (TeamInvitationNotification $notification, array $channels, AnonymousNotifiable $notifiable) use ($email, &$code) {
+        if ($notifiable->routes['mail'] !== $email) {
+            return false;
+        }
+
+        $code = $notification->code;
+
+        return true;
+    });
+
+    return (string) $code;
+}
 
 test('only admin and owner can send invitations', function () {
     $admin = User::factory()->create();
@@ -51,21 +72,21 @@ test('only admin and owner can send invitations', function () {
     $this->assertDatabaseCount('team_invitations', 0);
 });
 
-test('an invitation records role, visibility and a 7-day expiry, and emails a link with the code', function () {
+test('an invitation records role, visibility, a 7-day expiry and only the hash of the code it emails', function () {
     Notification::fake();
     $this->travelTo(now());
 
     $this->actingAs($this->owner)
         ->post(route('members.invitations.store', ['current_team' => $this->team->slug]), [
             'email' => 'invited@example.com',
-            'role' => TeamRole::Admin->value,
+            'role' => TeamRole::Member->value,
             'visibility' => MemberVisibility::NonProduction->value,
         ])
         ->assertRedirect();
 
     $invitation = TeamInvitation::where('email', 'invited@example.com')->firstOrFail();
 
-    expect($invitation->role)->toBe(TeamRole::Admin)
+    expect($invitation->role)->toBe(TeamRole::Member)
         ->and($invitation->visibility)->toBe(MemberVisibility::NonProduction)
         ->and($invitation->expires_at->timestamp)->toBe(now()->addDays(7)->timestamp);
 
@@ -75,9 +96,52 @@ test('an invitation records role, visibility and a 7-day expiry, and emails a li
             $mail = $notification->toMail($notifiable);
 
             return $notifiable->routes['mail'] === $invitation->email
-                && str_contains($mail->actionUrl, $invitation->code);
+                && $mail->actionUrl === TeamInvitation::urlFor($notification->code)
+                && $invitation->code_hash === hash('sha256', $notification->code);
         },
     );
+
+    expect(DB::table('team_invitations')->where('id', $invitation->id)->sole())->not->toHaveProperty('code');
+});
+
+test('an admin invitation always sees every environment, whatever visibility was sent', function () {
+    Notification::fake();
+
+    $environment = Environment::factory()->for(Application::factory()->for($this->team))->create();
+
+    $this->actingAs($this->owner)
+        ->post(route('members.invitations.store', ['current_team' => $this->team->slug]), [
+            'email' => 'invited@example.com',
+            'role' => TeamRole::Admin->value,
+            'visibility' => MemberVisibility::Manual->value,
+            'environmentIds' => [$environment->id],
+        ])
+        ->assertRedirect();
+
+    $invitation = TeamInvitation::where('email', 'invited@example.com')->firstOrFail();
+
+    expect($invitation->visibility)->toBe(MemberVisibility::All)
+        ->and($invitation->environments()->count())->toBe(0);
+});
+
+test('accepting an older admin invitation with a limited visibility still sees every environment', function () {
+    $environment = Environment::factory()->for(Application::factory()->for($this->team))->create();
+    $invited = User::factory()->create(['email' => 'invited@example.com']);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'role' => TeamRole::Admin,
+        'visibility' => MemberVisibility::Manual,
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+    $invitation->environments()->sync([$environment->id]);
+
+    app(AcceptInvitation::class)->handle($invitation, $invited);
+
+    expect($this->team->memberships()->where('user_id', $invited->id)->first()->visibility)->toBe(MemberVisibility::All);
+    $this->assertDatabaseMissing('environment_user', ['user_id' => $invited->id]);
 });
 
 test('manual visibility without environments is rejected', function () {
@@ -100,7 +164,7 @@ test('environment ids from another organization are rejected', function () {
             'visibility' => MemberVisibility::Manual->value,
             'environmentIds' => [$otherEnvironment->id],
         ])
-        ->assertSessionHasErrors('environmentIds.0');
+        ->assertSessionHasErrors('environmentIds');
 });
 
 test('manual visibility invites copy the chosen environments on acceptance', function () {
@@ -119,11 +183,10 @@ test('manual visibility invites copy the chosen environments on acceptance', fun
         ])
         ->assertRedirect();
 
-    $invitation = TeamInvitation::where('email', 'invited@example.com')->firstOrFail();
     $user = User::factory()->create(['email' => 'invited@example.com']);
 
     $this->actingAs($user)
-        ->post(route('invitations.accept', $invitation->code))
+        ->post(route('invitations.accept', codeEmailedTo('invited@example.com')))
         ->assertRedirect(route('wall', ['current_team' => $this->team->slug]));
 
     expect(Grants::of($user->id, $this->team->id))
@@ -154,10 +217,8 @@ test('accepting an invitation leaves the manual visibility of other organization
         ])
         ->assertRedirect();
 
-    $invitation = TeamInvitation::where('email', 'invited@example.com')->firstOrFail();
-
     $this->actingAs($user)
-        ->post(route('invitations.accept', $invitation->code))
+        ->post(route('invitations.accept', codeEmailedTo('invited@example.com')))
         ->assertRedirect(route('wall', ['current_team' => $this->team->slug]));
 
     expect(Grants::of($user->id, $otherTeam->id))
@@ -176,7 +237,7 @@ test('a guest opens the invitation, sees it is open, and registers to accept it'
         'expires_at' => now()->addDays(7),
     ]);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('auth/Invitation')
@@ -185,7 +246,7 @@ test('a guest opens the invitation, sees it is open, and registers to accept it'
             ->where('page.email', 'invited@example.com')
             ->where('page.organizationName', $this->team->name));
 
-    $response = $this->post(route('invitations.register', $invitation->code), [
+    $response = $this->post(route('invitations.register', $invitation->plainCode), [
         'name' => 'Ivy Guest',
         'password' => 'password1234',
         'password_confirmation' => 'password1234',
@@ -195,8 +256,7 @@ test('a guest opens the invitation, sees it is open, and registers to accept it'
 
     $user = User::where('email', 'invited@example.com')->firstOrFail();
 
-    expect($user->email_verified_at)->not->toBeNull()
-        ->and($user->teamRole($this->team))->toBe(TeamRole::Member);
+    expect($user->teamRole($this->team))->toBe(TeamRole::Member);
 
     $this->assertAuthenticatedAs($user);
 });
@@ -223,7 +283,7 @@ test('an authenticated user with the same email accepts the invitation', functio
         'expires_at' => now()->addDays(7),
     ]);
 
-    $response = $this->actingAs($invitedUser)->post(route('invitations.accept', $invitation->code));
+    $response = $this->actingAs($invitedUser)->post(route('invitations.accept', $invitation->plainCode));
 
     $response->assertRedirect(route('wall', ['current_team' => $this->team->slug]));
 
@@ -243,12 +303,33 @@ test('an authenticated user with the same email declines the invitation', functi
         'expires_at' => now()->addDays(7),
     ]);
 
-    $response = $this->actingAs($invitedUser)->delete(route('invitations.decline', $invitation->code));
+    $response = $this->actingAs($invitedUser)->delete(route('invitations.decline', $invitation->plainCode));
 
-    $response->assertRedirect(route('wall', ['current_team' => $invitedUser->currentTeam->slug]));
+    $response->assertRedirect(route('home'));
 
     $this->assertDatabaseMissing('team_invitations', ['id' => $invitation->id]);
     expect($invitedUser->fresh()->belongsToTeam($this->team))->toBeFalse();
+});
+
+test('someone without an organization can decline an invitation and lands on the organizations page', function () {
+    $invitedUser = User::factory()->withoutOrganization()->create(['email' => 'invited@example.com']);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    $this->actingAs($invitedUser)
+        ->delete(route('invitations.decline', $invitation->plainCode))
+        ->assertRedirect(route('home'));
+
+    $this->actingAs($invitedUser)
+        ->get(route('home'))
+        ->assertRedirect(route('teams.index'));
+
+    $this->assertDatabaseMissing('team_invitations', ['id' => $invitation->id]);
 });
 
 test('an authenticated user with a different email sees wrong_account and cannot accept', function () {
@@ -262,7 +343,7 @@ test('an authenticated user with a different email sees wrong_account and cannot
     ]);
 
     $this->actingAs($otherUser)
-        ->get(route('invitations.show', $invitation->code))
+        ->get(route('invitations.show', $invitation->plainCode))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.state', 'wrong_account')
             ->where('page.organizationName', null)
@@ -271,7 +352,7 @@ test('an authenticated user with a different email sees wrong_account and cannot
             ->where('page.email', null));
 
     $this->actingAs($otherUser)
-        ->post(route('invitations.accept', $invitation->code))
+        ->post(route('invitations.accept', $invitation->plainCode))
         ->assertForbidden();
 
     expect($otherUser->fresh()->belongsToTeam($this->team))->toBeFalse();
@@ -287,7 +368,7 @@ test('decline is gated like accept: an invitation that is no longer open cannot 
     ]);
 
     $this->actingAs($user)
-        ->delete(route('invitations.decline', $invitation->code))
+        ->delete(route('invitations.decline', $invitation->plainCode))
         ->assertStatus(410);
 
     $this->assertDatabaseHas('team_invitations', ['id' => $invitation->id]);
@@ -302,7 +383,7 @@ test('an expired invitation reports its state and rejects acceptance', function 
         'invited_by' => $this->owner->id,
     ]);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.state', 'expired')
             ->where('page.organizationName', null)
@@ -311,7 +392,7 @@ test('an expired invitation reports its state and rejects acceptance', function 
             ->where('page.email', null));
 
     $this->actingAs($user)
-        ->post(route('invitations.accept', $invitation->code))
+        ->post(route('invitations.accept', $invitation->plainCode))
         ->assertStatus(410);
 });
 
@@ -325,7 +406,7 @@ test('a revoked invitation reports its state and rejects acceptance', function (
         'expires_at' => now()->addDays(7),
     ]);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.state', 'revoked')
             ->where('page.organizationName', null)
@@ -334,7 +415,7 @@ test('a revoked invitation reports its state and rejects acceptance', function (
             ->where('page.email', null));
 
     $this->actingAs($user)
-        ->post(route('invitations.accept', $invitation->code))
+        ->post(route('invitations.accept', $invitation->plainCode))
         ->assertStatus(410);
 });
 
@@ -347,7 +428,7 @@ test('an already accepted invitation reports its state and rejects acceptance', 
         'invited_by' => $this->owner->id,
     ]);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.state', 'accepted')
             ->where('page.organizationName', null)
@@ -356,7 +437,7 @@ test('an already accepted invitation reports its state and rejects acceptance', 
             ->where('page.email', null));
 
     $this->actingAs($user)
-        ->post(route('invitations.accept', $invitation->code))
+        ->post(route('invitations.accept', $invitation->plainCode))
         ->assertStatus(410);
 });
 
@@ -367,7 +448,7 @@ test('registering against an expired invitation is rejected', function () {
         'invited_by' => $this->owner->id,
     ]);
 
-    $this->post(route('invitations.register', $invitation->code), [
+    $this->post(route('invitations.register', $invitation->plainCode), [
         'name' => 'Ivy Guest',
         'password' => 'password1234',
         'password_confirmation' => 'password1234',
@@ -386,10 +467,10 @@ test('registering an address that already has an account is refused, and the pag
         'expires_at' => now()->addDays(7),
     ]);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertInertia(fn (Assert $page) => $page->where('page.state', 'sign_in_required'));
 
-    $this->post(route('invitations.register', $invitation->code), [
+    $this->post(route('invitations.register', $invitation->plainCode), [
         'name' => 'Ivy Guest',
         'password' => 'password1234',
         'password_confirmation' => 'password1234',
@@ -399,13 +480,13 @@ test('registering an address that already has an account is refused, and the pag
         ->and($existing->fresh()->belongsToTeam($this->team))->toBeFalse();
 
     $this->actingAs($existing)
-        ->get(route('invitations.show', $invitation->code))
+        ->get(route('invitations.show', $invitation->plainCode))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.state', 'open')
             ->where('page.authenticated', true));
 });
 
-test('resend regenerates only the expiry, keeps the code, and respects the rate limit', function () {
+test('resend emails a new code, which replaces the old one, renews the expiry and respects the rate limit', function () {
     Notification::fake();
 
     $invitation = TeamInvitation::factory()->create([
@@ -414,7 +495,7 @@ test('resend regenerates only the expiry, keeps the code, and respects the rate 
         'invited_by' => $this->owner->id,
         'expires_at' => now()->addDay(),
     ]);
-    $originalCode = $invitation->code;
+    $originalCode = $invitation->plainCode;
 
     $this->travelTo(now()->addHour());
 
@@ -424,8 +505,14 @@ test('resend regenerates only the expiry, keeps the code, and respects the rate 
 
     $invitation->refresh();
 
-    expect($invitation->code)->toBe($originalCode)
+    $newCode = codeEmailedTo('invited@example.com');
+
+    expect($newCode)->not->toBe($originalCode)
+        ->and($invitation->code_hash)->toBe(hash('sha256', $newCode))
         ->and($invitation->expires_at->timestamp)->toBe(now()->addDays(7)->timestamp);
+
+    $this->get(route('invitations.show', $originalCode))->assertNotFound();
+    $this->get(route('invitations.show', $newCode))->assertOk();
 
     for ($i = 0; $i < 5; $i++) {
         $this->actingAs($this->owner)
@@ -451,7 +538,7 @@ test('destroy revokes the invitation, which then reports state revoked', functio
 
     expect($invitation->fresh()->isRevoked())->toBeTrue();
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertInertia(fn (Assert $page) => $page->where('page.state', 'revoked'));
 });
 
@@ -513,10 +600,10 @@ test('an account written in mixed case is told to sign in, and the address it wa
         'expires_at' => now()->addDays(7),
     ]);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertInertia(fn (Assert $page) => $page->where('page.state', 'sign_in_required'));
 
-    $this->post(route('invitations.register', $invitation->code), [
+    $this->post(route('invitations.register', $invitation->plainCode), [
         'name' => 'Ada Admin',
         'password' => 'password1234',
         'password_confirmation' => 'password1234',
@@ -526,7 +613,7 @@ test('an account written in mixed case is told to sign in, and the address it wa
         ->assertRedirect();
     $this->assertAuthenticatedAs($admin);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertInertia(fn (Assert $page) => $page
             ->where('page.state', 'open')
             ->where('page.authenticated', true));
@@ -550,7 +637,7 @@ test('an invitation sent in mixed case creates a canonical account that can sign
 
     $this->post(route('logout'));
 
-    $this->post(route('invitations.register', $invitation->code), [
+    $this->post(route('invitations.register', codeEmailedTo('ivy.guest@example.com')), [
         'name' => 'Ivy Guest',
         'password' => 'password1234',
         'password_confirmation' => 'password1234',
@@ -568,7 +655,7 @@ test('an invitation sent in mixed case creates a canonical account that can sign
 
 test('the invitation environment relation drops a row from another organization', function () {
     $foreign = Environment::factory()->create(['name' => 'production']);
-    $application = Application::factory()->for($this->team)->create();
+    $application = Application::factory()->for($this->team)->create(['name' => 'Shop']);
     $mine = Environment::factory()->for($application)->create(['name' => 'staging']);
 
     $invitation = TeamInvitation::factory()->create([
@@ -586,9 +673,9 @@ test('the invitation environment relation drops a row from another organization'
 
     expect($invitation->environments()->pluck('environments.id')->all())->toBe([$mine->id]);
 
-    $this->get(route('invitations.show', $invitation->code))
+    $this->get(route('invitations.show', $invitation->plainCode))
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->where('page.visibleEnvironmentNames', ['staging']));
+        ->assertInertia(fn (Assert $page) => $page->where('page.visibleEnvironmentNames', ['Shop / staging']));
 });
 
 test('a stale revoke reaches an Inertia visit as a redirect carrying a toast', function () {
@@ -683,6 +770,85 @@ test('the invitation email tells its lifetime in the language of the app', funct
         'invited_by' => $this->owner->id,
     ]);
 
-    expect((new TeamInvitationNotification($invitation))->toMail((object) [])->outroLines)
+    expect((new TeamInvitationNotification($invitation, (string) $invitation->plainCode))->toMail((object) [])->outroLines)
         ->toContain('Questo invito scade tra 5 giorni.');
+});
+
+test('the invitation email and its resend are written in the language of whoever sends them', function () {
+    Notification::fake();
+
+    $this->owner->update(['locale' => Locale::It]);
+
+    $this->actingAs($this->owner)
+        ->post(route('members.invitations.store', ['current_team' => $this->team->slug]), [
+            'email' => 'invited@example.com',
+            'role' => TeamRole::Member->value,
+            'visibility' => MemberVisibility::All->value,
+        ])
+        ->assertRedirect();
+
+    Notification::assertSentOnDemand(TeamInvitationNotification::class, fn (TeamInvitationNotification $notification) => $notification->locale === 'it');
+
+    Notification::fake();
+
+    $this->owner->update(['locale' => Locale::En]);
+
+    $this->actingAs($this->owner)
+        ->post(route('members.invitations.resend', ['current_team' => $this->team->slug, 'invitation' => TeamInvitation::query()->sole()->id]))
+        ->assertRedirect();
+
+    Notification::assertSentOnDemand(TeamInvitationNotification::class, fn (TeamInvitationNotification $notification) => $notification->locale === 'en');
+});
+
+test('an invitation revoked after it was loaded is not accepted', function () {
+    $user = User::factory()->create(['email' => 'invited@example.com']);
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    TeamInvitation::query()->whereKey($invitation->id)->update(['revoked_at' => now()]);
+
+    expect(fn () => app(AcceptInvitation::class)->handle($invitation, $user))
+        ->toThrow(fn (HttpException $exception) => expect($exception->getStatusCode())->toBe(410));
+
+    expect($user->fresh()->belongsToTeam($this->team))->toBeFalse();
+});
+
+test('an invitation revoked after it was loaded registers nobody', function () {
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    TeamInvitation::query()->whereKey($invitation->id)->update(['revoked_at' => now()]);
+
+    expect(fn () => app(RegisterInvitedUser::class)->handle($invitation, new AcceptInvitationData('Ivy Guest', 'password1234'), app(AcceptInvitation::class)))
+        ->toThrow(fn (HttpException $exception) => expect($exception->getStatusCode())->toBe(410));
+
+    expect(User::where('email', 'invited@example.com')->exists())->toBeFalse();
+});
+
+test('an invitation accepted after it was loaded can no longer be revoked or declined', function () {
+    $user = User::factory()->create(['email' => 'invited@example.com']);
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $this->team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $this->owner->id,
+        'expires_at' => now()->addDays(7),
+    ]);
+
+    app(AcceptInvitation::class)->handle($invitation->fresh(), $user);
+
+    expect(fn () => app(RevokeInvitation::class)->handle($invitation))
+        ->toThrow(fn (HttpException $exception) => expect($exception->getStatusCode())->toBe(409))
+        ->and(fn () => app(DeclineInvitation::class)->handle($invitation))
+        ->toThrow(fn (HttpException $exception) => expect($exception->getStatusCode())->toBe(410));
+
+    expect($invitation->fresh()->revoked_at)->toBeNull()
+        ->and($invitation->fresh()->isAccepted())->toBeTrue();
 });
