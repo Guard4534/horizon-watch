@@ -44,9 +44,8 @@ For a database with something in it:
 ```
 
 That creates a demo organization with a day of readings and an administrator,
-`admin@example.com` / `password`. The demo environments collect, but their hosts are on the
-reserved example domains (`example.com`, `example.net`, `example.org`), so the poller never
-reads them and no new reading arrives.
+`admin@example.com` / `password`. The demo environments are fictional, so they are created with
+collection paused: the wall marks them **Collection paused** and does not judge them.
 
 ## Commands
 

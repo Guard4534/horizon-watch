@@ -30,7 +30,7 @@ beforeEach(function () {
 });
 
 test('readings go on the polls queue', function () {
-    Environment::factory()->create(['horizon_url' => 'https://shop.acme.test/horizon']);
+    Environment::factory()->create();
 
     app(DispatchDuePolls::class)->handle();
 

@@ -28,20 +28,3 @@ test('the host of a URL is read in lower case, or not at all', function (string 
     'not a url' => ['shop.example.com/horizon', null],
     'empty' => ['', null],
 ]);
-
-test('only the hosts reserved for examples count as example hosts', function (string $url, bool $example) {
-    expect(HorizonUrl::isExample($url))->toBe($example);
-})->with([
-    'example.com' => ['https://example.com/horizon', true],
-    'a subdomain of example.net' => ['https://shop.example.net/horizon', true],
-    'example.org in capitals, with a port' => ['https://API.Example.ORG:8443/horizon', true],
-    'the .example top-level domain' => ['https://horizon.shop.example', true],
-    'a fully qualified name' => ['https://example.com./horizon', true],
-    'a name that ends like one' => ['https://notexample.com/horizon', false],
-    'one as a subdomain' => ['https://example.com.evil.io/horizon', false],
-    'another top-level domain' => ['https://example.co/horizon', false],
-    '.invalid' => ['https://shop.example.invalid/horizon', false],
-    '.test' => ['https://shop.example.test/horizon', false],
-    '.localhost' => ['http://example.localhost/horizon', false],
-    'not a url' => ['example.com/horizon', false],
-]);

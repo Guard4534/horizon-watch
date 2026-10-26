@@ -260,9 +260,6 @@ environment variables, the services of `compose.prod.yaml`, the documented `arti
   connection when you leave the URL field.
 - Every form submits on Enter, edit pages enable **Save** only when something changed, and
   destructive actions are marked in red.
-- Collection never reads a host on the domains reserved for examples (`example.com`,
-  `example.net`, `example.org`, their subdomains and `.example`), and the seeder's demo
-  organization, which lives there, now has collection on.
 
 ### Fixed
 

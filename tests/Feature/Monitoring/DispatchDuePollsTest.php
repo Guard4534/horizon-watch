@@ -22,7 +22,7 @@ beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-17 10:00:00.700'));
 
     $this->environment = fn (array $attributes = [], ?string $nextPollAt = null): Environment => tap(
-        Environment::factory()->create(['horizon_url' => 'https://shop.acme.test/horizon', ...$attributes]),
+        Environment::factory()->create($attributes),
         fn (Environment $environment) => $environment->forceFill(['next_poll_at' => $nextPollAt])->save(),
     );
 
@@ -57,30 +57,6 @@ test('next_poll_at moves one interval ahead of the current whole second', functi
 
     expect($fast->fresh()->next_poll_at->toDateTimeString())->toBe('2026-09-17 10:00:15')
         ->and($slow->fresh()->next_poll_at->toDateTimeString())->toBe('2026-09-17 10:05:00');
-});
-
-test('environments on the reserved example hosts are claimed but never read', function () {
-    $reserved = collect([
-        'https://example.com/horizon',
-        'https://shop.example.net/horizon',
-        'https://monitor:secret@API.Example.ORG:8443/horizon',
-        'https://horizon.shop.example/horizon',
-        'https://example.com./horizon',
-    ])->map(fn (string $url) => ($this->environment)(['horizon_url' => $url, 'poll_interval_seconds' => 30]));
-    $lookalikes = collect([
-        'https://notexample.com/horizon',
-        'https://example.com.evil.io/horizon',
-        'https://example.co/horizon',
-        'https://shop.example.invalid/horizon',
-    ])->map(fn (string $url) => ($this->environment)(['horizon_url' => $url]));
-
-    expect(($this->dispatch)())->toBe(4);
-
-    $queued = Queue::pushed(PollEnvironmentJob::class)->map(fn (PollEnvironmentJob $job) => $job->environmentId)->sort()->values()->all();
-
-    expect($queued)->toBe($lookalikes->pluck('id')->all())
-        ->and($reserved->every(fn (Environment $environment) => $environment->fresh()->next_poll_at->toDateTimeString() === '2026-09-17 10:00:30'))->toBeTrue()
-        ->and(($this->dispatch)())->toBe(0);
 });
 
 test('a second run right after the first queues nothing', function () {
