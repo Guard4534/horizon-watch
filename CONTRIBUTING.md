@@ -43,8 +43,10 @@ For a database with something in it:
 ./vendor/bin/sail php artisan migrate:fresh --seed
 ```
 
-That creates a demo organization with a few weeks of readings and an administrator,
-`admin@example.com` / `password`.
+That creates a demo organization with a day of readings and an administrator,
+`admin@example.com` / `password`. The demo environments collect, but their hosts are on the
+reserved example domains (`example.com`, `example.net`, `example.org`), so the poller never
+reads them and no new reading arrives.
 
 ## Commands
 
@@ -178,9 +180,10 @@ by hand before a release against a Horizon prepared to exercise what the fixture
 
 - fail more than 50 jobs within the hour, then set `HORIZON_WATCH_LIVE_EXPECT_FAILED` to how
   many failed, so the test checks that the 50-per-page paging of failed jobs reaches them all;
-- keep one long job running (a `sleep(600)` job is enough) and set
-  `HORIZON_WATCH_LIVE_EXPECT_RESERVED=1`, so it checks that a reserved job and its start time
-  are read;
+- keep one long job running and set `HORIZON_WATCH_LIVE_EXPECT_RESERVED=1`, so it checks that
+  a reserved job and its start time are read. The job has to outlive signals:
+  `php artisan horizon:pause` sends `SIGUSR2`, which ends a plain `sleep(600)` early, so loop
+  with `$end = time() + 600; while (($left = $end - time()) > 0) { sleep($left); }`;
 - run it once more after `php artisan horizon:pause` with `HORIZON_WATCH_LIVE_EXPECT_PAUSED=1`.
 
 Without those variables it still checks that the status, the masters, the failed and pending

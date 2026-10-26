@@ -8,6 +8,8 @@ final class HorizonUrl
 
     private const string API_SUFFIX = '#^([a-z][a-z0-9+.-]*://[^/?\#]+/[^?\#]*?[^/?\#])/api(?:/(?:stats|workload|masters|monitoring|metrics|jobs|batches)(?:/[^?\#]*)?)?$#i';
 
+    private const string EXAMPLE_HOST = '/(?:^|\.)example(?:\.(?:com|net|org))?\.?$/';
+
     public static function normalize(string $url): string
     {
         $url = (string) preg_replace_callback(
@@ -28,5 +30,12 @@ final class HorizonUrl
         $host = parse_url(trim($url), PHP_URL_HOST);
 
         return is_string($host) && $host !== '' ? strtolower($host) : null;
+    }
+
+    public static function isExample(string $url): bool
+    {
+        $host = self::host($url);
+
+        return $host !== null && preg_match(self::EXAMPLE_HOST, $host) === 1;
     }
 }

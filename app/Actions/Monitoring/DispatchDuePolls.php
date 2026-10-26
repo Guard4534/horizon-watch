@@ -4,6 +4,7 @@ namespace App\Actions\Monitoring;
 
 use App\Jobs\PollEnvironmentJob;
 use App\Models\Environment;
+use App\Support\HorizonUrl;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -17,7 +18,7 @@ class DispatchDuePolls
 
         $due = DB::transaction(function () use ($now) {
             $environments = Environment::query()
-                ->select(['id', 'poll_interval_seconds'])
+                ->select(['id', 'horizon_url', 'poll_interval_seconds'])
                 ->where('polling_enabled', true)
                 ->where(fn ($query) => $query->whereNull('next_poll_at')->orWhere('next_poll_at', '<=', $now))
                 ->orderByRaw('next_poll_at asc nulls first')
@@ -32,7 +33,7 @@ class DispatchDuePolls
                     ->update(['next_poll_at' => $now->addSeconds($environment->poll_interval_seconds)]);
             }
 
-            return $environments->modelKeys();
+            return $environments->reject(fn (Environment $environment) => HorizonUrl::isExample($environment->horizon_url))->modelKeys();
         });
 
         foreach ($due as $environmentId) {

@@ -64,7 +64,7 @@ class DatabaseSeeder extends Seeder
         ));
 
         $team = $admin->currentTeam;
-        $this->seedDemoReadings($this->seedMockupOrganization($team, polled: false));
+        $this->seedDemoReadings($this->seedMockupOrganization($team));
         (new SyntheticAlerts)->seed($team, $admin);
         $this->seedLocalHorizon($team);
     }
@@ -106,7 +106,7 @@ class DatabaseSeeder extends Seeder
     /**
      * @return list<Environment>
      */
-    public function seedMockupOrganization(Team $team, bool $polled = true): array
+    private function seedMockupOrganization(Team $team): array
     {
         $environments = [];
 
@@ -123,7 +123,7 @@ class DatabaseSeeder extends Seeder
                     'basic_auth_user' => $hasBasicAuth ? 'horizon-bot' : null,
                     'basic_auth_password' => $hasBasicAuth ? 'change-me' : null,
                     'poll_interval_seconds' => 15,
-                    'polling_enabled' => $polled,
+                    'polling_enabled' => true,
                 ]);
             }
         }

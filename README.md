@@ -174,6 +174,9 @@ Then, in order:
     It refuses a scheme other than `http` and `https`, credentials, a query string or a
     fragment, and an IP address on a network the panel does not call (see
     [Troubleshooting](#troubleshooting)).
+    Collection never reads a host on the domains reserved for examples (`example.com`,
+    `example.net`, `example.org`, their subdomains and the `.example` domain), so an
+    environment left on one gets no new readings; **Test connection** still reads it.
 
     **Add environment** on the application's page adds another one later. It suggests the
     Horizon URL in the same way, from the application's production environment (or its first
@@ -986,8 +989,9 @@ composer install
 lint, type check and unit tests, and the Pest suite.
 
 `./vendor/bin/sail php artisan migrate:fresh --seed` fills the database with a demo
-organization and a few weeks of readings, and creates an administrator:
-`admin@example.com` / `password`. Never seed a database you care about.
+organization and a day of readings, and creates an administrator:
+`admin@example.com` / `password`. The demo environments collect, but their hosts are on the
+reserved example domains, which collection never reads. Never seed a database you care about.
 
 ## Security
 
