@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-26
+
 The first stable release. From here on Horizon Watch follows Semantic Versioning: within 1.x the
 environment variables, the services of `compose.prod.yaml`, the documented `artisan` commands,
 `GET /health` and version 1 of the webhook payload keep working. Coming from 0.1.0, read the
@@ -399,5 +401,6 @@ First public release.
   `compose.prod.yaml` for a full stack on PostgreSQL.
 - English and Italian interface.
 
-[Unreleased]: https://github.com/Guard4534/horizon-watch/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Guard4534/horizon-watch/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Guard4534/horizon-watch/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/Guard4534/horizon-watch/releases/tag/v0.1.0

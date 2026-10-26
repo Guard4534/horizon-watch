@@ -68,7 +68,6 @@ export default defineConfig({
         ignorePatterns: [
             '.github/**',
             'composer.json',
-            'docs/superpowers/plans/**',
             'resources/js/components/ui/*',
             'resources/views/mail/*',
             'tests/Fixtures/Horizon/dashboard.html',
