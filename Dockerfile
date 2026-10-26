@@ -3,7 +3,7 @@
 ARG PHP_VERSION=8.5
 ARG NODE_VERSION=24
 
-FROM ubuntu:24.04 AS php
+FROM ubuntu:26.04 AS php
 ARG PHP_VERSION
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
