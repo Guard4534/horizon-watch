@@ -103,7 +103,7 @@ jobs:
         run: echo "value=${REF#v}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           # linux/amd64 only: the PHP packages come from packages.sury.org for Ubuntu noble
